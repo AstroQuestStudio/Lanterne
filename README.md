@@ -12,25 +12,58 @@ mods qui parallélisent ne servent à rien, faute d'un second cœur où pousser 
 
 ## Résultats mesurés
 
-Même monde, même charge — 4 000 entités, un joueur, distance de simulation 10 — même protocole.
-Tous les chiffres sortent de `LANTERNE_SELFTEST`. **Aucun n'a été saisi à la main.** Variance vérifiée
-sur trois exécutions identiques : **2 %**.
+Serveur dédié NeoForge 26.1.2, Ryzen 7 5800H, distance de simulation 10, un joueur, 7 900 entités.
+Tous les chiffres sortent de `LANTERNE_SELFTEST`. **Aucun n'a été saisi à la main.** Variance
+vérifiée sur trois exécutions identiques : **2 %**.
 
-### Vitesse
+### Sous charge — là où ça compte
 
-| Configuration | ms/tick | vs vanilla |
-|---|---:|---:|
-| Vanilla nu | ~68 | — |
-| Modpack d'optimisation (17 mods) | 13,5 | ×5,0 |
-| **Lanterne seul** | **19,3** | **×3,6** |
-| Modpack + Lanterne | 8,5 | ×8,0 |
+| Configuration | ms/tick | vs vanilla | TPS | Mémoire allouée |
+|---|---:|---:|---:|---:|
+| Vanilla nu | 140,7 | — | **7** | 20,4 Go |
+| Modpack d'optimisation (17 mods) | 23,4 | ×6,0 | 20 | 3,4 Go |
+| **Lanterne seul** | **26,1** | **×5,4** | **20** | **2,9 Go** |
+| Modpack + Lanterne | 14,8 | ×9,5 | 20 | 1,5 Go |
 
-Le modpack va plus vite que Lanterne seul. **Il faut dire pourquoi**, et c'est l'objet du tableau
-suivant.
+```
+                     0        50       100      150 ms
+                     |─────────|─────────|─────────|
+  budget 50 ms            ▼
+  Vanilla nu         ████████████████████████████████  140,7   7 TPS  ✗
+  Modpack, 17 mods   █████                              23,4  20 TPS  ✓
+  Lanterne seul      █████                              26,1  20 TPS  ✓
+  Les deux           ███                                14,8  20 TPS  ✓
+```
 
-### Conformité — ce que le mod ne doit pas avoir changé
+**Un seul mod fait jeu égal avec dix-sept**, et les bat sur la mémoire. Le modpack comparé contient
+Lithium, FerriteCore, ModernFix, ServerCore, Adaptive Performance Tweaks, AI-Improvements,
+Immersive Optimization, LetMeDespawn, Clumps et leurs dépendances.
 
-Chute libre d'une créature, mesurée en blocs parcourus en 25 ticks. C'est la mécanique dont dépendent
+### Le gain monte avec la charge
+
+| Entités | Sans | Avec | Gain |
+|---:|---:|---:|---:|
+| 4 000 | 70,4 ms | 20,8 ms | ×3,4 |
+| **7 571** | **137,2 ms** | **25,9 ms** | **×5,3** |
+| 11 089 | 147,0 ms | 36,6 ms | ×4,0 |
+
+C'est la propriété qu'on veut : **le mod s'efface quand le serveur va bien, et travaille d'autant
+plus qu'on en a besoin.** Profileur à l'appui — avec Lanterne, le serveur passe **47 % de son temps
+à dormir**, tick fini, en attente du suivant.
+
+### Mémoire et ramassages
+
+| | Vanilla | Modpack | **Lanterne** |
+|---|---:|---:|---:|
+| Mémoire allouée (25 s) | 20,4 Go | 3,4 Go | **2,9 Go** |
+| Ramassages | 59 | 10 | **11** |
+
+Sur un VPS à un cœur, la mémoire n'est pas un confort : un ramassage n'y tourne pas « en
+parallèle », il **fige le serveur**. Sept fois moins d'allocations, c'est sept fois moins d'à-coups.
+
+### Conformité — ce qu'aucun autre ne mesure
+
+Chute libre d'une créature, en blocs parcourus en 25 ticks. C'est la mécanique dont dépendent
 **toutes** les fermes à monstres : on fait tomber d'assez haut pour tuer, et l'on ramasse.
 
 | Configuration | 16 blocs | 40 blocs | 64 blocs |
@@ -42,19 +75,20 @@ Chute libre d'une créature, mesurée en blocs parcourus en 25 ticks. C'est la m
 **Le modpack réduit les chutes à un cinquième de leur vitesse, y compris à seize blocs du joueur.**
 Une ferme à chute y produit cinq fois moins — et le joueur l'attribuera à autre chose.
 
-Son ×5,0 est donc payé, en partie, avec du rendement de jeu. Lanterne a fait la même erreur, et
-l'épreuve de conformité l'a rattrapée : la correction lui a coûté la première place au chronomètre.
-C'est un arbitrage assumé — **un mod d'optimisation qui casse une ferme a échoué, même à ×10**.
+Son ×6,0 est donc payé, en partie, avec du rendement de jeu. Lanterne a fait la même erreur, et
+l'épreuve l'a rattrapée : la correction lui a coûté deux points de gain. C'est un arbitrage assumé —
+**un mod d'optimisation qui casse une ferme a échoué, même à ×10**.
 
-### Mémoire et réseau
+### Cuisson — exact au tick près
 
-| | Vanilla | Modpack | **Lanterne** |
-|---|---:|---:|---:|
-| Mémoire allouée (25 s) | 9,5 Go | 1,9 Go | **2,4 Go** |
-| Ramassages | 27 | 9 | **5** |
+| | Four 1 | Four 2 | Four 3 | Four 4 | Four 5 |
+|---|---:|---:|---:|---:|---:|
+| Sans Lanterne | 200 | 200 | 200 | 200 | 200 |
+| **Avec Lanterne** | **200** | **200** | **200** | **200** | **200** |
 
-Sur un VPS à un cœur, la mémoire n'est pas un confort : un ramassage n'y tourne pas « en
-parallèle », il **fige le serveur**.
+Le four ne travaille plus que **deux fois au lieu de deux cents**, et cuit au même tick. Ce n'est pas
+un ralentissement compensé : c'est un calcul qu'on cesse de refaire parce qu'on en connaît déjà la
+réponse.
 
 ## La thèse
 
@@ -105,8 +139,12 @@ Et un cinquième qui commande les autres : **quand le serveur va bien, le mod ne
 | `TickBudget` | Mesure le tick réel, en tire une pression de 0 à 1 |
 | `EntityThrottle` | Applique, via `EntityTickEvent.Pre`. **Zéro mixin sur le chemin chaud** |
 | `NetworkThrottle` | Le même gradient appliqué aux paquets de position |
+| `Jam` | Les amas immobiles ne résolvent plus une bousculade dont le résultat est nul |
+| `Sleep` | Le sommeil à échéance : ne pas recalculer une réponse déjà connue |
+| `Rationing` | Le budget **intra-tick** — réagir pendant, pas au tick suivant |
 | `ProfilerMixin` | Cache le profileur vanilla, qui coûtait 16 % du processeur |
 | `LivingEntityMixin` | Plafonne les poussées dans les tas d'entités (coût quadratique) |
+| `FurnaceMixin` | Le four dort jusqu'à son échéance |
 
 ### Trois décisions qui portent tout
 
@@ -142,6 +180,8 @@ En jeu : `/lanterne`, `/lanterne bench`, `/lanterne on|off`.
 | `Sampler` | Profileur par échantillonnage, avec vue « qui appelle qui » |
 | `Understudy` | **De vrais joueurs simulés** — ni client, ni réseau |
 | `Herd` | Charge reproductible, répartie en spirale |
+| `Conformance` | **L'épreuve de chute** — ce que le mod ne doit pas avoir changé |
+| `Kitchen` | L'épreuve de cuisson, au tick près |
 
 `Understudy` est la pièce qui rend tout le reste possible : de vrais `ServerPlayer`, inscrits dans la
 liste du serveur, avec une connexion qui absorbe les paquets. Cent doublures coûtent ce que
