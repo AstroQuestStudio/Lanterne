@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerLevel;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.lab.Conformance;
+import fr.clubcitrouille.lanterne.lab.Kitchen;
 import fr.clubcitrouille.lanterne.lab.Understudy;
 
 /**
@@ -57,8 +58,17 @@ public final class SelfTest {
      */
     /** Vrai si l'on éprouve la conformité plutôt que la vitesse. */
     private static boolean conformance;
+    /** Vrai si l'on éprouve la cuisson. */
+    private static boolean kitchen;
 
     public static void arm() {
+        if ("1".equals(System.getenv("LANTERNE_KITCHEN"))) {
+            kitchen = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de cuisson armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_CONFORMANCE"))) {
             conformance = true;
             step = Step.SETTLING;
@@ -87,10 +97,24 @@ public final class SelfTest {
 
     /** Fait avancer la procédure. Appelé à chaque tick du serveur. */
     public static void tick(MinecraftServer server) {
-        if (step == Step.OFF || (step == Step.LAUNCHED && !conformance)) {
+        if (step == Step.OFF || (step == Step.LAUNCHED && !conformance && !kitchen)) {
             return;
         }
-        if (!Conformance.running() && waiting-- > 0) {
+        if (!Conformance.running() && !Kitchen.running() && waiting-- > 0) {
+            return;
+        }
+
+        if (kitchen) {
+            if (Kitchen.running()) {
+                Kitchen.tick(server);
+            } else if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = CHUNK_LOAD;
+            } else if (step == Step.LOADING) {
+                Kitchen.begin(server);
+                step = Step.LAUNCHED;
+            }
             return;
         }
 
@@ -119,6 +143,11 @@ public final class SelfTest {
                 waiting = CHUNK_LOAD;
             }
             case LOADING -> {
+                String ovens = System.getenv("LANTERNE_OVENS");
+                if (ovens != null && !ovens.isBlank()) {
+                    int made = Herd.ovens(level, Integer.parseInt(ovens.trim()), 80);
+                    Lanterne.LOG.info("Auto-test : {} four(s) allumé(s).", made);
+                }
                 int born = Herd.populate(level, 0d, 0d, countWanted, radiusWanted);
                 Lanterne.LOG.info("Auto-test : {} entités créées sur un anneau de {} blocs.",
                         born, radiusWanted);

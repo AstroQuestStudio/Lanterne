@@ -53,6 +53,8 @@ public final class Settings {
     private static boolean collisions = true;
     /** Le court-circuit de bousculade pour les amas immobiles. */
     private static boolean jam = true;
+    /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
+    private static boolean sleep = true;
 
     private Settings() {}
 
@@ -95,6 +97,10 @@ public final class Settings {
         return master && jam;
     }
 
+    public static boolean sleep() {
+        return master && sleep;
+    }
+
     /**
      * Lit la sélection de modules depuis l'environnement.
      *
@@ -116,6 +122,7 @@ public final class Settings {
         density = wanted.contains("density") || wanted.contains("densite");
         collisions = wanted.contains("collision");
         jam = wanted.contains("jam");
+        sleep = wanted.contains("sleep") || wanted.contains("sommeil");
     }
 
     /** Ce qui est actif, pour l'en-tête du rapport. */
@@ -141,6 +148,9 @@ public final class Settings {
         }
         if (jam) {
             text.append("amas ");
+        }
+        if (sleep) {
+            text.append("sommeil ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

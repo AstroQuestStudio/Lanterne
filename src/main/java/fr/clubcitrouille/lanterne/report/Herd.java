@@ -24,6 +24,36 @@ import net.minecraft.world.level.levelgen.Heightmap;
  * différence entre une charge homogène et une charge qui se concentre au centre.
  */
 public final class Herd {
+    /**
+     * Pose un champ de fours allumés, pour éprouver le sommeil à échéance.
+     *
+     * <p>Les fours sont posés en damier autour du joueur, chacun garni de combustible et de minerai.
+     * C'est la charge type d'une base construite : quelques centaines de blocs-entités qui
+     * travaillent en permanence sans que personne ne les regarde.
+     */
+    public static int ovens(ServerLevel level, int count, int spread) {
+        int born = 0;
+        int side = (int) Math.ceil(Math.sqrt(count));
+        for (int i = 0; i < count; i++) {
+            int x = (i % side) * 2 - spread / 2;
+            int z = (i / side) * 2 - spread / 2;
+            int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(x, y, z);
+            level.setBlockAndUpdate(pos, net.minecraft.world.level.block.Blocks.FURNACE
+                    .defaultBlockState());
+            if (level.getBlockEntity(pos)
+                    instanceof net.minecraft.world.level.block.entity.FurnaceBlockEntity furnace) {
+                furnace.setItem(0, new net.minecraft.world.item.ItemStack(
+                        net.minecraft.world.item.Items.RAW_IRON, 64));
+                furnace.setItem(1, new net.minecraft.world.item.ItemStack(
+                        net.minecraft.world.item.Items.COAL, 64));
+                furnace.setChanged();
+                born++;
+            }
+        }
+        return born;
+    }
+
     /** L'angle d'or, en radians : la répartition la plus régulière qui soit sur un disque. */
     private static final double GOLDEN_ANGLE = 2.399963d;
 

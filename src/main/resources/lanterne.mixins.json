@@ -10,6 +10,8 @@
     "ServerEntityMixin",
     "ProfilerMixin",
     "LivingEntityMixin",
-    "NetworkRegistryMixin"
+    "NetworkRegistryMixin",
+    "FurnaceMixin",
+    "BlockEntityMixin"
   ]
 }
