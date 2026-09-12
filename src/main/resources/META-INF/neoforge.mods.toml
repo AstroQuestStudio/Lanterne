@@ -1,0 +1,33 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "${mod_license}"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+description = '''
+Un seul passage, une seule décision, un budget de temps réparti.
+
+Lanterne ne cherche pas à rendre chaque système plus rapide : il cherche à ne pas faire le travail
+qui ne sert à rien. Une vache à cent cinquante blocs ne mérite pas vingt décisions par seconde ; un
+plant de blé à dix chunks ne mérite pas vingt évaluations. Le jeu ne sait faire que binaire — chargé
+ou pas chargé — et c'est là qu'est le gaspillage.
+'''
+
+[[mixins]]
+config = "lanterne.mixins.json"
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neo_version},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
