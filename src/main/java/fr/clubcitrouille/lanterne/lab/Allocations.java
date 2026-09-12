@@ -96,9 +96,13 @@ public final class Allocations {
                     if (!event.getEventType().getName().equals("jdk.ObjectAllocationSample")) {
                         continue;
                     }
+                    String who = blame(event);
+                    if (who == null) {
+                        continue; // allocation du laboratoire lui-même
+                    }
                     long weight = event.getLong("weight");
                     total += weight;
-                    byMethod.computeIfAbsent(blame(event), ignored -> new long[1])[0] += weight;
+                    byMethod.computeIfAbsent(who, ignored -> new long[1])[0] += weight;
                 }
             }
 
@@ -137,6 +141,13 @@ public final class Allocations {
         if (event.getStackTrace() != null) {
             for (RecordedFrame frame : event.getStackTrace().getFrames()) {
                 String owner = frame.getMethod().getType().getName();
+                // Le laboratoire ne se compte pas lui-même : le magnétoscope alloue pour enregistrer,
+                // et ces octets-là n'existent pas en jeu. Les laisser au classement reviendrait à
+                // mesurer l'instrument plutôt que ce qu'il observe.
+                if (owner.startsWith("fr.clubcitrouille.lanterne.lab.")
+                        || owner.startsWith("jdk.jfr.")) {
+                    return null;
+                }
                 if (owner.startsWith("net.minecraft.") || owner.startsWith("fr.clubcitrouille.")
                         || owner.startsWith("net.neoforged.")) {
                     return simple(owner) + '.' + frame.getMethod().getName() + "  → " + type;

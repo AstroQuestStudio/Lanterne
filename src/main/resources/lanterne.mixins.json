@@ -14,6 +14,7 @@
     "FurnaceMixin",
     "ServerLevelMixin",
     "LevelMixin",
+    "NaturalSpawnerMixin",
     "BlockEntityMixin"
   ]
 }

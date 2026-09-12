@@ -18,27 +18,27 @@ vérifiée sur trois exécutions identiques : **2 %**.
 
 ### Sous charge — là où ça compte
 
+Monde **pré-généré** (la génération de terrain fausserait la mesure), 10 500 entités, un joueur.
+
 | Configuration | ms/tick | vs vanilla | TPS | Mémoire allouée |
 |---|---:|---:|---:|---:|
-| Vanilla nu | 114,3 | — | **9** | 17,0 Go |
-| Modpack d'optimisation (17 mods) | 25,8 | ×4,4 | 20 | 3,7 Go |
-| **Lanterne seul** | **26,1** | **×4,4** | **20** | **2,7 Go** |
-| Modpack + Lanterne | 12,9 | ×8,9 | 20 | **1,0 Go** |
+| Vanilla nu | 193,0 | — | **5** | 27,4 Go |
+| Modpack d'optimisation (17 mods) | 23,8 | ×8,1 | 20 | 3,7 Go |
+| **Lanterne seul** | **25,3** | **×7,6** | **20** | **2,7 Go** |
+| Modpack + Lanterne | 11,4 | ×17,0 | 20 | **0,8 Go** |
 
 ```
-                     0        40        80       120 ms
-                     |─────────|─────────|─────────|
-  budget 50 ms                 ▼
-  Vanilla nu         ████████████████████████████████  114,3   9 TPS  ✗
-  Modpack, 17 mods   ███████                            25,8  20 TPS  ✓
-  Lanterne seul      ███████                            26,1  20 TPS  ✓
-  Les deux           ███                                12,9  20 TPS  ✓
+                     0        50       100       150      200 ms
+                     |─────────|─────────|─────────|────────|
+  budget 50 ms            ▼
+  Vanilla nu         ████████████████████████████████████████ 193,0   5 TPS ✗
+  Modpack, 17 mods   █████                                     23,8  20 TPS ✓
+  Lanterne seul      █████                                     25,3  20 TPS ✓
+  Les deux           ██                                        11,4  20 TPS ✓
 ```
 
-**Un seul mod fait jeu égal avec dix-sept**, et les bat sur la mémoire — 2,7 Go contre 3,7, soit
-**six fois moins que vanilla**. Le modpack comparé contient Lithium, FerriteCore, ModernFix,
-ServerCore, Adaptive Performance Tweaks, AI-Improvements, Immersive Optimization, LetMeDespawn,
-Clumps et leurs dépendances.
+**Un seul mod fait jeu égal avec dix-sept**, et les bat sur la mémoire — sans casser les fermes à
+chute, que le modpack réduit à 20 % de leur rendement.
 
 ### Le gain monte avec la charge
 

@@ -25,6 +25,39 @@ import net.minecraft.world.level.levelgen.Heightmap;
  */
 public final class Herd {
     /**
+     * Vide le monde de ses créatures, sans toucher au terrain.
+     *
+     * <h2>Pourquoi ne plus effacer le monde entre deux épreuves</h2>
+     *
+     * <p>Le banc supprimait le monde à chaque exécution, pour repartir d'un état propre. Le
+     * profileur d'allocations a montré ce que cela coûtait : la génération de terrain — fonctions de
+     * densité, splines, structures — dominait les allocations mesurées, jusqu'à trente pour cent du
+     * total.
+     *
+     * <p>On ne mesurait donc pas le régime établi d'un serveur, mais celui d'une exploration. Tant
+     * que c'était le cas, aucune optimisation de la lumière ou des palettes n'aurait pu se voir :
+     * elle se serait perdue dans le bruit de la génération.
+     *
+     * <p>Le terrain est désormais conservé d'une épreuve à l'autre, et seules les créatures sont
+     * retirées. La première exécution paie la génération ; les suivantes mesurent ce qu'on cherche.
+     */
+    public static int sweepEntities(ServerLevel level) {
+        // On recense d'abord, on retire ensuite. Retirer pendant le parcours vide la collection
+        // sous l'itérateur, qui rend alors des éléments nuls — le serveur s'est arrêté dessus au
+        // premier essai, sur un « Cannot invoke Entity.discard() because entity is null ».
+        java.util.List<net.minecraft.world.entity.Entity> doomed = new java.util.ArrayList<>();
+        for (net.minecraft.world.entity.Entity entity : level.getAllEntities()) {
+            if (entity != null && !(entity instanceof net.minecraft.world.entity.player.Player)) {
+                doomed.add(entity);
+            }
+        }
+        for (net.minecraft.world.entity.Entity entity : doomed) {
+            entity.discard();
+        }
+        return doomed.size();
+    }
+
+    /**
      * Pose un champ de fours allumés, pour éprouver le sommeil à échéance.
      *
      * <p>Les fours sont posés en damier autour du joueur, chacun garni de combustible et de minerai.

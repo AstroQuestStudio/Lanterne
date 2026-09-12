@@ -143,6 +143,11 @@ public final class SelfTest {
                 waiting = CHUNK_LOAD;
             }
             case LOADING -> {
+                int swept = Herd.sweepEntities(level);
+                if (swept > 0) {
+                    Lanterne.LOG.info("Auto-test : {} entité(s) de l'épreuve précédente retirée(s).",
+                            swept);
+                }
                 String ovens = System.getenv("LANTERNE_OVENS");
                 if (ovens != null && !ovens.isBlank()) {
                     int made = Herd.ovens(level, Integer.parseInt(ovens.trim()), 80);
