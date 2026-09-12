@@ -143,11 +143,18 @@ public final class Census {
 
         int radius = level.getServer().getPlayerList().getViewDistance() + 2;
 
+        int seen = 0;
         for (ServerPlayer player : level.players()) {
             if (player.isSpectator()) {
                 continue; // un spectateur ne justifie pas qu'on simule un pays entier
             }
             markAt(player.getX(), player.getZ(), radius);
+            seen++;
+        }
+        if (tick % 200 == 0) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.info(
+                    "[RECENSEMENT] {} · joueurs dans le niveau : {} · retenus : {} · chunks : {}",
+                    level.dimension().identifier(), level.players().size(), seen, chunksSeen);
         }
 
         // L'observateur d'essai tient lieu de joueur quand il n'y en a pas. Sans lui, un banc lancé

@@ -71,6 +71,14 @@ public final class Crowd {
      *
      * @return nombre de crans à descendre dans l'échelle des niveaux, de 0 à 2
      */
+    /** Nombre de créatures recensées dans le chunk de celle-ci, au tick précédent. */
+    public static int neighbours(Entity entity) {
+        long key = ChunkPos.pack(
+                SectionPos.blockToSectionCoord(entity.getBlockX()),
+                SectionPos.blockToSectionCoord(entity.getBlockZ()));
+        return tallied.get(key);
+    }
+
     public static int noteAndPenalty(Entity entity, long gameTime) {
         if (gameTime != currentTick) {
             rotate(gameTime);

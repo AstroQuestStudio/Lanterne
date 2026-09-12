@@ -4,6 +4,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.lab.Conformance;
 import fr.clubcitrouille.lanterne.lab.Understudy;
 
 /**
@@ -54,7 +55,17 @@ public final class SelfTest {
      *
      * <p>Format : {@code entités:rayon:observateurs}. Les deux derniers sont facultatifs.
      */
+    /** Vrai si l'on éprouve la conformité plutôt que la vitesse. */
+    private static boolean conformance;
+
     public static void arm() {
+        if ("1".equals(System.getenv("LANTERNE_CONFORMANCE"))) {
+            conformance = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de conformité armée.");
+            return;
+        }
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
             return;
@@ -76,10 +87,24 @@ public final class SelfTest {
 
     /** Fait avancer la procédure. Appelé à chaque tick du serveur. */
     public static void tick(MinecraftServer server) {
-        if (step == Step.OFF || step == Step.LAUNCHED) {
+        if (step == Step.OFF || (step == Step.LAUNCHED && !conformance)) {
             return;
         }
-        if (waiting-- > 0) {
+        if (!Conformance.running() && waiting-- > 0) {
+            return;
+        }
+
+        if (conformance) {
+            if (Conformance.running()) {
+                Conformance.tick(server);
+            } else if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = CHUNK_LOAD;
+            } else if (step == Step.LOADING) {
+                Conformance.begin(server);
+                step = Step.LAUNCHED;
+            }
             return;
         }
 

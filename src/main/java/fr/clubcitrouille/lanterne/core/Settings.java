@@ -51,6 +51,8 @@ public final class Settings {
     private static boolean density = true;
     /** Le plafond de poussées dans les tas d'entités, où le coût est quadratique. */
     private static boolean collisions = true;
+    /** Le court-circuit de bousculade pour les amas immobiles. */
+    private static boolean jam = true;
 
     private Settings() {}
 
@@ -89,6 +91,10 @@ public final class Settings {
         return master && collisions;
     }
 
+    public static boolean jam() {
+        return master && jam;
+    }
+
     /**
      * Lit la sélection de modules depuis l'environnement.
      *
@@ -109,6 +115,7 @@ public final class Settings {
         profilerCache = wanted.contains("profiler");
         density = wanted.contains("density") || wanted.contains("densite");
         collisions = wanted.contains("collision");
+        jam = wanted.contains("jam");
     }
 
     /** Ce qui est actif, pour l'en-tête du rapport. */
@@ -131,6 +138,9 @@ public final class Settings {
         }
         if (collisions) {
             text.append("collisions ");
+        }
+        if (jam) {
+            text.append("amas ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

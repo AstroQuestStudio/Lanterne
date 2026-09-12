@@ -120,6 +120,54 @@ public final class EntityThrottle {
                 || entity instanceof FallingBlockEntity) {
             return true;
         }
+
+        // <h2>Une chute ne se ralentit pas : elle s'effondre</h2>
+        //
+        // La gravité s'applique dans le tick, et elle s'<em>accumule</em> : chaque tour ajoute à la
+        // vitesse, et la vitesse ajoute à la position. Sur N tours, la distance parcourue va donc
+        // comme le carré de N.
+        //
+        // La conséquence est brutale et n'avait pas été vue : ralentir une créature d'un facteur
+        // quatre ne divise pas sa chute par quatre, <b>mais par seize</b>. À la cadence la plus
+        // lente, par plus de cinq mille. L'épreuve de conformité l'a chiffré — sept pour cent de la
+        // chute normale à quatre-vingts blocs, là où l'on attendait vingt-cinq.
+        //
+        // Or toutes les fermes à monstres reposent sur une chute : on fait tomber d'assez haut pour
+        // tuer, et l'on ramasse en bas. Une chute seize fois plus lente est une ferme seize fois
+        // moins productive — le joueur ne le verrait pas venir, et l'attribuerait à autre chose.
+        //
+        // Ce qui tombe garde donc sa pleine cadence. Le coût est négligeable : une créature ne tombe
+        // que quelques secondes dans sa vie, et l'immense majorité de celles qui peuplent un serveur
+        // ont les pieds sur terre à tout instant.
+        if (carriesPlayer(entity)) {
+            return true;
+        }
+        // <h2>Une chute, et non un sautillement</h2>
+        //
+        // Le premier seuil retenu — « pas au sol » — exemptait trop : dans un troupeau serré, les
+        // créatures se poussent sans arrêt et décollent en permanence. Tout le monde était donc
+        // exempté, et le gain s'est effondré de dix fois et demie à moins de quatre.
+        //
+        // Ce qu'on veut protéger n'est pas le fait de quitter le sol, c'est la <b>chute</b> : celle
+        // des fermes, où la créature tombe d'assez haut pour mourir. Deux signes la distinguent
+        // d'un bond, et l'un suffit :
+        //
+        // <ul>
+        //   <li>une distance de chute supérieure à un saut — on ne saute pas de deux blocs et demi ;</li>
+        //   <li>une vitesse descendante franche, qu'une chute libre atteint en quatre ou cinq tours
+        //       et qu'aucune bousculade ne produit.</li>
+        // </ul>
+        //
+        // Le prix de ce choix est un démarrage de chute légèrement retardé — quelques tours, le
+        // temps que l'un des deux signes apparaisse. L'épreuve de conformité le chiffre, et c'est un
+        // compromis assumé : il vaut mieux une chute qui commence trois tours trop tard qu'une ferme
+        // seize fois moins productive, ou qu'un mod qui ne sert plus à rien.
+        return !entity.onGround()
+                && (entity.fallDistance > 2.5f || entity.getDeltaMovement().y < -0.4d);
+    }
+
+    /** Un véhicule qui porte un joueur : le saccader, c'est saccader le joueur lui-même. */
+    private static boolean carriesPlayer(Entity entity) {
         // Un véhicule ne se teste que s'il porte quelqu'un : l'appel parcourt la liste des passagers,
         // et la plupart des entités n'en ont aucun.
         return entity.isVehicle() && entity.hasPassenger(passenger -> passenger instanceof Player);

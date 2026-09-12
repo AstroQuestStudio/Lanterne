@@ -104,6 +104,7 @@ public final class Lanterne {
     public void onLevelTickPre(LevelTickEvent.Pre event) {
         if (event.getLevel() instanceof ServerLevel level) {
             Census.refresh(level);
+            fr.clubcitrouille.lanterne.core.Jam.sweep(level.getGameTime());
         }
     }
 
