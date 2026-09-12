@@ -65,19 +65,32 @@ public final class EntityThrottle {
             return true;
         }
 
-        Lod level = Census.levelOf(entity);
-        Census.count(level);
+        long now = entity.level().getGameTime();
+
+        // Deux raisons de ne pas simuler à fond : c'est loin, ou c'est noyé dans le nombre. La
+        // seconde échappe entièrement à la première — cinquante vaches dans un enclos à vingt blocs
+        // sont toutes « proches », et ce sont elles qui coûtent le plus cher.
+        int period = Cadence.forEntity(entity, Census.distanceOf(entity), TickBudget.pressure());
+
+        if (Settings.density()) {
+            // La foule multiplie la cadence au lieu de la faire descendre d'un cran : avec une
+            // échelle continue, doubler l'attente est la traduction exacte de « on en voit deux fois
+            // moins ». Le plafond propre à l'espèce s'applique ensuite — un villageois serré dans
+            // une ferme reste un villageois qui travaille.
+            int crowd = Crowd.noteAndPenalty(entity, now);
+            if (crowd > 0) {
+                period = Math.min(period << crowd, Cadence.ceiling(entity));
+            }
+        }
+        Census.count(period);
 
         // Éteint, on classe mais on ne dégrade pas. Le rapport reste donc lisible pendant la phase
         // témoin du banc, et les deux moitiés de la comparaison portent bien sur le même monde.
-        if (!Settings.enabled()) {
+        if (!Settings.lod()) {
             return true;
         }
 
-        // Le décalage par identifiant étale le travail sur toute la période. Sans lui, toutes les
-        // entités d'un même niveau s'exécuteraient dans le même tick : la charge ne baisserait pas,
-        // elle se concentrerait, et les à-coups seraient pires qu'avant.
-        return level.actsOn(entity.level().getGameTime(), entity.getId());
+        return Cadence.actsOn(period, now, entity.getId());
     }
 
     /**

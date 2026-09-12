@@ -13,6 +13,7 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import fr.clubcitrouille.lanterne.core.Census;
+import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.core.EntityThrottle;
 import fr.clubcitrouille.lanterne.core.TickBudget;
 import fr.clubcitrouille.lanterne.report.Bench;
@@ -60,8 +61,15 @@ public final class Lanterne {
 
     public Lanterne() {
         NeoForge.EVENT_BUS.register(this);
+        Settings.configureFromEnvironment();
         SelfTest.arm();
-        LOG.info("Lanterne allumée — recensement par chunk, budget de tick, compensation exacte.");
+        // Vérification d'environnement, et non curiosité : si Tracy est disponible,
+        // Profiler.getDefaultFiller() fait une recherche ThreadLocal à chaque appel — c'est-à-dire
+        // une fois par entité et par tick. Un profil mesuré dans ces conditions ne vaudrait que
+        // pour elles, et toute optimisation qu'on en tirerait serait un remède sans maladie.
+        LOG.info("Tracy disponible : {} — si vrai, les mesures de cet environnement sont gonflées.",
+                com.mojang.jtracy.TracyClient.isAvailable());
+        LOG.info("Lanterne allumée — modules actifs : {}", Settings.describe());
     }
 
     /**

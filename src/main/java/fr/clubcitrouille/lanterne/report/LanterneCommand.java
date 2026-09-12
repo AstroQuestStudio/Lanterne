@@ -16,7 +16,6 @@ import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.phys.Vec3;
 
 import fr.clubcitrouille.lanterne.core.Census;
-import fr.clubcitrouille.lanterne.core.Lod;
 import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.core.TickBudget;
 
@@ -157,12 +156,8 @@ public final class LanterneCommand {
         line(source, "Chunks recensés", String.valueOf(Census.chunksSeen()));
         line(source, "Entités classées", String.valueOf(Census.entitiesSeen()));
 
-        for (Lod level : Lod.values()) {
-            long count = Census.countAt(level);
-            if (count == 0L) {
-                continue;
-            }
-            line(source, "  " + label(level), count + " entité(s), 1 tick sur " + level.period);
+        for (var entry : Census.buckets().entrySet()) {
+            line(source, "  " + entry.getKey(), entry.getValue()[0] + " entité(s)");
         }
 
         source.sendSuccess(() -> Component.literal(
@@ -173,16 +168,6 @@ public final class LanterneCommand {
         source.sendSuccess(() -> Component.literal(
                         "« /lanterne bench » compare la même charge avec et sans.")
                 .withStyle(ChatFormatting.DARK_GRAY), false);
-    }
-
-    private static String label(Lod level) {
-        return switch (level) {
-            case FULL -> "Pleine simulation";
-            case NEAR -> "Proche";
-            case FAR -> "Lointain";
-            case DISTANT -> "Très lointain";
-            case DORMANT -> "En sommeil";
-        };
     }
 
     private static void line(CommandSourceStack source, String name, String value) {

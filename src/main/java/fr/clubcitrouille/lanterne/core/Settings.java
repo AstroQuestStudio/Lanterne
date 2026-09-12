@@ -1,37 +1,56 @@
 package fr.clubcitrouille.lanterne.core;
 
+import java.util.Locale;
+
 /**
- * L'interrupteur, et pourquoi il est le module le plus important du mod.
+ * Les interrupteurs, et pourquoi ils sont le module le plus important du mod.
  *
- * <h2>Deux erreurs en une heure</h2>
+ * <h2>Quatre plans démolis par la mesure</h2>
  *
- * <p>Ce mod a commencé par deux plans qu'un calcul a démolis avant la première ligne de code.
+ * <p>Ce mod a commencé par des idées séduisantes, défendables, et fausses.
  *
- * <p><b>La compensation des ticks aléatoires.</b> L'idée : ne tirer qu'une fois sur seize, mais
- * seize fois plus. La loi est préservée — c'est exact — et le gain est <b>nul</b> : quatre cent
- * quarante et un chunks fois vingt-quatre sections fois trois tirages, avant comme après. On aurait
- * préservé le comportement sans économiser une milliseconde.
+ * <p><b>La compensation des ticks aléatoires.</b> Ne tirer qu'une fois sur seize, mais seize fois
+ * plus. La loi est préservée — c'est exact — et le gain est <b>nul</b> : même nombre total de
+ * tirages, avant comme après.
  *
- * <p><b>Le ralentissement des entonnoirs.</b> L'idée : leur appliquer le même gradient qu'aux
- * entités. Sauf qu'un entonnoir tické une fois sur seize transfère seize fois moins d'objets, et que
- * les chunks concernés sont dans le rayon de simulation — ce sont donc des fermes <em>en marche</em>.
- * On ne les aurait pas optimisées, on les aurait cassées.
+ * <p><b>Le ralentissement des entonnoirs.</b> Un entonnoir tické une fois sur seize transfère seize
+ * fois moins d'objets, et les chunks concernés sont dans le rayon de simulation — ce sont donc des
+ * fermes <em>en marche</em>. On ne les aurait pas optimisées, on les aurait cassées.
  *
- * <p>Les deux idées étaient séduisantes, défendables, et fausses. Ce qui les a écartées n'est pas
- * l'expérience ni le flair : c'est une multiplication posée avant de coder. <b>Et ce qui vaut pour
- * un plan vaut pour un résultat.</b>
+ * <p><b>Un débordement d'entier</b> a neutralisé le recensement entier pendant six bancs, sans que
+ * rien ne le signale. Le mod compilait, démarrait, journalisait, et ne faisait rien.
  *
- * <h2>Un mod d'optimisation qui ne se compare pas ne prouve rien</h2>
+ * <p>Ce qui les a écartés n'est ni l'expérience ni le flair : une multiplication posée avant de
+ * coder, et une ligne de rapport. <b>Et ce qui vaut pour un plan vaut pour un résultat.</b>
  *
- * <p>« Ça a l'air plus fluide » n'est pas une mesure. Sur une instance qui compte vingt-deux mods
- * d'optimisation, personne ne peut dire lequel agit — ni si l'un d'eux coûte plus qu'il ne rapporte.
- * La seule preuve recevable est la comparaison du même instant avec et sans, sur la même charge.
+ * <h2>Un interrupteur par optimisation, et non un seul pour tout</h2>
  *
- * <p>D'où cet interrupteur. Il n'est pas un réglage de confort : il est l'<b>instrument de mesure</b>.
- * Sans lui, tout ce que ce mod affirmerait serait une opinion — y compris quand il aurait raison.
+ * <p>Un interrupteur global suffit à prouver que le mod sert à quelque chose. Il ne dit pas
+ * <em>lequel</em> de ses modules y est pour quelque chose — et c'est très exactement le reproche
+ * qu'on fait à un assemblage de vingt mods d'optimisation.
+ *
+ * <p>Le cas s'est présenté aussitôt : le cache du profileur, qui vise seize pour cent du temps
+ * mesuré, n'a rien changé au résultat d'ensemble. Non qu'il soit inutile, mais parce que le niveau
+ * de détail écarte déjà la plupart des appels qu'il aurait accélérés. Sans interrupteurs séparés, on
+ * aurait conclu « inutile » et jeté un module qui vaut peut-être beaucoup une fois seul.
+ *
+ * <p>Chaque module se mesure donc seul, et le rapport porte sur ce qu'il fait, pas sur ce qu'on
+ * espérait qu'il fasse.
  */
 public final class Settings {
-    private static boolean enabled = true;
+    /** Coupe tout, d'un coup. Sert au banc et au diagnostic. */
+    private static boolean master = true;
+
+    /** Le niveau de détail appliqué au tick des entités. Le cœur du mod. */
+    private static boolean lod = true;
+    /** L'espacement des paquets de position pour les entités lointaines. */
+    private static boolean network = true;
+    /** Le cache du profileur intégré, qui évite une recherche par entité et par tick. */
+    private static boolean profilerCache = true;
+    /** La dégradation par densité : ce qui est noyé dans le nombre ne se distingue pas. */
+    private static boolean density = true;
+    /** Le plafond de poussées dans les tas d'entités, où le coût est quadratique. */
+    private static boolean collisions = true;
 
     private Settings() {}
 
@@ -43,10 +62,76 @@ public final class Settings {
      * on mesure deux fois le même monde, pas deux mondes différents.
      */
     public static boolean enabled() {
-        return enabled;
+        return master;
     }
 
     public static void setEnabled(boolean value) {
-        enabled = value;
+        master = value;
+    }
+
+    public static boolean lod() {
+        return master && lod;
+    }
+
+    public static boolean network() {
+        return master && network;
+    }
+
+    public static boolean profilerCache() {
+        return master && profilerCache;
+    }
+
+    public static boolean density() {
+        return master && density;
+    }
+
+    public static boolean collisions() {
+        return master && collisions;
+    }
+
+    /**
+     * Lit la sélection de modules depuis l'environnement.
+     *
+     * <p>{@code LANTERNE_MODULES="lod"} n'active que le niveau de détail ; {@code "lod,network"} en
+     * active deux ; {@code "none"} n'en active aucun. Absent, tout est actif.
+     *
+     * <p>C'est ce qui permet d'attribuer un gain à un module plutôt qu'au mod dans son ensemble —
+     * et donc de savoir ce qu'on garde.
+     */
+    public static void configureFromEnvironment() {
+        String raw = System.getenv("LANTERNE_MODULES");
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        String wanted = raw.toLowerCase(Locale.ROOT);
+        lod = wanted.contains("lod");
+        network = wanted.contains("network") || wanted.contains("reseau");
+        profilerCache = wanted.contains("profiler");
+        density = wanted.contains("density") || wanted.contains("densite");
+        collisions = wanted.contains("collision");
+    }
+
+    /** Ce qui est actif, pour l'en-tête du rapport. */
+    public static String describe() {
+        if (!master) {
+            return "tout éteint";
+        }
+        StringBuilder text = new StringBuilder();
+        if (lod) {
+            text.append("lod ");
+        }
+        if (network) {
+            text.append("réseau ");
+        }
+        if (profilerCache) {
+            text.append("profileur ");
+        }
+        if (density) {
+            text.append("densité ");
+        }
+        if (collisions) {
+            text.append("collisions ");
+        }
+        return text.isEmpty() ? "aucun module" : text.toString().trim();
     }
 }

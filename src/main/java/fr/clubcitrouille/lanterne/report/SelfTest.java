@@ -4,7 +4,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
 import fr.clubcitrouille.lanterne.Lanterne;
-import fr.clubcitrouille.lanterne.lab.Phantom;
+import fr.clubcitrouille.lanterne.lab.Understudy;
 
 /**
  * L'auto-test : le mod se mesure lui-même, sans personne aux commandes.
@@ -86,9 +86,10 @@ public final class SelfTest {
         ServerLevel level = server.overworld();
         switch (step) {
             case SETTLING -> {
-                // Les observateurs d'abord, seuls. Sans leurs tickets, les chunks se déchargent et
-                // tout ce qu'on y poserait partirait avec eux.
-                Phantom.summon(level, observers, 512, 12);
+                // De vrais joueurs, et non de simples porteurs de tickets : un mod concurrent qui
+                // interroge « level.players() » doit les voir, sans quoi la comparaison mesure deux
+                // mondes différents et ne prouve rien.
+                Understudy.enter(server, level, observers, 512);
                 step = Step.LOADING;
                 waiting = CHUNK_LOAD;
             }
@@ -100,8 +101,8 @@ public final class SelfTest {
                 waiting = POPULATE;
             }
             case POPULATING -> {
-                Lanterne.LOG.info("Auto-test : {} entité(s) vivante(s) avant mesure.",
-                        Bench.livingCount(level));
+                Lanterne.LOG.info("Auto-test : {} entité(s) vivante(s), {} joueur(s) en ligne.",
+                        Bench.livingCount(level), server.getPlayerList().getPlayerCount());
                 Bench.startHeadless(server);
                 step = Step.LAUNCHED;
             }

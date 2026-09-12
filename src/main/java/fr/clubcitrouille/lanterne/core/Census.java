@@ -1,6 +1,6 @@
 package fr.clubcitrouille.lanterne.core;
 
-import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ShortOpenHashMap;
 
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
@@ -63,11 +63,17 @@ public final class Census {
      */
     private static final int REFRESH_PERIOD = 10;
 
-    /** Chunk encodé vers niveau de détail. Un octet par chunk : l'ordinal du niveau. */
-    private static final Long2ByteOpenHashMap LEVELS = new Long2ByteOpenHashMap();
+    /**
+     * Chunk encodé vers distance au joueur le plus proche, en blocs.
+     *
+     * <p>Une distance, et non un palier. La première version rangeait ici l'ordinal d'un niveau
+     * parmi cinq ; c'était perdre l'information juste avant d'en avoir besoin. La cadence se calcule
+     * mieux à partir du nombre lui-même, et les paliers ne servaient qu'à l'affichage.
+     */
+    private static final Long2ShortOpenHashMap DISTANCES = new Long2ShortOpenHashMap();
 
-    /** Valeurs de l'énumération, mises de côté : {@code values()} alloue un tableau à chaque appel. */
-    private static final Lod[] LADDER = Lod.values();
+    /** Distance attribuée à un chunk qu'aucun joueur ne regarde. */
+    private static final short UNSEEN = Short.MAX_VALUE;
 
     /**
      * Tick du dernier recensement.
@@ -105,11 +111,15 @@ public final class Census {
     /** Compteurs du dernier recensement, pour le rapport. */
     private static int chunksSeen;
     private static int entitiesSeen;
-    private static final long[] BY_LEVEL = new long[Lod.values().length];
+    /** Somme des cadences constatées, pour en tirer le travail évité sans garder chaque valeur. */
+    private static double keptWork;
+    /** Comptage par rangée d'affichage. */
+    private static final java.util.Map<String, long[]> BY_BUCKET = new java.util.LinkedHashMap<>();
 
     static {
-        // Un chunk inconnu vaut « pleine simulation » : tant qu'on ne sait pas, on ne dégrade pas.
-        LEVELS.defaultReturnValue((byte) 0);
+        // Un chunk hors de portée de tout joueur est aussi loin qu'il est possible de l'être. Rien
+        // ne s'y simule de toute façon : le jeu ne tick que ce qu'un ticket maintient.
+        DISTANCES.defaultReturnValue(UNSEEN);
     }
 
     private Census() {}
@@ -128,17 +138,16 @@ public final class Census {
         stale = false;
         lastRefresh = tick;
 
-        LEVELS.clear();
+        DISTANCES.clear();
         chunksSeen = 0;
 
-        double pressure = TickBudget.pressure();
         int radius = level.getServer().getPlayerList().getViewDistance() + 2;
 
         for (ServerPlayer player : level.players()) {
             if (player.isSpectator()) {
                 continue; // un spectateur ne justifie pas qu'on simule un pays entier
             }
-            markAt(player.getX(), player.getZ(), radius, pressure);
+            markAt(player.getX(), player.getZ(), radius);
         }
 
         // L'observateur d'essai tient lieu de joueur quand il n'y en a pas. Sans lui, un banc lancé
@@ -146,7 +155,7 @@ public final class Census {
         // recensé, donc tout en pleine simulation — et le mod paraîtrait inutile alors qu'il n'aurait
         // simplement pas eu l'occasion d'agir.
         for (int i = 0; i < probeCount; i++) {
-            markAt(probes[i * 2], probes[i * 2 + 1], radius, pressure);
+            markAt(probes[i * 2], probes[i * 2 + 1], radius);
         }
     }
 
@@ -173,7 +182,7 @@ public final class Census {
      * d'un joueur reste en pleine simulation même s'il est loin de tous les autres. C'est
      * exactement la règle qu'on attend, et elle tombe d'elle-même en gardant le minimum.
      */
-    private static void markAt(double px, double pz, int radius, double pressure) {
+    private static void markAt(double px, double pz, int radius) {
         int centreX = SectionPos.blockToSectionCoord((int) Math.floor(px));
         int centreZ = SectionPos.blockToSectionCoord((int) Math.floor(pz));
 
@@ -188,13 +197,13 @@ public final class Census {
                 double nearestZ = clamp(pz, cz << 4, (cz << 4) + 15);
                 double distanceSq = sq(px - nearestX) + sq(pz - nearestZ);
 
-                byte wanted = (byte) Lod.forDistance(distanceSq, pressure).ordinal();
+                short wanted = (short) Math.min(UNSEEN, (int) Math.sqrt(distanceSq));
                 long key = ChunkPos.pack(cx, cz);
 
-                byte current = LEVELS.getOrDefault(key, Byte.MAX_VALUE);
+                short current = DISTANCES.get(key);
                 if (wanted < current) {
-                    LEVELS.put(key, wanted);
-                    if (current == Byte.MAX_VALUE) {
+                    DISTANCES.put(key, wanted);
+                    if (current == UNSEEN) {
                         chunksSeen++;
                     }
                 }
@@ -208,27 +217,28 @@ public final class Census {
      * <p>Une lecture dans une table de hachage, et rien d'autre — c'est tout ce que le chemin chaud
      * doit payer. Le calcul a eu lieu ailleurs, une fois pour tout un chunk.
      */
-    public static Lod levelOf(Entity entity) {
+    public static double distanceOf(Entity entity) {
         long key = ChunkPos.pack(
                 SectionPos.blockToSectionCoord(entity.getBlockX()),
                 SectionPos.blockToSectionCoord(entity.getBlockZ()));
-        return LADDER[LEVELS.get(key)];
+        return DISTANCES.get(key);
     }
 
-    /** Le niveau applicable à une position de bloc, pour les blocs et les blocs-entités. */
-    public static Lod levelOfBlock(int blockX, int blockZ) {
+    /** La distance applicable à une position de bloc, pour les blocs et les blocs-entités. */
+    public static double distanceOfBlock(int blockX, int blockZ) {
         long key = ChunkPos.pack(
                 SectionPos.blockToSectionCoord(blockX),
                 SectionPos.blockToSectionCoord(blockZ));
-        return LADDER[LEVELS.get(key)];
+        return DISTANCES.get(key);
     }
 
     // ------------------------------------------------------------------ comptabilité
 
-    /** Enregistre qu'une entité a été classée, pour que le rapport dise ce qui a été évité. */
-    public static void count(Lod level) {
+    /** Enregistre une cadence, pour que le rapport dise ce qui a été évité. */
+    public static void count(int period) {
         entitiesSeen++;
-        BY_LEVEL[level.ordinal()]++;
+        keptWork += 1d / Math.max(1, period);
+        BY_BUCKET.computeIfAbsent(Cadence.bucket(period), ignored -> new long[1])[0]++;
     }
 
     public static int chunksSeen() {
@@ -239,8 +249,8 @@ public final class Census {
         return entitiesSeen;
     }
 
-    public static long countAt(Lod level) {
-        return BY_LEVEL[level.ordinal()];
+    public static java.util.Map<String, long[]> buckets() {
+        return BY_BUCKET;
     }
 
     /**
@@ -251,19 +261,13 @@ public final class Census {
      * mesure qui compte — et elle est calculée, pas estimée.
      */
     public static double workAvoided() {
-        long total = 0L;
-        double kept = 0d;
-        for (Lod level : LADDER) {
-            long count = BY_LEVEL[level.ordinal()];
-            total += count;
-            kept += (double) count / level.period;
-        }
-        return total == 0L ? 0d : 1d - kept / total;
+        return entitiesSeen == 0 ? 0d : 1d - keptWork / entitiesSeen;
     }
 
     public static void resetCounters() {
         entitiesSeen = 0;
-        java.util.Arrays.fill(BY_LEVEL, 0L);
+        keptWork = 0d;
+        BY_BUCKET.clear();
     }
 
     private static double clamp(double value, double low, double high) {

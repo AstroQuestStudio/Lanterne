@@ -62,18 +62,19 @@ public final class NetworkThrottle {
      * @param gameTime le tick courant du monde, pour l'étalement
      */
     public static boolean shouldSend(Entity entity, long gameTime) {
-        if (!Settings.enabled() || mustAlwaysSend(entity)) {
+        if (!Settings.network() || mustAlwaysSend(entity)) {
             return true;
         }
 
-        Lod level = Census.levelOf(entity);
-        if (level == Lod.FULL || level == Lod.NEAR) {
+        int simulation = Cadence.forEntity(entity, Census.distanceOf(entity), TickBudget.pressure());
+        if (simulation <= 2) {
             return true; // à portée de vue utile, on n'économise rien sur le dos du joueur
         }
 
-        // La moitié de la période de simulation, arrondie vers le bas et jamais sous deux : on
-        // espace, on ne coupe pas.
-        int period = Math.max(2, level.period / SOFTENING);
+        // La moitié de la cadence de simulation, et jamais moins souvent qu'un envoi sur douze : un
+        // paquet coûte moins cher qu'un tick, et son absence se voit davantage. On espace, on ne
+        // coupe pas.
+        int period = Math.min(12, Math.max(2, simulation / SOFTENING));
         return (gameTime + entity.getId()) % period == 0;
     }
 
