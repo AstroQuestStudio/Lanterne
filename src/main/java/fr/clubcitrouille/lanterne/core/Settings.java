@@ -55,6 +55,8 @@ public final class Settings {
     private static boolean jam = true;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
     private static boolean sleep = true;
+    /** Le rationnement : réagir pendant le tick, et non au suivant. */
+    private static boolean rationing = true;
 
     private Settings() {}
 
@@ -101,6 +103,10 @@ public final class Settings {
         return master && sleep;
     }
 
+    public static boolean rationing() {
+        return master && rationing;
+    }
+
     /**
      * Lit la sélection de modules depuis l'environnement.
      *
@@ -123,6 +129,7 @@ public final class Settings {
         collisions = wanted.contains("collision");
         jam = wanted.contains("jam");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
+        rationing = wanted.contains("ration");
     }
 
     /** Ce qui est actif, pour l'en-tête du rapport. */
@@ -151,6 +158,9 @@ public final class Settings {
         }
         if (sleep) {
             text.append("sommeil ");
+        }
+        if (rationing) {
+            text.append("ration ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

@@ -70,7 +70,13 @@ public final class EntityThrottle {
         // Deux raisons de ne pas simuler à fond : c'est loin, ou c'est noyé dans le nombre. La
         // seconde échappe entièrement à la première — cinquante vaches dans un enclos à vingt blocs
         // sont toutes « proches », et ce sont elles qui coûtent le plus cher.
-        int period = Cadence.forEntity(entity, Census.distanceOf(entity), TickBudget.pressure());
+        // La pression réunit deux mesures de natures différentes : celle du tick précédent, lissée
+        // et lente, et celle du tick en cours, immédiate. La seconde n'existe chez personne — le
+        // seul mod qui l'ait tentée l'a retirée — et c'est elle qui freine un pic avant qu'il ne
+        // devienne un à-coup.
+        double pressure = Math.max(TickBudget.pressure(),
+                Settings.rationing() ? Rationing.pressure() : 0d);
+        int period = Cadence.forEntity(entity, Census.distanceOf(entity), pressure);
 
         if (Settings.density()) {
             // La foule multiplie la cadence au lieu de la faire descendre d'un cran : avec une

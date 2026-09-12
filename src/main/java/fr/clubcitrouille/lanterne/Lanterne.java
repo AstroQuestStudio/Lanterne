@@ -82,6 +82,7 @@ public final class Lanterne {
     @SubscribeEvent
     public void onServerTickPre(ServerTickEvent.Pre event) {
         TickBudget.beginTick();
+        fr.clubcitrouille.lanterne.core.Rationing.beginTick();
         Bench.beginTick();
         Census.resetCounters();
     }
