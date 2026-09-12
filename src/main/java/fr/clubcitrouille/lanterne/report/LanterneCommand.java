@@ -153,6 +153,12 @@ public final class LanterneCommand {
         line(source, "Pression", String.format(Locale.ROOT, "%.0f %%", pressure * 100d)
                 + (pressure < 0.05d ? "  — serveur au repos, rien n'est dégradé" : ""));
 
+        line(source, "Machine", fr.clubcitrouille.lanterne.core.Machine.cores() + " fil(s), gain parallèle ×"
+                + String.format(Locale.ROOT, "%.2f", fr.clubcitrouille.lanterne.core.Machine.speedup())
+                + " — " + fr.clubcitrouille.lanterne.core.Machine.verdict());
+        line(source, "Blocs-entités endormis",
+                String.format(Locale.ROOT, "%.0f %% des ticks épargnés",
+                        fr.clubcitrouille.lanterne.core.Sleep.savedShare() * 100d));
         line(source, "Chunks recensés", String.valueOf(Census.chunksSeen()));
         line(source, "Entités classées", String.valueOf(Census.entitiesSeen()));
 

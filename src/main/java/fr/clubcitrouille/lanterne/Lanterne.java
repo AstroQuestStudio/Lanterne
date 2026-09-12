@@ -8,13 +8,11 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
-import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import fr.clubcitrouille.lanterne.core.Census;
 import fr.clubcitrouille.lanterne.core.Settings;
-import fr.clubcitrouille.lanterne.core.EntityThrottle;
 import fr.clubcitrouille.lanterne.core.TickBudget;
 import fr.clubcitrouille.lanterne.report.Bench;
 import fr.clubcitrouille.lanterne.report.SelfTest;
@@ -62,6 +60,7 @@ public final class Lanterne {
     public Lanterne() {
         NeoForge.EVENT_BUS.register(this);
         Settings.configureFromEnvironment();
+        fr.clubcitrouille.lanterne.core.Machine.appraise();
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,
         // Profiler.getDefaultFiller() fait une recherche ThreadLocal à chaque appel — c'est-à-dire
@@ -114,24 +113,7 @@ public final class Lanterne {
         LanterneCommand.register(event.getDispatcher());
     }
 
-    /**
-     * Le point où tout se joue.
-     *
-     * <p>NeoForge tire cet évènement juste avant {@code entity.tick()}, et il est annulable. Toute
-     * la dégradation du mod passe par cette seule ligne — il n'y a pas de second chemin, pas de
-     * module concurrent, et donc pas de décision contradictoire possible.
-     *
-     * <p>Rien de ce qui précède l'évènement ne nous échappe : le compteur d'âge de l'entité et son
-     * examen de disparition ont déjà eu lieu. Une entité endormie vieillit et finit par disparaître
-     * exactement comme les autres.
-     */
-    @SubscribeEvent
-    public void onEntityTick(EntityTickEvent.Pre event) {
-        if (event.getEntity().level().isClientSide()) {
-            return; // le client a ses propres règles ; la simulation se juge côté serveur
-        }
-        if (!EntityThrottle.shouldTick(event.getEntity())) {
-            event.setCanceled(true);
-        }
-    }
+    // Le filtrage des entités a quitté cet évènement pour un mixin en tête de
+    // « tickNonPassenger » : le hook de NeoForge alloue un objet par entité et par tick, et l'on
+    // payait cette allocation pour, neuf fois sur dix, annuler aussitôt. Voir ServerLevelMixin.
 }

@@ -20,46 +20,51 @@ vérifiée sur trois exécutions identiques : **2 %**.
 
 | Configuration | ms/tick | vs vanilla | TPS | Mémoire allouée |
 |---|---:|---:|---:|---:|
-| Vanilla nu | 140,7 | — | **7** | 20,4 Go |
-| Modpack d'optimisation (17 mods) | 23,4 | ×6,0 | 20 | 3,4 Go |
-| **Lanterne seul** | **26,1** | **×5,4** | **20** | **2,9 Go** |
-| Modpack + Lanterne | 14,8 | ×9,5 | 20 | 1,5 Go |
+| Vanilla nu | 114,3 | — | **9** | 17,0 Go |
+| Modpack d'optimisation (17 mods) | 25,8 | ×4,4 | 20 | 3,7 Go |
+| **Lanterne seul** | **26,1** | **×4,4** | **20** | **2,7 Go** |
+| Modpack + Lanterne | 12,9 | ×8,9 | 20 | **1,0 Go** |
 
 ```
-                     0        50       100      150 ms
+                     0        40        80       120 ms
                      |─────────|─────────|─────────|
-  budget 50 ms            ▼
-  Vanilla nu         ████████████████████████████████  140,7   7 TPS  ✗
-  Modpack, 17 mods   █████                              23,4  20 TPS  ✓
-  Lanterne seul      █████                              26,1  20 TPS  ✓
-  Les deux           ███                                14,8  20 TPS  ✓
+  budget 50 ms                 ▼
+  Vanilla nu         ████████████████████████████████  114,3   9 TPS  ✗
+  Modpack, 17 mods   ███████                            25,8  20 TPS  ✓
+  Lanterne seul      ███████                            26,1  20 TPS  ✓
+  Les deux           ███                                12,9  20 TPS  ✓
 ```
 
-**Un seul mod fait jeu égal avec dix-sept**, et les bat sur la mémoire. Le modpack comparé contient
-Lithium, FerriteCore, ModernFix, ServerCore, Adaptive Performance Tweaks, AI-Improvements,
-Immersive Optimization, LetMeDespawn, Clumps et leurs dépendances.
+**Un seul mod fait jeu égal avec dix-sept**, et les bat sur la mémoire — 2,7 Go contre 3,7, soit
+**six fois moins que vanilla**. Le modpack comparé contient Lithium, FerriteCore, ModernFix,
+ServerCore, Adaptive Performance Tweaks, AI-Improvements, Immersive Optimization, LetMeDespawn,
+Clumps et leurs dépendances.
 
 ### Le gain monte avec la charge
 
 | Entités | Sans | Avec | Gain |
 |---:|---:|---:|---:|
 | 4 000 | 70,4 ms | 20,8 ms | ×3,4 |
+| 6 539 | 113,6 ms | 26,1 ms | ×4,4 |
 | **7 571** | **137,2 ms** | **25,9 ms** | **×5,3** |
-| 11 089 | 147,0 ms | 36,6 ms | ×4,0 |
 
 C'est la propriété qu'on veut : **le mod s'efface quand le serveur va bien, et travaille d'autant
 plus qu'on en a besoin.** Profileur à l'appui — avec Lanterne, le serveur passe **47 % de son temps
 à dormir**, tick fini, en attente du suivant.
 
-### Mémoire et ramassages
+### La machine se mesure elle-même
 
-| | Vanilla | Modpack | **Lanterne** |
-|---|---:|---:|---:|
-| Mémoire allouée (25 s) | 20,4 Go | 3,4 Go | **2,9 Go** |
-| Ramassages | 59 | 10 | **11** |
+Au démarrage, Lanterne fait tourner le même calcul sur un fil puis sur tous, et compare :
 
-Sur un VPS à un cœur, la mémoire n'est pas un confort : un ramassage n'y tourne pas « en
-parallèle », il **fige le serveur**. Sept fois moins d'allocations, c'est sept fois moins d'à-coups.
+```
+Machine : 16 fil(s) annoncé(s), gain parallèle réel ×13.19 — paralléliser vaudrait le coup
+Machine :  1 fil(s) annoncé(s), gain parallèle réel ×1.00 — contre-productif, faire moins
+```
+
+`Runtime.availableProcessors()` ment souvent : un VPS annoncé à quatre cœurs peut n'en avoir qu'un de
+réellement disponible. La seule réponse fiable est de mesurer — et la documentation de Folia
+recommande **seize cœurs physiques minimum**, en deçà desquels l'ordonnancement coûte plus qu'il ne
+rapporte.
 
 ### Conformité — ce qu'aucun autre ne mesure
 
