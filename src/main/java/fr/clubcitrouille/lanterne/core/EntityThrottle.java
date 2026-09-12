@@ -144,26 +144,31 @@ public final class EntityThrottle {
         }
         // <h2>Une chute, et non un sautillement</h2>
         //
-        // Le premier seuil retenu — « pas au sol » — exemptait trop : dans un troupeau serré, les
-        // créatures se poussent sans arrêt et décollent en permanence. Tout le monde était donc
-        // exempté, et le gain s'est effondré de dix fois et demie à moins de quatre.
+        // Ce qu'on protège n'est pas le fait de quitter le sol, c'est la <b>chute</b> : celle des
+        // fermes, où la créature tombe d'assez haut pour mourir. Trois seuils ont été essayés.
         //
-        // Ce qu'on veut protéger n'est pas le fait de quitter le sol, c'est la <b>chute</b> : celle
-        // des fermes, où la créature tombe d'assez haut pour mourir. Deux signes la distinguent
-        // d'un bond, et l'un suffit :
+        // <p><b>« Pas au sol »</b> exemptait tout : dans un troupeau serré, les créatures se
+        // poussent sans arrêt et décollent en permanence. Le gain s'est effondré de dix fois et
+        // demie à moins de quatre.
         //
-        // <ul>
-        //   <li>une distance de chute supérieure à un saut — on ne saute pas de deux blocs et demi ;</li>
-        //   <li>une vitesse descendante franche, qu'une chute libre atteint en quatre ou cinq tours
-        //       et qu'aucune bousculade ne produit.</li>
-        // </ul>
+        // <p><b>« Vitesse descendante franche »</b> corrigeait cela, mais trop tard : il faut cinq
+        // tours de chute libre pour atteindre le seuil, et à la cadence d'une créature lointaine,
+        // cinq tours <em>siens</em> font quinze tours réels. La chute démarrait avec un retard qui
+        // croissait avec la distance — exactement là où l'on voulait rester juste.
         //
-        // Le prix de ce choix est un démarrage de chute légèrement retardé — quelques tours, le
-        // temps que l'un des deux signes apparaisse. L'épreuve de conformité le chiffre, et c'est un
-        // compromis assumé : il vaut mieux une chute qui commence trois tours trop tard qu'une ferme
-        // seize fois moins productive, ou qu'un mod qui ne sert plus à rien.
+        // <p>Le bon critère réunit les deux questions que le mod se pose déjà : <b>hors du sol, et
+        // hors d'un amas</b>. Une vache bousculée par quarante voisines n'est pas en train de
+        // tomber, elle vibre ; une créature isolée qui quitte le sol, elle, tombe — et on le sait
+        // dès le premier tour, sans attendre que la vitesse le confirme.
+        //
+        // Le comptage de voisines est déjà fait pour la densité : ce critère ne coûte donc rien de
+        // plus qu'une lecture de table.
+        // Et elle doit descendre. La phase montante d'un saut quitte le sol sans rien devoir à la
+        // gravité : l'exempter ne protège aucune ferme et paie plein tarif. Une vraie chute, elle,
+        // a une vitesse négative dès le premier tour — le critère reste donc immédiat.
         return !entity.onGround()
-                && (entity.fallDistance > 2.5f || entity.getDeltaMovement().y < -0.4d);
+                && entity.getDeltaMovement().y < 0d
+                && Crowd.neighbours(entity) < 6;
     }
 
     /** Un véhicule qui porte un joueur : le saccader, c'est saccader le joueur lui-même. */

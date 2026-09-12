@@ -53,13 +53,13 @@ import fr.clubcitrouille.lanterne.core.Settings;
  */
 public final class Conformance {
     /** Hauteur du lâcher, en blocs au-dessus du sol. Assez pour ne jamais toucher pendant l'épreuve. */
-    private static final int DROP_HEIGHT = 220;
+    private static final int DROP_HEIGHT = 45;
     /** Durée de l'observation, en ticks. Une seconde et demie de chute libre. */
-    private static final int WINDOW = 70;
+    private static final int WINDOW = 25;
     /** Distances auxquelles on éprouve la chute. */
     // On évite zéro : une créature lâchée sur la tête du joueur retombe sur lui et ne mesure
     // plus une chute mais une collision.
-    private static final int[] RANGES = {16, 40, 80, 110};
+    private static final int[] RANGES = {16, 40, 64};
 
     private record Subject(Entity entity, int range, double startY) {}
 

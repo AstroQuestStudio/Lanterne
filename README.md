@@ -13,43 +13,48 @@ mods qui parallélisent ne servent à rien, faute d'un second cœur où pousser 
 ## Résultats mesurés
 
 Même monde, même charge — 4 000 entités, un joueur, distance de simulation 10 — même protocole.
-Tous les chiffres sortent de `LANTERNE_SELFTEST`. **Aucun n'a été saisi à la main.**
+Tous les chiffres sortent de `LANTERNE_SELFTEST`. **Aucun n'a été saisi à la main.** Variance vérifiée
+sur trois exécutions identiques : **2 %**.
 
-| Configuration | ms/tick | vs vanilla | Mémoire allouée | Paquets émis |
-|---|---:|---:|---:|---:|
-| Vanilla nu | 62,39 | — | 10,02 Go | 13 137 |
-| Modpack d'optimisation (17 mods) | 11,55 | ×5,4 | 1,80 Go | 6 022 |
-| **Lanterne seul** | **5,72** | **×10,9** | **483 Mo** | **132** |
-| Modpack + Lanterne | 3,86 | ×16,2 | 338 Mo | 53 |
+### Vitesse
 
-Le modpack comparé contient Lithium, FerriteCore, ModernFix, ServerCore, Adaptive Performance
-Tweaks, AI-Improvements, Immersive Optimization, LetMeDespawn, Clumps et leurs dépendances.
+| Configuration | ms/tick | vs vanilla |
+|---|---:|---:|
+| Vanilla nu | ~68 | — |
+| Modpack d'optimisation (17 mods) | 13,5 | ×5,0 |
+| **Lanterne seul** | **19,3** | **×3,6** |
+| Modpack + Lanterne | 8,5 | ×8,0 |
 
-```
-Temps de tick          0        20        40        60 ms
-                       |─────────|─────────|─────────|
-  budget 50 ms                                  ▼
-  Vanilla nu           ████████████████████████████████  62,4  → 16 TPS  ✗
-  Modpack, 17 mods     ██████                            11,6  → 20 TPS  ✓
-  Lanterne seul        ███                                5,7  → 20 TPS  ✓
-  Les deux             ██                                 3,9  → 20 TPS  ✓
-```
+Le modpack va plus vite que Lanterne seul. **Il faut dire pourquoi**, et c'est l'objet du tableau
+suivant.
 
-**Un seul mod bat les dix-sept réunis, par un facteur 2** — et les deux se cumulent.
+### Conformité — ce que le mod ne doit pas avoir changé
 
-L'écart est plus net encore sur les deux ressources dont dépend un petit serveur :
+Chute libre d'une créature, mesurée en blocs parcourus en 25 ticks. C'est la mécanique dont dépendent
+**toutes** les fermes à monstres : on fait tomber d'assez haut pour tuer, et l'on ramasse.
 
-```
-Mémoire allouée (25 s)          Paquets réseau émis (25 s)
-  Vanilla    10,02 Go             Vanilla    13 137
-  Modpack     1,80 Go  ×5,6       Modpack     6 022  ×2,2
-  Lanterne    0,48 Go  ×20,7      Lanterne      132  ×99,5
-```
+| Configuration | 16 blocs | 40 blocs | 64 blocs |
+|---|---:|---:|---:|
+| Vanilla (référence : 20,3 blocs) | 100 % | 100 % | 100 % |
+| **Modpack (17 mods)** | **20 %** | **20 %** | **20 %** |
+| **Lanterne** | **100 %** | **100 %** | **85 %** |
+
+**Le modpack réduit les chutes à un cinquième de leur vitesse, y compris à seize blocs du joueur.**
+Une ferme à chute y produit cinq fois moins — et le joueur l'attribuera à autre chose.
+
+Son ×5,0 est donc payé, en partie, avec du rendement de jeu. Lanterne a fait la même erreur, et
+l'épreuve de conformité l'a rattrapée : la correction lui a coûté la première place au chronomètre.
+C'est un arbitrage assumé — **un mod d'optimisation qui casse une ferme a échoué, même à ×10**.
+
+### Mémoire et réseau
+
+| | Vanilla | Modpack | **Lanterne** |
+|---|---:|---:|---:|
+| Mémoire allouée (25 s) | 9,5 Go | 1,9 Go | **2,4 Go** |
+| Ramassages | 27 | 9 | **5** |
 
 Sur un VPS à un cœur, la mémoire n'est pas un confort : un ramassage n'y tourne pas « en
-parallèle », il **fige le serveur**. Vingt fois moins d'allocations, c'est vingt fois moins d'à-coups.
-
----
+parallèle », il **fige le serveur**.
 
 ## La thèse
 
@@ -179,10 +184,16 @@ celui du chargement. Un vrai joueur pose *deux* tickets.
 moitié du gain. `Enum.values()` clone son tableau à chaque appel — cent mille tableaux jetables par
 seconde. Repéré en relisant l'état de l'art, pas en relisant le code.
 
-**Un banc qui mesurait autre chose.** La comparaison avec Immersive Optimization le donnait deux
-fois meilleur que Lanterne. En réalité ses observateurs n'étaient pas de vrais joueurs : pour lui le
-serveur était **vide**, et il ralentissait donc tout au maximum. Il ne faisait pas mieux, **il ne
-faisait rien** — correctement. Corriger cela a fait passer le gain mesuré de ×2,9 à ×10,5.
+**Un banc qui mesurait autre chose.** Trois défauts successifs du laboratoire ont produit des
+chiffres flatteurs et faux. Les observateurs n'étaient pas de vrais joueurs, puis l'étaient mais en
+spectateur — que le recensement ignore — puis n'appartenaient à aucun monde. Dans les trois cas le
+recensement voyait un serveur vide et **tout** était ralenti au maximum, y compris ce qui touchait le
+joueur. Un ×10,5 a été publié sur cette base ; il ne valait rien.
+
+**Le plus coûteux : ce qui tombe.** La gravité s'accumule — `v += g` puis `y += v` — donc ticker une
+créature une fois sur quatre ne divise pas sa chute par quatre **mais par seize**. Toutes les fermes
+à monstres reposent sur une chute. Corriger cela a ramené le gain de ×10,5 à ×3,6 : le ×10,5 n'était
+pas un gain, c'était une dégradation non mesurée.
 
 La leçon vaut au-delà du cas : **un banc qui ne reproduit pas les conditions réelles mesure autre
 chose que ce qu'on croit, et il le fait sans prévenir.**
