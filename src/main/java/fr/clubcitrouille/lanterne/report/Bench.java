@@ -164,6 +164,7 @@ public final class Bench {
                     gcMark = gcCount();
                     fr.clubcitrouille.lanterne.lab.Understudy.resetPackets();
                     fr.clubcitrouille.lanterne.lab.Sampler.start(Thread.currentThread());
+                    fr.clubcitrouille.lanterne.lab.Allocations.start();
                 }
             }
             case MEASURE_ON -> {
@@ -178,6 +179,7 @@ public final class Bench {
                     fr.clubcitrouille.lanterne.lab.Sampler.stop();
                     say("── Profil AVEC Lanterne ──");
                     fr.clubcitrouille.lanterne.lab.Sampler.report(14);
+                    fr.clubcitrouille.lanterne.lab.Allocations.stopAndReport(20);
                     say("Phase 1 terminée (mod actif). Bascule — phase 2 sans le mod.");
                 }
             }

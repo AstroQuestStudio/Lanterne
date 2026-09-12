@@ -57,6 +57,8 @@ public final class Settings {
     private static boolean sleep = true;
     /** Le rationnement : réagir pendant le tick, et non au suivant. */
     private static boolean rationing = true;
+    /** La position réutilisée pour les tirages aléatoires de blocs. */
+    private static boolean scratchPos = true;
 
     private Settings() {}
 
@@ -107,6 +109,10 @@ public final class Settings {
         return master && rationing;
     }
 
+    public static boolean scratchPos() {
+        return master && scratchPos;
+    }
+
     /**
      * Lit la sélection de modules depuis l'environnement.
      *
@@ -130,6 +136,7 @@ public final class Settings {
         jam = wanted.contains("jam");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         rationing = wanted.contains("ration");
+        scratchPos = wanted.contains("scratch") || wanted.contains("pos");
     }
 
     /** Ce qui est actif, pour l'en-tête du rapport. */
@@ -161,6 +168,9 @@ public final class Settings {
         }
         if (rationing) {
             text.append("ration ");
+        }
+        if (scratchPos) {
+            text.append("positions ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

@@ -13,6 +13,7 @@
     "NetworkRegistryMixin",
     "FurnaceMixin",
     "ServerLevelMixin",
+    "LevelMixin",
     "BlockEntityMixin"
   ]
 }
