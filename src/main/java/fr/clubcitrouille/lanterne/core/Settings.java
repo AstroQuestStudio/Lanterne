@@ -77,6 +77,37 @@ public final class Settings {
     /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
     private static boolean projectiles = true;
 
+    /**
+     * La forme d.entité construite à la demande, retirée après mesure — treizième plan démoli.
+     *
+     * <h2>Un million d.objets supprimés, et rien au compteur</h2>
+     *
+     * <p>{@code BlockCollisions} est créé à chaque appel de {@code Entity.move}, et son constructeur
+     * fabrique {@code Shapes.create(box)}. Ce champ n.est lu qu.en <b>un seul endroit</b>, dans la
+     * branche des blocs à forme partielle — dalles, escaliers, murs. Un monde est fait de blocs pleins ;
+     * la forme était donc construite pour rien presque à chaque déplacement de chaque entité.
+     *
+     * <p>Le raisonnement était juste et le compteur l.a confirmé sans réserve :
+     *
+     * <pre>
+     * Formes différées : 1 123 417, dont 619 construites   →   99,9 % évitées
+     * 22,81 ms sans  ·  22,78 ms avec   →   aucun effet mesurable
+     * mémoire allouée : 3,98 Go sans  ·  3,87 Go avec   →   ×1,03
+     * </pre>
+     *
+     * <p>Un million cent vingt-trois mille constructions d.objet supprimées, pour trois pour cent de
+     * mémoire et zéro milliseconde.
+     *
+     * <p>La cause est celle qui avait déjà emporté le module de génération de terrain : le compilateur
+     * à la volée <b>élimine ces allocations par analyse d.échappement</b>. L.objet ne quitte pas la
+     * méthode dans l.immense majorité des cas, donc il n.est jamais vraiment créé.
+     *
+     * <p>C.est la deuxième fois que ce projet supprime une allocation que la machine virtuelle avait
+     * déjà supprimée. La règle à en tirer complète celle des artefacts d.attribution : <b>compter des
+     * allocations évitées ne prouve rien tant qu.on n.a pas mesuré le tas</b>.
+     */
+    private static final boolean OUTLINE_REMOVED_AFTER_MEASUREMENT = true;
+
     /** La compression des sauvegardes, choisie pour la vitesse. Voir Attic. */
     private static boolean save = true;
 

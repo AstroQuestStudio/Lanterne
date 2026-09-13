@@ -137,6 +137,7 @@ public final class Lanterne {
      */
     @SubscribeEvent
     public void onServerStarted(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
+        fr.clubcitrouille.lanterne.core.Ballast.appraise();
         fr.clubcitrouille.lanterne.core.Herald.welcome(
                 (System.nanoTime() - AWOKEN) / 1_000_000L,
                 net.neoforged.fml.ModList.get().size());
