@@ -135,16 +135,21 @@ chunk**, donc un monde écrit en `deflate` se relit sans rien convertir.
 
 | Opération | Coût médian par chunk |
 |---|---:|
-| **Générer** un chunk neuf | **36 à 44 ms** |
-| Relire un chunk existant | ~0,2 ms |
+| **Générer** un chunk neuf | **37 ms** |
+| Relire un chunk déjà généré | **6,8 ms** |
 
-Générer un chunk coûte donc presque **un tick entier**. C'est le vrai goulot de l'exploration, et
-Lanterne n'y touche pas encore — le dire est plus utile que de le laisser croire.
+Générer un chunk coûte donc presque **un tick entier**, et cinq fois et demie ce que coûte le
+relire. C'est le vrai goulot de l'exploration, et Lanterne n'y touche **pas encore** — le dire est
+plus utile que de le laisser croire.
 
-<sub>Ce banc rend aussi deux verdicts comparatifs que **le mod refuse de publier** : la « perte » en
-génération compare deux régions au relief différent, et le « gain » en chargement atteint ×30, ce qui
-est impossible puisque aucun module ne touche au chargement. Le banc les rejette lui-même et dit
-pourquoi.</sub>
+<sub>Ce banc a fallu le réparer deux fois avant de le croire. Sa première version générait une région
+avec le mod et une autre sans, à des coordonnées éloignées — seule façon apparente de contourner le
+fait qu'un chunk généré ne se régénère pas. Verdict : « perte ×0,83 ». Sauf qu'une montagne coûte
+plus cher qu'une plaine, et rien dans ce chiffre ne disait laquelle on avait tirée. Il alterne
+désormais **à l'intérieur d'une seule grille** — un chunk avec le mod, le suivant sans — et rend
+« aucun effet mesurable », ce qui est très exactement l'attendu pour un mod qui ne touche pas à la
+génération. Son régime chargement annonçait auparavant un gain de ×30, impossible ; il est retombé à
+×0,89.</sub>
 
 ---
 

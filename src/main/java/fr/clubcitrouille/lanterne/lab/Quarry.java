@@ -176,8 +176,8 @@ public final class Quarry {
     private static final int MEASURED = GRID_CHUNKS - WARMUP_CHUNKS;
 
     /** Origine (en coordonnées de chunk) de la région de génération, mod actif. */
-    private static final int GEN_ON_CX = 6250;
-    private static final int GEN_ON_CZ = 6250;
+    private static final int GEN_ON_CX = 7500;
+    private static final int GEN_ON_CZ = 7500;
     /** Origine de la région de génération témoin — DIFFÉRENTE, un chunk généré ne se régénère pas. */
     private static final int GEN_OFF_CX = 6250;
     private static final int GEN_OFF_CZ = -6250;
@@ -205,9 +205,34 @@ public final class Quarry {
     private static final double GEN_SUSPECT_MS = GEN_SUSPECT_NS / 1e6;
 
     private enum Step {
-        OFF, GEN_ON, GEN_OFF, LOAD_SEED, LOAD_SAVE_1, LOAD_WAIT_1, LOAD_ON, LOAD_SAVE_2, LOAD_WAIT_2,
+        OFF, GEN_PAIRED, LOAD_SEED, LOAD_SAVE_1, LOAD_WAIT_1, LOAD_ON, LOAD_SAVE_2, LOAD_WAIT_2,
         LOAD_OFF, DONE
     }
+
+    /**
+     * Nombre de mesures par côté, la grille étant partagée en deux par alternance.
+     *
+     * <h2>Deux régions différentes ne se comparent pas</h2>
+     *
+     * <p>Le protocole d'origine générait une région avec le mod, une autre sans, à des coordonnées
+     * éloignées. C'était la seule façon apparente de contourner un fait têtu : <b>un chunk généré ne se
+     * régénère pas</b>.
+     *
+     * <p>La première exécution a rendu « PERTE ×0,83 » — le mod plus cher que le témoin. Un résultat que
+     * le banc lui-même refusait d'endosser, et à juste titre : 43,8 ms contre 36,2, sur deux reliefs
+     * différents. Une montagne coûte plus cher qu'une plaine, et rien dans ce chiffre ne disait laquelle
+     * on avait tirée.
+     *
+     * <p>On alterne donc <b>à l'intérieur d'une même grille</b> : un chunk avec le mod, le suivant sans,
+     * et ainsi de suite. Les chunks voisins partagent leur relief, leurs structures et leur biome ; ce
+     * qui les distingue encore se répartit également entre les deux moitiés au lieu de s'accumuler d'un
+     * seul côté.
+     *
+     * <p>Le prix de cet appariement est une bascule du mod à chaque chunk. C'est acceptable ici — la
+     * génération dure des dizaines de millisecondes, contre quelques nanosecondes pour changer un
+     * booléen — alors que ce serait absurde sur un tick d'entité.
+     */
+    private static final int PAIRED = MEASURED / 2;
 
     private static Step step = Step.OFF;
     /** Index du chunk courant dans la grille en cours, de 0 à {@link #GRID_CHUNKS} exclu. */
@@ -222,8 +247,11 @@ public final class Quarry {
     private static boolean loadOnAvailable = true;
     private static boolean loadOffAvailable = true;
 
-    private static final long[] genOn = new long[MEASURED];
-    private static final long[] genOff = new long[MEASURED];
+    private static final long[] genOn = new long[PAIRED];
+    private static final long[] genOff = new long[PAIRED];
+    /** Combien de mesures rangées de chaque côté : l'alternance ne les remplit pas au même rythme. */
+    private static int genOnFilled;
+    private static int genOffFilled;
     private static final long[] loadOn = new long[MEASURED];
     private static final long[] loadOff = new long[MEASURED];
 
@@ -255,7 +283,7 @@ public final class Quarry {
             return;
         }
 
-        step = Step.GEN_ON;
+        step = Step.GEN_PAIRED;
         shot = 0;
         evictWait = 0;
         settleLeft = 0;
@@ -280,18 +308,7 @@ public final class Quarry {
         ServerChunkCache chunkSource = level.getChunkSource();
 
         switch (step) {
-            case GEN_ON -> measureChunk(chunkSource, GEN_ON_CX, GEN_ON_CZ, genOn, () -> {
-                Settings.setEnabled(false);
-                Lanterne.LOG.info("[CARRIÈRE] Génération (mod actif) terminée — bascule vers la région "
-                        + "témoin, mod éteint.");
-                step = Step.GEN_OFF;
-            });
-            case GEN_OFF -> measureChunk(chunkSource, GEN_OFF_CX, GEN_OFF_CZ, genOff, () -> {
-                Settings.setEnabled(true);
-                Lanterne.LOG.info("[CARRIÈRE] Génération (mod éteint) terminée — amorçage, hors mesure, "
-                        + "de la région de chargement.");
-                step = Step.LOAD_SEED;
-            });
+            case GEN_PAIRED -> measurePairedChunk(chunkSource);
             case LOAD_SEED -> seedLoadRegion(chunkSource);
             case LOAD_SAVE_1 -> {
                 chunkSource.save(true);
@@ -328,6 +345,42 @@ public final class Quarry {
      * artificiellement le pic de charge que {@code Rationing} est censé absorber, exactement le piège
      * que {@code Boom} évite pour la même raison.
      */
+    /**
+     * Mesure un chunk, en alternant l'état du mod d'un chunk au suivant.
+     *
+     * <p>La bascule a lieu <b>avant</b> le chronomètre : ce qu'on mesure est la génération, pas le
+     * changement d'un booléen.
+     */
+    private static void measurePairedChunk(ServerChunkCache chunkSource) {
+        ChunkPos pos = chunkPosAt(GEN_ON_CX, GEN_ON_CZ, shot);
+        boolean active = (shot & 1) == 0;
+        Settings.setEnabled(active);
+
+        long start = System.nanoTime();
+        chunkSource.getChunk(pos.x(), pos.z(), ChunkStatus.FULL, true);
+        long elapsed = System.nanoTime() - start;
+
+        if (shot >= WARMUP_CHUNKS) {
+            if (active) {
+                if (genOnFilled < genOn.length) {
+                    genOn[genOnFilled++] = elapsed;
+                }
+            } else if (genOffFilled < genOff.length) {
+                genOff[genOffFilled++] = elapsed;
+            }
+        }
+        shot++;
+
+        if (shot >= GRID_CHUNKS) {
+            shot = 0;
+            Settings.setEnabled(true);
+            Lanterne.LOG.info("[CARRIÈRE] Génération appariée terminée — {} mesures avec le mod, {} sans, "
+                    + "sur la même grille. Amorçage, hors mesure, de la région de chargement.",
+                    genOnFilled, genOffFilled);
+            step = Step.LOAD_SEED;
+        }
+    }
+
     private static void measureChunk(ServerChunkCache chunkSource, int originCx, int originCz,
             long[] samples, Runnable onGridDone) {
         ChunkPos pos = chunkPosAt(originCx, originCz, shot);
@@ -456,14 +509,14 @@ public final class Quarry {
         long genOffTotal = total(genOff);
         double genRatio = genOnMedian <= 0d ? 0d : genOffMedian / genOnMedian;
 
-        Lanterne.LOG.info("[CARRIÈRE] ── Régime GÉNÉRATION — {} mesures utiles par région sur {} ──",
-                MEASURED, GRID_CHUNKS);
+        Lanterne.LOG.info("[CARRIÈRE] ── Régime GÉNÉRATION — grille unique, chunks appariés par "
+                + "alternance ({} avec le mod, {} sans) ──", genOnFilled, genOffFilled);
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[CARRIÈRE] Mod actif  : médiane %.3f ms/chunk · total %.1f ms (région chunk %d,%d)",
-                genOnMedian / 1e6, genOnTotal / 1e6, GEN_ON_CX, GEN_ON_CZ));
+                "[CARRIÈRE] Mod actif  : médiane %.3f ms/chunk · total %.1f ms",
+                genOnMedian / 1e6, genOnTotal / 1e6));
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[CARRIÈRE] Mod éteint : médiane %.3f ms/chunk · total %.1f ms (région chunk %d,%d)",
-                genOffMedian / 1e6, genOffTotal / 1e6, GEN_OFF_CX, GEN_OFF_CZ));
+                "[CARRIÈRE] Mod éteint : médiane %.3f ms/chunk · total %.1f ms",
+                genOffMedian / 1e6, genOffTotal / 1e6));
 
         int genOnSuspect = countSuspectlyFast(genOn);
         int genOffSuspect = countSuspectlyFast(genOff);
@@ -476,8 +529,10 @@ public final class Quarry {
                     genOnSuspect, genOffSuspect, GEN_SUSPECT_MS));
         }
         Lanterne.LOG.info(
-                "[CARRIÈRE] VERDICT génération : {} — RAPPEL : deux régions DIFFÉRENTES (relief "
-                        + "distinct), l'écart peut donc venir du terrain autant que du mod.",
+                "[CARRIÈRE] VERDICT génération : {} — chunks appariés dans la MÊME grille, un sur deux "
+                        + "de chaque côté : le relief se répartit également au lieu de s'accumuler d'un "
+                        + "seul côté. Aucun module de ce mod ne touchant à la génération, tout écart "
+                        + "notable est un signal sur le protocole, pas sur le mod.",
                 verdict(genRatio));
 
         Lanterne.LOG.info(

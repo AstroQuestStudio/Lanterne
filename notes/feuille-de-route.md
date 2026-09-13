@@ -171,7 +171,7 @@ Le laboratoire passe de 7 à 15 outils.
 | Sujet | État |
 |---|---|
 | Banc des fluides | **corrigé** : il manquait de forcer les chunks du bassin, sans quoi aucun tick de fluide n'y est exécuté. La conformité est fiable (113 blocs des deux côtés, stable) ; le verdict de vitesse est rejeté par le banc lui-même (×1,58 puis ×3,33) |
-| Banc des chunks, régime chargement | verdict **rejeté par le banc lui-même** (×30 impossible) |
+| Banc des chunks | **réparé par appariement** : alternance chunk par chunk dans une seule grille. Génération « aucun effet mesurable » (37,2 vs 35,8 ms) et chargement ×0,89 — les deux verdicts sont enfin crédibles. Générer = 37 ms, relire = 6,8 ms |
 | Débit d'une chaîne de trémies | **non reproductible** : 18/30, 39/16, 16/16 |
 | Banc client `Glass` | écrit et câblé, **jamais exécuté** |
 | Génération de chunks | mesurée à 36-44 ms/chunk — gisement énorme, non attaqué |
