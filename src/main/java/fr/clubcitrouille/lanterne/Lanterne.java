@@ -60,8 +60,16 @@ public final class Lanterne {
     /** Instant du chargement, pour dire au démarrage combien il aura duré. */
     private static final long AWOKEN = System.nanoTime();
 
-    public Lanterne() {
+    public Lanterne(net.neoforged.bus.api.IEventBus modBus,
+            net.neoforged.fml.ModContainer container) {
         NeoForge.EVENT_BUS.register(this);
+        // Le contenu s.enregistre TOUJOURS, même si son effet est coupé. Un bloc qui n.existe plus
+        // dans le registre transforme en air toutes les ancres déjà posées dans les mondes des
+        // joueurs — un interrupteur ne doit jamais pouvoir détruire une construction.
+        fr.clubcitrouille.lanterne.content.Contents.register(modBus);
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                fr.clubcitrouille.lanterne.core.Config.SPEC);
+        modBus.addListener(fr.clubcitrouille.lanterne.core.Config::apply);
         // Les réglages d'abord : le filtre de journal les consulte, et la première version
         // l'installait avant de les avoir lus — si bien qu'aucun réglage ne pouvait l'en empêcher.
         Settings.configureFromEnvironment();

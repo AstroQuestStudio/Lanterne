@@ -77,6 +77,26 @@ public final class Settings {
     /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
     private static boolean projectiles = true;
 
+    /**
+     * L.effet de l.ancre de chunk.
+     *
+     * <h2>Le socle et les ajouts</h2>
+     *
+     * <p>Ce mod est d.abord un socle de performance, et les modules ci-dessus en font partie. L.ancre
+     * est autre chose : un <b>ajout</b> de contenu, qui répond à un besoin que l.optimisation fait
+     * naître — si l.on dégrade ce qui est loin, comment garder sa ferme en marche ?
+     *
+     * <p>Les deux doivent rester séparables. Un administrateur qui ne veut que la vitesse coupe
+     * l.ajout ; un autre qui veut l.ancre garde tout. {@code LANTERNE_MODULES} sans {@code ancre}
+     * laisse le bloc exister — il reste posable, cassable, échangeable — mais il ne garde plus son
+     * chunk chargé.
+     *
+     * <p>Le bloc lui-même est enregistré <b>en toutes circonstances</b>, et ce n.est pas négociable :
+     * un bloc absent du registre devient de l.air dans les mondes où il était posé. Un interrupteur de
+     * performance n.a pas le droit de détruire une construction.
+     */
+    private static boolean anchor = true;
+
     /** Les comportements composites parcourus sans streams. Voir Mind. */
     private static boolean mind = true;
 
@@ -473,6 +493,10 @@ public final class Settings {
         return master && projectiles;
     }
 
+    public static boolean anchor() {
+        return master && anchor;
+    }
+
     public static boolean mind() {
         return master && mind;
     }
@@ -548,6 +572,7 @@ public final class Settings {
         density = wanted.contains("density") || wanted.contains("densite");
         collisions = wanted.contains("collision");
         projectiles = wanted.contains("projectile") || wanted.contains("fleche");
+        anchor = wanted.contains("anchor") || wanted.contains("ancre");
         save = wanted.contains("save") || wanted.contains("sauvegarde");
         explosions = wanted.contains("explosion") || wanted.contains("blast");
         jam = wanted.contains("jam");
@@ -556,6 +581,38 @@ public final class Settings {
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
         hush = wanted.contains("silence");
+    }
+
+    /**
+     * L.environnement a-t-il posé un choix de modules ?
+     *
+     * <p>Sert au fichier de configuration, qui doit s.effacer devant lui : un banc lancé avec un seul
+     * module verrait sinon le fichier rallumer les autres, et mesurerait le mod entier en croyant
+     * mesurer une pièce.
+     */
+    public static boolean environmentSpoke() {
+        String raw = System.getenv("LANTERNE_MODULES");
+        return raw != null && !raw.isBlank();
+    }
+
+    /** Applique le fichier de configuration. Voir Config, et la priorité donnée à l.environnement. */
+    public static void applyFromConfig() {
+        lod = Config.LOD.get();
+        network = Config.NETWORK.get();
+        profilerCache = Config.PROFILER.get();
+        density = Config.DENSITY.get();
+        collisions = Config.COLLISIONS.get();
+        projectiles = Config.PROJECTILES.get();
+        explosions = Config.EXPLOSIONS.get();
+        mind = Config.MIND.get();
+        save = Config.SAVE.get();
+        jam = Config.JAM.get();
+        sleep = Config.SLEEP.get();
+        rationing = Config.RATIONING.get();
+        scratchPos = Config.SCRATCH_POS.get();
+        strictYield = Config.STRICT_YIELD.get();
+        clump = Config.CLUMP.get();
+        anchor = Config.ANCHOR.get();
     }
 
     /** Ce qui est actif, pour l'en-tête du rapport. */
