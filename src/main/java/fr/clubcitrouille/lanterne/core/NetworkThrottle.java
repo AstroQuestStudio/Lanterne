@@ -66,7 +66,16 @@ public final class NetworkThrottle {
             return true;
         }
 
-        int simulation = Cadence.forEntity(entity, Census.distanceOf(entity), TickBudget.pressure());
+        // La cadence a déjà été calculée pour cette entité, dans ce tick, par le tour de simulation.
+        // On la relit : deux champs contre une lecture de table et une formule. Voir PaceMixin.
+        int simulation = entity instanceof fr.clubcitrouille.lanterne.core.PaceHolder holder
+                ? holder.lanterne$paceAt(gameTime)
+                : 0;
+        if (simulation == 0) {
+            // L'entité n'est pas passée par le tour de simulation à ce tick — cas d'une entité que le
+            // jeu diffuse sans la ticker. On calcule alors, comme avant.
+            simulation = Cadence.forEntity(entity, Census.distanceOf(entity), TickBudget.pressure());
+        }
         if (simulation <= 2) {
             return true; // à portée de vue utile, on n'économise rien sur le dos du joueur
         }

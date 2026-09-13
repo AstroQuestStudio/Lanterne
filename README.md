@@ -9,7 +9,7 @@ mais à lui éviter le travail qui ne sert à rien.
 
 ### Un seul mod fait jeu égal avec dix-sept — et les bat sur la mémoire, sans casser les fermes.
 
-**×6,3** sur un serveur peuplé · **×5,2** sur un élevage intensif · **×62** sur un sol jonché d'objets
+**×7,1** sur un serveur peuplé · **×5,2** sur un élevage intensif · **×62** sur un sol jonché d'objets
 
 *Rendement d'une ferme : **100 %**, mesuré. Aucun autre mod d'optimisation ne publie ce chiffre.*
 
@@ -19,9 +19,10 @@ mais à lui éviter le travail qui ne sert à rien.
 
 ## 📊 Résultats
 
-Monde pré-généré, 10 500 entités, un joueur, distance de simulation 10. Serveur dédié NeoForge
+Monde pré-généré, un joueur, distance de simulation 10. Serveur dédié NeoForge
 26.1.2, Ryzen 7 5800H. Tous les chiffres sortent de `LANTERNE_SELFTEST` — **aucun n'a été saisi à la
-main**. Variance vérifiée sur trois exécutions : 2 %.
+main**. Les chiffres du tableau ci-dessous sont la médiane de trois exécutions ; ceux du grand
+tableau plus bas datent d'une exécution unique et sont signalés comme tels.
 
 ```mermaid
 xychart-beta
@@ -52,13 +53,13 @@ xychart-beta
     title "Millisecondes par tick — échelle logarithmique impossible, lisez les chiffres"
     x-axis ["10 500 entités", "1 000 vaches en 15x15", "8 000 objets au sol"]
     y-axis "ms par tick" 0 --> 480
-    bar [200.3, 28.4, 463.5]
-    bar [31.6, 5.4, 7.4]
+    bar [202.9, 28.4, 463.5]
+    bar [28.2, 5.4, 7.4]
 ```
 
 | Charge | Sans Lanterne | Avec Lanterne | Gain | Ce qu'elle reproduit |
 |---|---:|---:|---:|---|
-| 10 500 entités sur un anneau de 160 blocs | 200,3 ms | **31,6 ms** | **×6,3** | un serveur peuplé, gradient de distance |
+| 10 500 entités sur un anneau de 160 blocs | 202,9 ms | **28,2 ms** | **×7,1** | un serveur peuplé, gradient de distance |
 | 1 000 vaches dans un carré de 15 blocs | 28,4 ms | **5,4 ms** | **×5,2** | un élevage intensif, coût quadratique |
 | 8 000 piles d'objets au sol | 463,5 ms | **7,4 ms** | **×62,4** | une ferme qui déborde, un sol jonché |
 

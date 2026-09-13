@@ -203,3 +203,22 @@ le chemin le plus chaud du serveur aurait contredit tout ce que ce projet défen
 Générer un chunk coûte **36 à 44 ms** — presque un tick entier. Aucun banc de tick ne le montre,
 parce qu'un monde pré-généré n'en génère aucun. C'est pourtant ce que vit un joueur qui explore, et
 c'est le seul domaine où le mod ne fait encore **rien**.
+
+### La cadence mémorisée — un gain probable, non attribuable
+
+Le profil désignait notre propre code au deuxième rang : `NetworkThrottle.shouldSend` refaisait, pour
+décider d'un envoi de paquet, le calcul que `EntityThrottle.shouldTick` venait d'achever dans le même
+tick pour la même entité.
+
+Deux champs posés sur `Entity` (et non une table : remplacer un calcul par un hachage aurait pu ne
+rien rapporter, comme deux modules déjà retirés). Première tentative refusée au démarrage —
+`IllegalClassLoadError` : une interface ordinaire ne peut pas vivre dans un paquet déclaré comme
+paquet de mixins. Elle a été déplacée dans `core`, qui est d'ailleurs sa vraie place.
+
+Mesures sur la charge de référence : **28,23 / 31,41 / 27,65 ms**, médiane 28,23, contre 31,59 avant
+— une seule mesure.
+
+**Le gain n'est pas attribué à ce module dans le README**, et c'est délibéré : comparer une médiane de
+trois mesures à une mesure unique n'est pas une comparaison. Le chiffre publié (28,2 ms, ×7,1) est
+simplement mieux étayé que le précédent. Le module est conservé parce que supprimer un calcul
+redondant ne peut pas nuire, pas parce qu'on lui a prouvé un gain.

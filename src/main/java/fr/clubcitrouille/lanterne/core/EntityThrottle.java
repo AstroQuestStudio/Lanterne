@@ -100,6 +100,13 @@ public final class EntityThrottle {
         }
         Census.count(period);
 
+        // On dépose la cadence sur l'entité : le tour de diffusion la relira au lieu de la recalculer.
+        // Le profileur nous avait placés au deuxième rang de notre propre profil pour cette raison.
+        // Voir PaceMixin.
+        if (entity instanceof fr.clubcitrouille.lanterne.core.PaceHolder holder) {
+            holder.lanterne$rememberPace(period, now);
+        }
+
         // Éteint, on classe mais on ne dégrade pas. Le rapport reste donc lisible pendant la phase
         // témoin du banc, et les deux moitiés de la comparaison portent bien sur le même monde.
         if (!Settings.lod()) {

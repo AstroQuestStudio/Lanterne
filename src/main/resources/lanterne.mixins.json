@@ -21,6 +21,7 @@
     "LevelChunkMixin",
     "EntityGetterMixin",
     "ItemEntityMixin",
-    "ItemAgeAccessor"
+    "ItemAgeAccessor",
+    "PaceMixin"
   ]
 }
