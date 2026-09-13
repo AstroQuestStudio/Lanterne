@@ -25,6 +25,7 @@
     "ChunkMapMixin",
     "ChunkStepMixin",
     "ProjectileUtilMixin",
-    "LivingTargetMixin"
+    "LivingTargetMixin",
+    "RegionFileVersionMixin"
   ]
 }
