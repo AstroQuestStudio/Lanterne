@@ -77,6 +77,46 @@ public final class Settings {
     /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
     private static boolean projectiles = true;
 
+    /**
+     * Le raccourci du tirage aléatoire, retiré après mesure — dixième plan démoli, et le plus
+     * instructif.
+     *
+     * <h2>Douze pour cent au profil, cent cinquante millions de raccourcis, zéro milliseconde</h2>
+     *
+     * <p>La charge « village » — un serveur réaliste, aucun réglage touché — plaçait
+     * {@code FluidState.isRandomlyTicking} en deuxième position de son profil, à <b>12,0 %</b>. Le
+     * raisonnement était net : la méthode délègue à {@code getType().isRandomlyTicking()}, le site
+     * d.appel voit passer l.eau, la lave et le vide, il est donc mégamorphique et la machine virtuelle
+     * renonce à l.incorporer. Un bloc sans fluide rend un singleton ; une comparaison de référence
+     * devait suffire à l.écarter.
+     *
+     * <p>Le raccourci a fonctionné exactement comme prévu :
+     *
+     * <pre>
+     * Tirages de bloc sans fluide reconnus : 151 055 840
+     * 25,36 ms sans  ·  25,58 ms avec   →  aucun effet mesurable
+     * </pre>
+     *
+     * <p>Cent cinquante et un millions d.appels virtuels supprimés, et pas une milliseconde gagnée.
+     *
+     * <h2>La leçon, qui vaut mieux que le module</h2>
+     *
+     * <p>Les douze pour cent n.existaient pas. Ce sont un <b>artefact d.attribution</b> de
+     * l.échantillonneur : la méthode est si courte que le compilateur l.incorpore dans ses appelantes,
+     * et le relevé, qui ne voit que le sommet de pile, lui impute le temps de ses voisines.
+     *
+     * <p>D.où une règle que ce projet appliquera désormais : <b>un poste élevé sur une méthode très
+     * courte et très appelée doit être suspecté d.artefact avant d.être attaqué</b>. Elle disqualifie
+     * du même coup {@code PalettedContainer.get} comme cible directe — et elle explique après coup
+     * pourquoi le module « vide », qui le visait, n.avait rien rendu.
+     *
+     * <p>Les postes qui restent crédibles sont ceux dont le coût est <em>structurel</em> :
+     * {@code FarmlandBlock.isNearWater} parcourt cent soixante-deux positions, et cela, aucun
+     * compilateur ne l.effacera.
+     */
+    private static final boolean DRAW_REMOVED_AFTER_MEASUREMENT = true;
+
+
 
     /**
      * Le saut des balayages de blocs dans le vide, retiré après mesure — huitième plan démoli.

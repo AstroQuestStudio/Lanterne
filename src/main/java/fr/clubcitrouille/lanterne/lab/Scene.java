@@ -140,7 +140,26 @@ public final class Scene {
          * tirage, et non ceux du blé. Les lire comme des cibles serait répéter l.erreur du compteur
          * qui doublait le coût de l.étape qu.il mesurait.
          */
-        FARM
+        FARM,
+        /**
+         * Un serveur habité : tout à la fois, et dans les proportions qu.on rencontre vraiment.
+         *
+         * <h2>Pourquoi les charges isolées ne suffisent plus</h2>
+         *
+         * <p>Chaque charge de ce projet éprouve un poste et le met en évidence en le poussant à
+         * l.extrême : huit mille objets, six mille flèches, quatre mille parcelles. C.est ce qu.il
+         * faut pour juger un module — et c.est trompeur pour décider lequel écrire ensuite.
+         *
+         * <p>Un profil pris sur une charge extrême désigne le poste qu.on a soi-même exagéré. Pour
+         * savoir <b>ce qui tick le plus sur un serveur réel</b>, il faut une charge où rien n.est
+         * exagéré : des créatures, des objets, des fours, des cultures, dans les proportions d.un
+         * village habité.
+         *
+         * <p>Elle ne touche à <b>aucun réglage</b> — ni entassement désarmé, ni vitesse de tick
+         * aléatoire relevée. C.est sa raison d.être : le classement qu.elle rend doit être celui d.un
+         * serveur, pas celui d.un laboratoire.
+         */
+        VILLAGE
     }
 
     /**
@@ -174,6 +193,7 @@ public final class Scene {
             case "light", "lumiere", "lumière", "lampes" -> Kind.LIGHT;
             case "arrows", "fleches", "flèches", "projectiles" -> Kind.ARROWS;
             case "farm", "champ", "agriculture", "ble", "blé" -> Kind.FARM;
+            case "village", "reel", "réel", "serveur" -> Kind.VILLAGE;
             default -> Kind.RING;
         };
     }
@@ -470,6 +490,87 @@ public final class Scene {
         return lampToggles;
     }
 
+    /**
+     * Un serveur habité, dans les proportions qu'on rencontre vraiment.
+     *
+     * <h2>D'où viennent ces proportions</h2>
+     *
+     * <p>Elles ne sont pas tirées au sort. Sur un serveur entre amis qui tourne depuis quelques mois,
+     * un joueur à son point d'apparition a autour de lui, à peu près dans cet ordre : des créatures
+     * apparues naturellement et jamais tuées, les objets tombés de ce qu'il a cassé, une poignée de
+     * fours qui cuisent, un champ, et des coffres.
+     *
+     * <p>Le rapport entre ces postes compte plus que leur valeur absolue. C'est lui qui décide quel
+     * module écrire ensuite — et c'est très exactement ce qu'aucune des charges extrêmes de ce projet
+     * ne peut dire, puisque chacune exagère le poste qu'elle éprouve.
+     *
+     * <p><b>Aucun réglage n'est touché.</b> L'entassement reste armé, la vitesse de tick aléatoire
+     * reste à trois. Une charge dont le classement servirait à décider du travail ne doit pas être une
+     * charge truquée.
+     */
+    private static int village(ServerLevel level, int count) {
+        int souls = Math.max(40, count / 4);
+        int litter = Math.max(60, count / 2);
+        int furnaces = Math.max(8, count / 40);
+        int plots = Math.max(100, count / 4);
+
+        int born = ring(level, souls);
+        born += items(level, litter);
+        int lit = fr.clubcitrouille.lanterne.report.Herd.ovens(level, furnaces, 96);
+        int sown = plough(level, plots);
+
+        Lanterne.LOG.info("[SCÈNE] village : {} créature(s), {} objet(s) au sol, {} four(s) allumé(s), "
+                + "{} parcelle(s) cultivée(s) — et aucun réglage touché.",
+                souls, litter, lit, sown);
+        return born;
+    }
+
+    /** Un troupeau dispersé, comme une faune naturelle et non comme un élevage. */
+    private static int ring(ServerLevel level, int count) {
+        return fr.clubcitrouille.lanterne.report.Herd.populate(level, 0d, 0d, count, 96);
+    }
+
+    /**
+     * Un champ de taille ordinaire, sans relever la vitesse de tick aléatoire.
+     *
+     * <p>C'est la différence avec la charge {@link Kind#FARM} : ici le blé pousse au rythme du jeu.
+     * Il en tickera peu — et c'est précisément le renseignement qu'on cherche, puisque la question est
+     * de savoir <em>combien</em> l'agriculture pèse réellement à côté du reste.
+     */
+    private static int plough(ServerLevel level, int count) {
+        int side = Math.max(6, (int) Math.ceil(Math.sqrt(Math.max(1, count))));
+        int top = ground(level);
+        var farmland = net.minecraft.world.level.block.Blocks.FARMLAND.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.FarmlandBlock.MOISTURE, 7);
+        var wheat = net.minecraft.world.level.block.Blocks.WHEAT.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int sown = 0;
+        // Décalé du centre : le champ ne doit pas recouvrir les fours ni le point d.apparition.
+        int offset = 40;
+        // Un canal d.eau au milieu, comme tout joueur en creuse un. Sans lui, deux choses fausses :
+        // FarmlandBlock.isNearWater parcourt ses cent soixante-deux positions sans jamais sortir tôt,
+        // ce qui gonfle artificiellement son poids dans le profil ; et surtout la terre SE DESSÈCHE
+        // pendant la mesure, donc la charge se dégrade en cours de route — le défaut même qui a
+        // produit quatre verdicts faux sur la dynamite.
+        int mid = offset + side / 2;
+        var water = net.minecraft.world.level.block.Blocks.WATER.defaultBlockState();
+        for (int x = offset; x < offset + side; x++) {
+            for (int z = offset; z < offset + side; z++) {
+                if (z == mid) {
+                    cursor.set(x, top, z);
+                    level.setBlock(cursor, water, 2);
+                    continue;
+                }
+                cursor.set(x, top, z);
+                level.setBlock(cursor, farmland, 2);
+                cursor.set(x, top + 1, z);
+                level.setBlock(cursor, wheat, 2);
+                sown++;
+            }
+        }
+        return sown;
+    }
+
     /** Côté du champ cultivé, et les positions qu'il occupe. */
     private static int fieldSide;
     private static long cropsReset;
@@ -692,6 +793,7 @@ public final class Scene {
             case LIGHT -> hall(level, count);
             case ARROWS -> volley(level, count);
             case FARM -> field(level, count);
+            case VILLAGE -> village(level, count);
         };
     }
 
