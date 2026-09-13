@@ -259,6 +259,14 @@ public final class Swarm {
         running = false;
         Sampler.stop();
         Sampler.report(20);
+        Lanterne.LOG.info(String.format(java.util.Locale.ROOT,
+                "[ESSAIM] re-soumissions de tâches de génération : %d pour %d chunk(s), soit %.0f "
+                + "par chunk · vidanges de file (une par tick) : %d",
+                fr.clubcitrouille.lanterne.core.Relay.submissions(),
+                (long) PER_WAVE * WIDTHS.length,
+                (double) fr.clubcitrouille.lanterne.core.Relay.submissions()
+                        / Math.max(1L, (long) PER_WAVE * WIDTHS.length),
+                fr.clubcitrouille.lanterne.core.Relay.drains()));
         Lanterne.LOG.info("[ESSAIM] ── Débit de génération selon le nombre de demandes en vol ──");
         for (String line : VERDICTS) {
             Lanterne.LOG.info("[ESSAIM] {}", line);

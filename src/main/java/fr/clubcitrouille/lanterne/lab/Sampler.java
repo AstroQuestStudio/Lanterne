@@ -447,6 +447,18 @@ public final class Sampler {
         }
         count(ELSEWHERE_BUSY, threadName);
         count(ELSEWHERE, label(stack[0]));
+        // La vue « qui appelle » vaut aussi pour les autres fils : c.est même là qu.elle sert le
+        // plus, puisqu.on ne connaît pas leur code aussi bien que celui du tick.
+        String[] probes = probes();
+        if (probes.length > 0 && matchesProbe(label(stack[0]), probes)) {
+            for (int i = 1; i < Math.min(stack.length, 14); i++) {
+                String caller = label(stack[i]);
+                if (!matchesProbe(caller, probes)) {
+                    count(CALLERS, caller);
+                    break;
+                }
+            }
+        }
         return true;
     }
 

@@ -21,6 +21,7 @@
     "EntityGetterMixin",
     "ItemAgeAccessor",
     "PaceMixin",
-    "ServerExplosionMixin"
+    "ServerExplosionMixin",
+    "ChunkMapMixin"
   ]
 }
