@@ -123,6 +123,30 @@ public final class Settings {
     private static boolean strictYield;
 
     /**
+     * Le cache de lecture de bloc pendant une recherche de chemin.
+     *
+     * <p>Vanilla 26.1 a déjà absorbé les trois optimisations de pathfinding de Lithium — le cache de
+     * type par position, le chemin rapide des blocs ordinaires, la forme de collision mémorisée par
+     * état. Deux appels de {@code WalkNodeEvaluator} les contournent pourtant et relisent l'état brut,
+     * jusqu'à huit fois la même position pendant une seule recherche. Voir {@code Wayfind}.
+     */
+
+    /**
+     * Les allocations de position dans le calcul d'une explosion.
+     *
+     * <p>Un premier module « explosions » a déjà été retiré après mesure : il visait le temps de calcul
+     * et ne rapportait rien. Celui-ci vise le <b>débit d'allocation</b>, qui est une autre grandeur —
+     * celle qui commande la fréquence des ramassages, donc les à-coups. Voir {@code Blast}.
+     */
+
+    /**
+     * Le cache d'état de bloc pour les entités immobiles.
+     *
+     * <p>Le profileur place les lectures d'état de bloc à dix-huit pour cent du travail du serveur. Une
+     * créature qui n'a pas bougé relit les mêmes blocs vingt fois par seconde. Voir {@code Stone}.
+     */
+
+    /**
      * Le module de génération de terrain, retiré après mesure — sixième plan démoli par le banc.
      *
      * <h2>Une allocation par bloc, et le compilateur l'avait déjà supprimée</h2>
@@ -255,6 +279,9 @@ public final class Settings {
      * <p>Elle choisit <em>comment</em> on ralentit, et non <em>si</em> l'on ralentit. Le banc éteint le
      * mod pour comparer ; il n'a pas à changer d'architecture au milieu d'une mesure.
      */
+
+
+
     public static boolean strictYield() {
         return strictYield;
     }

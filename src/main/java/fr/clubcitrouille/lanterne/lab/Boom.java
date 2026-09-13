@@ -271,6 +271,20 @@ public final class Boom {
                 "[BOOM] Sans Lanterne : %.1f µs · Avec Lanterne : %.1f µs",
                 without / 1e3, with / 1e3));
 
+        // <h2>Deux modules d'explosion écrits, deux modules retirés</h2>
+        //
+        // Le premier supprimait un doublon réel — l'état du bloc puis l'état du fluide, demandés
+        // séparément dix-sept mille fois par tir. Gain nul : 972 µs contre 1022, le cache du dernier
+        // chunk rendait déjà la seconde demande gratuite.
+        //
+        // Le second réutilisait une position mutable au lieu d'en allouer une par pas de rayon. La
+        // redondance était réelle aussi — 37,7 % des positions ne servaient qu'à poser une question,
+        // soit vingt-quatre millions d'objets évités pour vingt mille charges. Et le résultat a été
+        // bien pire que nul : sur la charge dynamite, 89,28 ms contre 43,88, et deux fois plus
+        // d'allocations. Un détournement de mixin posé sur un chemin parcouru dix-sept mille fois par
+        // explosion coûte davantage que l'allocation qu'il évite.
+        //
+        // La leçon vaut au-delà des explosions : sur un chemin très chaud, l'interception EST le coût.
         if (ratio > 1.05d) {
             Lanterne.LOG.info(String.format(Locale.ROOT,
                     "[BOOM] VERDICT : gain ×%.2f (%.0f %% de temps en moins) — inattendu, puisque "

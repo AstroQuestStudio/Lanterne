@@ -64,7 +64,9 @@ public final class Scene {
         /** Le sol jonché : des milliers d'objets posés, immobiles, qui tickent quand même. */
         ITEMS,
         /** Les deux à la fois, ce qui est la situation d'un serveur habité. */
-        MIXED
+        MIXED,
+        /** Un duplicateur qui part : des milliers de charges amorcées, échelonnées. */
+        TNT
     }
 
     /**
@@ -94,6 +96,7 @@ public final class Scene {
             case "pen", "enclos", "elevage", "élevage" -> Kind.PEN;
             case "items", "objets", "sol" -> Kind.ITEMS;
             case "mixed", "mixte", "tout" -> Kind.MIXED;
+            case "tnt", "dynamite", "boom" -> Kind.TNT;
             default -> Kind.RING;
         };
     }
@@ -114,6 +117,7 @@ public final class Scene {
                 born += items(level, count / 2);
                 yield born;
             }
+            case TNT -> dynamite(level, count);
         };
     }
 
@@ -211,6 +215,63 @@ public final class Scene {
         }
         Lanterne.LOG.info("[SCÈNE] sol : {} objet(s) sur un carré de {} blocs{}.",
                 born, side, dropped > 0 ? " (" + dropped + " refusé(s))" : "");
+        return born;
+    }
+
+    /**
+     * Un duplicateur qui part : des milliers de charges amorcées, échelonnées.
+     *
+     * <h2>Pourquoi les mèches sont étalées</h2>
+     *
+     * <p>Vingt mille charges qui explosent au même tick produiraient un seul pic monstrueux, puis plus
+     * rien. Le banc mesure une <b>médiane</b> : il verrait un tick catastrophique noyé dans mille ticks
+     * vides, et conclurait que tout va bien.
+     *
+     * <p>Or ce qu'on veut reproduire n'est pas l'instant du pic, c'est le <b>régime</b> : un
+     * duplicateur en marche fait sauter des charges en continu, tick après tick, pendant que le joueur
+     * regarde. Les mèches sont donc réparties sur toute la durée de la mesure, ce qui donne un flux
+     * d'explosions au lieu d'une détonation unique.
+     *
+     * <h2>En l'air, et non posées</h2>
+     *
+     * <p>Les charges sont amorcées au-dessus du sol plutôt qu'enterrées. Une charge enterrée creuse un
+     * cratère, et les suivantes explosent alors dans le vide : la charge de la seconde moitié du banc
+     * ne serait plus celle de la première. En l'air, chaque explosion rencontre à peu près le même
+     * terrain — le sol en dessous — et les deux moitiés restent comparables.
+     *
+     * <p>C'est le même souci que pour l'eau et la dynamite du banc à charge reconstituée : <b>une
+     * charge qui détruit ce qu'elle mesure ne se mesure pas deux fois.</b> Ici on ne peut pas
+     * reconstruire entre chaque tir, alors on s'arrange pour que la destruction reste marginale.
+     */
+    private static int dynamite(ServerLevel level, int count) {
+        Random dice = new Random(SEED);
+        // Un carré large : les charges ne doivent pas toutes se détruire entre elles avant d'exploser,
+        // sinon on mesurerait une réaction en chaîne et non un flux régulier.
+        int side = Math.max(16, (int) Math.ceil(Math.sqrt(count)) * 2);
+        int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0);
+        int born = 0;
+
+        for (int i = 0; i < count; i++) {
+            double x = (dice.nextDouble() - 0.5d) * side;
+            double z = (dice.nextDouble() - 0.5d) * side;
+
+            var charge = net.minecraft.world.entity.EntityType.TNT.create(
+                    level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+            if (charge == null) {
+                continue;
+            }
+            charge.snapTo(x, ground + 6d, z, 0f, 0f);
+            charge.setDeltaMovement(0d, 0d, 0d);
+            // Étalées sur mille six cents ticks : la durée complète du banc, chauffe comprise. Chaque
+            // tick voit donc éclater à peu près le même nombre de charges.
+            charge.setFuse(20 + (i * 1600) / Math.max(1, count));
+            if (level.addFreshEntity(charge)) {
+                born++;
+            }
+        }
+        Lanterne.LOG.info("[SCÈNE] dynamite : {} charge(s) amorcée(s) sur un carré de {} blocs, "
+                + "mèches étalées sur 1600 ticks — soit environ {} explosion(s) par tick.",
+                born, side, Math.max(1, born / 1600));
         return born;
     }
 

@@ -525,3 +525,44 @@ panneaux), ni aux **particules**.
 
 C'est précisément là que Lanterne peut être complémentaire plutôt que concurrent — et maintenant,
 mesurable.
+
+## Quatre optimisations de plus, quatre retraits — et une régression trouvée
+
+### Les quatre tentatives
+
+| Module | Cible | Mesure | Verdict |
+|---|---|---|---|
+| `wayfind` — cache de lecture pendant le pathfinding | 2,0 % | 282,9 → 292,3 ms | aucun effet, **retiré** |
+| `stone` — cache d'état de bloc pour entités immobiles | 18 % | 271,5 → 263,6 ms | sous le bruit, **retiré** |
+| `blast` #1 — doublon `getFluidState` | 17 000 appels/tir | 972 → 1022 µs | gain nul, **retiré** |
+| `blast` #2 — position mutable au lieu d'une allocation par pas | 24,5 M d'objets pour 20 000 charges | **43,9 → 89,3 ms** | **deux fois pire**, retiré |
+
+La quatrième est la plus instructive. La redondance était réelle et chiffrée — 37,7 % des positions de
+rayon ne servaient qu'à poser une question. Et pourtant : **un détournement de mixin posé sur un chemin
+parcouru dix-sept mille fois par explosion coûte plus cher que l'allocation qu'il évite.**
+
+> Sur un chemin très chaud, **l'interception est le coût**. C'est vrai du mixin comme de l'objet.
+
+### La régression, plus importante que les quatre retraits
+
+La charge dynamite — 6 000 charges amorcées, mèches étalées, ~3 explosions par tick — donne, **mod
+complet** :
+
+| | ms/tick | mémoire allouée |
+|---|---:|---:|
+| Sans Lanterne | 42,0 | 5,47 Go |
+| **Avec Lanterne** | **58,1** | **9,71 Go** |
+
+**Lanterne rend cette charge 38 % plus lente.** Module par module, le coupable est `collisions` —
+celui-là même qui donne ×62 sur un sol jonché : seul, il fait passer de 41,7 à **70,7 ms**.
+
+L'explication tient à la géométrie :
+
+- sur un **sol jonché**, 8 000 objets tiennent dans une poignée de sections. Chaque requête parcourt
+  des milliers d'entités pour n'en retenir aucune : le court-circuit supprime un travail énorme ;
+- sur la **charge dynamite**, 6 000 charges s'étalent sur 156 blocs, soit une centaine de sections.
+  Le parcours vanilla est déjà court — et l'interception, appelée à chaque déplacement de chaque
+  entité, coûte davantage que ce qu'elle évite.
+
+**Le module n'est pas mauvais : il est mal conditionné.** Il devrait s'activer selon la densité locale,
+exactement comme la cadence le fait déjà. C'est la première correction à faire.
