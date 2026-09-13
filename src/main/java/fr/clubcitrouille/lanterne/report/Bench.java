@@ -509,6 +509,21 @@ public final class Bench {
                 fr.clubcitrouille.lanterne.core.Solid.blockers(),
                 fr.clubcitrouille.lanterne.core.Produce.compensated()));
 
+        long xp = 0L;
+        int orbCount = 0;
+        for (net.minecraft.world.entity.Entity alive : level.getAllEntities()) {
+            if (alive instanceof net.minecraft.world.entity.ExperienceOrb orb) {
+                xp += (long) orb.getValue()
+                        * ((fr.clubcitrouille.lanterne.mixin.ExperienceOrbAccessor) orb).lanterne$count();
+                orbCount++;
+            }
+        }
+        if (orbCount > 0) {
+            say(String.format(Locale.ROOT,
+                    "Orbes vivantes : %d, portant %d point(s) d.expérience au total — c.est ce nombre "
+                    + "qui doit rester constant, et non le nombre d.orbes.", orbCount, xp));
+        }
+
         if (fr.clubcitrouille.lanterne.core.Clump.freed() > 0L) {
             say(String.format(Locale.ROOT,
                     "Fusions d.orbes autorisées que vanilla aurait refusées : %d",

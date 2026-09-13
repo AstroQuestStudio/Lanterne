@@ -27,6 +27,7 @@
     "ProjectileUtilMixin",
     "LivingTargetMixin",
     "ExperienceOrbMixin",
+    "ExperienceOrbAccessor",
     "RegionFileVersionMixin"
   ]
 }
