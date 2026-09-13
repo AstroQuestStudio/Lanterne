@@ -425,3 +425,18 @@ Vérification jamais faite, et pourtant essentielle : le mod est chargé côté 
 atteint le menu principal — OpenAL initialisé, moteur sonore démarré, atlas de textures construits,
 aucune exception. La classe `Pane`, seul point de contact avec le code de rendu, est bien isolée
 derrière `@EventBusSubscriber(Dist.CLIENT)` et n'empêche pas le serveur dédié de démarrer.
+
+### Le plafond de densité monté à ×32
+
+Puisque la densité porte tout le gain, son plafond méritait d'être poussé. Chaque montée a été mesurée
+avant d'être gardée, et suivie des épreuves de conformité :
+
+| Plafond | Résultat sur la base habitée | Rendement | Chutes |
+|---|---|---|---|
+| ×4 | ×3,0 sur l'élevage | intact | conforme |
+| ×16 | travail évité 93,3 % | intact | conforme |
+| **×32** | **26,89 ms**, travail évité **96,1 %** | **intact** | **conforme** |
+
+Sur quatre mille bêtes entassées, cent vingt-cinq décident encore à chaque tick : le troupeau grouille.
+Ce qui rend ces paliers défendables est `Produce` — sans lui, un facteur trente-deux aurait divisé par
+trente-deux la ponte d'une ferme à œufs.

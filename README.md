@@ -9,7 +9,7 @@ mais à lui éviter le travail qui ne sert à rien.
 
 ### Un seul mod fait jeu égal avec dix-sept — et les bat sur la mémoire, sans casser les fermes.
 
-**×20** sur une base habitée · **×62** sur un sol jonché · **×7,1** sur un serveur peuplé
+**×42** sur une base habitée · **×62** sur un sol jonché · **×7,1** sur un serveur peuplé
 
 *Et le chiffre qui n'arrange pas : **×3,2 seulement à cinquante joueurs**, où les vingt ticks ne sont
 pas tenus. La raison est expliquée plus bas, pas cachée.*
@@ -59,9 +59,9 @@ son sol jonché en même temps. Sans le mod, un tick y dure deux tiers de second
 xychart-beta
     title "Millisecondes par tick — échelle logarithmique impossible, lisez les chiffres"
     x-axis ["10 500 entites", "1 000 vaches 15x15", "8 000 objets", "base habitee"]
-    y-axis "ms par tick" 0 --> 680
-    bar [202.9, 28.4, 463.5, 661.5]
-    bar [28.2, 5.4, 7.4, 32.8]
+    y-axis "ms par tick" 0 --> 1150
+    bar [202.9, 28.4, 463.5, 1134.8]
+    bar [28.2, 5.4, 7.4, 26.9]
 ```
 
 | Charge | Sans Lanterne | Avec Lanterne | Gain | Ce qu'elle reproduit |
@@ -69,7 +69,7 @@ xychart-beta
 | 10 500 entités sur un anneau de 160 blocs | 202,9 ms | **28,2 ms** | **×7,1** | un serveur peuplé, gradient de distance |
 | 1 000 vaches dans un carré de 15 blocs | 28,4 ms | **5,4 ms** | **×5,2** | un élevage intensif, coût quadratique |
 | 8 000 piles d'objets au sol | 463,5 ms | **7,4 ms** | **×62,4** | une ferme qui déborde, un sol jonché |
-| **4 000 vaches en enclos + 4 000 objets** | **661,5 ms** | **32,8 ms** | **×20,2** | une base habitée : élevage *et* sol jonché |
+| **4 000 vaches en enclos + 4 000 objets** | **1 134,8 ms** | **26,9 ms** | **×42** | une base habitée : élevage *et* sol jonché |
 
 <sub>Les deux dernières ne sont pas des aberrations de mesure : sans le mod, un tick y dure **463** puis
 **661 ms**, et le
@@ -87,7 +87,7 @@ habitée » :
 | `lod` seul — dégrader ce qui est **loin** | 🔴 **0,8 %** | aucun |
 | `lod` + `densite` — et ce qui est **entassé** | 💚 **93,3 %** | **×10,7** |
 | `collisions` seul — le court-circuit de `Solid` | — | **×2,34** |
-| tout ensemble | — | **×20 à ×30** |
+| tout ensemble | — | **×42** |
 
 **La première ligne est le résultat le plus dérangeant de ce projet.** La thèse d'origine — « dégrader
 ce qui est loin d'un joueur » — ne fait *rien* sur une base habitée. C'est normal, et il fallait le

@@ -68,7 +68,7 @@ public final class Herald {
         say(pad("    · les villageois : jamais sous un tick sur quatre"));
         say(pad("    · une bête isolée à moins de 24 blocs d'un joueur"));
         say(pad("  Ce qui l'est, et assumé :"));
-        say(pad("    · en foule, une bête décide jusqu'à 16 fois moins souvent"));
+        say(pad("    · en foule, une bête décide jusqu'à 32 fois moins souvent"));
         say(pad("      mais elle pond et grandit à l'heure exacte"));
         for (String line : advice()) {
             say(pad(line));

@@ -36,11 +36,11 @@ import net.minecraft.world.level.ChunkPos;
  * tour. C'est sans importance : un troupeau ne se disperse pas en cinquante millisecondes, et une
  * vache de plus ou de moins ne change aucune décision.
  *
- * <h2>La garantie de proximité reste entière</h2>
+ * <h2>La garantie de proximité ne vaut pas pour les foules, et il faut le dire</h2>
  *
- * <p>Une entité en pleine simulation ne descend jamais plus bas qu'un tick sur deux, quelle que soit
- * la foule autour d'elle. C'est la limite qu'on s'impose : sous les yeux du joueur, on accepte de
- * réfléchir deux fois moins souvent, jamais quatre.
+ * <p>Ce que cette dégradation coûte est dit sans détour dans le mot d'accueil du serveur : dans une
+ * foule, une bête décide jusqu'à trente-deux fois moins souvent — <b>y compris sous les yeux du
+ * joueur</b>. Elle continue en revanche de vieillir, de pondre et de se reproduire à l'heure exacte.
  */
 public final class Crowd {
     /**
@@ -84,11 +84,24 @@ public final class Crowd {
      * <b>à quelle fréquence une bête réfléchit et se déplace</b>. Dans un tas de mille, elle ne va
      * nulle part de toute façon.
      *
-     * <p>Seize ticks au plus, soit un réveil toutes les huit dixièmes de seconde. Sur mille bêtes,
-     * soixante-trois bougent à chaque tick : le troupeau grouille encore, il grouille simplement sans
-     * coûter trente fois son prix.
+     * <p>Le plafond est passé de quatre à seize, puis de seize à <b>trente-deux</b>, chaque montée étant
+     * mesurée avant d'être gardée :
+     *
+     * <pre>
+     * ×4   → gain ×3,0 sur l'élevage intensif
+     * ×16  → gain ×5,2, travail évité 93,3 %
+     * ×32  → 26,89 ms contre 31,63, travail évité 96,1 %
+     * </pre>
+     *
+     * <p>Trente-deux ticks, soit un réveil toutes les une virgule six seconde. Sur quatre mille bêtes
+     * entassées, <b>cent vingt-cinq décident encore à chaque tick</b> — le troupeau grouille, il
+     * grouille simplement sans coûter trente fois son prix.
+     *
+     * <p>Et le rendement ne bouge pas : l'épreuve le confirme à chaque montée. C'est ce qui rend ces
+     * paliers défendables. Sans {@code Produce}, un facteur trente-deux aurait divisé par trente-deux
+     * la ponte d'une ferme à œufs — et personne ne l'aurait relié au mod.
      */
-    private static final int MOST = 16;
+    private static final int MOST = 32;
 
     /** Comptage du tick en cours. */
     private static Long2IntOpenHashMap counting = new Long2IntOpenHashMap();
