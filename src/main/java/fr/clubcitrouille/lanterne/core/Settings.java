@@ -60,6 +60,19 @@ public final class Settings {
     private static boolean density = true;
     /** Le plafond de poussées dans les tas d'entités, où le coût est quadratique. */
     private static boolean collisions = true;
+
+    /**
+     * Le court-circuit de visibilité des explosions.
+     *
+     * <p>Deux modules « explosions » ont déjà été retirés après mesure — voir
+     * {@link #BLAST_REMOVED_AFTER_MEASUREMENT}. Tous deux visaient le <b>tracé des rayons</b>, et tous
+     * deux ont rendu zéro : le cache de chunk du jeu absorbait déjà ce qu'ils économisaient.
+     *
+     * <p>Celui-ci vise un autre poste, jamais mesuré : {@code getSeenPercent}, dont le coût croît comme
+     * le <b>carré</b> du nombre de charges. Le raisonnement est dans {@code Rubble} ; la mesure décidera
+     * comme elle a décidé pour les deux précédents.
+     */
+    private static boolean explosions = true;
     /** Le court-circuit de bousculade pour les amas immobiles. */
     private static boolean jam = true;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
@@ -254,6 +267,10 @@ public final class Settings {
         return master && collisions;
     }
 
+    public static boolean explosions() {
+        return master && explosions;
+    }
+
     public static boolean jam() {
         return master && jam;
     }
@@ -316,6 +333,7 @@ public final class Settings {
         profilerCache = wanted.contains("profiler");
         density = wanted.contains("density") || wanted.contains("densite");
         collisions = wanted.contains("collision");
+        explosions = wanted.contains("explosion") || wanted.contains("blast");
         jam = wanted.contains("jam");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         rationing = wanted.contains("ration");
@@ -344,6 +362,9 @@ public final class Settings {
         }
         if (collisions) {
             text.append("collisions ");
+        }
+        if (explosions) {
+            text.append("explosions ");
         }
         if (jam) {
             text.append("amas ");

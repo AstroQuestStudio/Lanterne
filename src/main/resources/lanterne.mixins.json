@@ -20,6 +20,7 @@
     "EntityGetterAccessor",
     "EntityGetterMixin",
     "ItemAgeAccessor",
-    "PaceMixin"
+    "PaceMixin",
+    "ServerExplosionMixin"
   ]
 }

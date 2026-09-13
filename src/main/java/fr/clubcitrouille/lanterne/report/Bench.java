@@ -357,10 +357,14 @@ public final class Bench {
                     avoidedWith = fr.clubcitrouille.lanterne.core.Census.workAvoided();
                     jammedWith = fr.clubcitrouille.lanterne.core.Jam.held();
                     liveWith = liveBytes();
+                    explosionsWith = fr.clubcitrouille.lanterne.core.Rubble.explosions();
                     phase = Phase.WARM_OFF;
                     phaseOpened = System.nanoTime();
                     left = WARMUP;
                     Settings.setEnabled(false);
+                    // Avant la chauffe témoin, et non pendant la mesure : rebâtir coûte cent mille
+                    // poses de bloc, qui n'ont rien à faire dans une fenêtre chronométrée.
+                    fr.clubcitrouille.lanterne.lab.Scene.rearm(level);
                     fr.clubcitrouille.lanterne.lab.Sampler.stop();
                     say("── Profil AVEC Lanterne ──");
                     fr.clubcitrouille.lanterne.lab.Sampler.report(24);
@@ -489,6 +493,11 @@ public final class Bench {
                 fr.clubcitrouille.lanterne.core.Solid.blockers(),
                 fr.clubcitrouille.lanterne.core.Produce.compensated()));
 
+        // Les deux phases ont-elles seulement subi la même charge ? Voir refuseUnequal.
+        if (refuseUnequal()) {
+            return;
+        }
+
         // Le verdict, formulé pour être vérifiable et non pour flatter. Un gain sous cinq pour cent
         // n'est pas un gain : c'est du bruit, et le dire est la seule façon de rester crédible
         // quand le chiffre est bon.
@@ -502,6 +511,62 @@ public final class Bench {
             say("Aucun effet mesurable dans cette situation (écart sous le bruit de fond).");
         }
     }
+
+    /**
+     * Refuse de conclure quand les deux phases n'ont pas abattu la même quantité de travail.
+     *
+     * <h2>Le défaut qui a produit quatre diagnostics faux d'affilée</h2>
+     *
+     * <p>Le protocole compare deux phases en supposant qu'elles subissent une charge identique. Pour
+     * un troupeau ou un tas d'objets, c'est vrai : rien ne s'use. Pour la dynamite, c'est faux — la
+     * première phase creuse le sol et la seconde explose dans le vide qu'elle a laissé.
+     *
+     * <p>Le banc a rendu quatre verdicts de « perte » sur cette charge. Quatre correctifs ont été
+     * écrits pour expliquer une régression qui n'existait pas ; trois ont été démentis par la mesure
+     * et retirés. Ce qui trahissait l'affaire était pourtant imprimé dans chacun de ces rapports :
+     *
+     * <pre>
+     * Mémoire allouée · sans : 5,34 Go · avec : 11,34 Go
+     * Paquets par tick · sans : 123    · avec : 443
+     * </pre>
+     *
+     * <p>Un facteur trois sur le travail accompli. Je lisais ces lignes comme un symptôme du mod
+     * — « il alloue trop » — alors qu'elles disaient l'inverse : la phase active <b>faisait trois fois
+     * plus de choses</b>. Un rapport de temps entre deux charges différentes ne mesure rien.
+     *
+     * <p>La scène se reconstruit désormais entre les phases ({@code Scene.rearm}). Ce garde-fou reste
+     * en second rideau, parce qu'une reconstruction peut être imparfaite et qu'une charge future sera
+     * destructive sans qu'on y pense : il compte les explosions et les blocs qu'elles désignent,
+     * indépendamment du mod, et se tait tant que les deux phases concordent.
+     *
+     * @return vrai si le verdict a été refusé et déjà expliqué
+     */
+    private static boolean refuseUnequal() {
+        long explosions = fr.clubcitrouille.lanterne.core.Rubble.explosions();
+        if (explosions == 0) {
+            return false; // charge non destructive : rien à vérifier ici
+        }
+        long withCount = explosionsWith;
+        long withoutCount = explosions - explosionsWith;
+        if (withCount == 0 || withoutCount == 0) {
+            return false;
+        }
+        double skew = (double) Math.max(withCount, withoutCount) / Math.min(withCount, withoutCount);
+        if (skew <= 1.25d) {
+            say(String.format(Locale.ROOT,
+                    "Explosions traitées · avec : %d · sans : %d (écart %.0f %%, les deux phases "
+                    + "sont comparables)", withCount, withoutCount, (skew - 1d) * 100d));
+            return false;
+        }
+        say(String.format(Locale.ROOT,
+                "VERDICT REFUSÉ · les deux phases n'ont pas subi la même charge : %d explosion(s) "
+                + "avec le mod contre %d sans, soit un écart de ×%.2f. Un rapport de temps entre "
+                + "deux charges différentes ne mesure pas le mod.", withCount, withoutCount, skew));
+        return true;
+    }
+
+    /** Explosions comptées à la fin de la phase active, pour les distinguer de celles de la phase témoin. */
+    private static long explosionsWith;
 
     /** Nombre d'entités réellement vivantes dans le monde — la vérification qui a tout débloqué. */
     public static int livingCount(ServerLevel level) {
