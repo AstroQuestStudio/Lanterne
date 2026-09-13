@@ -203,7 +203,19 @@ public final class Scene {
          * <p>Le domaine n.avait jamais été éprouvé. Cette charge dira ce que le niveau de détail et la
          * densité y font déjà, et s.il reste un poste propre aux villageois.
          */
-        VILLAGERS
+        VILLAGERS,
+        /**
+         * Des lignes de redstone alimentées par une horloge, jamais éprouvées.
+         *
+         * <p>La propagation d.un signal de redstone est réputée coûteuse, et vanilla en porte deux
+         * versions : l.historique, et un {@code ExperimentalRedstoneWireEvaluator} qui ne s.active
+         * qu.avec un indicateur de fonctionnalité expérimental. Le second dort donc sur tous les
+         * serveurs ordinaires.
+         *
+         * <p>Cette charge dira ce que coûte le premier, et ce que le second ferait gagner — avant de
+         * décider si l.on a le droit de l.allumer, car il ne change pas que la vitesse.
+         */
+        REDSTONE
     }
 
     /**
@@ -240,6 +252,7 @@ public final class Scene {
             case "village", "reel", "réel", "serveur" -> Kind.VILLAGE;
             case "orbs", "orbes", "xp", "experience" -> Kind.ORBS;
             case "villagers", "villageois", "pnj" -> Kind.VILLAGERS;
+            case "redstone", "signal", "circuit" -> Kind.REDSTONE;
             default -> Kind.RING;
         };
     }
@@ -539,6 +552,10 @@ public final class Scene {
      * allume ce qui est éteint, on éteint ce qui est allumé.
      */
     public static void stir(ServerLevel level) {
+        if (builtKind == Kind.REDSTONE) {
+            pulse(level);
+            return;
+        }
         if (builtKind == Kind.FARM) {
             resetCrops(level);
             return;
@@ -663,6 +680,62 @@ public final class Scene {
         level.getGameRules().set(GameRules.MAX_ENTITY_CRAMMING, 0, level.getServer());
         Lanterne.LOG.info("[SCÈNE] villageois : {} sur un carré de {} blocs.", born, side);
         return born;
+    }
+
+    /** Longueur des lignes de redstone, et les positions des sources à faire battre. */
+    private static int wireLength;
+    private static final java.util.List<BlockPos> SOURCES = new java.util.ArrayList<>();
+    private static long pulses;
+
+    /**
+     * Des lignes de redstone parallèles, chacune avec sa source.
+     *
+     * <p>Le signal ne porte qu.à quinze blocs, mais une ligne plus longue reste utile : elle force le
+     * moteur à recalculer l.extinction sur toute sa portée à chaque battement. Les lignes sont
+     * séparées de deux blocs pour ne pas se toucher — on veut mesurer la propagation, pas un
+     * enchevêtrement.
+     */
+    private static int wiring(ServerLevel level, int count) {
+        int lines = Math.max(4, count / 32);
+        wireLength = 24;
+        int top = ground(level);
+        var wire = net.minecraft.world.level.block.Blocks.REDSTONE_WIRE.defaultBlockState();
+        var stone = net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        SOURCES.clear();
+        pulses = 0L;
+        for (int line = 0; line < lines; line++) {
+            int z = line * 3;
+            for (int x = 0; x < wireLength; x++) {
+                cursor.set(x, top, z);
+                level.setBlock(cursor, stone, 2);
+                cursor.set(x, top + 1, z);
+                level.setBlock(cursor, wire, 2);
+            }
+            SOURCES.add(new BlockPos(-1, top + 1, z));
+        }
+        Lanterne.LOG.info("[SCÈNE] redstone : {} ligne(s) de {} blocs, une source par ligne.",
+                lines, wireLength);
+        return 0;
+    }
+
+    /** Fait battre les sources : c.est le changement qui coûte, jamais l.état stable. */
+    private static void pulse(ServerLevel level) {
+        if (SOURCES.isEmpty()) {
+            return;
+        }
+        var block = net.minecraft.world.level.block.Blocks.REDSTONE_BLOCK.defaultBlockState();
+        var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        boolean on = (level.getGameTime() / 4L) % 2L == 0L;
+        for (BlockPos source : SOURCES) {
+            level.setBlock(source, on ? block : air, 3);
+            pulses++;
+        }
+    }
+
+    /** Battements de source, pour que le rapport dise sur quoi il a porté. */
+    public static long pulses() {
+        return pulses;
     }
 
     /** Un troupeau dispersé, comme une faune naturelle et non comme un élevage. */
@@ -980,6 +1053,7 @@ public final class Scene {
             case VILLAGE -> village(level, count);
             case ORBS -> orbs(level, count);
             case VILLAGERS -> villagers(level, count);
+            case REDSTONE -> wiring(level, count);
         };
     }
 

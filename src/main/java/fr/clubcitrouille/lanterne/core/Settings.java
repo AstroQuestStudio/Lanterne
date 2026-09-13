@@ -100,6 +100,7 @@ public final class Settings {
     /** Les comportements composites parcourus sans streams. Voir Mind. */
     private static boolean mind = true;
 
+
     /** La fusion des orbes d.expérience, débridée. Voir Clump. */
     private static boolean clump = true;
 
@@ -171,6 +172,33 @@ public final class Settings {
      * <p>La leçon est celle qu.un crash enseigne mieux qu.un raisonnement : <b>un compteur incrémenté
      * à l.intérieur de la méthode qu.on annule cesse d.avancer</b>, et toute logique de cadence qui
      * s.appuie dessus se bloque sur sa première valeur.
+     *
+     * <h2>La version chirurgicale a été écrite, et elle plante aussi</h2>
+     *
+     * <p>Seconde tentative : n.envelopper que l.appel à {@code entity.tick()}, en laissant
+     * {@code tickCount++} et {@code setOldPosAndRot()} s.exécuter. Le compteur avance, l.animation
+     * progresse, seule la simulation est espacée. C.était la correction évidente du premier échec.
+     *
+     * <p>Le client s.arrête toujours, sur d.autres index :
+     *
+     * <pre>
+     * ArrayIndexOutOfBoundsException: Index 63 out of bounds for length 33
+     * ArrayIndexOutOfBoundsException: Index -1 out of bounds for length 65
+     * </pre>
+     *
+     * <p>La cause est plus profonde que l.accroche, et elle ferme le domaine : <b>côté client, le tick
+     * ne consomme pas l.état du rendu, il le produit</b>. Les tableaux que le moteur de rendu indexe —
+     * poses d.animation, cycles de marche, positions interpolées — sont tenus à jour par
+     * {@code tick()}. Les figer ne ralentit pas le rendu : cela lui donne des index qui n.existent
+     * plus.
+     *
+     * <p>La thèse de ce mod — <em>on ne fait pas le travail dont le résultat ne se voit pas</em> — ne
+     * s.applique donc pas ici, parce que le travail <b>est</b> ce qui se voit. C.est la première fois
+     * qu.elle rencontre sa limite, et elle valait d.être trouvée.
+     *
+     * <p>Le client gagne de toute façon <b>×1,25</b> sans qu.on touche à une ligne de rendu, en
+     * récupérant le processeur que le mod libère au serveur intégré. C.est un gain indirect, entier,
+     * et sans risque.
      */
     private static final boolean HAZE_REMOVED_AFTER_CRASH = true;
 
