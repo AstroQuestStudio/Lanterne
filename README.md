@@ -268,8 +268,12 @@ l'élevage intensif est passé de ×3,0 à ×5,3 — payé par la correction, pa
 
 ### Objets au sol — disparition au tick exact
 
-Le sommeil des objets rend le plus gros chiffre du projet (×62). Il ne vaudrait rien si un objet
-endormi cessait de disparaître : le sol s'accumulerait, et le gain deviendrait une fuite de mémoire.
+Un sol jonché donne le plus gros chiffre du projet (×62). Il ne vaudrait rien si un objet ralenti
+cessait de disparaître : le sol s'accumulerait, et le gain deviendrait une fuite de mémoire.
+
+C'est exactement ce qui arrivait. La cadence annule le tick d'un objet, or **son horloge d'âge vit
+dans ce tick** : durée de vie demandée 120 ticks, obtenue 152, sur les 40 objets mesurés. Le remède
+est le même que pour la ponte des poules — tenir l'horloge à la main pendant le sommeil.
 
 | Vérification | Résultat |
 |---|---|
@@ -416,7 +420,7 @@ En jeu : `/lanterne`, `/lanterne bench`, `/lanterne on|off`.
 | `Conformance` | L'épreuve de chute, 5 sujets par distance, médiane |
 | `Kitchen` | L'épreuve de cuisson, au tick près |
 | **`Yield`** | **L'épreuve de rendement** — œufs pondus, croissance des petits |
-| **`Tidy`** | **L'épreuve des objets** — disparition, trémie, ramassage |
+| **`Tidy`** | **L'épreuve des objets** — disparition, trémie, ramassage, et le bateau qui doit bloquer |
 | **`Boom`** | Le coût d'une explosion, à charge reconstituée avant chaque tir |
 | **`Flow`** | Le coût d'un écoulement d'eau, par différence avec un bassin sec |
 | **`Quarry`** | Génération **contre** chargement de chunks, mesurés séparément |

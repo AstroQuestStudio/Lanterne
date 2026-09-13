@@ -5,7 +5,7 @@ import java.util.Locale;
 /**
  * Les interrupteurs, et pourquoi ils sont le module le plus important du mod.
  *
- * <h2>Six plans démolis par la mesure</h2>
+ * <h2>Sept plans démolis par la mesure</h2>
  *
  * <p>Ce mod a commencé par des idées séduisantes, défendables, et fausses.
  *
@@ -69,12 +69,40 @@ public final class Settings {
     /** La position réutilisée pour les tirages aléatoires de blocs. */
     private static boolean scratchPos = true;
     /**
-     * Le sommeil des objets posés au sol.
+     * Le sommeil des objets au sol, retiré après mesure — septième plan démoli, et le plus coûteux.
      *
-     * <p>Le seul module de ce mod qui ne concède rien : il ne ralentit pas les objets, il cesse de
-     * recalculer une réponse déjà connue. Le raisonnement complet est dans {@code Litter}.
+     * <h2>L'innovation de la nuit, écartée par son propre banc</h2>
+     *
+     * <p>C'était l'idée la mieux fondée de ce projet. Un objet posé au sol refait vingt fois par seconde
+     * une requête de collision complète dont la réponse n'a pas changé depuis trois minutes ; et l'on
+     * pouvait démontrer, code du jeu à l'appui, que l'endormir ne cassait rien — c'est le joueur qui
+     * ramasse, la trémie qui aspire, l'explosion qui cherche.
+     *
+     * <p>Elle a demandé quatre fichiers, deux mixins, un compteur de modifications par section de chunk
+     * pour le réveil événementiel, une épreuve de conformité dédiée, et la correction de deux bugs — le
+     * critère de vitesse qui ne se déclenchait jamais, puis le compteur qui comptait les mauvais ticks.
+     *
+     * <p>Trois mesures l'ont écartée :
+     *
+     * <pre>
+     * module seul, 2 000 objets   : 38,46 contre 38,84 ms  → aucun effet
+     * tout sauf lui, 8 000 objets : ×62,24
+     * tout avec lui, 8 000 objets : ×62,36
+     * </pre>
+     *
+     * <p>Le niveau de détail et le court-circuit de collision faisaient déjà tout le travail. Le sommeil
+     * n'arrivait qu'après eux, sur un tick déjà supprimé.
+     *
+     * <h2>Ce qu'il laisse derrière lui, et qui reste</h2>
+     *
+     * <p>Le retrait n'efface pas ce que sa construction a trouvé. En cherchant pourquoi la disparition
+     * des objets était décalée — 152 ticks au lieu de 120 —, on a découvert que la cadence arrêtait leur
+     * horloge d'âge. Cette correction, elle, est <b>réelle et conservée</b> : voir {@code Produce.age}.
+     *
+     * <p>Retirer le module supprime aussi un mixin sur {@code LevelChunk.setBlockState}, c'est-à-dire
+     * sur chaque pose de bloc du serveur. Un chemin très chaud, allégé pour de bon.
      */
-    private static boolean litter = true;
+    private static final boolean LITTER_REMOVED_AFTER_MEASUREMENT = true;
 
     /**
      * La préservation stricte du rendement, pour les créatures venues de mods.
@@ -218,9 +246,6 @@ public final class Settings {
         return master && scratchPos;
     }
 
-    public static boolean litter() {
-        return master && litter;
-    }
 
 
 
@@ -268,7 +293,6 @@ public final class Settings {
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
-        litter = wanted.contains("litter") || wanted.contains("objets") || wanted.contains("sol");
         strictYield = wanted.contains("strict");
         hush = wanted.contains("silence");
     }
@@ -305,9 +329,6 @@ public final class Settings {
         }
         if (scratchPos) {
             text.append("positions ");
-        }
-        if (litter) {
-            text.append("objets ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

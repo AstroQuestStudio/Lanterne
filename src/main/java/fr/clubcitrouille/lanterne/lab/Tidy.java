@@ -21,7 +21,7 @@ import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.report.Herd;
 
 /**
- * L'épreuve des objets au sol : le sommeil laisse-t-il le monde se ranger tout seul ?
+ * L'épreuve des objets au sol : le monde se range-t-il encore tout seul ?
  *
  * <h2>Pourquoi cette épreuve décide de tout</h2>
  *
@@ -348,7 +348,7 @@ public final class Tidy {
             // joueurs les ramassent », alors que ce volet n'était pas mesuré — une phrase vraie par
             // raisonnement, fausse comme constat, et c'est exactement la nuance que ce projet paie
             // cher à chaque fois qu'il la laisse passer.
-            Lanterne.LOG.info("[OBJETS] VERDICT : le sommeil ne change rien de ce qui a été mesuré. "
+            Lanterne.LOG.info("[OBJETS] VERDICT : la cadence ne change rien de ce qui a été mesuré. "
                     + "Les objets disparaissent au tick exact et les trémies les aspirent à "
                     + "l'identique. Le ramassage par un joueur reste à éprouver avec un vrai client.");
             return;

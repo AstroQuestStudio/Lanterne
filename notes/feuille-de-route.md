@@ -368,3 +368,35 @@ interdire le raccourci sur sa propre boîte, et le laisser possible ailleurs.
 
 Les deux réponses sont correctes. Et les deux importent : un mécanisme qui refuserait toujours serait
 sûr et parfaitement inutile.
+
+### Le sommeil des objets, retiré — septième plan démoli, et le plus coûteux
+
+C'était l'innovation phare de la nuit : quatre fichiers, deux mixins, un compteur de modifications par
+section de chunk pour le réveil événementiel, une épreuve de conformité dédiée, et deux bugs corrigés.
+
+Trois mesures l'ont écarté :
+
+| | |
+|---|---|
+| module seul, 2 000 objets | 38,46 contre 38,84 ms → **aucun effet** |
+| tout **sauf** lui, 8 000 objets | **×62,24** |
+| tout **avec** lui, 8 000 objets | ×62,36 |
+
+La cadence et le court-circuit de collision faisaient déjà tout le travail ; le sommeil n'arrivait
+qu'après eux, sur un tick déjà supprimé.
+
+**Ce que son retrait laisse en place**, et qui est la vraie trouvaille : en cherchant pourquoi la
+disparition des objets était décalée — 152 ticks au lieu de 120 — on a découvert que la cadence
+arrêtait leur horloge d'âge, comme elle arrêtait la ponte des poules. `Produce.age()` reste, et
+l'épreuve `Tidy` confirme 0 décalage sur 40 objets **sans** le module de sommeil.
+
+Retirer le module supprime aussi un mixin sur `LevelChunk.setBlockState` — sur chaque pose de bloc du
+serveur. Un chemin très chaud, allégé pour de bon.
+
+### Contribution mesurée de chaque module (charge mixte)
+
+| Module seul | Gain |
+|---|---:|
+| `collisions` (`Solid` + `Shove`) | **×2,34** |
+| `objets` (sommeil, retiré) | aucun effet |
+| tous ensemble | ×20,2 |

@@ -479,14 +479,9 @@ public final class Bench {
         say(String.format(Locale.ROOT,
                 "Travail évité pendant la phase active : %.1f %% · amas figés : %d",
                 avoidedWith * 100d, jammedWith));
-        // Ces deux lignes existent parce qu'un module a été mesuré « sans effet » alors qu'il ne
-        // s'était en réalité jamais déclenché. Sans compteur d'activation, un gain nul et une
-        // optimisation morte donnent le même chiffre — et appellent des corrections opposées.
-        say(String.format(Locale.ROOT,
-                "Objets endormis : %d · réveillés : %d · sections suivies : %d",
-                fr.clubcitrouille.lanterne.core.Litter.sleepCount(),
-                fr.clubcitrouille.lanterne.core.Litter.wakeCount(),
-                fr.clubcitrouille.lanterne.core.Churn.tracked()));
+        // Cette ligne existe parce qu'un module a été mesuré « sans effet » alors qu'il ne s'était en
+        // réalité jamais déclenché. Sans compteur d'activation, un gain nul et une optimisation morte
+        // donnent le même chiffre — et appellent des corrections opposées.
         say(String.format(Locale.ROOT,
                 "Recherches de collision évitées : %d · entités bloquantes : %d · "
                 + "ticks de production rattrapés : %d",
