@@ -24,6 +24,48 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Ce compteur tranche la question avant qu'on écrive une ligne de générateur. Il ne change rien :
  * il additionne des nanosecondes par nom d'étape.
+ *
+ * <h2>Ce qu'il a répondu, sur un cœur unique</h2>
+ *
+ * <pre>
+ * 60,7 %  minecraft:noise             21,9 %  minecraft:biomes
+ *  6,3 %  minecraft:surface            4,4 %  minecraft:features
+ *  2,4 %  minecraft:initialize_light   1,8 %  minecraft:structure_starts
+ * </pre>
+ *
+ * <p>Il a fallu le mesurer deux fois. La première version arrêtait le chronomètre au retour de la
+ * méthode — or {@code noise} et {@code biomes} sont asynchrones, et paraissaient donc <b>gratuites</b>
+ * là où elles pèsent en réalité plus des quatre cinquièmes. Le relevé initial désignait
+ * {@code surface} à 47 % et {@code features} à 26 %, ce qui aurait envoyé le prochain chantier
+ * exactement au mauvais endroit.
+ *
+ * <h2>Et pourquoi il n'y a pas de gros poisson à prendre</h2>
+ *
+ * <p>Le demandeur principal du bruit est {@code NoiseBasedChunkGenerator.doFill}, qui appelle la
+ * règle de matériau une fois par bloc — quatre-vingt-dix-huit mille fois par chunk, sur toute la
+ * hauteur du monde. Et {@code BlendedNoise.compute} coûte, par point, jusqu'à <b>quarante évaluations
+ * de bruit de Perlin en trois dimensions</b> : huit octaves de bruit principal, seize de limite
+ * basse, seize de limite haute.
+ *
+ * <p>La piste évidente était de court-circuiter les blocs qui ne produisent que de l'air, puisqu'un
+ * chunk fait trois cent quatre-vingt-quatre blocs de haut pour un terrain qui en occupe une fraction.
+ * Un compteur posé sur {@code MaterialRuleList.calculate} l'a chiffrée :
+ *
+ * <pre>
+ * 253 811 068 appels, dont 31,1 % ne produisent que de l'air
+ * </pre>
+ *
+ * <p>Trente et un pour cent, et non soixante-quinze. Un court-circuit parfait rapporterait donc au
+ * mieux 0,31 × 0,607 — <b>dix-huit pour cent</b> de la génération. Réel, mais pas un facteur.
+ *
+ * <p>Ce compteur-là a été retiré aussitôt, et pour une raison qui vaut d'être retenue : instrumenter
+ * un chemin appelé cent quarante mille fois par chunk a <b>doublé</b> le coût de l'étape qu'il
+ * mesurait — 35,4 ms par chunk sans lui, 71,8 avec. Le rapport qu'il a rendu ne vaut donc que comme
+ * proportion, jamais comme durée.
+ *
+ * <p>Conclusion : le coût de ce générateur est étalé sur un peloton serré et il est <b>intrinsèque</b>
+ * — le bruit de Perlin <em>est</em> le terrain. Le seul facteur multiplicatif établi sur ce domaine
+ * reste la pré-génération, mesurée à quinze fois. Voir {@code Pregen}.
  */
 public final class Forge {
     private static final Map<String, AtomicLong> NANOS = new ConcurrentHashMap<>();
