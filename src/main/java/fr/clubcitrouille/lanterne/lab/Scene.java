@@ -45,14 +45,20 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * <p>Le banc compare deux phases de vingt-cinq secondes. Pour que la comparaison ait un sens, la
  * charge doit être <b>stable sur les cinquante secondes</b> : ni décroissante, ni destructrice.
  *
- * <p>C'est ce qui écarte, pour l'instant, deux charges pourtant intéressantes. La dynamite
- * <em>détruit le terrain</em> qu'elle mesure : la seconde phase ne travaillerait plus sur le même
- * monde que la première, et l'écart mesuré ne vaudrait rien. L'eau se <em>stabilise</em> : au bout de
- * quelques secondes elle ne coule plus, et la seconde phase mesurerait une nappe au repos.
+ * <p>Ce paragraphe a longtemps dit que la dynamite <em>détruisait le terrain</em> qu'elle mesure, que
+ * la seconde phase ne travaillerait donc plus sur le même monde que la première, et que l'écart
+ * mesuré ne vaudrait rien. C'était exact — et la charge a pourtant été ajoutée sans que la réserve
+ * soit levée. Quatre verdicts faux en sont sortis, et quatre modules écrits pour expliquer une
+ * régression qui n'existait pas. Voir {@link #rearm}.
  *
- * <p>Les deux méritent un banc, mais un banc d'un autre genre — à charge reconstituée entre chaque
- * relevé. Les annoncer comme mesurées ici serait le genre de raccourci qui produit les chiffres faux
- * que ce projet passe son temps à traquer.
+ * <p>La dynamite est désormais mesurable, parce qu'elle est <b>reconstituée entre les deux phases</b>
+ * : dalle reposée, restes balayés, charges réamorcées, altitude figée à la première construction. Ce
+ * n'est pas une précaution de confort — c'est la condition sans laquelle le chiffre ne veut rien
+ * dire, et le banc refuse maintenant de conclure quand elle n'est pas remplie.
+ *
+ * <p>L'eau, elle, attend toujours son banc : elle se <em>stabilise</em>, et au bout de quelques
+ * secondes la seconde phase mesurerait une nappe au repos. Le remède est le même — reconstituer — et
+ * il n'est pas encore écrit.
  */
 public final class Scene {
     /** Les charges disponibles. */
@@ -111,6 +117,27 @@ public final class Scene {
     private static Kind builtKind;
     private static int builtCount;
     private static int builtRadius;
+
+    /**
+     * L'altitude du sol, figée à la première construction.
+     *
+     * <h2>Une dalle qui montait de quatre blocs à chaque reconstruction</h2>
+     *
+     * <p>La dalle et les charges s'ancraient sur {@code getHeight}, c'est-à-dire sur le sommet du
+     * terrain. Après la première phase, ce sommet n'est plus le terrain naturel : c'est <b>la dalle
+     * elle-même</b>, qui est de la pierre et bloque donc le mouvement. La reconstruction bâtissait la
+     * suivante quatre blocs plus haut, sur les décombres de la précédente.
+     *
+     * <p>Les deux phases ne se déroulaient donc pas au même endroit, et le compte d'explosions le
+     * disait : deux mille neuf cent cinquante et une contre deux mille cinq cent cinquante-quatre,
+     * soit seize pour cent d'écart, reproduit à l'identique sur trois exécutions et sur des modules
+     * qui ne touchent pas à la physique.
+     *
+     * <p>C'est le même défaut que celui qui vient d'être corrigé, à un étage de plus : on croit
+     * remettre une scène à neuf, et l'on en bâtit une autre. L'altitude est désormais relevée une
+     * seule fois, à la construction, et toutes les reconstructions s'y tiennent.
+     */
+    private static int builtGround = Integer.MIN_VALUE;
 
     /**
      * Remet la scène dans l'état exact où la première phase l'a trouvée.
@@ -180,7 +207,7 @@ public final class Scene {
      */
     private static int slab(ServerLevel level, int count) {
         int side = side(count) + 24;
-        int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0) + 4;
+        int top = ground(level) + 4;
         net.minecraft.world.level.block.state.BlockState stone =
                 net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
         net.minecraft.core.BlockPos.MutableBlockPos cursor = new net.minecraft.core.BlockPos.MutableBlockPos();
@@ -198,6 +225,19 @@ public final class Scene {
             }
         }
         return placed;
+    }
+
+    /**
+     * L.altitude de référence, relevée une seule fois et jamais recalculée.
+     *
+     * <p>Voir {@link #builtGround} : la recalculer après une phase destructive ferait bâtir la scène
+     * suivante sur les décombres de la précédente.
+     */
+    private static int ground(ServerLevel level) {
+        if (builtGround == Integer.MIN_VALUE) {
+            builtGround = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0);
+        }
+        return builtGround;
     }
 
     /** L'étendue du champ de charges, calculée au même endroit par la pose et par la reconstruction. */
@@ -244,7 +284,7 @@ public final class Scene {
         Lanterne.LOG.info("[SCÈNE] max_entity_cramming mis à zéro : sans cela, l'enclos se vide.");
 
         Random dice = new Random(SEED);
-        int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0);
+        int ground = ground(level);
         int born = 0;
 
         for (int i = 0; i < count; i++) {

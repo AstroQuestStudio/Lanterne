@@ -286,6 +286,12 @@ public final class Bench {
         // plus que sa rivale — et traitait dix-huit pour cent d'explosions de plus. L'écart jouait
         // contre le mod, mais un banc ne doit pas se tromper, même en sa défaveur.
         fr.clubcitrouille.lanterne.lab.Scene.rearm(server.overworld());
+        // Et les compteurs repartent de zéro avec elle. Ils couraient depuis le démarrage du serveur,
+        // si bien que la phase active se voyait attribuer toutes les explosions du chargement, de la
+        // décantation et du contrôle préalable. Le témoin valait 2554 à trois exécutions près d'une
+        // unité ; la phase active, elle, oscillait entre 2951 et 3019 — non parce qu'elle travaillait
+        // davantage, mais parce qu'elle héritait d'un préambule de durée variable.
+        fr.clubcitrouille.lanterne.core.Rubble.reset();
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
         left = WARMUP;
