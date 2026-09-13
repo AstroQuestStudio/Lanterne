@@ -346,6 +346,50 @@ public final class Settings {
      */
     private static boolean wire = true;
     /**
+     * Le tableau vide des effets traversés, retiré après mesure — dix-septième plan démoli, et le
+     * premier où c'est le profileur d'ALLOCATIONS qui a menti.
+     *
+     * <h2>Le poste, tel qu'annoncé</h2>
+     *
+     * <pre>
+     * 44,1 %  InsideBlockEffectApplier$StepBasedCollector.flushStep → Object[]   (2,70 Go)
+     * </pre>
+     *
+     * <p>La cause était réelle et vérifiée ligne par ligne : {@code ArrayList.addAll} appelle
+     * {@code toArray()} sur sa source <b>avant</b> de regarder si elle contient quelque chose, et
+     * {@code Arrays.copyOf(données, 0)} rend un tableau neuf. Deux appels par type d'effet, à chaque
+     * pas, pour chaque entité — et toiles, feu et buissons ne sont presque jamais là.
+     *
+     * <h2>Le verdict</h2>
+     *
+     * <pre>
+     * 2 448 370 tableaux non fabriqués
+     * mémoire allouée — sans : 2,92 et 2,93 Go   ·   avec : 2,90 et 2,91 Go
+     * temps          — sans : 28,75 et 28,59 ms  ·   avec : 29,32 et 26,29 ms
+     * </pre>
+     *
+     * <p>Vingt mégaoctets sur deux mille neuf cents, soit <b>sept dixièmes de pour cent</b>. Rien sur
+     * le temps.
+     *
+     * <h2>L'arithmétique qu'il fallait poser AVANT de coder</h2>
+     *
+     * <p>Deux millions quatre cent mille tableaux de longueur zéro font seize octets chacun, soit
+     * <b>trente-neuf mégaoctets</b>. Le profileur en annonçait deux mille sept cents. <b>Il s'est
+     * trompé d'un facteur soixante-dix.</b>
+     *
+     * <h2>La règle, et elle est neuve</h2>
+     *
+     * <p>{@code ObjectAllocationSample} <b>échantillonne et extrapole</b> : le poids qu'il attribue à
+     * un site vient du taux d'échantillonnage, pas de la taille des objets. Un site qui alloue de
+     * <em>tout petits</em> objets <em>très souvent</em> y est donc surévalué d'ordres de grandeur.
+     *
+     * <p>Ce projet savait déjà se méfier du profileur de temps sur les méthodes courtes et très
+     * appelées. Il sait maintenant se méfier du profileur d'allocations sur les objets minuscules et
+     * très nombreux. <b>Dans les deux cas, le correctif est le même : multiplier le compte par la
+     * taille avant d'écrire une ligne de code.</b>
+     */
+    private static final boolean SPILL_REMOVED_AFTER_MEASUREMENT = true;
+    /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
      *
@@ -738,6 +782,7 @@ public final class Settings {
     public static boolean wire() {
         return master && wire;
     }
+
 
 
 

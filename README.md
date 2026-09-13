@@ -508,7 +508,38 @@ C'est la partie du projet dont il est le plus fier.
 | **Repos posé** | 15 % du profil part en gravité | Retiré **deux fois** — voir ci-dessous |
 | **Chute libre** | `Entity.move` = 52 % du profil TNT | **0 balayage évité sur 3 437 405** — granularité |
 | **Bordure retenue** | 2,9 % du profil TNT | **3,9 M de recherches épargnées, et 4 ms de PLUS** |
+| **Tableau vide des effets** | **44 % des allocations** (2,70 Go) | 2,4 M évités = **39 Mo**, pas 2 700 |
 | *…et cinq autres* | | |
+
+### Le profileur d'allocations ment aussi
+
+Le profileur de temps attribuait 3 % à `applyEffectsFromBlocks` — la signature exacte d'un artefact,
+donc à écarter. Le profileur d'**allocations** en donnait une tout autre lecture :
+
+```
+44,1 %  InsideBlockEffectApplier$StepBasedCollector.flushStep → Object[]   2,70 Go
+```
+
+La cause était réelle : `ArrayList.addAll` appelle `toArray()` **avant** de regarder si la source est
+vide, et `Arrays.copyOf(données, 0)` alloue. Deux appels par type d'effet, par pas, par entité — pour
+des toiles et des buissons qui ne sont presque jamais là.
+
+```
+2 448 370 tableaux non fabriqués
+mémoire : 2,92 → 2,90 Go     (0,7 %)
+temps   : aucun effet
+```
+
+**L'arithmétique qu'il fallait poser avant de coder :** 2,4 M × 16 octets = **39 Mo**. Le profileur en
+annonçait 2 700. Il s'est trompé d'un facteur **soixante-dix**.
+
+> `ObjectAllocationSample` **échantillonne et extrapole** : le poids vient du taux d'échantillonnage,
+> pas de la taille des objets. Un site qui alloue de *tout petits* objets *très souvent* y est
+> surévalué d'ordres de grandeur.
+>
+> Ce projet se méfiait du profileur de temps sur les méthodes courtes et très appelées. Il se méfie
+> maintenant du profileur d'allocations sur les objets minuscules et très nombreux. **Dans les deux
+> cas, le correctif est le même : multiplier le compte par la taille avant d'écrire une ligne.**
 
 ### Trois fois la même leçon
 
