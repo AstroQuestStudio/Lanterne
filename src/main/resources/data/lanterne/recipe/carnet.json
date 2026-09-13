@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " C ",
+    "CBC",
+    " C "
+  ],
+  "key": {
+    "B": "minecraft:book",
+    "C": "minecraft:paper"
+  },
+  "result": {
+    "id": "lanterne:carnet",
+    "count": 1
+  }
+}

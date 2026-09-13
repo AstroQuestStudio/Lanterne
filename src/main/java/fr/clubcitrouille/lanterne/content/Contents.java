@@ -78,6 +78,21 @@ public final class Contents {
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem>
             VIGIL_ITEM = ITEMS.registerSimpleBlockItem("veilleuse", VIGIL);
 
+    /**
+     * Le Carnet de repères.
+     *
+     * <p>Sans lui, la touche du carnet ne fait rien : les repères cessent d'être une fonctionnalité
+     * d'interface pour devenir un <b>objet du monde</b>. On le fabrique, on le perd à la mort, on peut
+     * le donner. Voir {@code Settings#waypoints} pour l'interrupteur qui le rend facultatif.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<Item> CARNET =
+            ITEMS.registerItem("carnet", properties -> new Item(properties.stacksTo(1)));
+
+    /** La Boussole d'Ancre. Voir {@link AnchorCompass} : elle lit le chargement forcé de vanilla. */
+    public static final net.neoforged.neoforge.registries.DeferredItem<AnchorCompass> ANCHOR_COMPASS =
+            ITEMS.registerItem("boussole_ancre",
+                    properties -> new AnchorCompass(properties.stacksTo(1)));
+
     public static final DeferredRegister<net.minecraft.world.level.block.entity.BlockEntityType<?>>
             BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, Lanterne.ID);
 
@@ -101,6 +116,8 @@ public final class Contents {
                     .displayItems((params, output) -> {
                         output.accept(ANCHOR_ITEM.get());
                         output.accept(VIGIL_ITEM.get());
+                        output.accept(CARNET.get());
+                        output.accept(ANCHOR_COMPASS.get());
                     })
                     .build());
 

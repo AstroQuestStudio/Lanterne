@@ -5,5 +5,7 @@
   "item.lanterne.veilleuse": "Vigil Lantern",
   "itemGroup.lanterne": "Lanterne",
   "key.lanterne.waypoints": "Waypoint book",
-  "key.categories.lanterne": "Lanterne"
+  "key.categories.lanterne": "Lanterne",
+  "item.lanterne.carnet": "Waypoint Book",
+  "item.lanterne.boussole_ancre": "Anchor Compass"
 }

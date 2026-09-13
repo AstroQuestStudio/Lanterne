@@ -5,5 +5,7 @@
   "item.lanterne.veilleuse": "Lanterne de Veille",
   "itemGroup.lanterne": "Lanterne",
   "key.lanterne.waypoints": "Carnet de repères",
-  "key.categories.lanterne": "Lanterne"
+  "key.categories.lanterne": "Lanterne",
+  "item.lanterne.carnet": "Carnet de repères",
+  "item.lanterne.boussole_ancre": "Boussole d'Ancre"
 }

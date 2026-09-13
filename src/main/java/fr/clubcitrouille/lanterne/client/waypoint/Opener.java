@@ -29,8 +29,39 @@ public final class Opener {
         while (Compass.OPEN.consumeClick()) {
             asked = true;
         }
-        if (asked) {
-            client.setScreen(new Board());
+        if (!asked) {
+            return;
         }
+        // <h2>Le carnet est un objet, pas une touche</h2>
+        //
+        // Sans lui, la touche ne fait rien. C'est ce qui distingue un repère d'une fonctionnalité
+        // d'interface : on le fabrique, on le perd à la mort, on peut le donner. Un carnet gratuit
+        // n'aurait aucun poids, et un système de repères sans poids finit en liste de courses.
+        //
+        // Le contrôle est FAIT CÔTÉ CLIENT pour l'ouverture seule — il n'a pas à être sûr, il a à
+        // être clair. Le serveur, lui, ne fait confiance à rien : c'est lui qui refusera la pose.
+        if (!hasBook(client)) {
+            client.player.sendOverlayMessage(net.minecraft.network.chat.Component.literal(
+                    "Il te faut un Carnet de repères.")
+                    .withStyle(net.minecraft.ChatFormatting.GRAY));
+            return;
+        }
+        client.setScreen(new Board());
+    }
+
+    /** Le carnet est-il quelque part dans l'inventaire ? Le tenir en main n'est pas exigé. */
+    private static boolean hasBook(Minecraft client) {
+        if (client.player == null) {
+            return false;
+        }
+        if (client.player.isCreative()) {
+            return true;
+        }
+        for (var stack : client.player.getInventory().getNonEquipmentItems()) {
+            if (stack.is(fr.clubcitrouille.lanterne.content.Contents.CARNET.get())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

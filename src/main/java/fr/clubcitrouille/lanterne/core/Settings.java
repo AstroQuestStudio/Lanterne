@@ -346,6 +346,45 @@ public final class Settings {
      */
     private static boolean wire = true;
     /**
+     * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
+     * confirmation de la même règle.
+     *
+     * <h2>Le poste, et il était réel</h2>
+     *
+     * <pre>
+     * public WorldBorder getWorldBorder() {
+     *     WorldBorder worldBorder = this.getDataStorage().computeIfAbsent(WorldBorder.TYPE);
+     *     worldBorder.applyInitialSettings(this.levelData.getGameTime());
+     *     return worldBorder;
+     * }
+     * </pre>
+     *
+     * <p>Une consultation des données de monde à chaque appel, pour un objet identique pendant toute
+     * la partie, sur un chemin parcouru une fois par entité et par tick. Le profileur lui attribuait
+     * <b>2,9 %</b> du temps sur six mille TNT.
+     *
+     * <h2>Le verdict</h2>
+     *
+     * <pre>
+     * 3 877 401 recherches épargnées
+     * sans : 48,39 et 48,34 ms   ·   avec : 52,83 ms
+     * </pre>
+     *
+     * <p>Près de quatre millions de consultations supprimées, et le banc <b>monte</b> de quatre
+     * millisecondes.
+     *
+     * <h2>La règle, confirmée pour la troisième fois</h2>
+     *
+     * <p>Un poste élevé sur une méthode <b>courte et très appelée</b> est un artefact d'attribution
+     * jusqu'à preuve du contraire : l'échantillonneur ne voit que le sommet de pile, et le compilateur
+     * à la volée inline. La méthode monte haut sans porter le temps qu'on lui prête.
+     *
+     * <p>Et y poser un mixin lui <b>retire cette inlinisation</b> — c'est la leçon du repos posé,
+     * retrouvée ici. Le coût d'un point d'accroche sur un chemin chaud dépasse celui du travail qu'on
+     * y supprime, même quand ce travail est réel et qu'on en supprime quatre millions.
+     */
+    private static final boolean BORDER_REMOVED_AFTER_MEASUREMENT = true;
+    /**
      * La chute libre, retirée après mesure — quinzième plan démoli, et le plus vite tranché.
      *
      * <h2>Le raisonnement</h2>
@@ -699,6 +738,7 @@ public final class Settings {
     public static boolean wire() {
         return master && wire;
     }
+
 
 
     /**

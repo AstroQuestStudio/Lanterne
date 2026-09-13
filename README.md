@@ -232,12 +232,17 @@ souvent juste sous le seuil. Le bloc revient.
 
 ---
 
-## 🧭 Les repères — un carnet, et aucune téléportation
+## 🧭 Les repères et la Boussole d'Ancre
 
 ```
-Touche B          → le carnet
+Touche G          → le carnet    (B, J et N sont prises par JourneyMap)
 /lanterne wp add|remove|share <nom>
 ```
+
+**Il faut un Carnet** — un livre entouré de quatre papiers. Sans lui, la touche ne fait rien : les
+repères cessent d'être une fonctionnalité d'interface pour devenir **un objet du monde**. On le
+fabrique, on le perd à la mort, on peut le donner. Un carnet gratuit n'aurait aucun poids, et un
+système de repères sans poids finit en liste de courses.
 
 Les mods de carte offrent presque tous le saut vers un repère. C'est commode pour un opérateur, et
 cela **détruit la survie** : plus rien ne coûte de distance, donc plus rien ne coûte de temps, donc le
@@ -254,6 +259,23 @@ monde cesse d'être grand.
 
 > **Pourquoi une flèche et non un cap.** « 247° » demande de savoir où l'on regarde pour servir à
 > quelque chose. Un joueur ne sait pas où est le nord ; il sait où il regarde.
+
+### ⚓ La Boussole d'Ancre
+
+*Obsidienne autour d'une boussole.* Clic droit :
+
+> *Chunk gardé le plus proche : 340 blocs, devant, sur ta gauche — en (1248, -96). 3 gardé(s) au total.*
+
+Une Ancre ne fait pas de bruit et ne s'use pas : un serveur de six mois en porte que personne ne sait
+plus situer. `/forceload query` existe, mais il répond à un opérateur, en coordonnées de chunk, dans
+une console.
+
+Elle lit **le chargement forcé de vanilla**, pas une liste à elle — deux registres du même fait
+finissent toujours par diverger, et c'est le plus discret des deux qui ment. Et elle **parle au lieu
+de tourner** : « nord-est » suppose de savoir où est le nord ; « devant, sur ta gauche » ne le suppose
+pas.
+
+---
 
 Le serveur envoie le carnet **entier** à chaque changement. Le client n'ajoute, ne retire et ne
 modifie jamais rien de lui-même : il remplace. C'est ce qui rend impossible le défaut classique de ces
@@ -485,7 +507,26 @@ C'est la partie du projet dont il est le plus fier.
 | **Entonnoirs endormis** | Sept ticks sur huit ne font rien | Vrai, et sans valeur : ces sept ticks ne font qu'une décrémentation |
 | **Repos posé** | 15 % du profil part en gravité | Retiré **deux fois** — voir ci-dessous |
 | **Chute libre** | `Entity.move` = 52 % du profil TNT | **0 balayage évité sur 3 437 405** — granularité |
+| **Bordure retenue** | 2,9 % du profil TNT | **3,9 M de recherches épargnées, et 4 ms de PLUS** |
 | *…et cinq autres* | | |
+
+### Trois fois la même leçon
+
+`ServerLevel.getWorldBorder()` consulte les données de monde **à chaque appel**, pour un objet
+identique pendant toute la partie — sur un chemin parcouru une fois par entité et par tick. Le
+profileur lui attribuait **2,9 %**.
+
+```
+3 877 401 recherches épargnées
+sans : 48,39 et 48,34 ms   ·   avec : 52,83 ms
+```
+
+Près de quatre millions de consultations supprimées, et le banc **monte de quatre millisecondes**.
+
+> Un poste élevé sur une méthode **courte et très appelée** est un artefact d'attribution jusqu'à
+> preuve du contraire. Et y poser un mixin lui **retire son inlinisation** : le coût du point
+> d'accroche dépasse celui du travail qu'on y supprime — **même quand on en supprime quatre
+> millions**.
 
 ### Celui qui a été tranché en une exécution
 

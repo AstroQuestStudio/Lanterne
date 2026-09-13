@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " O ",
+    "OCO",
+    " O "
+  ],
+  "key": {
+    "C": "minecraft:compass",
+    "O": "minecraft:obsidian"
+  },
+  "result": {
+    "id": "lanterne:boussole_ancre",
+    "count": 1
+  }
+}
