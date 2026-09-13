@@ -60,6 +60,15 @@ public final class Conformance {
     // On évite zéro : une créature lâchée sur la tête du joueur retombe sur lui et ne mesure
     // plus une chute mais une collision.
     private static final int[] RANGES = {16, 40, 64};
+    /**
+     * Sujets lâchés par distance.
+     *
+     * <p>Un seul suffisait en théorie — la chute est déterministe. En pratique le relevé oscillait
+     * de vingt-cinq à cent pour cent d'une exécution à l'autre, parce que le moment du premier
+     * réveil dépend du décalage propre à chaque créature. Cinq sujets et une médiane rendent le
+     * verdict stable, et un verdict instable ne sert à rien.
+     */
+    private static final int PER_RANGE = 5;
 
     private record Subject(Entity entity, int range, double startY) {}
 
@@ -81,6 +90,11 @@ public final class Conformance {
 
     /** Ouvre l'épreuve. Le mod est actif pour la première moitié, éteint pour la seconde. */
     public static void begin(MinecraftServer server) {
+        var verdict = Preflight.check(server, server.overworld(), 0);
+        if (!Preflight.announce("épreuve de chute", verdict)) {
+            server.halt(false);
+            return;
+        }
         host = server;
         step = Step.FALLING_ON;
         Settings.setEnabled(true);
@@ -91,14 +105,19 @@ public final class Conformance {
     private static void drop(ServerLevel level) {
         clear();
         for (int range : RANGES) {
+          for (int copy = 0; copy < PER_RANGE; copy++) {
+            // Les sujets d'une même distance sont écartés de quatre blocs : assez pour qu'aucun ne
+            // tombe sur un autre, assez peu pour qu'ils partagent la même distance au joueur.
             double x = range;
-            double ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, (int) x, 0);
+            double z = copy * 4d;
+            double ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    (int) x, (int) z);
             Cow cow = EntityType.COW.create(level, EntitySpawnReason.COMMAND);
             if (cow == null) {
                 continue;
             }
             double y = ground + DROP_HEIGHT;
-            cow.snapTo(x, y, 0d, 0f, 0f);
+            cow.snapTo(x, y, z, 0f, 0f);
             cow.setPersistenceRequired();
             // Invulnérable : une créature qui meurt en route ne mesure plus rien, et les dégâts de
             // chute ne sont pas le sujet.
@@ -106,6 +125,7 @@ public final class Conformance {
             if (level.addFreshEntity(cow)) {
                 SUBJECTS.add(new Subject(cow, range, y));
             }
+          }
         }
         waiting = WINDOW;
     }
@@ -121,24 +141,43 @@ public final class Conformance {
         final MinecraftServer host = server;
 
         double[] into = step == Step.FALLING_ON ? WITH : WITHOUT;
+
+        // On regroupe par distance, puis l'on prend la médiane. Un sujet unique suffisait en
+        // théorie — la chute est déterministe — mais le relevé oscillait de vingt-cinq à cent pour
+        // cent d'une exécution à l'autre : le moment du premier réveil dépend du décalage propre à
+        // chaque créature. Cinq sujets et une médiane rendent le verdict stable.
+        java.util.Map<Integer, java.util.List<Double>> byRange = new java.util.HashMap<>();
         for (Subject subject : SUBJECTS) {
-            int index = indexOf(subject.range());
-            if (index >= 0) {
-                into[index] = subject.startY() - subject.entity().getY();
-            }
-            // Diagnostic : ce que le mod croit savoir de cette créature. Sans cela, un « elle ne
-            // tombe pas » ne dit pas si c'est la cadence, le recensement, ou le chunk.
-            Lanterne.LOG.info(String.format(Locale.ROOT,
-                    "[CONFORMITÉ] · %d blocs : vivante=%b, distance vue=%.0f, cadence=%d, "
-                            + "chunks recensés=%d, joueurs=%d",
-                    subject.range(), subject.entity().isAlive(),
-                    fr.clubcitrouille.lanterne.core.Census.distanceOf(subject.entity()),
-                    fr.clubcitrouille.lanterne.core.Cadence.forEntity(subject.entity(),
-                            fr.clubcitrouille.lanterne.core.Census.distanceOf(subject.entity()),
-                            fr.clubcitrouille.lanterne.core.TickBudget.pressure()),
-                    fr.clubcitrouille.lanterne.core.Census.chunksSeen(),
-                    server.overworld().players().size()));
+            byRange.computeIfAbsent(subject.range(), ignored -> new java.util.ArrayList<>())
+                    .add(subject.startY() - subject.entity().getY());
         }
+        for (var entry : byRange.entrySet()) {
+            int index = indexOf(entry.getKey());
+            if (index < 0) {
+                continue;
+            }
+            java.util.List<Double> falls = entry.getValue();
+            java.util.Collections.sort(falls);
+            into[index] = falls.get(falls.size() / 2);
+        }
+
+        // Un relevé de contexte par distance, et non par sujet : ce qu'on veut savoir est ce que le
+        // mod croit de cette zone, pas de chaque vache.
+        for (int range : RANGES) {
+            SUBJECTS.stream().filter(s -> s.range() == range).findFirst().ifPresent(witness ->
+                    Lanterne.LOG.info(String.format(Locale.ROOT,
+                            "[CONFORMITÉ] · %d blocs : distance vue=%.0f, cadence=%d, "
+                                    + "voisines=%d, chunks recensés=%d",
+                            witness.range(),
+                            fr.clubcitrouille.lanterne.core.Census.distanceOf(witness.entity()),
+                            fr.clubcitrouille.lanterne.core.Cadence.forEntity(witness.entity(),
+                                    fr.clubcitrouille.lanterne.core.Census
+                                            .distanceOf(witness.entity()),
+                                    fr.clubcitrouille.lanterne.core.TickBudget.pressure()),
+                            fr.clubcitrouille.lanterne.core.Crowd.neighbours(witness.entity()),
+                            fr.clubcitrouille.lanterne.core.Census.chunksSeen())));
+        }
+
         clear();
         advance(server.overworld());
     }

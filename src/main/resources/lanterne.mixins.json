@@ -15,6 +15,7 @@
     "ServerLevelMixin",
     "LevelMixin",
     "NaturalSpawnerMixin",
+    "MobMixin",
     "BlockEntityMixin"
   ]
 }

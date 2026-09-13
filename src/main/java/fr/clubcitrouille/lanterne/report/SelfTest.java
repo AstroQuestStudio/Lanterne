@@ -112,6 +112,7 @@ public final class SelfTest {
                 step = Step.LOADING;
                 waiting = CHUNK_LOAD;
             } else if (step == Step.LOADING) {
+                Herd.sweepEntities(server.overworld());
                 Kitchen.begin(server);
                 step = Step.LAUNCHED;
             }
@@ -126,6 +127,13 @@ public final class SelfTest {
                 step = Step.LOADING;
                 waiting = CHUNK_LOAD;
             } else if (step == Step.LOADING) {
+                // Le monde est conservé d'une épreuve à l'autre depuis que la génération de terrain
+                // faussait les mesures — mais les créatures des épreuves précédentes y restaient.
+                // L'épreuve de chute s'en trouvait faussée : ses vaches étaient noyées dans une
+                // foule, et l'exemption de chute exige précisément d'être hors d'un amas. Trois
+                // relevés à six, quatre et zéro pour cent, imputés au mod alors que le banc seul
+                // était en cause.
+                Herd.sweepEntities(server.overworld());
                 Conformance.begin(server);
                 step = Step.LAUNCHED;
             }
@@ -162,6 +170,7 @@ public final class SelfTest {
             case POPULATING -> {
                 Lanterne.LOG.info("Auto-test : {} entité(s) vivante(s), {} joueur(s) en ligne.",
                         Bench.livingCount(level), server.getPlayerList().getPlayerCount());
+                Bench.expect(countWanted);
                 Bench.startHeadless(server);
                 step = Step.LAUNCHED;
             }

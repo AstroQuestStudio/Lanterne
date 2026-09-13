@@ -3,6 +3,7 @@ package fr.clubcitrouille.lanterne.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -93,6 +94,45 @@ public abstract class ProfilerMixin {
     @Inject(method = "stopUsing", at = @At("RETURN"))
     private static void lanterne$noteStop(CallbackInfo callback) {
         lanterne$generation++;
+        // Le cache devient caduc : la prochaine lecture doit repasser par le jeu.
+        lanterne$cachedFiller = null;
+    }
+
+    /**
+     * Remplace la purge par une écriture nulle.
+     *
+     * <h2>Dix pour cent du serveur dans une méthode de ménage</h2>
+     *
+     * <p>Une fois le cache de {@code get()} en place, le profileur restait au sommet du relevé :
+     *
+     * <pre>
+     * 10,7 %  Profiler.stopUsing
+     *  0,9 %  ThreadLocalMap.expungeStaleEntry
+     * </pre>
+     *
+     * <p>La cause est {@code ACTIVE.remove()}. Retirer une variable de thread ne se contente pas
+     * d'effacer une case : la table balaie ses entrées périmées au passage — c'est
+     * {@code expungeStaleEntry}, visible juste en dessous dans le relevé — et ce ménage est
+     * proportionnel au nombre de variables que porte le thread. Le fil du serveur en porte beaucoup.
+     *
+     * <p>{@code set(null)} écrit une case et s'arrête là. Pour tout lecteur, le résultat est
+     * identique : {@code ACTIVE.get()} rend {@code null} dans les deux cas, et c'est la seule chose
+     * que le jeu vérifie.
+     *
+     * <p>La seule différence tient à la mémoire : l'entrée reste dans la table au lieu d'être
+     * retirée. Elle pèse une référence, sur un thread qui vit aussi longtemps que le serveur, et
+     * sera réécrite au tick suivant. C'est un objet contre dix pour cent du processeur.
+     */
+    @Redirect(
+            method = "stopUsing",
+            at = @At(value = "INVOKE",
+                     target = "Ljava/lang/ThreadLocal;remove()V"))
+    private static void lanterne$clearWithoutPurge(ThreadLocal<ProfilerFiller> active) {
+        if (Settings.profilerCache()) {
+            active.set(null);
+        } else {
+            active.remove();
+        }
     }
 
     /**

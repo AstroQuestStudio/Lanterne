@@ -68,6 +68,12 @@ public final class Bench {
     private static int filled;
 
     private static long tickStart;
+    /** Entités que l'épreuve a demandées, pour que le contrôle sache quoi vérifier. */
+    private static int expected;
+
+    public static void expect(int entities) {
+        expected = entities;
+    }
 
     /**
      * Mémoire allouée pendant chaque phase, en octets.
@@ -108,8 +114,19 @@ public final class Bench {
     }
 
     /** Lance la comparaison. Deux phases de vingt-cinq secondes, plus la chauffe. */
-    /** Lance le banc sans interlocuteur : le verdict ira au journal, puis le serveur s'arrête. */
+    /**
+     * Lance le banc sans interlocuteur : le verdict ira au journal, puis le serveur s'arrête.
+     *
+     * <p>Rien ne démarre si le contrôle préalable échoue. Ce banc a rendu trois chiffres faux avec
+     * assurance ; il rend désormais un refus explicite plutôt qu'un nombre plausible.
+     */
     public static void startHeadless(net.minecraft.server.MinecraftServer server) {
+        var verdict = fr.clubcitrouille.lanterne.lab.Preflight.check(
+                server, server.overworld(), expected);
+        if (!fr.clubcitrouille.lanterne.lab.Preflight.announce("banc de vitesse", verdict)) {
+            server.halt(false);
+            return;
+        }
         headless = true;
         stopAfter = server;
         listener = null;
@@ -164,7 +181,13 @@ public final class Bench {
                     gcMark = gcCount();
                     fr.clubcitrouille.lanterne.lab.Understudy.resetPackets();
                     fr.clubcitrouille.lanterne.lab.Sampler.start(Thread.currentThread());
-                    fr.clubcitrouille.lanterne.lab.Allocations.start();
+                    // Le profileur d'allocations ne s'ouvre que si on le demande : démarrer le
+                    // magnétoscope charge ses propres classes, et ces octets-là entraient dans la
+                    // mesure de mémoire de la première phase — faussant la comparaison en faveur de
+                    // la seconde, qui les trouvait déjà chargées.
+                    if ("1".equals(System.getenv("LANTERNE_ALLOC"))) {
+                        fr.clubcitrouille.lanterne.lab.Allocations.start();
+                    }
                 }
             }
             case MEASURE_ON -> {
