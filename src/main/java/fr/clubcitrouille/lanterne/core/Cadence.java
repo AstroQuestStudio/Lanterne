@@ -53,6 +53,28 @@ public final class Cadence {
     private static final double UNTOUCHED = 24d;
 
     /**
+     * Le rayon réellement appliqué, que l'administrateur peut régler.
+     *
+     * <h2>Pourquoi ce réglage existe, et ce qu'il arbitre</h2>
+     *
+     * <p>Ce rayon décide d'un compromis que ce projet ne peut pas trancher à la place du joueur :
+     * <b>la fluidité de ce qu'on a sous les yeux contre le temps de tick</b>.
+     *
+     * <p>Sur un élevage de mille bêtes dans un enclos de quinze blocs, joueur au milieu, le rayon par
+     * défaut protège tout le troupeau : le gain tombe de ×6,5 à ×1,2, et le serveur passe de 4 ms à
+     * 27 — ce qui reste très en deçà des cinquante millisecondes d'un tick. Personne ne perd rien, et
+     * les bêtes bougent normalement.
+     *
+     * <p>Sur un serveur qui ne tient pas ses ticks, l'arbitrage s'inverse, et c'est pourquoi la
+     * pression le fait <b>rétrécir toute seule</b> — jusqu'à la moitié. Un administrateur qui préfère
+     * les ticks à la fluidité peut le descendre davantage ; un autre qui ne veut aucune saccade peut
+     * le monter.
+     */
+    public static double untouchedRadius() {
+        return Config.NEAR_RADIUS == null ? UNTOUCHED : Config.NEAR_RADIUS.get();
+    }
+
+    /**
      * Blocs par cran de ralentissement.
      *
      * <p>Un tick de plus entre deux réveils tous les seize blocs — soit un chunk. La valeur vient
@@ -86,10 +108,35 @@ public final class Cadence {
      * @param distance distance au joueur le plus proche, en blocs
      * @param pressure sévérité demandée par le budget de tick, de 0 à 1
      */
+    /**
+     * Cette entité est-elle dans la zone franche ?
+     *
+     * <h2>La contradiction que cette méthode existe pour lever</h2>
+     *
+     * <p>Le mod promet, en toutes lettres et dans son mot d'accueil : <em>rien n'est dégradé près
+     * d'un joueur</em>. {@link #forEntity} tenait cette promesse — elle rend 1 dans la zone franche.
+     *
+     * <p>Mais la pénalité de foule <b>multipliait ce 1 ensuite</b>. Une créature à cinq blocs du
+     * joueur, dans un groupe de trente-deux, ne décidait plus qu'un tick sur trois, et le freinage
+     * réseau espaçait ses paquets par-dessus. La garantie était écrite d'un côté et enfreinte de
+     * l'autre, dans le même fichier.
+     *
+     * <p>Cela s'est vu en jeu avant de se voir dans le code : des slimes aux bonds saccadés, des
+     * coups qui portent mal. Un slime se déplace par sauts — le freiner d'un tick sur trois hache
+     * chaque saut, là où une vache qui marche ne montrerait rien.
+     *
+     * <p>La zone franche prime donc désormais sur la foule. Ce que cela coûte au banc de l'élevage
+     * est réel et sera publié tel quel : <b>un gain obtenu en enfreignant une garantie n'était pas
+     * un gain, c'était une dette.</b>
+     */
+    public static boolean untouched(double distance, double pressure) {
+        return distance <= untouchedRadius() * (1d - 0.5d * clamp(pressure));
+    }
+
     public static int forEntity(Entity entity, double distance, double pressure) {
         // La pression rapproche la dégradation du joueur quand le serveur souffre, et l'en éloigne
         // quand il respire. Un serveur au repos ne dégrade presque rien.
-        double free = UNTOUCHED * (1d - 0.5d * clamp(pressure));
+        double free = untouchedRadius() * (1d - 0.5d * clamp(pressure));
         if (distance <= free) {
             return 1;
         }

@@ -31,13 +31,13 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | Charge | Sans Lanterne | Avec | Gain | |
 |---|---:|---:|:---:|:--:|
 | **8 000 objets au sol** | 494,83 ms | 36,37 ms | **×13,60** | ✅ |
-| **1 000 vaches dans 15×15** | 31,04 ms | **5,91 ms** | **×5,25** | ✅ |
+| **1 000 vaches dans 15×15** | 30,83 ms | 27,54 ms | **×1,12** | ✅ |
 | **4 000 orbes d'expérience** | 55,21 ms | **4,70 ms** | **×11,76** | ✅ |
 | **Sauvegarde de 64 chunks** | 114,59 ms | 38,37 ms | **×2,99** | ✅ |
 | **6 000 projectiles en vol** | 113,74 ms | 23,12 ms | **×4,92** | ✅ |
 | **Serveur habité réaliste** | 33,19 ms | 8,02 ms | **×4,14** | ✅ |
 | **6 000 TNT** | 72,46 ms | 49,64 ms | **×1,46** | ✅ |
-| **600 villageois** | 39,23 ms | 25,93 ms | **×1,51** | ✅ |
+| **600 villageois** | 61,00 ms | 34,84 ms | **×1,75** | ✅ |
 | **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
 | **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
 | **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | **×1,05** | ✅ |
@@ -62,6 +62,37 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 > Publier celui qui baisse est le seul moyen de rendre croyables ceux qui montent.
 
 <div align="center">
+
+### ⚠️ Pourquoi l'élevage est passé de ×5,25 à ×1,12
+
+Un joueur a signalé, **en jouant**, des slimes aux bonds saccadés et des coups qui portaient mal.
+
+Le mod promettait *« rien n'est dégradé près d'un joueur »* — et le code faisait ceci :
+
+```java
+int period = Cadence.forEntity(entity, distance, pressure);   // = 1 si à moins de 24 blocs
+if (Settings.density()) {
+    int crowd = Crowd.noteAndPenalty(entity, now);
+    if (crowd > 1) {
+        period = Math.min(period * crowd, ceiling(entity));    // 1 × 3 = 3
+    }
+}
+```
+
+**La garde de proximité rendait 1, et la densité la multipliait quand même.** La garantie était écrite
+d'un côté et enfreinte de l'autre, dans le même fichier.
+
+Le seuil de foule est de huit entités par colonne de chunk — et un slime qui meurt se divise en
+quatre, puis en seize. Un slime se déplace par **bonds** : le freiner à un tick sur trois hache chaque
+saut, là où une vache qui marche ne montrerait rien.
+
+> **Un gain obtenu en enfreignant une garantie n'était pas un gain, c'était une dette.** Le ×5,25
+> venait pour l'essentiel de là. Le chiffre honnête est ×1,12 — et le serveur reste à **27,54 ms**,
+> très en deçà des 50 ms d'un tick. Personne ne perd rien.
+
+Le rayon de la zone franche est désormais **réglable** (`zone_franche_blocs`, défaut 24), et il
+**rétrécit de moitié tout seul** quand le serveur souffre : un serveur qui tient ses ticks ne dégrade
+rien, un serveur qui peine se resserre.
 
 ### 🧠 Et la mémoire, qui décide des à-coups
 

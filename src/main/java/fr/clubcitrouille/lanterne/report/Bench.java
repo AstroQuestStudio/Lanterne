@@ -293,6 +293,8 @@ public final class Bench {
         // davantage, mais parce qu'elle héritait d'un préambule de durée variable.
         fr.clubcitrouille.lanterne.core.Rubble.reset();
         fr.clubcitrouille.lanterne.core.Pasture.reset();
+        fr.clubcitrouille.lanterne.core.Poi.reset();
+        fr.clubcitrouille.lanterne.core.Spill.reset();
         fr.clubcitrouille.lanterne.core.Wire.reset();
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
@@ -573,6 +575,22 @@ public final class Bench {
         // durees ci-dessus ne la voit pas, et ne la verra jamais. On publie donc la chose elle-meme.
         if (fr.clubcitrouille.lanterne.core.Wire.packets() > 0L) {
             say("Compression reseau : " + fr.clubcitrouille.lanterne.core.Wire.describe());
+        }
+
+        if (fr.clubcitrouille.lanterne.core.Spill.skipped() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Effets traverses : %d tableau(x) vide(s) non fabrique(s), soit %.1f Mo",
+                    fr.clubcitrouille.lanterne.core.Spill.skipped(),
+                    fr.clubcitrouille.lanterne.core.Spill.megabytes()));
+        }
+
+        if (fr.clubcitrouille.lanterne.core.Poi.chunks() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Points d.interet : %d chunk(s) parcouru(s), %d entier(s) non emballe(s) "
+                    + "— soit %.1f Mo si chacun pesait seize octets.",
+                    fr.clubcitrouille.lanterne.core.Poi.chunks(),
+                    fr.clubcitrouille.lanterne.core.Poi.boxesSpared(),
+                    fr.clubcitrouille.lanterne.core.Poi.boxesSpared() * 16d / 1048576d));
         }
 
         if (fr.clubcitrouille.lanterne.core.Pasture.refused() > 0L) {

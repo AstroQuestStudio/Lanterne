@@ -345,50 +345,16 @@ public final class Settings {
      * décision de l'émetteur, pas une propriété du flux.
      */
     private static boolean wire = true;
+    /** Les points d'intérêt parcourus sans emballer d'entiers. Voir {@code PoiStreamMixin}. */
+    private static boolean poi = true;
     /**
-     * Le tableau vide des effets traversés, retiré après mesure — dix-septième plan démoli, et le
-     * premier où c'est le profileur d'ALLOCATIONS qui a menti.
+     * Le tableau vide non fabriqué dans les effets de blocs traversés.
      *
-     * <h2>Le poste, tel qu'annoncé</h2>
-     *
-     * <pre>
-     * 44,1 %  InsideBlockEffectApplier$StepBasedCollector.flushStep → Object[]   (2,70 Go)
-     * </pre>
-     *
-     * <p>La cause était réelle et vérifiée ligne par ligne : {@code ArrayList.addAll} appelle
-     * {@code toArray()} sur sa source <b>avant</b> de regarder si elle contient quelque chose, et
-     * {@code Arrays.copyOf(données, 0)} rend un tableau neuf. Deux appels par type d'effet, à chaque
-     * pas, pour chaque entité — et toiles, feu et buissons ne sont presque jamais là.
-     *
-     * <h2>Le verdict</h2>
-     *
-     * <pre>
-     * 2 448 370 tableaux non fabriqués
-     * mémoire allouée — sans : 2,92 et 2,93 Go   ·   avec : 2,90 et 2,91 Go
-     * temps          — sans : 28,75 et 28,59 ms  ·   avec : 29,32 et 26,29 ms
-     * </pre>
-     *
-     * <p>Vingt mégaoctets sur deux mille neuf cents, soit <b>sept dixièmes de pour cent</b>. Rien sur
-     * le temps.
-     *
-     * <h2>L'arithmétique qu'il fallait poser AVANT de coder</h2>
-     *
-     * <p>Deux millions quatre cent mille tableaux de longueur zéro font seize octets chacun, soit
-     * <b>trente-neuf mégaoctets</b>. Le profileur en annonçait deux mille sept cents. <b>Il s'est
-     * trompé d'un facteur soixante-dix.</b>
-     *
-     * <h2>La règle, et elle est neuve</h2>
-     *
-     * <p>{@code ObjectAllocationSample} <b>échantillonne et extrapole</b> : le poids qu'il attribue à
-     * un site vient du taux d'échantillonnage, pas de la taille des objets. Un site qui alloue de
-     * <em>tout petits</em> objets <em>très souvent</em> y est donc surévalué d'ordres de grandeur.
-     *
-     * <p>Ce projet savait déjà se méfier du profileur de temps sur les méthodes courtes et très
-     * appelées. Il sait maintenant se méfier du profileur d'allocations sur les objets minuscules et
-     * très nombreux. <b>Dans les deux cas, le correctif est le même : multiplier le compte par la
-     * taille avant d'écrire une ligne de code.</b>
+     * <p>Retiré une fois — 0,7 % de la mémoire, rien sur le temps — puis remis, parce que la règle du
+     * projet était trop grossière. Voir {@code InsideEffectsMixin} : on retire ce qui coûte, on garde
+     * ce qui gagne, même peu.
      */
-    private static final boolean SPILL_REMOVED_AFTER_MEASUREMENT = true;
+    private static boolean spill = true;
     /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
@@ -783,6 +749,14 @@ public final class Settings {
         return master && wire;
     }
 
+    public static boolean poi() {
+        return master && poi;
+    }
+
+    public static boolean spill() {
+        return master && spill;
+    }
+
 
 
 
@@ -901,6 +875,8 @@ public final class Settings {
         gather = wanted.contains("gather") || wanted.contains("fusion") || wanted.contains("objets");
         pasture = wanted.contains("pasture") || wanted.contains("enclos") || wanted.contains("errance");
         wire = wanted.contains("wire") || wanted.contains("compression") || wanted.contains("paquet");
+        poi = wanted.contains("poi") || wanted.contains("interet");
+        spill = wanted.contains("spill") || wanted.contains("effets") || wanted.contains("tableau");
         mining = !wanted.contains("nomining");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
@@ -939,6 +915,8 @@ public final class Settings {
         vigil = Config.VIGIL.get();
         pasture = Config.PASTURE.get();
         wire = Config.WIRE.get();
+        poi = Config.POI.get();
+        spill = Config.SPILL.get();
         mining = Config.MINING.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
@@ -995,6 +973,12 @@ public final class Settings {
         }
         if (wire) {
             text.append("compression ");
+        }
+        if (poi) {
+            text.append("poi ");
+        }
+        if (spill) {
+            text.append("effets ");
         }
         if (rationing) {
             text.append("ration ");

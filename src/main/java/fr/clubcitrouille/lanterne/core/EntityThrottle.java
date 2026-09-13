@@ -91,13 +91,20 @@ public final class EntityThrottle {
                 Settings.rationing() ? Rationing.pressure() : 0d);
         int period = Cadence.forEntity(entity, Census.distanceOf(entity), pressure);
 
+        // La zone franche prime sur la foule. Voir Cadence.untouched : la garantie « rien n'est
+        // dégradé près d'un joueur » était écrite d'un côté et enfreinte de l'autre, et cela se
+        // voyait en jeu — slimes aux bonds saccadés, coups qui portent mal.
+        //
+        // Le recensement de foule continue de tourner : il sert au court-circuit de bousculade et au
+        // rapport, et l'interrompre ici fausserait les deux. Seule la PÉNALITÉ est levée.
+        boolean close = Cadence.untouched(Census.distanceOf(entity), pressure);
         if (Settings.density()) {
             // La foule multiplie la cadence au lieu de la faire descendre d'un cran : avec une
             // échelle continue, doubler l'attente est la traduction exacte de « on en voit deux fois
             // moins ». Le plafond propre à l'espèce s'applique ensuite — un villageois serré dans
             // une ferme reste un villageois qui travaille.
             int crowd = Crowd.noteAndPenalty(entity, now);
-            if (crowd > 1) {
+            if (crowd > 1 && !close) {
                 // Une multiplication et non un décalage : la foule se mesure désormais de façon
                 // continue, comme la distance, et « deux fois plus serré » doit se traduire par
                 // « deux fois moins souvent », pas par le palier le plus proche.

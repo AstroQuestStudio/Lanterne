@@ -35,6 +35,9 @@
     "SpawnGuardMixin",
     "StrollMixin",
     "CompressionMixin",
-    "MiningMixin"
+    "MiningMixin",
+    "SectionStorageAccessor",
+    "PoiStreamMixin",
+    "InsideEffectsMixin"
   ]
 }

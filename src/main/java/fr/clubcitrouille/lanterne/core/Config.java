@@ -55,6 +55,9 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue GATHER;
     public static final ModConfigSpec.BooleanValue PASTURE;
     public static final ModConfigSpec.BooleanValue WIRE;
+    public static final ModConfigSpec.BooleanValue POI;
+    public static final ModConfigSpec.BooleanValue SPILL;
+    public static final ModConfigSpec.IntValue NEAR_RADIUS;
     public static final ModConfigSpec.BooleanValue MINING;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
@@ -162,6 +165,34 @@ public final class Config {
                 "Prix : des paquets 10 a 15 % plus gros, compresses 3 a 5 fois plus vite.",
                 "Pris en compte a la CONNEXION : changer ce reglage n'affecte que les suivantes.")
                 .define("compression_reseau", true);
+        POI = BUILDER.comment(
+                "Points d'interet parcourus sans emballer d'entiers.",
+                "getInChunk fait IntStream.rangeClosed(...).boxed() : 24 Integer par chunk. Et",
+                "getInSquare l'appelle POUR CHAQUE CHUNK d'un carre - un villageois qui cherche un",
+                "lit a 48 blocs balaie 81 chunks, soit 1944 entiers emballes par recherche.",
+                "mapToObj fait la meme chose sans l'emballage : meme paresse, meme ordre, meme",
+                "contenu. La paresse est conservee - certains appelants ne prennent que le premier",
+                "resultat, et materialiser une liste les ferait travailler davantage.")
+                .define("points_interet", true);
+        SPILL = BUILDER.comment(
+                "Effets de blocs traverses : ne pas fabriquer un tableau vide pour ne rien copier.",
+                "ArrayList.addAll appelle toArray() AVANT de regarder si la source est vide.",
+                "600 villageois : 2,4 millions de tableaux evites, 20 Mo sur 2900.",
+                "Modeste et gratuit - un serveur rapide est fait de la somme de ces gains-la.")
+                .define("effets_traverses", true);
+        NEAR_RADIUS = BUILDER.comment(
+                "Rayon de la zone franche, en blocs : rien n'y est degrade, ni par la distance ni",
+                "par la foule. C'est le seul reglage qui arbitre un COMPROMIS et non un gain.",
+                "",
+                "24 (defaut) : aucune saccade sous les yeux du joueur. Sur un elevage de 1000 betes",
+                "  dans 15x15, joueur au milieu, le gain tombe de x6,5 a x1,2 - mais le serveur",
+                "  reste a 27 ms, tres en deca des 50 ms d'un tick. Personne ne perd rien.",
+                "8  : la foule reprend ses droits pres du joueur. Les betes d'un enclos bondissent",
+                "  moins nettement, et le serveur respire beaucoup plus.",
+                "",
+                "La PRESSION le fait rétrécir de moitie toute seule quand le serveur souffre :",
+                "un serveur qui tient ses ticks ne degrade rien, un serveur qui peine se resserre.")
+                .defineInRange("zone_franche_blocs", 24, 4, 128);
         MINING = BUILDER.comment(
                 "Minage compte a l'horloge reelle plutot qu'en ticks serveur.",
                 "CORRIGE UN DEFAUT VISIBLE DE VANILLA : quand le serveur prend du retard, les blocs",
