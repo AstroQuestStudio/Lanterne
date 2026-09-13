@@ -8,6 +8,7 @@
 
 <br>
 
+![Version](https://img.shields.io/badge/version-2.1.0-brightgreen?style=for-the-badge)
 ![NeoForge](https://img.shields.io/badge/NeoForge-26.1.2-orange?style=for-the-badge)
 ![Java](https://img.shields.io/badge/Java-21-blue?style=for-the-badge)
 ![Licence](https://img.shields.io/badge/licence-tous%20droits%20r%C3%A9serv%C3%A9s-lightgrey?style=for-the-badge)
@@ -89,6 +90,19 @@ saut, là où une vache qui marche ne montrerait rien.
 > **Un gain obtenu en enfreignant une garantie n'était pas un gain, c'était une dette.** Le ×5,25
 > venait pour l'essentiel de là. Le chiffre honnête est ×1,12 — et le serveur reste à **27,54 ms**,
 > très en deçà des 50 ms d'un tick. Personne ne perd rien.
+
+**La correction, vérifiée sur le relevé de cadences** — mille bêtes entourant le joueur :
+
+| | Avant | Après |
+|---|---:|---:|
+| Pleine simulation | 21 | **932** |
+| Très lointain *(1 tick sur 9 à 24)* | **1 015** | **0** |
+| Travail évité | 91 % | 5,1 % |
+
+La catégorie « très lointain » a entièrement disparu. Le symptôme exact rapporté — *« un saut de slime
+peut prendre 20 secondes »* — s'explique à l'unité près : le plafond de foule vaut 32, donc le
+minuteur de saut d'un slime avançait 32 fois plus lentement, et son saut naturel de 10 à 30 ticks
+devenait 16 à 48 secondes.
 
 Le rayon de la zone franche est désormais **réglable** (`zone_franche_blocs`, défaut 24), et il
 **rétrécit de moitié tout seul** quand le serveur souffre : un serveur qui tient ses ticks ne dégrade
