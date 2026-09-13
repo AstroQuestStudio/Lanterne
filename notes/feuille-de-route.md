@@ -400,3 +400,28 @@ serveur. Un chemin très chaud, allégé pour de bon.
 | `collisions` (`Solid` + `Shove`) | **×2,34** |
 | `objets` (sommeil, retiré) | aucun effet |
 | tous ensemble | ×20,2 |
+
+### Contribution de chaque module, mesurée seul (charge « base habitée »)
+
+| Modules actifs | Travail évité | Gain |
+|---|---:|---:|
+| `lod` seul | **0,8 %** | aucun (bruit) |
+| `lod` + `densite` | **93,3 %** | **×10,7** |
+| `collisions` seul | — | ×2,34 |
+| tout | — | ×20 à ×30 |
+
+**La thèse d'origine du mod ne fait rien là où les joueurs vivent.** « Dégrader ce qui est loin »
+suppose qu'il y ait du loin ; un élevage et un sol jonché sont à vingt blocs du joueur, dans la zone
+franche que le mod s'interdit de toucher.
+
+Ce qui porte le gain est la **densité**. Et c'est ce qui justifie, rétrospectivement, le changement le
+plus important de la nuit : la dégradation par densité n'a pu passer de ×4 à ×16 qu'une fois les
+horloges de production tenues à la main. Sans `Produce`, ce facteur 16 aurait divisé par seize la ponte
+d'une ferme à œufs.
+
+### Le client démarre avec le mod
+
+Vérification jamais faite, et pourtant essentielle : le mod est chargé côté client aussi. `runClient`
+atteint le menu principal — OpenAL initialisé, moteur sonore démarré, atlas de textures construits,
+aucune exception. La classe `Pane`, seul point de contact avec le code de rendu, est bien isolée
+derrière `@EventBusSubscriber(Dist.CLIENT)` et n'empêche pas le serveur dédié de démarrer.

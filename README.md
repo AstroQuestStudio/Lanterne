@@ -77,6 +77,31 @@ chien de garde du serveur finit par le déclarer planté. Le détail de l'analys
 `Entity.canBeCollidedWith()` rend faux par défaut, et trois classes seulement le redéfinissent dans
 tout Minecraft.</sub>
 
+### Quel module fait quoi — et la surprise
+
+Chaque module a son interrupteur, ce qui permet de le mesurer **seul**. Sur la charge « base
+habitée » :
+
+| Modules actifs | Travail évité | Gain |
+|---|---:|---:|
+| `lod` seul — dégrader ce qui est **loin** | 🔴 **0,8 %** | aucun |
+| `lod` + `densite` — et ce qui est **entassé** | 💚 **93,3 %** | **×10,7** |
+| `collisions` seul — le court-circuit de `Solid` | — | **×2,34** |
+| tout ensemble | — | **×20 à ×30** |
+
+**La première ligne est le résultat le plus dérangeant de ce projet.** La thèse d'origine — « dégrader
+ce qui est loin d'un joueur » — ne fait *rien* sur une base habitée. C'est normal, et il fallait le
+mesurer pour le voir : un élevage et un sol jonché sont **à vingt blocs du joueur**, dans la zone que
+le mod s'interdit de toucher.
+
+Ce qui porte le gain, là où les joueurs vivent réellement, c'est la **densité** : ce qui est noyé dans
+le nombre ne se distingue pas, qu'il soit loin ou sous vos yeux.
+
+> C'est aussi ce qui justifie le changement le plus important de la dernière passe : la dégradation
+> par densité est passée d'un facteur 4 à un facteur **16**. Elle ne pouvait pas monter tant que
+> ralentir une bête arrêtait sa ponte et sa croissance. Une fois les horloges de production tenues à
+> la main, elle l'a pu — et le gain sur l'élevage est passé de ×3,0 à ×5,2.
+
 ### Dix joueurs — la charge que ce mod n'avait jamais mesurée
 
 Tous les chiffres ci-dessus portent sur **un** observateur. C'était une lacune : un serveur, par
