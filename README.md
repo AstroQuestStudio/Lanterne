@@ -9,7 +9,7 @@ mais à lui éviter le travail qui ne sert à rien.
 
 ### Un seul mod fait jeu égal avec dix-sept — et les bat sur la mémoire, sans casser les fermes.
 
-**×7,1** sur un serveur peuplé · **×5,2** sur un élevage intensif · **×62** sur un sol jonché d'objets
+**×7,1** un serveur peuplé · **×5,2** un élevage intensif · **×62** un sol jonché · **×5,0** à dix joueurs
 
 *Rendement d'une ferme : **100 %**, mesuré. Aucun autre mod d'optimisation ne publie ce chiffre.*
 
@@ -67,6 +67,31 @@ xychart-beta
 chien de garde du serveur finit par le déclarer planté. Le détail de l'analyse est plus bas —
 `Entity.canBeCollidedWith()` rend faux par défaut, et trois classes seulement le redéfinissent dans
 tout Minecraft.</sub>
+
+### Dix joueurs — la charge que ce mod n'avait jamais mesurée
+
+Tous les chiffres ci-dessus portent sur **un** observateur. C'était une lacune : un serveur, par
+définition, en a plusieurs, et chacun apporte ses chunks, son suivi d'entités et son flux de paquets.
+
+| 10 joueurs, 11 441 entités, 1 881 chunks | ms/tick | TPS |
+|---|---:|:---:|
+| Sans Lanterne | 222,2 | 🔴 **4,5** |
+| **Avec Lanterne** | **44,8** | 🟢 **20** |
+
+**×5,0** (deux exécutions : ×4,73 et ×4,96). Sans le mod, ce serveur est injouable ; avec, il tient
+ses vingt ticks — de justesse, et c'est dit : 45 ms sur 50 disponibles, la marge est mince.
+
+Le réseau suit le même gradient : **560 paquets par tick sans le mod, 387 avec** (×1,45). C'est ce qui
+compte pour un joueur en mauvaise connexion, et ce que le serveur décide d'émettre est la seule part
+sur laquelle un mod puisse agir.
+
+<sub>Il a fallu trois tentatives pour obtenir cette mesure, et les deux premières ont été **refusées
+par le contrôle préalable** : 18 entités vivantes sur 10 500, puis 962. Dix doublures espacées de 500
+blocs réclament 6 250 chunks, que le gestionnaire de distance ne livre pas dans le temps imparti — les
+vaches naissaient dans des chunks inexistants. Sans ce refus, le banc aurait comparé deux mondes
+presque vides et annoncé « aucun effet » avec aplomb. Les joueurs sont désormais posés à 128 blocs les
+uns des autres, ce qui est aussi beaucoup plus proche de la réalité : sur un serveur entre amis, on
+est ensemble.</sub>
 
 ### Mémoire occupée, et non seulement allouée
 

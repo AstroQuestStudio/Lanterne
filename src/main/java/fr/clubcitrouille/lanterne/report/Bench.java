@@ -444,10 +444,26 @@ public final class Bench {
         }
 
         if (packetsWithout > 0L) {
+            // <h2>Un ratio qui comparait deux durées différentes</h2>
+            //
+            // Ces compteurs étaient publiés en valeur absolue. À dix joueurs, le résultat a été
+            // « paquets ×0,93 » — le mod en émettant <em>plus</em> que le témoin, ce qui n'a pas de sens
+            // puisqu'il ne fait que les espacer.
+            //
+            // L'explication est dans la ligne du dessus : la phase témoin s'était arrêtée à l'échéance
+            // au bout de 401 relevés, la phase active en avait fait 500. Le mod avait donc émis vingt-
+            // cinq pour cent de paquets en plus parce qu'il avait vécu vingt-cinq pour cent de ticks en
+            // plus — ce qui est précisément la preuve qu'il fonctionne, présentée comme un défaut.
+            //
+            // On divise donc par le nombre de ticks. C'est la seule grandeur comparable entre deux
+            // phases qui n'ont pas duré le même nombre de ticks, et ce cas devient la règle dès que la
+            // charge dépasse ce qu'un tick peut absorber.
+            double perTickWithout = packetsWithout / (double) Math.max(1, keptWithout);
+            double perTickWith = packetsWith / (double) Math.max(1, keptWith);
             say(String.format(Locale.ROOT,
-                    "Paquets émis — sans : %d · avec : %d  (×%.2f moins)",
-                    packetsWithout, packetsWith,
-                    (double) packetsWithout / Math.max(1L, packetsWith)));
+                    "Paquets émis par tick — sans : %.0f · avec : %.0f  (×%.2f moins)",
+                    perTickWithout, perTickWith,
+                    perTickWithout / Math.max(0.001d, perTickWith)));
         }
 
         // Sans cette ventilation, un verdict « aucun effet » est indéchiffrable : on ne sait pas si

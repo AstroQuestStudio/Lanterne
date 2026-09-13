@@ -176,8 +176,8 @@ public final class Quarry {
     private static final int MEASURED = GRID_CHUNKS - WARMUP_CHUNKS;
 
     /** Origine (en coordonnées de chunk) de la région de génération, mod actif. */
-    private static final int GEN_ON_CX = 12500;
-    private static final int GEN_ON_CZ = 12500;
+    private static final int GEN_ON_CX = 13750;
+    private static final int GEN_ON_CZ = 13750;
     /** Origine de la région de génération témoin — DIFFÉRENTE, un chunk généré ne se régénère pas. */
     private static final int GEN_OFF_CX = 6250;
     private static final int GEN_OFF_CZ = -6250;
@@ -284,6 +284,10 @@ public final class Quarry {
         }
 
         step = Step.GEN_PAIRED;
+        // Le profileur ne connaissait que le banc de vitesse. La génération d'un chunk coûte trente-sept
+        // millisecondes et personne n'avait jamais regardé où elles passent — le forçage synchrone fait
+        // tourner une bonne part du travail sur ce fil, donc un profil y est lisible.
+        fr.clubcitrouille.lanterne.lab.Sampler.start(Thread.currentThread());
         shot = 0;
         evictWait = 0;
         settleLeft = 0;
@@ -521,6 +525,9 @@ public final class Quarry {
      * moyenner.
      */
     private static void report() {
+        fr.clubcitrouille.lanterne.lab.Sampler.stop();
+        Lanterne.LOG.info("[CARRIÈRE] ── Où passent les millisecondes d'une génération ──");
+        fr.clubcitrouille.lanterne.lab.Sampler.report(26);
         double genOnMedian = median(genOn);
         double genOffMedian = median(genOff);
         long genOnTotal = total(genOn);

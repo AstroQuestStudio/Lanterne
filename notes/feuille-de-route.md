@@ -245,3 +245,52 @@ les blocs entièrement pleins ou entièrement vides.
 fait passer une entité à travers le sol. Le gain envisageable — quelques pour cent — ne justifie pas
 d'y toucher sans pouvoir répéter les mesures et les épreuves plusieurs fois. C'est la première cible
 d'une prochaine session, avec le temps qu'elle mérite.
+
+### La génération de chunks ne coûte rien au temps de tick
+
+Le plus gros gisement apparent — 37 ms par chunk — vient d'être écarté, et par la mesure la plus
+simple : brancher le profileur sur le banc de génération.
+
+```
+2510 relevés dont 205 pendant le travail (92 % du temps dormi)
+17,6 %  Unsafe.unpark
+ 7,8 %  BlockableEventLoop.managedBlock
+ 3,9 %  Unsafe.park
+```
+
+Le fil du serveur **attend**. Ce qu'il fait pendant ce temps est de la coordination de fils, pas de la
+génération de terrain : celle-ci s'exécute entièrement sur le pool de travail.
+
+Trois conséquences, qui changent la façon de voir le sujet :
+
+1. Les 37 ms mesurées sont une **latence**, pas un coût de processeur sur le fil principal. Le banc
+   mesure « combien de temps avant que ce chunk soit prêt », et c'est bien ce qu'un joueur qui explore
+   ressent — mais ce n'est pas du temps de tick.
+2. **Optimiser la génération n'améliorerait pas les TPS.** Elle améliorerait la vitesse d'exploration,
+   ce qui est un autre problème, réel mais distinct.
+3. Le nombre de fils disponibles compte donc directement. Sur un VPS à deux cœurs, la génération est
+   lente parce qu'il y a peu de travailleurs — pas parce que l'algorithme est mauvais.
+
+C'est exactement le genre de conclusion qu'on ne peut pas atteindre en lisant du code, et qui évite
+de passer une nuit à optimiser au mauvais endroit.
+
+### Dix joueurs — la charge jamais mesurée, et deux refus avant d'y arriver
+
+| 10 joueurs, 11 441 entités, 1 881 chunks | ms/tick | TPS |
+|---|---:|:---:|
+| Sans Lanterne | 222,2 | 4,5 |
+| Avec Lanterne | **44,8** | 20 |
+
+**×5,0** sur deux exécutions (×4,73 puis ×4,96). Réseau : 560 paquets par tick sans, 387 avec (×1,45).
+
+Le contrôle préalable a refusé les deux premières tentatives — 18 entités vivantes sur 10 500, puis
+962 — parce que dix doublures espacées de 500 blocs réclament 6 250 chunks que le gestionnaire de
+distance ne livre pas dans le temps imparti. Deux corrections : le délai de chargement suit désormais
+le nombre d'observateurs, et les joueurs sont posés à 128 blocs les uns des autres, ce qui décrit
+beaucoup mieux un serveur réel.
+
+**Un septième chiffre faux attrapé au passage.** Le compteur de paquets était publié en valeur
+absolue et annonçait « ×0,93 » — le mod émettant *plus* que le témoin. La cause : la phase témoin
+s'était arrêtée à l'échéance au bout de 401 relevés quand la phase active en faisait 500. Le mod avait
+donc émis plus de paquets parce qu'il avait vécu plus de ticks, ce qui est exactement la preuve qu'il
+fonctionne, présentée comme un défaut. Rapporté par tick, le chiffre devient ×1,45.

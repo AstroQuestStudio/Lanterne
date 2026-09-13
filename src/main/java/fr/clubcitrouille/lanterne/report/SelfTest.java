@@ -36,8 +36,29 @@ import fr.clubcitrouille.lanterne.lab.Understudy;
 public final class SelfTest {
     /** Ticks d'attente avant de poser l'observateur : le temps que le monde finisse de s'ouvrir. */
     private static final int SETTLE = 60;
-    /** Ticks d'attente après la pose : le temps que les chunks demandés arrivent vraiment. */
+    /**
+     * Ticks d'attente après la pose : le temps que les chunks demandés arrivent vraiment.
+     *
+     * <h2>Une constante qui supposait un seul joueur</h2>
+     *
+     * <p>Cent vingt ticks suffisent largement pour un observateur. À dix, le contrôle préalable a
+     * refusé de mesurer : <b>18 entités vivantes sur 10 500 demandées</b>, parce que dix doublures
+     * espacées de cinq cents blocs réclament dix fois plus de chunks, et que le gestionnaire de
+     * distance ne les livre pas en six secondes.
+     *
+     * <p>Le refus est le bon comportement — sans lui, le banc aurait mesuré deux fois un monde presque
+     * vide et annoncé « aucun effet » avec aplomb. Mais un outil qui refuse toujours ne sert pas non
+     * plus : le délai suit désormais le nombre d'observateurs.
+     */
     private static final int CHUNK_LOAD = 120;
+
+    /** Ticks d'attente supplémentaires par observateur au-delà du premier. */
+    private static final int CHUNK_LOAD_PER_EXTRA = 60;
+
+    /** Le délai réellement accordé, qui dépend du nombre de mondes à charger. */
+    private static int chunkLoadDelay() {
+        return CHUNK_LOAD + Math.max(0, observers - 1) * CHUNK_LOAD_PER_EXTRA;
+    }
     /** Ticks d'attente après le peuplement : le temps que les entités s'installent. */
     private static final int POPULATE = 40;
 
@@ -191,7 +212,7 @@ public final class SelfTest {
             } else if (step == Step.SETTLING) {
                 Understudy.enter(server, server.overworld(), 1, 512);
                 step = Step.LOADING;
-                waiting = CHUNK_LOAD;
+                waiting = chunkLoadDelay();
             } else if (step == Step.LOADING) {
                 Herd.sweepEntities(server.overworld());
                 fr.clubcitrouille.lanterne.lab.Tidy.begin(server);
@@ -231,7 +252,7 @@ public final class SelfTest {
                 // verdict rassurant, exactement le piège dans lequel l'épreuve de cuisson est tombée.
                 Understudy.enter(server, server.overworld(), 1, 512);
                 step = Step.LOADING;
-                waiting = CHUNK_LOAD;
+                waiting = chunkLoadDelay();
             } else if (step == Step.LOADING) {
                 Herd.sweepEntities(server.overworld());
                 fr.clubcitrouille.lanterne.lab.Yield.begin(server);
@@ -259,7 +280,7 @@ public final class SelfTest {
             } else if (step == Step.SETTLING) {
                 Understudy.enter(server, server.overworld(), 1, 512);
                 step = Step.LOADING;
-                waiting = CHUNK_LOAD;
+                waiting = chunkLoadDelay();
             } else if (step == Step.LOADING) {
                 Herd.sweepEntities(server.overworld());
                 Kitchen.begin(server);
@@ -274,7 +295,7 @@ public final class SelfTest {
             } else if (step == Step.SETTLING) {
                 Understudy.enter(server, server.overworld(), 1, 512);
                 step = Step.LOADING;
-                waiting = CHUNK_LOAD;
+                waiting = chunkLoadDelay();
             } else if (step == Step.LOADING) {
                 // Le monde est conservé d'une épreuve à l'autre depuis que la génération de terrain
                 // faussait les mesures — mais les créatures des épreuves précédentes y restaient.
@@ -295,9 +316,20 @@ public final class SelfTest {
                 // De vrais joueurs, et non de simples porteurs de tickets : un mod concurrent qui
                 // interroge « level.players() » doit les voir, sans quoi la comparaison mesure deux
                 // mondes différents et ne prouve rien.
-                Understudy.enter(server, level, observers, 512);
+                // <h2>Cinq cents blocs entre deux joueurs, c'était une hypothèse et elle était fausse</h2>
+                //
+                // Le contrôle préalable a refusé deux fois de mesurer à dix observateurs : 18 entités
+                // vivantes sur 10 500, puis 962. Dix doublures espacées de cinq cents blocs réclament
+                // six mille deux cent cinquante chunks, et le gestionnaire de distance ne les livre pas
+                // dans le temps imparti — les vaches naissaient dans des chunks qui n'existaient pas.
+                //
+                // Mais surtout : dix joueurs à cinq cents blocs les uns des autres ne décrivent aucune
+                // situation réelle. Sur un serveur entre amis, ils sont ensemble — sur une base, dans
+                // une ferme, autour d'un projet commun. C'est ce cas-là qui charge un serveur, et
+                // c'est celui-là qu'il faut mesurer.
+                Understudy.enter(server, level, observers, 128);
                 step = Step.LOADING;
-                waiting = CHUNK_LOAD;
+                waiting = chunkLoadDelay();
             }
             case LOADING -> {
                 int swept = Herd.sweepEntities(level);
