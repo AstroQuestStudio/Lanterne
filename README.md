@@ -9,7 +9,10 @@ mais à lui éviter le travail qui ne sert à rien.
 
 ### Un seul mod fait jeu égal avec dix-sept — et les bat sur la mémoire, sans casser les fermes.
 
-**×7,1** un serveur peuplé · **×5,2** un élevage intensif · **×62** un sol jonché · **×5,0** à dix joueurs
+**×20** sur une base habitée · **×62** sur un sol jonché · **×7,1** sur un serveur peuplé
+
+*Et le chiffre qui n'arrange pas : **×3,2 seulement à cinquante joueurs**, où les vingt ticks ne sont
+pas tenus. La raison est expliquée plus bas, pas cachée.*
 
 *Rendement d'une ferme : **100 %**, mesuré. Aucun autre mod d'optimisation ne publie ce chiffre.*
 
@@ -42,19 +45,23 @@ xychart-beta
 <sub>Modpack comparé : Lithium, FerriteCore, ModernFix, ServerCore, Adaptive Performance Tweaks,
 AI-Improvements, Immersive Optimization, LetMeDespawn, Clumps et dépendances.</sub>
 
-### Trois charges, et non une moyenne
+### Quatre charges, et non une moyenne
 
 Un chiffre unique cache l'essentiel : **ce qui met un serveur à genoux n'est jamais homogène.** Les
 entités réparties en anneau sont la charge la plus facile à mesurer et la moins représentative. Les
-deux autres reproduisent les plaintes réelles des administrateurs.
+autres reproduisent les plaintes réelles des administrateurs.
+
+La dernière ligne du tableau est la plus intéressante : c'est une **base habitée**, avec son élevage et
+son sol jonché en même temps. Sans le mod, un tick y dure deux tiers de seconde — le serveur tourne à
+1,5 TPS et le jeu est perdu. Avec, il tient ses vingt ticks avec de la marge.
 
 ```mermaid
 xychart-beta
     title "Millisecondes par tick — échelle logarithmique impossible, lisez les chiffres"
-    x-axis ["10 500 entités", "1 000 vaches en 15x15", "8 000 objets au sol"]
-    y-axis "ms par tick" 0 --> 480
-    bar [202.9, 28.4, 463.5]
-    bar [28.2, 5.4, 7.4]
+    x-axis ["10 500 entites", "1 000 vaches 15x15", "8 000 objets", "base habitee"]
+    y-axis "ms par tick" 0 --> 680
+    bar [202.9, 28.4, 463.5, 661.5]
+    bar [28.2, 5.4, 7.4, 32.8]
 ```
 
 | Charge | Sans Lanterne | Avec Lanterne | Gain | Ce qu'elle reproduit |
@@ -62,8 +69,10 @@ xychart-beta
 | 10 500 entités sur un anneau de 160 blocs | 202,9 ms | **28,2 ms** | **×7,1** | un serveur peuplé, gradient de distance |
 | 1 000 vaches dans un carré de 15 blocs | 28,4 ms | **5,4 ms** | **×5,2** | un élevage intensif, coût quadratique |
 | 8 000 piles d'objets au sol | 463,5 ms | **7,4 ms** | **×62,4** | une ferme qui déborde, un sol jonché |
+| **4 000 vaches en enclos + 4 000 objets** | **661,5 ms** | **32,8 ms** | **×20,2** | une base habitée : élevage *et* sol jonché |
 
-<sub>La dernière n'est pas une aberration de mesure : sans le mod, un tick dure **463 ms**, et le
+<sub>Les deux dernières ne sont pas des aberrations de mesure : sans le mod, un tick y dure **463** puis
+**661 ms**, et le
 chien de garde du serveur finit par le déclarer planté. Le détail de l'analyse est plus bas —
 `Entity.canBeCollidedWith()` rend faux par défaut, et trois classes seulement le redéfinissent dans
 tout Minecraft.</sub>

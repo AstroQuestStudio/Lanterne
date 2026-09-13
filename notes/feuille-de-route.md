@@ -315,3 +315,43 @@ Deux conséquences pour la suite :
 2. Pour aller plus loin à fort effectif, il faudrait des optimisations qui ne dépendent pas de la
    distance aux joueurs — c'est-à-dire du travail à la Lithium, système par système. `BlockCollisions`
    (5,9 %) en est le premier candidat.
+
+### `BlockCollisions` : vanilla 26.1 a déjà absorbé Lithium
+
+La cible désignée par le profileur (5,9 % du travail) a été examinée ligne par ligne, et **aucune
+optimisation n'a été écrite** — pour une fois, la lecture a suffi à trancher.
+
+`BlockCollisions.computeNext` contient déjà, en 26.1 :
+- un cache du dernier chunk consulté (`cachedBlockGetter` / `cachedBlockGetterPos`) ;
+- un chemin rapide pour le cube plein (`blockShape == Shapes.block()` → simple test d'intersection,
+  sans construction de forme) ;
+- le saut des coins du curseur (`cursorFaceType != 3`).
+
+Et l'optimisation qui semblait rester — tester `isEmpty()` avant `move()` pour les blocs d'air — est
+**déjà dans `VoxelShape.move`** :
+
+```java
+public VoxelShape move(double dx, double dy, double dz) {
+    return this.isEmpty() ? Shapes.empty() : new ArrayVoxelShape(...);
+}
+```
+
+Un shape vide déplacé ne coûte rien et n'alloue rien. Ces 5,9 % sont le coût incompressible du
+parcours lui-même : une lecture d'état par bloc de la boîte englobante.
+
+**À ne pas reprendre sans idée neuve.** Le seul angle restant serait de parcourir moins de blocs, ce
+qui suppose de prouver qu'une entité ne bougera pas — c'est-à-dire le calcul qu'on cherche à éviter.
+
+### La charge la plus réaliste, et le meilleur gain défendable
+
+| 4 000 vaches en enclos + 4 000 objets au sol | ms/tick | TPS |
+|---|---:|:---:|
+| Sans Lanterne | 661,5 | 1,5 |
+| Avec Lanterne | **32,8** | 20 |
+
+**×20,2**, travail évité 93,2 %. C'est une base habitée : un élevage et un sol jonché en même temps,
+ce que tout serveur finit par avoir. Sans le mod, un tick y dure deux tiers de seconde et le jeu est
+perdu.
+
+C'est le chiffre le plus représentatif du mod — plus que le ×62 des objets seuls, qui décrit un cas
+extrême, et plus que le ×7,1 de l'anneau, qui décrit un cas facile.
