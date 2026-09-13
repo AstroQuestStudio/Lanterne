@@ -59,6 +59,24 @@ public final class Settings {
     private static boolean rationing = true;
     /** La position réutilisée pour les tirages aléatoires de blocs. */
     private static boolean scratchPos = true;
+    /**
+     * Le filtre qui écarte les avertissements dont l'innocuité est démontrée.
+     *
+     * <h2>Éteint par défaut, et ce n'est pas de la prudence excessive</h2>
+     *
+     * <p>Sa première version a fait taire <b>la totalité</b> des messages du mod — bannière, mesure
+     * de la machine, tout — au lieu des quatre qu'elle visait. La cause était un défaut connu de
+     * Log4j ({@code AbstractFilter} refuse par défaut ce qu'il ne reconnaît pas) et elle a été
+     * corrigée ; mais l'incident dit quelque chose de plus général.
+     *
+     * <p>Un mod d'optimisation qui casse le journal d'un serveur a fait bien pire que de le
+     * ralentir : il a rendu la panne suivante indéchiffrable. Le rapport entre le gain — une console
+     * plus propre — et le risque — ne plus voir une vraie erreur — ne justifie pas un défaut à
+     * « allumé ».
+     *
+     * <p>Il s'active par {@code LANTERNE_MODULES=…,silence}.
+     */
+    private static boolean hush;
 
     private Settings() {}
 
@@ -114,6 +132,16 @@ public final class Settings {
     }
 
     /**
+     * Le filtre de journal ne dépend pas de l'interrupteur général.
+     *
+     * <p>Le banc éteint le mod pour comparer ; il n'y a aucune raison que la console redevienne
+     * bruyante pendant une mesure. Faire taire un message inutile ne change rien à la vitesse.
+     */
+    public static boolean hush() {
+        return hush;
+    }
+
+    /**
      * Lit la sélection de modules depuis l'environnement.
      *
      * <p>{@code LANTERNE_MODULES="lod"} n'active que le niveau de détail ; {@code "lod,network"} en
@@ -137,6 +165,7 @@ public final class Settings {
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
+        hush = wanted.contains("silence");
     }
 
     /** Ce qui est actif, pour l'en-tête du rapport. */

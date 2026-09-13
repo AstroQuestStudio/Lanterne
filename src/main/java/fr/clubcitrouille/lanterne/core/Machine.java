@@ -86,15 +86,33 @@ public final class Machine {
     private static long burn(int threads) {
         AtomicLong total = new AtomicLong();
         CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch go = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(threads);
-        long deadline = System.nanoTime() + SLICE_MS * 1_000_000L;
+        // L'échéance se fixe une fois tout le monde en place, jamais avant.
+        //
+        // La première version la calculait au lancement, puis créait les fils. Créer un fil coûte
+        // quelques millisecondes ; avec deux fils, chacun démarrait plus tard et travaillait donc
+        // moins longtemps dans une fenêtre qui, elle, ne bougeait pas. Le résultat était un gain
+        // annoncé de ×0,08 sur une machine à deux cœurs — c'est-à-dire douze fois pire que
+        // séquentiel, ce qu'aucune machine ne fait.
+        //
+        // Le verdict restait juste par accident ; le chiffre, lui, était faux. Un outil de mesure
+        // qui se trompe d'un facteur dix ne sert qu'à donner confiance à tort.
+        final long[] deadline = new long[1];
 
         for (int i = 0; i < threads; i++) {
             Thread worker = new Thread(() -> {
                 ready.countDown();
+                try {
+                    go.await();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    done.countDown();
+                    return;
+                }
                 long rounds = 0L;
                 long noise = 1L;
-                while (System.nanoTime() < deadline) {
+                while (System.nanoTime() < deadline[0]) {
                     // Mille tours entre deux lectures d'horloge : lire le temps est un appel
                     // système déguisé, et le mesurer lui-même fausserait l'épreuve.
                     for (int step = 0; step < 1000; step++) {
@@ -114,6 +132,10 @@ public final class Machine {
 
         try {
             ready.await();
+            // Tout le monde est prêt : on ouvre la fenêtre et on la referme au même instant pour
+            // tous. C'est la seule façon de comparer des débits plutôt que des temps de démarrage.
+            deadline[0] = System.nanoTime() + SLICE_MS * 1_000_000L;
+            go.countDown();
             done.await();
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();

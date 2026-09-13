@@ -57,9 +57,15 @@ public final class Lanterne {
     public static final String ID = "lanterne";
     public static final Logger LOG = LogUtils.getLogger();
 
+    /** Instant du chargement, pour dire au démarrage combien il aura duré. */
+    private static final long AWOKEN = System.nanoTime();
+
     public Lanterne() {
         NeoForge.EVENT_BUS.register(this);
+        // Les réglages d'abord : le filtre de journal les consulte, et la première version
+        // l'installait avant de les avoir lus — si bien qu'aucun réglage ne pouvait l'en empêcher.
         Settings.configureFromEnvironment();
+        fr.clubcitrouille.lanterne.core.Hush.install();
         fr.clubcitrouille.lanterne.core.Machine.appraise();
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,
@@ -68,7 +74,9 @@ public final class Lanterne {
         // pour elles, et toute optimisation qu'on en tirerait serait un remède sans maladie.
         LOG.info("Tracy disponible : {} — si vrai, les mesures de cet environnement sont gonflées.",
                 com.mojang.jtracy.TracyClient.isAvailable());
-        LOG.info("Lanterne allumée — modules actifs : {}", Settings.describe());
+        // Le mot d'accueil complet attend que le serveur soit prêt : avant, ni la machine ni les
+        // mods ne sont connus. Ici, on se contente d'exister.
+        LOG.debug("Lanterne chargée.");
     }
 
     /**
@@ -106,6 +114,20 @@ public final class Lanterne {
             Census.refresh(level);
             fr.clubcitrouille.lanterne.core.Jam.sweep(level.getGameTime());
         }
+    }
+
+    /**
+     * Le mot d'accueil, une fois le serveur réellement prêt.
+     *
+     * <p>Plus tôt, on ne saurait dire ni ce que vaut la machine, ni combien de mods ont été chargés,
+     * ni combien de temps le démarrage aura pris. Une bannière affichée trop tôt ne peut annoncer
+     * que son propre nom.
+     */
+    @SubscribeEvent
+    public void onServerStarted(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
+        fr.clubcitrouille.lanterne.core.Herald.welcome(
+                (System.nanoTime() - AWOKEN) / 1_000_000L,
+                net.neoforged.fml.ModList.get().size());
     }
 
     @SubscribeEvent
