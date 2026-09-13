@@ -58,6 +58,18 @@ public final class LanterneCommand {
                                             .withStyle(ChatFormatting.GOLD), true);
                                     return 1;
                                 })))
+                .then(Commands.literal("nbt")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
+                            Ledger.survey(context.getSource(), 15);
+                            return 1;
+                        })
+                        .then(Commands.argument("lignes", IntegerArgumentType.integer(1, 200))
+                                .executes(context -> {
+                                    Ledger.survey(context.getSource(),
+                                            IntegerArgumentType.getInteger(context, "lignes"));
+                                    return 1;
+                                })))
                 .then(Commands.literal("pregen-stop")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> {

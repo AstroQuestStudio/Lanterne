@@ -30,6 +30,27 @@ import net.minecraft.world.level.chunk.storage.RegionFileVersion;
  * — les chunks traversés puis abandonnés, l'immense majorité d'un monde — et en rapide ce qu'on
  * réécrit sans cesse, c'est-à-dire les chunks habités que la sauvegarde périodique visite.
  *
+ * <p>ADDENDUM sur la généralisation du sommeil aux blocs-entités de mods, demandée puis écartée.
+ *
+ * <p>Le sommeil à échéance fonctionne pour le four parce qu.on <b>connaît sa logique</b> : un four qui
+ * cuit sait combien de ticks il lui reste, et rien ne peut l.interrompre qu.un changement de son
+ * inventaire, qu.on surveille. L.échéance est calculable.
+ *
+ * <p>Pour un bloc-entité venu d.un mod, elle ne l.est pas. On ignore ce qu.il attend, ce qui le
+ * réveille, et s.il a seulement un état stable. Deux voies s.offraient, et aucune ne tient :
+ *
+ * <ul>
+ *   <li><b>Deviner l.échéance</b> par introspection — impossible sans connaître le code de chaque
+ *       machine, et faux dès qu.un mod fait autrement ;</li>
+ *   <li><b>Détecter l.inactivité</b> en comparant son état d.un tick à l.autre — or la seule façon de
+ *       lire cet état est de le sérialiser, ce qui coûte <em>plus</em> que le tick qu.on voulait
+ *       éviter. L.outil {@code Ledger} le mesure précisément : quelques centaines d.octets écrits par
+ *       machine, là où son tick ne fait souvent qu.une poignée de comparaisons.</li>
+ * </ul>
+ *
+ * <p>La généralisation est donc close sur une limite de principe, et non sur un manque de temps :
+ * <b>on ne peut pas endormir ce dont on ne sait pas quand il doit se réveiller</b>.
+ *
  * <p>Elle a été écrite, puis abandonnée pour un danger précis. Le champ de compression est lu
  * <b>deux fois</b> par écriture de chunk, à deux endroits :
  *
