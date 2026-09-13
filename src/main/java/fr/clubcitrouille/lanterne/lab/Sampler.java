@@ -165,6 +165,8 @@ public final class Sampler {
         CALLERS.clear();
         ELSEWHERE.clear();
         ELSEWHERE_BUSY.clear();
+        busySum = 0L;
+        busySamples = 0L;
         samples = 0;
         working = 0;
         running = true;
@@ -243,15 +245,23 @@ public final class Sampler {
                 record(stack);
             }
             if (all) {
+                int busy = 0;
                 // getAllStackTraces fige brièvement chaque fil. On l'appelle donc à la même cadence
                 // que le relevé principal et jamais plus souvent : c'est un profileur, il n'a pas le
                 // droit de devenir la cause de ce qu'il mesure.
                 for (var entry : Thread.getAllStackTraces().entrySet()) {
                     Thread other = entry.getKey();
                     if (other != target && worthWatching(other) && entry.getValue().length > 0) {
-                        recordElsewhere(other.getName(), entry.getValue());
+                        if (recordElsewhere(other.getName(), entry.getValue())) {
+                            busy++;
+                        }
                     }
                 }
+                // Le nombre de fils réellement occupés à cet instant, et non la simple présence
+                // d.un nom. C.est la seule façon de savoir si la machine est saturée ou si elle
+                // attend : un relevé qui dit « wgen_fill_noise 52 % » ne dit pas s.il y en avait un
+                // ou quinze.
+                noteBusyThreads(busy);
             }
             try {
                 Thread.sleep(PERIOD_MS);
@@ -385,6 +395,12 @@ public final class Sampler {
             return;
         }
         Lanterne.LOG.info("[PROFIL] ── Les autres fils (lumière, génération, sauvegarde) ──");
+        if (busySamples > 0L) {
+            Lanterne.LOG.info(String.format(Locale.ROOT,
+                    "[PROFIL]  %.2f fil(s) occupé(s) en moyenne, hors fil du serveur — c.est la seule "
+                    + "façon de savoir si la machine est saturée ou si elle attend.",
+                    (double) busySum / busySamples));
+        }
 
         List<Map.Entry<String, int[]>> busiest = new ArrayList<>(ELSEWHERE_BUSY.entrySet());
         busiest.sort(Comparator.comparingInt((Map.Entry<String, int[]> e) -> e.getValue()[0]).reversed());
@@ -425,12 +441,22 @@ public final class Sampler {
      * comme l'attente du serveur l'est déjà — sans quoi douze fils oisifs noieraient le seul qui
      * travaille.
      */
-    private static synchronized void recordElsewhere(String threadName, StackTraceElement[] stack) {
+    private static synchronized boolean recordElsewhere(String threadName, StackTraceElement[] stack) {
         if (parked(stack)) {
-            return;
+            return false;
         }
         count(ELSEWHERE_BUSY, threadName);
         count(ELSEWHERE, label(stack[0]));
+        return true;
+    }
+
+    /** Fils occupés, cumulés sur les relevés, pour en tirer une moyenne. */
+    private static long busySum;
+    private static long busySamples;
+
+    private static synchronized void noteBusyThreads(int busy) {
+        busySum += busy;
+        busySamples++;
     }
 
     /** Le fil attend-il une tâche plutôt que d'en exécuter une ? */

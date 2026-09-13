@@ -74,6 +74,7 @@ public final class Settings {
      */
     private static boolean explosions = true;
 
+
     /**
      * Le saut des balayages de blocs dans le vide, retiré après mesure — huitième plan démoli.
      *
