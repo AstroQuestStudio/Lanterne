@@ -555,7 +555,12 @@ public final class Bench {
         if (skew <= 1.25d) {
             say(String.format(Locale.ROOT,
                     "Explosions traitées · avec : %d · sans : %d (écart %.0f %%, les deux phases "
-                    + "sont comparables)", withCount, withoutCount, (skew - 1d) * 100d));
+                    + "sont comparables) · blocs désignés : %d · lancers de rayon évités : %d · "
+                    + "relectures de palette évitées : %d",
+                    withCount, withoutCount, (skew - 1d) * 100d,
+                    fr.clubcitrouille.lanterne.core.Rubble.blocksTouched(),
+                    fr.clubcitrouille.lanterne.core.Rubble.raysSkipped(),
+                    fr.clubcitrouille.lanterne.core.Rubble.lookupsSkipped()));
             return false;
         }
         say(String.format(Locale.ROOT,
