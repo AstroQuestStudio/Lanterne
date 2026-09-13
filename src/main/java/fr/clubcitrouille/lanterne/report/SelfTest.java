@@ -111,6 +111,30 @@ public final class SelfTest {
     /** Vrai si l'on éprouve le rendement d'une ferme. */
     private static boolean yield;
 
+    /**
+     * À quelle distance du troupeau on plante l'observateur.
+     *
+     * <p>{@code LANTERNE_OBSERVER=8} met le joueur <b>dans</b> l'enclos, ce qui interdit au niveau de
+     * détail de dégrader quoi que ce soit et force le mod à gagner autrement — ou à ne rien gagner,
+     * ce qui est une réponse tout aussi utile.
+     *
+     * <p>Cent vingt-huit reste la valeur par défaut pour que les mesures déjà publiées restent
+     * comparables : changer silencieusement la distance rendrait tous les anciens chiffres
+     * incomparables aux nouveaux sans que rien ne le signale.
+     */
+    private static int observerRange() {
+        String raw = System.getenv("LANTERNE_OBSERVER");
+        if (raw == null || raw.isBlank()) {
+            return 128;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException malformed) {
+            Lanterne.LOG.warn("LANTERNE_OBSERVER illisible : {} — on garde 128.", raw);
+            return 128;
+        }
+    }
+
     public static void arm() {
         if ("1".equals(System.getenv("LANTERNE_YIELD"))) {
             yield = true;
@@ -372,7 +396,21 @@ public final class SelfTest {
                 // situation réelle. Sur un serveur entre amis, ils sont ensemble — sur une base, dans
                 // une ferme, autour d'un projet commun. C'est ce cas-là qui charge un serveur, et
                 // c'est celui-là qu'il faut mesurer.
-                Understudy.enter(server, level, observers, 128);
+                // <h2>Cent vingt-huit blocs mesuraient le cas facile</h2>
+                //
+                // Cette distance était écrite en dur, et elle décidait de tout ce que le banc pouvait
+                // voir. Le relevé des cadences l'a dit sans détour sur un élevage de mille bêtes :
+                //
+                //     Très lointain : 1015 · Lointain : 36 · Proche : 16 · Pleine simulation : 21
+                //
+                // Mille quinze bêtes sur mille étaient classées « très lointain ». Le niveau de détail
+                // les étranglait toutes, et le gain annoncé — x5,25 — était celui d'un troupeau que
+                // PERSONNE NE REGARDE.
+                //
+                // Or le cas qui coûte à un serveur est l'inverse : le joueur debout dans sa ferme, où
+                // le niveau de détail n'a pas le droit de dégrader quoi que ce soit. Ce cas-là n'avait
+                // jamais été mesuré, faute de pouvoir approcher l'observateur.
+                Understudy.enter(server, level, observers, observerRange());
                 step = Step.LOADING;
                 waiting = chunkLoadDelay();
             }

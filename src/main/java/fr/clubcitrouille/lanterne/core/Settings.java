@@ -331,6 +331,41 @@ public final class Settings {
      * {@link Watch} pour le chemin d'apparition qu'une garde épargne en entier.
      */
     private static boolean vigil = true;
+    /**
+     * Le repos posé, retiré après mesure — quatorzième plan démoli, et le premier dont la cause soit
+     * <b>le point d'accroche lui-même</b>.
+     *
+     * <h2>Le raisonnement était juste, et la foule l'a démenti</h2>
+     *
+     * <p>Le profil d'un élevage désignait la gravité : une fois l'intelligence traitée,
+     * {@code travelInAir} et ses lectures d'états de bloc pesaient quinze pour cent de ce qui restait.
+     * Une bête posée sur un cube plein ne peut pas tomber ; la collision pouvait donc être conclue au
+     * lieu d'être balayée, en lisant quatre booléens déjà en cache.
+     *
+     * <p>Le raccourci fonctionnait, et il ne servait presque jamais :
+     *
+     * <pre>
+     * 22 674 collisions conclues sans balayage, sur 500 000 tick-entités   →   4,5 %
+     * sans le module : 6,10 ms et 6,55 ms  ·  avec : 7,32 ms et 7,26 ms
+     * </pre>
+     *
+     * <p>La cause tient à ce que la charge fait vraiment. Dans un enclos dense, les bêtes <b>se
+     * poussent en permanence</b> : leur mouvement horizontal n'est jamais exactement nul, et la
+     * première condition du raccourci échoue. Rien n'est au repos dans une foule — et la foule est
+     * précisément le cas qui coûte.
+     *
+     * <h2>La règle que cet échec installe, et qu'aucun des treize précédents n'avait donnée</h2>
+     *
+     * <p>Le module ne perdait pas une milliseconde à cause de son code : il en perdait une à cause de
+     * son <b>point d'injection</b>. {@code Entity.collide} est très courte et très appelée, donc
+     * inlinée par le compilateur à la volée. Y poser un mixin lui retire cette inlinisation, et cette
+     * perte se paie sur les quatre-vingt-seize pour cent d'appels où le raccourci ne sert à rien.
+     *
+     * <p><b>Un raccourci dont le taux de déclenchement est faible ne doit pas être posé sur un chemin
+     * chaud</b>, même s'il est exact et même s'il est gratuit quand il réussit. Le droit d'entrée se
+     * paie à chaque passage.
+     */
+    private static final boolean REST_REMOVED_AFTER_MEASUREMENT = true;
     /** Le rationnement : réagir pendant le tick, et non au suivant. */
     private static boolean rationing = true;
     /**
@@ -584,6 +619,7 @@ public final class Settings {
     public static boolean gather() {
         return master && gather;
     }
+
 
     /**
      * La Lanterne ne dépend pas non plus de l'interrupteur général — pour la raison inverse du balai.
