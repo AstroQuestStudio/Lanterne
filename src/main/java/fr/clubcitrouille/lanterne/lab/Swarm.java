@@ -267,6 +267,8 @@ public final class Swarm {
                 (double) fr.clubcitrouille.lanterne.core.Relay.submissions()
                         / Math.max(1L, (long) PER_WAVE * WIDTHS.length),
                 fr.clubcitrouille.lanterne.core.Relay.drains()));
+        Lanterne.LOG.info("[FORGE] ── Où va le temps, étape par étape ──{}",
+                fr.clubcitrouille.lanterne.core.Forge.describe());
         Lanterne.LOG.info("[ESSAIM] ── Débit de génération selon le nombre de demandes en vol ──");
         for (String line : VERDICTS) {
             Lanterne.LOG.info("[ESSAIM] {}", line);

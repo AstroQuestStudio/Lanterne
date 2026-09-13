@@ -97,6 +97,7 @@ public final class Lanterne {
     @SubscribeEvent
     public void onServerTickPost(ServerTickEvent.Post event) {
         TickBudget.endTick();
+        fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
         SelfTest.tick(event.getServer());
         Bench.endTick(event.getServer().overworld());
     }

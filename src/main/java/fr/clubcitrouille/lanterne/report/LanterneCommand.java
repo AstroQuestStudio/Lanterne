@@ -43,6 +43,29 @@ public final class LanterneCommand {
                     report(context.getSource());
                     return 1;
                 })
+                .then(Commands.literal("pregen")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .then(Commands.argument("rayon", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 20000))
+                                .executes(context -> {
+                                    int radius = com.mojang.brigadier.arguments.IntegerArgumentType
+                                            .getInteger(context, "rayon");
+                                    fr.clubcitrouille.lanterne.lab.Pregen.begin(
+                                            context.getSource().getLevel(), radius);
+                                    context.getSource().sendSuccess(() -> Component.literal(
+                                            "Pré-génération lancée sur un rayon de " + radius
+                                            + " chunks. Ce qui existe déjà est sauté ; l'interrompre "
+                                            + "ne perd rien, la reprise est gratuite.")
+                                            .withStyle(ChatFormatting.GOLD), true);
+                                    return 1;
+                                })))
+                .then(Commands.literal("pregen-stop")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
+                            fr.clubcitrouille.lanterne.lab.Pregen.halt();
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "Pré-génération interrompue.").withStyle(ChatFormatting.GOLD), true);
+                            return 1;
+                        }))
                 .then(Commands.literal("on").executes(context -> {
                     Settings.setEnabled(true);
                     context.getSource().sendSuccess(() -> Component.literal("Lanterne allumée.")
