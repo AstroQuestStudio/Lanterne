@@ -1,5 +1,7 @@
 {
   "block.lanterne.anchor": "Chunk Anchor",
   "item.lanterne.anchor": "Chunk Anchor",
+  "block.lanterne.veilleuse": "Vigil Lantern",
+  "item.lanterne.veilleuse": "Vigil Lantern",
   "itemGroup.lanterne": "Lanterne"
 }

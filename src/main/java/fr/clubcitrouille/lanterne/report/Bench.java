@@ -530,6 +530,43 @@ public final class Bench {
                     fr.clubcitrouille.lanterne.core.Mind.gates()));
         }
 
+        // <h2>Le garde-fou propre à la charge des entonnoirs</h2>
+        //
+        // Cette charge ne crée aucune entité, donc le contrôle préalable — qui compte des créatures
+        // vivantes — ne peut rien dire d'elle. Trois épreuves de ce projet ont mesuré un monde vide en
+        // croyant mesurer une charge ; celle-ci pourrait mesurer des entonnoirs posés hors du rayon de
+        // simulation, qui ne tickent pas et ne coûtent donc rien aux deux phases à la fois.
+        //
+        // Le transfert est la preuve de vie : un entonnoir qui ne transfère pas ne ticke pas. Zéro
+        // transfert sur une charge d'entonnoirs veut dire que la mesure est vide, et le rapport le dit
+        // au lieu de publier un rapport de durées plausible.
+        if (fr.clubcitrouille.lanterne.lab.Scene.hoppersLaid() > 0) {
+            long lots = fr.clubcitrouille.lanterne.core.Bulk.transfers();
+            if (lots == 0L) {
+                say(String.format(Locale.ROOT,
+                        "ENTONNOIRS : %d posés et AUCUN transfert — rien n.a tické. "
+                        + "Le rapport de durées ci-dessus ne mesure pas les entonnoirs.",
+                        fr.clubcitrouille.lanterne.lab.Scene.hoppersLaid()));
+            } else {
+                say(String.format(Locale.ROOT,
+                        "Entonnoirs : %d posés · %d transfert(s) pour %d objet(s) déplacé(s) · "
+                        + "lot moyen %.2f — soit %d recherche(s) de conteneur épargnée(s).",
+                        fr.clubcitrouille.lanterne.lab.Scene.hoppersLaid(), lots,
+                        fr.clubcitrouille.lanterne.core.Bulk.items(),
+                        fr.clubcitrouille.lanterne.core.Bulk.averageLot(),
+                        fr.clubcitrouille.lanterne.core.Bulk.items() - lots));
+            }
+        }
+
+        // La preuve de vie du module de fusion au sol. Zéro fusion sur une charge de récolte veut
+        // dire que vanilla a refusé pour une raison qu'on n'a pas vue — pile pleine, âge illimité,
+        // délai de ramassage bloqué — et non que le module ne sert à rien.
+        if (fr.clubcitrouille.lanterne.core.Gather.merges() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Objets au sol absorbés par fusion : %d entité(s) en moins",
+                    fr.clubcitrouille.lanterne.core.Gather.merges()));
+        }
+
         if (fr.clubcitrouille.lanterne.core.Clump.freed() > 0L) {
             say(String.format(Locale.ROOT,
                     "Fusions d.orbes autorisées que vanilla aurait refusées : %d",

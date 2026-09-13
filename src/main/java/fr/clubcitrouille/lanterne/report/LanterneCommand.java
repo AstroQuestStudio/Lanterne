@@ -70,6 +70,53 @@ public final class LanterneCommand {
                                             IntegerArgumentType.getInteger(context, "lignes"));
                                     return 1;
                                 })))
+                .then(Commands.literal("clear")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
+                            var haul = fr.clubcitrouille.lanterne.core.Sweeper.run(
+                                    context.getSource().getServer());
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "Balai passé : " + haul.describe() + ".")
+                                    .withStyle(ChatFormatting.GOLD), true);
+                            return haul.total();
+                        })
+                        .then(Commands.literal("on")
+                                .executes(context -> {
+                                    Settings.setBroom(true);
+                                    fr.clubcitrouille.lanterne.core.Sweeper.rearm();
+                                    context.getSource().sendSuccess(() -> Component.literal(
+                                            "Nettoyage périodique allumé. Il ne survivra pas au "
+                                            + "redémarrage — pour cela, le fichier de configuration.")
+                                            .withStyle(ChatFormatting.GOLD), true);
+                                    return 1;
+                                }))
+                        .then(Commands.literal("off")
+                                .executes(context -> {
+                                    Settings.setBroom(false);
+                                    context.getSource().sendSuccess(() -> Component.literal(
+                                            "Nettoyage périodique éteint.")
+                                            .withStyle(ChatFormatting.GOLD), true);
+                                    return 1;
+                                }))
+                        .then(Commands.literal("status")
+                                .executes(context -> {
+                                    long left = fr.clubcitrouille.lanterne.core.Sweeper.remaining();
+                                    context.getSource().sendSuccess(() -> Component.literal(left < 0L
+                                            ? "Nettoyage périodique éteint."
+                                            : String.format(Locale.ROOT,
+                                                    "Prochain passage dans %d min %02d s. "
+                                                    + "%d entité(s) effacée(s) depuis le démarrage.",
+                                                    left / 1200L, (left % 1200L) / 20L,
+                                                    fr.clubcitrouille.lanterne.core.Broom.sweptTotal()))
+                                            .withStyle(ChatFormatting.GRAY), false);
+                                    return 1;
+                                })))
+                .then(Commands.literal("palette")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
+                            Weave.survey(context.getSource());
+                            return 1;
+                        }))
                 .then(Commands.literal("pregen-stop")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> {

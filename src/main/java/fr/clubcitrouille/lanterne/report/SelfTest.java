@@ -416,8 +416,11 @@ public final class SelfTest {
                 // Pour ces charges-là, l.attendu est ce qui vit après stabilisation. Le contrôle perd
                 // sa capacité à détecter une évaporation — mais il ne l.avait de toute façon pas ici,
                 // puisqu.il ne sait pas distinguer une orbe fusionnée d.une orbe perdue.
-                Bench.expect(builtScene == fr.clubcitrouille.lanterne.lab.Scene.Kind.ORBS
-                        ? Bench.livingCount(level) : born);
+                // La récolte fusionne comme les orbes : lui réclamer le compte demandé ferait refuser
+                // la mesure pour la raison exacte qui la rend intéressante.
+                boolean merges = builtScene == fr.clubcitrouille.lanterne.lab.Scene.Kind.ORBS
+                        || builtScene == fr.clubcitrouille.lanterne.lab.Scene.Kind.DROPS;
+                Bench.expect(merges ? Bench.livingCount(level) : born);
                 Bench.startHeadless(server);
                 step = Step.LAUNCHED;
             }

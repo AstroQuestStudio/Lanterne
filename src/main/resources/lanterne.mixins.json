@@ -29,6 +29,9 @@
     "ExperienceOrbMixin",
     "GateBehaviorMixin",
     "ExperienceOrbAccessor",
-    "RegionFileVersionMixin"
+    "RegionFileVersionMixin",
+    "HopperBulkMixin",
+    "ItemMergeMixin",
+    "SpawnGuardMixin"
   ]
 }

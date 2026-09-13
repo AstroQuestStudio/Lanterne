@@ -7,9 +7,9 @@
     "OEO"
   ],
   "key": {
-    "O": { "item": "minecraft:obsidian" },
-    "E": { "item": "minecraft:ender_eye" },
-    "N": { "item": "minecraft:netherite_ingot" }
+    "O": "minecraft:obsidian",
+    "E": "minecraft:ender_eye",
+    "N": "minecraft:netherite_ingot"
   },
   "result": {
     "id": "lanterne:anchor",

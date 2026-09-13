@@ -215,7 +215,48 @@ public final class Scene {
          * <p>Cette charge dira ce que coûte le premier, et ce que le second ferait gagner — avant de
          * décider si l.on a le droit de l.allumer, car il ne change pas que la vitesse.
          */
-        REDSTONE
+        REDSTONE,
+        /**
+         * Des chaînes d.entonnoirs en marche, alimentées par des coffres pleins.
+         *
+         * <h2>Ce qui coûte dans un entonnoir, et où le chercher</h2>
+         *
+         * <p>Un entonnoir <b>en marche</b> ne travaille qu.un tick sur huit : après chaque transfert
+         * réussi, {@code setCooldown(8)} impose sept ticks qui ne font que décrémenter un compteur.
+         * C.est peu, et c.est pourquoi la première tentative de ce projet — l.endormir pendant sa
+         * recharge — ne pouvait rien rapporter.
+         *
+         * <p>Mais ce tick sur huit fait <b>deux recherches de conteneur</b> pour déplacer <b>un seul
+         * objet</b>. Soixante-quatre cailloux qui traversent un entonnoir, ce sont cent vingt-huit
+         * recherches. C.est là qu.est le coût, et c.est ce que le transfert par lots divise.
+         *
+         * <p>La charge reproduit un transport d.objets réel : des chaînes de huit entonnoirs, un
+         * coffre plein en tête, un coffre de réception en queue. Tous les entonnoirs y sont actifs —
+         * c.est le cas que le module vise, et le seul où sa mesure veut dire quelque chose.
+         */
+        HOPPERS,
+        /**
+         * Une récolte au sol : des petites piles éparpillées, comme en laisse une ferme.
+         *
+         * <h2>Pourquoi {@link #ITEMS} ne pouvait pas servir</h2>
+         *
+         * <p>La charge des objets pose des piles <b>pleines</b> de soixante-quatre, et appelle
+         * {@code setUnlimitedLifetime()}. Or vanilla refuse de fusionner dans ces deux cas :
+         *
+         * <pre>
+         * return this.isAlive() &amp;&amp; this.pickupDelay != 32767
+         *     &amp;&amp; this.age != -32768                      // &lt;- durée de vie illimitée
+         *     &amp;&amp; this.age &lt; 6000
+         *     &amp;&amp; item.getCount() &lt; item.getMaxStackSize(); // &lt;- pile pleine
+         * </pre>
+         *
+         * <p>Huit mille piles pleines et immortelles ne peuvent donc <b>jamais</b> fusionner, et le
+         * module s'y serait mesuré à zéro. La charge aurait rendu un chiffre juste sur une situation
+         * où le module ne peut rien faire — le genre de mesure qui condamne un module innocent.
+         *
+         * <p>Celle-ci pose ce qu'une ferme laisse tomber : des piles de un à quatre, d'âge normal.
+         */
+        DROPS
     }
 
     /**
@@ -253,6 +294,8 @@ public final class Scene {
             case "orbs", "orbes", "xp", "experience" -> Kind.ORBS;
             case "villagers", "villageois", "pnj" -> Kind.VILLAGERS;
             case "redstone", "signal", "circuit" -> Kind.REDSTONE;
+            case "hoppers", "entonnoirs", "tremies", "trémies", "tri" -> Kind.HOPPERS;
+            case "drops", "recolte", "récolte", "chutes", "fusion" -> Kind.DROPS;
             default -> Kind.RING;
         };
     }
@@ -357,6 +400,37 @@ public final class Scene {
                     spent.size(), born);
             return;
         }
+        if (builtKind == Kind.DROPS) {
+            // Cette charge FUSIONNE — c'est tout son objet. La première phase en laisse deux fois
+            // moins que la seconde n'en recevrait, et le banc mesurerait deux charges différentes.
+            // C'est la sixième fois que ce projet rencontre ce défaut, et la première où il était
+            // prévu avant d'avoir menti.
+            java.util.List<net.minecraft.world.entity.Entity> spent = new java.util.ArrayList<>();
+            for (net.minecraft.world.entity.Entity old : level.getAllEntities()) {
+                if (old instanceof ItemEntity) {
+                    spent.add(old);
+                }
+            }
+            for (net.minecraft.world.entity.Entity old : spent) {
+                old.discard();
+            }
+            int born = harvest(level, builtCount);
+            Lanterne.LOG.info("[SCÈNE] remise à neuf : {} objet(s) balayé(s), {} reposé(s).",
+                    spent.size(), born);
+            return;
+        }
+        if (builtKind == Kind.HOPPERS) {
+            // La charge se consomme : les coffres de tête se vident, ceux de queue se remplissent, et
+            // la seconde phase commencerait sur un transport déjà à moitié fait. On repose tout.
+            //
+            // Les compteurs de {@link Bulk}, eux, ne sont PAS remis à zéro ici. Ils le sont au
+            // lancement de l'épreuve, et pas entre les phases : la phase sans le mod n'en incrémente
+            // aucun, si bien que le total publié à la fin est exactement celui de la phase active.
+            // Les remettre à zéro à chaque remise à neuf effacerait précisément le chiffre qu'on veut
+            // lire.
+            conveyors(level, builtCount);
+            return;
+        }
         if (builtKind == Kind.FARM) {
             field(level, fieldSide * fieldSide);
             return;
@@ -443,7 +517,28 @@ public final class Scene {
      */
     private static int ground(ServerLevel level) {
         if (builtGround == Integer.MIN_VALUE) {
-            builtGround = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0);
+            // <h2>La carte des hauteurs compte ce qu'on a bâti dessus</h2>
+            //
+            // La première version lisait getHeight(MOTION_BLOCKING_NO_LEAVES, 0, 0). Or (0, 0) est au
+            // MILIEU du chantier du banc : après une charge d'entonnoirs, la carte des hauteurs y
+            // renvoie l'altitude d'un coffre, soit le sol plus trois.
+            //
+            // Le sol gelé montait donc de trois blocs à chaque exécution. clearDecor, qui efface de
+            // « sol + 1 » à « sol + 10 », nettoyait au-dessus des ruines au lieu de dedans ; le
+            // chantier suivant se bâtissait par-dessus l'ancien ; et les mesures additionnaient des
+            // charges empilées. Le nombre de blocs effacés restait identique d'une exécution à
+            // l'autre — 58 081, puis 58 963 — alors même que douze mille cinq cents blocs de
+            // chantier auraient dû s'y ajouter. C'est ce chiffre trop stable qui a trahi l'affaire.
+            //
+            // C'est la même faute que la dalle de pierre qui montait de quatre blocs à chaque
+            // reconstruction, revenue ailleurs sous un autre visage.
+            //
+            // On demande donc son altitude au GÉNÉRATEUR de terrain, et non au monde. Le générateur
+            // répond ce que le relief vaut là où rien n'a jamais été posé : une propriété du terrain,
+            // que rien de ce que le banc construit ne peut déplacer.
+            var source = level.getChunkSource();
+            builtGround = source.getGenerator().getBaseHeight(0, 0,
+                    Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, level, source.randomState());
         }
         return builtGround;
     }
@@ -1001,6 +1096,25 @@ public final class Scene {
      * mille poses de bloc à chaque démarrage.
      */
     private static void clearDecor(ServerLevel level) {
+        // <h2>Les règles de jeu qu'une charge laisse derrière elle</h2>
+        //
+        // Le champ porte RANDOM_TICK_SPEED à 256 — il le doit, c'est ce qui fait pousser le blé
+        // pendant la mesure — et ne le remet jamais. Or le monde est CONSERVÉ d'une épreuve à
+        // l'autre. Toute charge lancée après un champ héritait donc d'un monde qui ticke
+        // quatre-vingt-cinq fois trop vite, sans que rien ne l'annonce.
+        //
+        // Les conséquences se sont vues avant d'être comprises : les feuillages laissés en l'air par
+        // ce même nettoyage se décomposaient à toute vitesse et semaient des milliers d'objets au
+        // sol, jusqu'à faire refuser la mesure par le contrôle préalable — sur une charge qui n'a
+        // rien à voir avec l'agriculture.
+        //
+        // On remet donc les règles à leur valeur vanilla avant chaque construction. Chaque charge
+        // repose ensuite les siennes ; aucune n'hérite de celles d'une autre.
+        level.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 3, level.getServer());
+        level.getGameRules().set(GameRules.SPAWN_MOBS, true, level.getServer());
+        level.getGameRules().set(GameRules.MAX_ENTITY_CRAMMING, 24, level.getServer());
+
+        int looseBefore = looseItems(level);
         int top = ground(level);
         var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
         var grass = net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState();
@@ -1009,9 +1123,15 @@ public final class Scene {
         int cleared = 0;
         for (int x = -reach; x <= reach; x++) {
             for (int z = -reach; z <= reach; z++) {
-                for (int y = top + 1; y <= top + 10; y++) {
+                for (int y = top + 1; y <= top + CEILING; y++) {
                     cursor.set(x, y, z);
-                    if (!level.getBlockState(cursor).isAir() && level.setBlock(cursor, air, 2)) {
+                    // Le drapeau 256 — UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS — coupe le lâcher du
+                    // contenu. Sans lui, effacer le décor d'une charge à coffres sèmerait des
+                    // milliers d'objets dans le chantier, et la charge suivante mesurerait le
+                    // ramassage de la précédente. C'est la faute exacte qui rendait l'épreuve des
+                    // entonnoirs de Kitchen non reproductible, découverte là-bas, corrigée ici avant
+                    // qu'elle ne se reproduise.
+                    if (!level.getBlockState(cursor).isAir() && level.setBlock(cursor, air, 2 | 256)) {
                         cleared++;
                     }
                 }
@@ -1023,8 +1143,24 @@ public final class Scene {
             }
         }
         Lanterne.LOG.info("[SCÈNE] décor précédent effacé : {} bloc(s) remis à l.état initial sur un "
-                + "carré de {} blocs. Sans cela, chaque charge mesure les ruines des précédentes.",
-                cleared, reach * 2);
+                + "carré de {} blocs, du sol+1 au sol+{}. Sans cela, chaque charge mesure les ruines "
+                + "des précédentes.", cleared, reach * 2, CEILING);
+        // <h2>Le nettoyage salissait ce qu'il nettoyait</h2>
+        //
+        // Le relevé a tranché une question qu'on ne savait pas poser : sur un monde VIERGE, sans un
+        // seul coffre, effacer le décor faisait apparaître cinq mille cent soixante-quinze objets au
+        // sol. Ce ne sont pas des contenus de conteneurs — il n'y en avait aucun — mais de la
+        // végétation : retirer la moitié haute d'une plante double fait tomber la moitié basse avec
+        // ses graines, et les feuillages privés de tronc se décomposent en pousses et en pommes.
+        //
+        // Ces objets restaient dans le monde pendant toute la mesure, s'ajoutaient d'une exécution à
+        // l'autre, et ont fini par faire refuser deux bancs pour « entités résiduelles ». Le
+        // nettoyage se nettoie donc lui-même.
+        int spilled = looseItems(level) - looseBefore;
+        int swept = sweepLoose(level);
+        Lanterne.LOG.info("[SCÈNE] objets lâchés par le nettoyage lui-même : {} — balayés ({} au "
+                + "total). La végétation arrachée sème ses graines ; on ne les laisse pas.",
+                Math.max(0, spilled), swept);
     }
 
     public static int build(ServerLevel level, Kind kind, int count, int radius) {
@@ -1054,7 +1190,184 @@ public final class Scene {
             case ORBS -> orbs(level, count);
             case VILLAGERS -> villagers(level, count);
             case REDSTONE -> wiring(level, count);
+            case HOPPERS -> conveyors(level, count);
+            case DROPS -> harvest(level, count);
         };
+    }
+
+    /**
+     * Une récolte au sol : de petites piles, d'âge normal, assez proches pour se rejoindre.
+     *
+     * <p>Trois détails décident de tout ici, et chacun est un frein de vanilla qu'il ne faut
+     * <b>pas</b> désarmer par mégarde dans la charge elle-même :
+     *
+     * <ul>
+     *   <li>La pile est <b>partielle</b> — une pile pleine est déclarée non fusionnable.</li>
+     *   <li>L'âge est <b>normal</b> — {@code setUnlimitedLifetime()} le met à -32768, que
+     *       {@code isMergable()} refuse. Une charge immortelle ne fusionne jamais.</li>
+     *   <li>Le délai de ramassage est ordinaire — 32767 signifie « jamais ramassable », et disqualifie
+     *       là aussi.</li>
+     * </ul>
+     *
+     * <p>Une charge qui enfreindrait l'un des trois mesurerait un module empêché, et conclurait qu'il
+     * ne sert à rien.
+     */
+    private static int harvest(ServerLevel level, int count) {
+        int side = Math.max(4, (int) Math.ceil(Math.sqrt(count / 16d)));
+        Random dice = new Random(SEED);
+        int born = 0;
+
+        for (int i = 0; i < count; i++) {
+            double x = (dice.nextDouble() - 0.5d) * side;
+            double z = (dice.nextDouble() - 0.5d) * side;
+            int floor = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    (int) Math.floor(x), (int) Math.floor(z));
+            ItemEntity grain = new ItemEntity(level, x, floor + 0.2d, z,
+                    new ItemStack(Items.WHEAT, 1 + dice.nextInt(4)));
+            grain.setDeltaMovement(0d, 0d, 0d);
+            grain.setPickUpDelay(40);
+            if (level.addFreshEntity(grain)) {
+                born++;
+            }
+        }
+        Lanterne.LOG.info("[SCÈNE] récolte : {} pile(s) de blé de 1 à 4, sur un carré de {} blocs. "
+                + "Âge normal et piles partielles — sans quoi vanilla refuserait toute fusion.",
+                born, side);
+        return born;
+    }
+
+    /**
+     * Hauteur du nettoyage, au-dessus du sol.
+     *
+     * <p>Dix suffisaient tant que le sol gelé était juste. Il ne l'était pas — voir {@link #ground} —
+     * et des chantiers se sont empilés sur plusieurs exécutions. Vingt-quatre rattrape ce qui a pu
+     * s'accumuler avant la correction, et couvre largement la plus haute des charges.
+     */
+    private static final int CEILING = 24;
+
+    /** Longueur d'une chaîne d'entonnoirs. Huit : ce qu'on tire d'un coffre à l'autre sans y penser. */
+    private static final int LINK = 8;
+    /** Demi-côté du chantier, en blocs. Six chunks : dans le rayon de simulation, à coup sûr. */
+    private static final int YARD = 96;
+    /** Entonnoirs réellement posés à la dernière construction. */
+    private static int laid;
+
+    /**
+     * Des chaînes d'entonnoirs en marche.
+     *
+     * <h2>Le décompte rendu est zéro, et c'est voulu</h2>
+     *
+     * <p>Cette charge ne crée aucune entité. Rendre le nombre d'entonnoirs ferait refuser la mesure
+     * par le contrôle préalable, qui compte des créatures vivantes et n'en trouverait aucune — c'est
+     * exactement l'erreur qui avait fait rejeter la charge des lampes.
+     *
+     * <p>Le contrôle propre à cette charge est ailleurs, et il est meilleur : le rapport publie le
+     * nombre de transferts effectués. <b>Zéro transfert veut dire que rien ne ticke</b>, et aucune
+     * durée mesurée dans ces conditions ne vaut d'être citée.
+     */
+    private static int conveyors(ServerLevel level, int count) {
+        int top = ground(level);
+        int y = top + 2;
+        var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        var chestBlock = net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState();
+        var hopperEast = net.minecraft.world.level.block.Blocks.HOPPER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.HopperBlock.FACING,
+                        net.minecraft.core.Direction.EAST);
+        // <h2>Une charge qui fuit, et le compteur qui le dira</h2>
+        //
+        // Ce chantier n'est censé créer AUCUNE entité : tout va de conteneur en conteneur. Une
+        // exécution a pourtant vu apparaître trente-six mille objets au sol en quarante-deux
+        // secondes, et le contrôle préalable a refusé de mesurer — à juste titre.
+        //
+        // On relève donc l'état avant et après la construction. Si le compte monte pendant la
+        // construction, c'est la pose des blocs qui lâche du contenu ; s'il monte pendant la
+        // mesure, ce sont les transferts. Les deux fautes ne se corrigent pas au même endroit, et
+        // deviner laquelle c'est a déjà coûté assez de temps.
+        // Aucune créature ne doit apparaître : leur nombre varierait d'une phase à l'autre, et l'on
+        // mesurerait la différence de peuplement au lieu de celle des entonnoirs.
+        level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
+
+        int before = looseItems(level);
+        int swept = sweepLoose(level);
+        laid = 0;
+        int chains = 0;
+
+        for (int z = -YARD; z <= YARD && laid < count; z += 2) {
+            for (int x = -YARD; x + LINK + 1 <= YARD && laid < count; x += LINK + 2) {
+                BlockPos feeder = new BlockPos(x, y + 1, z);
+                level.setBlock(feeder, air, 2 | 256);
+                level.setBlock(feeder, chestBlock, 2);
+                if (level.getBlockEntity(feeder) instanceof net.minecraft.world.level.block.entity
+                        .ChestBlockEntity chest) {
+                    for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+                        chest.setItem(slot, new net.minecraft.world.item.ItemStack(
+                                net.minecraft.world.item.Items.COBBLESTONE, 64));
+                    }
+                    chest.setChanged();
+                }
+
+                for (int i = 0; i < LINK && laid < count; i++) {
+                    BlockPos link = new BlockPos(x + i, y, z);
+                    level.setBlock(link, air, 2 | 256);
+                    level.setBlock(link, hopperEast, 2);
+                    laid++;
+                }
+
+                BlockPos sink = new BlockPos(x + LINK, y, z);
+                level.setBlock(sink, air, 2 | 256);
+                level.setBlock(sink, chestBlock, 2);
+                chains++;
+            }
+        }
+
+        int after = looseItems(level);
+        Lanterne.LOG.info("[SCÈNE] {} entonnoir(s) en {} chaîne(s), chacune alimentée par un coffre "
+                + "plein et vidée dans un coffre. Tous actifs : c'est le cas que le transfert par "
+                + "lots vise.", laid, chains);
+        Lanterne.LOG.info("[SCÈNE] objets au sol — trouvés : {} (balayés : {}) · après la pose : {} "
+                + "· créés par la pose : {}. Cette charge doit n'en créer AUCUN.",
+                before, swept, after, after);
+        return 0;
+    }
+
+    /**
+     * Efface les objets au sol avant de bâtir.
+     *
+     * <p>Une charge qui hérite des objets de la précédente ne mesure pas ce qu'on lui demande, et le
+     * contrôle préalable refuse — à juste titre — de conclure. C'est la troisième fois que ce projet
+     * pose ce balayage, après les créatures et les orbes : toute charge qui laisse des traces doit
+     * les effacer elle-même, et non compter sur celle qui suit.
+     */
+    private static int sweepLoose(ServerLevel level) {
+        java.util.List<net.minecraft.world.entity.Entity> loose = new java.util.ArrayList<>();
+        for (var soul : level.getAllEntities()) {
+            // Objets ET créatures : le nettoyage du décor sème les uns, l'apparition naturelle
+            // apporte les autres, et cette charge ne veut ni des uns ni des autres.
+            if (soul instanceof net.minecraft.world.entity.item.ItemEntity
+                    || soul instanceof net.minecraft.world.entity.Mob) {
+                loose.add(soul);
+            }
+        }
+        for (var soul : loose) {
+            soul.discard();
+        }
+        return loose.size();
+    }
+
+    /** Objets au sol présents dans le monde. Sert à savoir si la charge fuit, et quand. */
+    private static int looseItems(ServerLevel level) {
+        int total = 0;
+        for (var soul : level.getAllEntities()) {
+            if (soul instanceof net.minecraft.world.entity.item.ItemEntity) {
+                total++;
+            }
+        }
+        return total;
+    }
+
+    /** Entonnoirs posés par la dernière charge, pour le rapport. */
+    public static int hoppersLaid() {
+        return laid;
     }
 
     /**

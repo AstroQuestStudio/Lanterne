@@ -39,9 +39,23 @@ public final class Kitchen {
      * <p>Près du joueur, et non « loin de tout » comme le voulait la première version : à deux cents
      * blocs, les fours étaient hors du rayon de simulation et <b>aucun n'a cuit</b> — ni avec le mod,
      * ni sans. Le verdict annonçait « exact » en comparant deux échecs identiques.
+     *
+     * <h2>Et pourquoi pas au milieu non plus</h2>
+     *
+     * <p>Le site était en (16, 16), c'est-à-dire <b>à l'intérieur du chantier du banc de vitesse</b> —
+     * qui pose dix mille trémies et deux mille cinq cents coffres sur un carré de cent quatre-vingt-
+     * douze blocs, à l'altitude même de cette chaîne. Le monde étant conservé d'une épreuve à
+     * l'autre, une chaîne de six trémies a fini par annoncer 288 944 objets déplacés et un débit
+     * <em>négatif</em> : elle mesurait le chantier d'un autre banc.
+     *
+     * <p>Cent vingt blocs met le site hors de ce chantier — qui s'arrête à quatre-vingt-seize — et le
+     * laisse à l'intérieur du rayon de simulation, qui est de dix chunks, soit cent soixante blocs.
+     * Dégager le terrain aurait été l'autre réponse, et la mauvaise : creuser sous les fours aurait
+     * fait descendre la carte des hauteurs d'une exécution à l'autre, ce qui est très exactement le
+     * défaut qui avait fait monter la dalle de pierre de quatre blocs par reconstruction.
      */
-    private static final int BASE_X = 16;
-    private static final int BASE_Z = 16;
+    private static final int BASE_X = 120;
+    private static final int BASE_Z = 0;
     /** Nombre de fours de l'épreuve : la médiane de plusieurs vaut mieux qu'une mesure unique. */
     private static final int OVENS = 5;
     /** Ticks au-delà desquels on cesse d'attendre une cuisson. */
@@ -55,16 +69,27 @@ public final class Kitchen {
 
     /** Longueur de la chaîne d'entonnoirs éprouvée. */
     private static final int CHAIN = 6;
+    /** Altitude de la chaîne. Fixe : deux phases doivent se dérouler au même endroit. */
+    private static final int CHAIN_Y = 80;
     private static BlockPos hopperEnd;
-    private static final int[] MOVED = new int[2];
 
     /**
-     * Tick auquel on relève le débit des entonnoirs.
+     * Ticks auxquels on relève le débit.
      *
-     * <p>Cent cinquante : bien avant la fin de la cuisson, donc atteint dans les deux phases, et assez
-     * tard pour qu'une chaîne de six entonnoirs ait eu le temps de s'amorcer.
+     * <h2>Pourquoi trois marques, et non une</h2>
+     *
+     * <p>Un débit est une pente, et une pente ne se lit pas sur un point. Un relevé unique ne permet
+     * pas de distinguer « le mod transfère moins vite » de « le mod a démarré deux ticks plus tard » —
+     * or les deux donnent le même chiffre à un instant donné, et n'ont rien à voir.
+     *
+     * <p>Trois marques donnent deux pentes de plus, et ce sont elles qui comptent : si le mod préserve
+     * le débit, les écarts entre marques doivent coïncider même si le départ diffère.
      */
-    private static final int FLOW_MARK = 150;
+    private static final int[] MARKS = {60, 120, 180};
+    /** Relevés : première ligne avec le mod, seconde sans. */
+    private static final int[][] MOVED = new int[2][MARKS.length];
+    /** Durée minimale d'une phase : sans elle, la dernière marque ne serait pas atteinte. */
+    private static final int FLOOR = 200;
 
     private static Step step = Step.OFF;
     private static int elapsed;
@@ -80,6 +105,7 @@ public final class Kitchen {
         host = server;
         step = Step.COOKING_ON;
         Settings.setEnabled(true);
+        fr.clubcitrouille.lanterne.core.Bulk.reset();
         light(server.overworld());
         chain(server.overworld());
         Lanterne.LOG.info("[CUISSON] Épreuve lancée, mod actif.");
@@ -126,26 +152,66 @@ public final class Kitchen {
         // poser un bloc identique sur lui-même ne recrée pas son bloc-entité. Les trémies gardaient donc
         // leur contenu, et la phase témoin commençait avec l'avance accumulée par la phase précédente.
         //
-        // L'écart mesuré — dix-huit pour cent de débit en moins pour le mod — était entièrement
-        // fabriqué par le protocole. On efface donc d'abord, ce qui détruit les blocs-entités et leur
-        // contenu, avant de reconstruire.
+        // <h2>Le même héritage, revenu par le sol</h2>
+        //
+        // Le correctif ci-dessus — effacer d'abord — était juste, et il n'a pas suffi : trois
+        // exécutions identiques ont rendu 18/30, puis 39/16, puis 16/16. Le témoin lui-même variait du
+        // simple au double, et un chiffre qu'on ne sait pas reproduire n'est pas une mesure.
+        //
+        // La cause était dans le correctif. Casser une trémie n'efface pas son contenu : il le
+        // RELÂCHE. LevelChunk.setBlockState appelle preRemoveSideEffects, qui appelle
+        // Containers.dropContents dès que le bloc-entité est un conteneur. Les soixante-quatre
+        // cailloux tombaient donc en objets, à l'endroit exact où la boucle suivante reposait les
+        // trémies — qui les ré-aspiraient aussitôt, en nombre variable selon la dispersion aléatoire
+        // du lâcher.
+        //
+        // On vide donc AVANT de casser, et l'on balaie le sol après : le contenu ne peut alors ni
+        // survivre dans le bloc-entité, ni revenir par le sol.
         for (int i = 0; i < CHAIN; i++) {
-            level.setBlockAndUpdate(new BlockPos(BASE_X + i, 80, BASE_Z + 8),
-                    Blocks.AIR.defaultBlockState());
+            BlockPos pos = new BlockPos(BASE_X + i, CHAIN_Y, BASE_Z + 8);
+            if (level.getBlockEntity(pos)
+                    instanceof net.minecraft.world.level.block.entity.HopperBlockEntity old) {
+                old.clearContent();
+            }
+            level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
         }
+        sweep(level);
+
         for (int i = 0; i < CHAIN; i++) {
-            BlockPos pos = new BlockPos(BASE_X + i, 80, BASE_Z + 8);
+            BlockPos pos = new BlockPos(BASE_X + i, CHAIN_Y, BASE_Z + 8);
             level.setBlockAndUpdate(pos, Blocks.HOPPER.defaultBlockState()
                     .setValue(net.minecraft.world.level.block.HopperBlock.FACING,
                             net.minecraft.core.Direction.EAST));
         }
-        BlockPos source = new BlockPos(BASE_X, 80, BASE_Z + 8);
+        BlockPos source = new BlockPos(BASE_X, CHAIN_Y, BASE_Z + 8);
         if (level.getBlockEntity(source)
                 instanceof net.minecraft.world.level.block.entity.HopperBlockEntity hopper) {
             hopper.setItem(0, new ItemStack(Items.COBBLESTONE, 64));
             hopper.setChanged();
         }
-        hopperEnd = new BlockPos(BASE_X + CHAIN - 1, 80, BASE_Z + 8);
+        hopperEnd = new BlockPos(BASE_X + CHAIN - 1, CHAIN_Y, BASE_Z + 8);
+    }
+
+    /**
+     * Efface tout objet traînant autour de la chaîne.
+     *
+     * <p>La zone descend de vingt-quatre blocs sous la chaîne : un objet lâché tombe, et l'on ne
+     * balaie pas seulement là où il est né.
+     */
+    private static void sweep(ServerLevel level) {
+        var zone = new net.minecraft.world.phys.AABB(
+                BASE_X - 2, CHAIN_Y - 24, BASE_Z + 6,
+                BASE_X + CHAIN + 2, CHAIN_Y + 4, BASE_Z + 10);
+        int wiped = 0;
+        for (var loose : level.getEntitiesOfClass(
+                net.minecraft.world.entity.item.ItemEntity.class, zone)) {
+            loose.discard();
+            wiped++;
+        }
+        if (wiped > 0) {
+            Lanterne.LOG.info("[ENTONNOIR] {} objet(s) balayé(s) autour de la chaîne avant la phase.",
+                    wiped);
+        }
     }
 
     /** Attend l'apparition du premier lingot dans chaque four. */
@@ -164,8 +230,11 @@ public final class Kitchen {
         //
         // La mesure dépendait donc d'un évènement sans rapport avec elle. On relève maintenant à un
         // tick fixe, identique des deux côtés : c'est la seule façon de comparer deux débits.
-        if (elapsed == FLOW_MARK) {
-            MOVED[step == Step.COOKING_ON ? 0 : 1] = countAtEnd(level);
+        int phase = step == Step.COOKING_ON ? 0 : 1;
+        for (int m = 0; m < MARKS.length; m++) {
+            if (elapsed == MARKS[m]) {
+                MOVED[phase][m] = countAtEnd(level);
+            }
         }
 
         int[] into = step == Step.COOKING_ON ? WITH : WITHOUT;
@@ -183,7 +252,11 @@ public final class Kitchen {
             }
         }
 
-        if (allDone || elapsed >= PATIENCE) {
+        // La cuisson peut s'achever avant la dernière marque de débit. On ne laisse pas la phase
+        // partir tant que les entonnoirs n'ont pas été relevés : sinon les deux phases se
+        // compareraient sur des durées différentes, ce qui était déjà le défaut de la version
+        // précédente.
+        if ((allDone && elapsed >= FLOOR) || elapsed >= PATIENCE) {
             for (int i = 0; i < PLACES.size(); i++) {
                 if (into[i] == 0) {
                     into[i] = PATIENCE;
@@ -236,26 +309,45 @@ public final class Kitchen {
     }
 
     private static void report() {
-        // <h2>Un volet qu'on cesse de publier, faute de pouvoir le reproduire</h2>
+        // <h2>Le volet qui ne se reproduisait pas, et ce qui l'en empêchait</h2>
         //
-        // Deux défauts de protocole ont été corrigés ici : les trémies n'étaient pas vidées entre les
-        // phases (d'où cent trente-six objets arrivés au bout d'une chaîne qui n'en reçoit que
-        // soixante-quatre), et le relevé se faisait en fin de phase, donc sur deux durées différentes.
+        // Trois défauts de protocole se sont succédé ici, chacun corrigeant le précédent sans le
+        // suffire :
         //
-        // Les deux corrections étaient justes, et elles n'ont pas suffi. Trois exécutions du protocole
-        // corrigé, strictement identiques, ont rendu : <b>18 / 30</b>, puis <b>39 / 16</b>, puis
-        // <b>16 / 16</b>. Le témoin lui-même varie du simple au double.
+        //   1. Les trémies n'étaient pas vidées entre les phases — d'où cent trente-six objets arrivés
+        //      au bout d'une chaîne qui n'en reçoit que soixante-quatre.
+        //   2. Le relevé se faisait en fin de phase, donc sur deux durées différentes.
+        //   3. Le correctif du premier défaut CASSAIT les trémies, ce qui relâche leur contenu au sol,
+        //      à l'endroit exact où les nouvelles étaient reposées. Elles le ré-aspiraient, en nombre
+        //      variable. C'est ce qui donnait 18/30, puis 39/16, puis 16/16 : le témoin variait du
+        //      simple au double, et l'écart mesuré était entièrement fabriqué.
         //
-        // On ne sait donc pas mesurer le débit d'une chaîne d'entonnoirs de façon reproductible, et un
-        // chiffre qu'on ne sait pas reproduire n'est pas une mesure — c'est un tirage. Il est affiché
-        // pour information, accompagné de ce qu'il vaut, et il ne doit être cité nulle part tant que ce
-        // protocole n'aura pas été refait.
-        //
-        // Ce que l'on peut dire, et c'est déjà quelque chose : les trois relevés vont dans les deux
-        // sens. Si le mod ralentissait réellement les entonnoirs, ils iraient tous dans le même.
-        Lanterne.LOG.warn("[ENTONNOIR] au bout de la chaîne — sans {} objet(s) · avec {} objet(s) "
-                + "— CHIFFRE NON REPRODUCTIBLE, à ne pas citer : trois exécutions identiques ont "
-                + "donné 18/30, 39/16 et 16/16.", MOVED[1], MOVED[0]);
+        // Le troisième est corrigé dans chain() : on vide avant de casser, et l'on balaie le sol. Le
+        // protocole n'est déclaré reproductible que si trois exécutions rendent le même témoin — c'est
+        // au lanceur de l'épreuve de le vérifier, et le rapport lui en donne les moyens en publiant
+        // les trois marques plutôt qu'un total.
+        Lanterne.LOG.info("[ENTONNOIR] ── Objets parvenus au bout de la chaîne ──");
+        for (int m = 0; m < MARKS.length; m++) {
+            int without = MOVED[1][m];
+            int with = MOVED[0][m];
+            Lanterne.LOG.info(String.format(Locale.ROOT,
+                    "[ENTONNOIR] tick %3d : sans %3d · avec %3d · écart %+d",
+                    MARKS[m], without, with, with - without));
+        }
+        int spanWithout = MOVED[1][MARKS.length - 1] - MOVED[1][0];
+        int spanWith = MOVED[0][MARKS.length - 1] - MOVED[0][0];
+        int window = MARKS[MARKS.length - 1] - MARKS[0];
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[ENTONNOIR] DÉBIT sur %d ticks — sans %.2f obj/s · avec %.2f obj/s · %s",
+                window, spanWithout * 20d / window, spanWith * 20d / window,
+                spanWithout == 0
+                        ? "témoin nul, épreuve sans valeur"
+                        : String.format(Locale.ROOT, "×%.2f", spanWith / (double) spanWithout)));
+        Lanterne.LOG.info("[ENTONNOIR] lot moyen : {} objet(s) par transfert, {} transfert(s), "
+                        + "{} objet(s) déplacé(s).",
+                String.format(Locale.ROOT, "%.2f", fr.clubcitrouille.lanterne.core.Bulk.averageLot()),
+                fr.clubcitrouille.lanterne.core.Bulk.transfers(),
+                fr.clubcitrouille.lanterne.core.Bulk.items());
         Lanterne.LOG.info("[CUISSON] ── Ticks jusqu'au premier lingot ──");
         int mismatches = 0;
         for (int i = 0; i < PLACES.size() || i < OVENS; i++) {

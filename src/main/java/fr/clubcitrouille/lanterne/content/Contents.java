@@ -59,12 +59,49 @@ public final class Contents {
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem>
             ANCHOR_ITEM = ITEMS.registerSimpleBlockItem("anchor", ANCHOR);
 
+    /**
+     * La Lanterne de Veille.
+     *
+     * <p>Éclaire au maximum — quinze, comme une pierre lumineuse — parce qu'un bloc qui empêche les
+     * monstres d'apparaître doit <b>avoir l'air</b> de le faire. Fragile en comparaison de l'ancre :
+     * on la pose par dizaines dans une base, et exiger de la netherite pour chacune la rendrait
+     * inutilisable. Voir {@link Vigil} pour ce qu'elle épargne.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredBlock<Vigil> VIGIL =
+            BLOCKS.registerBlock("veilleuse", Vigil::new, () -> BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.COLOR_ORANGE)
+                    .strength(3.0F, 6.0F)
+                    .sound(SoundType.LANTERN)
+                    .lightLevel(state -> 15)
+                    .requiresCorrectToolForDrops());
+
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem>
+            VIGIL_ITEM = ITEMS.registerSimpleBlockItem("veilleuse", VIGIL);
+
+    public static final DeferredRegister<net.minecraft.world.level.block.entity.BlockEntityType<?>>
+            BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, Lanterne.ID);
+
+    /**
+     * Le bloc-entité de la Lanterne — sans ticker, donc gratuit par tick.
+     *
+     * <p>Il n'existe que pour être sérialisé avec son chunk et pour signaler son arrivée et son
+     * départ. Voir {@link VigilBlockEntity} pour l'alternative sans bloc-entité qui a été écartée, et
+     * la raison qui l'a fait écarter.
+     */
+    public static final Supplier<net.minecraft.world.level.block.entity.BlockEntityType<VigilBlockEntity>>
+            VIGIL_ENTITY = BLOCK_ENTITIES.register("veilleuse",
+                    () -> new net.minecraft.world.level.block.entity.BlockEntityType<>(
+                            VigilBlockEntity::new, VIGIL.get()));
+
     /** Un onglet à part : on doit pouvoir trouver l'ancre sans savoir où Mojang l'aurait rangée. */
     public static final Supplier<CreativeModeTab> TAB = TABS.register("lanterne",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.lanterne"))
                     .icon(() -> new net.minecraft.world.item.ItemStack(ANCHOR_ITEM.get()))
-                    .displayItems((params, output) -> output.accept(ANCHOR_ITEM.get()))
+                    .displayItems((params, output) -> {
+                        output.accept(ANCHOR_ITEM.get());
+                        output.accept(VIGIL_ITEM.get());
+                    })
                     .build());
 
     private Contents() {}
@@ -72,6 +109,7 @@ public final class Contents {
     public static void register(IEventBus modBus) {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
+        BLOCK_ENTITIES.register(modBus);
         TABS.register(modBus);
     }
 }

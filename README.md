@@ -17,7 +17,7 @@
 ### Chaque chiffre de ce document sort d'un banc automatique.
 
 **Aucun n'a été saisi à la main.** Treize modules ont été écrits puis **retirés** faute de gain prouvé,
-et six bancs ont été réparés parce qu'ils mentaient. C'est cette moitié-là qui rend l'autre croyable.
+et **dix bancs** ont été réparés parce qu'ils mentaient. C'est cette moitié-là qui rend l'autre croyable.
 
 </div>
 
@@ -28,17 +28,34 @@ et six bancs ont été réparés parce qu'ils mentaient. C'est cette moitié-là
 Serveur dédié NeoForge 26.1.2, Ryzen 7 5800H, monde pré-généré, distance de simulation 10.
 Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les phases**.
 
-| Charge | Sans Lanterne | Avec | Gain |
-|---|---:|---:|:---:|
-| **8 000 objets au sol** | 433,64 ms | 36,02 ms | **×12,04** |
-| **1 000 vaches dans 15×15** | 22,40 ms | **4,47 ms** | **×5,02** |
-| **4 000 orbes d'expérience** | 63,21 ms | 14,77 ms | **×4,28** |
-| **Sauvegarde de 64 chunks** | 153,33 ms | 43,35 ms | **×3,54** |
-| **6 000 projectiles en vol** | 97,25 ms | 32,50 ms | **×2,99** |
-| **Serveur habité réaliste** | 33,46 ms | 17,65 ms | **×1,90** |
-| **6 000 TNT** | 64,75 ms | 39,47 ms | **×1,64** |
-| **600 villageois** | 56,30 ms | 38,43 ms | **×1,46** |
-| **Client — temps par image** | 24,79 ms | 19,80 ms | **×1,25** |
+| Charge | Sans Lanterne | Avec | Gain | |
+|---|---:|---:|:---:|:--:|
+| **8 000 objets au sol** | 494,83 ms | 36,37 ms | **×13,60** | ✅ |
+| **1 000 vaches dans 15×15** | 31,04 ms | **5,91 ms** | **×5,25** | ✅ |
+| **4 000 orbes d'expérience** | 63,21 ms | 14,77 ms | **×4,28** | ⏳ |
+| **Sauvegarde de 64 chunks** | 153,33 ms | 43,35 ms | **×3,54** | ⏳ |
+| **6 000 projectiles en vol** | 97,25 ms | 32,50 ms | **×2,99** | ⏳ |
+| **Serveur habité réaliste** | 33,46 ms | 17,65 ms | **×1,90** | ⏳ |
+| **6 000 TNT** | 64,75 ms | 39,47 ms | **×1,64** | ⏳ |
+| **600 villageois** | 56,30 ms | 38,43 ms | **×1,46** | ⏳ |
+| **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
+| **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
+| **Client — temps par image** | 24,79 ms | 19,80 ms | **×1,25** | ⏳ |
+
+<div align="center">
+
+✅ **revérifié après la réparation de l'instrument** &nbsp;·&nbsp; ⏳ **mesuré avant, à reprendre**
+
+</div>
+
+> **Pourquoi cette colonne existe.** Une charge de ce laboratoire portait la vitesse de tick aléatoire
+> à 256 pour faire pousser son blé — et ne la remettait jamais. Le monde étant conservé d'une épreuve
+> à l'autre, **toute mesure lancée après elle héritait d'un monde qui ticke 85 fois trop vite.**
+> Trois autres défauts du même genre ont été trouvés le même soir.
+>
+> Les deux chiffres revérifiés se sont révélés **meilleurs** que ce qui était publié — ×13,60 au lieu
+> de ×12,04, ×5,25 au lieu de ×5,02. Les autres sont probablement justes. « Probablement » n'est pas
+> une mesure : ils repassent au banc avant d'être affirmés.
 
 <div align="center">
 
@@ -114,6 +131,82 @@ de ce mod pour être rétabli.
 
 ---
 
+## 🏮 La Lanterne de Veille
+
+<div align="center">
+
+<img src="docs/images/veilleuse.png" width="320" alt="La Lanterne de Veille">
+
+**Aucun monstre n'apparaît dans son chunk.**
+
+<img src="docs/images/veilleuse_top.png" width="110" alt="Le dessus"> &nbsp;&nbsp; <img src="docs/images/veilleuse_side.png" width="110" alt="Les faces">
+
+*Une cage d'acier noirci, trois fenêtres d'ambre, une flamme au cœur.*
+
+</div>
+
+Le mod s'appelle Lanterne et n'avait pas de lanterne. Voici la sienne — et c'est le **seul ajout de ce
+projet qui rend le serveur plus rapide** au lieu de le rendre plus riche.
+
+Elle n'éteint pas les monstres après coup : elle refuse la tentative **avant qu'elle ne commence**.
+
+```java
+public static void spawnCategoryForChunk(MobCategory c, ServerLevel level, LevelChunk chunk, …) {
+    BlockPos start = getRandomPosWithin(level, chunk);   // ← annulé avant ceci
+    if (start.getY() >= level.getMinY() + 1) {
+        spawnCategoryForPosition(…);                      // ← et avant ceci
+    }
+}
+```
+
+Le tirage de position, la carte des hauteurs, la recherche du joueur le plus proche, les règles de
+placement, et jusqu'à douze créatures qu'il aurait fallu créer puis faire vivre : **rien de cela n'a
+lieu**. Un chunk gardé ne coûte pas moins cher à l'apparition — il ne coûte rien du tout.
+
+| | |
+|---|---|
+| **Recette** | 4 lingots de fer · 4 verres · **1 pierre lumineuse** |
+| **Lumière** | Niveau 15 — un bloc qui repousse la nuit doit avoir l'air de le faire |
+| **Portée** | Son chunk, et lui seul — la même langue que l'Ancre |
+
+**Ce qu'elle ne touche pas :** les générateurs de créatures que le joueur a bâtis, les raids, les
+invocations, et les animaux. Ce sont des choses voulues ; les supprimer ne serait pas de
+l'optimisation, ce serait retirer le jeu.
+
+> L'Ancre garde son chunk **chargé**. La Lanterne le garde **calme**. Deux blocs, une seule règle à
+> retenir.
+
+---
+
+## 🧹 Le balai — et pourquoi il est éteint par défaut
+
+```
+/lanterne clear            → passage immédiat
+/lanterne clear on|off     → minuterie
+/lanterne clear status     → temps restant, total effacé
+```
+
+C'est le **seul module qui retire quelque chose au jeu**. Tout le reste de ce mod fait le même travail
+pour moins cher ; celui-ci supprime des entités. C'est un aveu, pas une optimisation — d'où
+l'interrupteur à `false`.
+
+Il existe parce qu'un administrateur qui en a besoin installera un mod de nettoyage de toute façon, et
+parce qu'**un nettoyeur se juge sur ce qu'il refuse d'effacer** :
+
+- tout ce qui **porte un nom** — une étiquette est une déclaration d'intention
+- tout ce qui est **apprivoisé, monté, attaché, ou persistant**
+- les **villageois** et les marchands ambulants
+- tout ce qui est à **moins de 16 blocs d'un joueur** — faire disparaître un butin sous les yeux de
+  celui qui vient de le faire tomber est la seule faute qu'un joueur ne pardonne pas
+
+Deux avertissements avant chaque passage : dix secondes, puis trois. Le premier laisse le temps de
+courir, le second celui de lâcher ce qu'on fait.
+
+> La **fusion des objets au sol** réduit d'ailleurs le besoin d'y recourir : soixante-quatre objets
+> devenus une pile n'ont plus besoin d'être effacés.
+
+---
+
 ## ⚙️ Configuration
 
 `config/lanterne-server.toml` — **une ligne par module, et chaque commentaire dit ce que le module a
@@ -123,8 +216,13 @@ rendu à la mesure.**
 [socle]
     #Collisions d'entites : presque rien ne peut bloquer quoi que ce soit.
     #canBeCollidedWith rend faux par defaut ; seuls le bateau, le shulker et le
-    #ghast apprivoise le redefinissent. 8000 objets au sol : x12,04.
+    #ghast apprivoise le redefinissent. 8000 objets au sol : x13,60.
     collisions = true
+
+    #Entonnoirs : seize objets par recherche de conteneur, au lieu d'un.
+    #La recharge suit le lot - seize objets coutent 8x16 ticks - donc le debit
+    #moyen est EXACTEMENT celui de vanilla. Ce n'est pas un ralentissement.
+    entonnoirs = true
 
     #Positions reutilisees pour les tirages de blocs.
     #Aucun effet sur le temps, et x3,01 SUR LA MEMOIRE ALLOUEE (4,08 Go -> 1,36 Go).
@@ -135,8 +233,12 @@ rendu à la mesure.**
     #4000 orbes : 63,21 ms -> 14,77 ms, soit x4,28.
     fusion_des_orbes = true
 
-    #L'Ancre de chunk garde charge le chunk ou elle est posee, et lui seul.
-    ancre_de_chunk = true
+    #La Lanterne de Veille : aucun monstre n'apparait dans son chunk.
+    lanterne_de_veille = true
+
+    [ajouts.balai]
+        #Le seul module qui RETIRE quelque chose au jeu. Eteint par defaut.
+        actif = false
 ```
 
 > **Un réglage dont on ne connaît pas le prix ne se règle pas : il se subit.**
@@ -216,8 +318,11 @@ dans le mot d'accueil du serveur, pas caché dans un fichier.
 Le mod mesure ses propres effets, et **refuse de conclure** quand il ne peut pas.
 
 ```bash
-LANTERNE_SELFTEST=1000:0:1 LANTERNE_SCENE=enclos    # élevage intensif
+LANTERNE_SELFTEST=1000:160:1 LANTERNE_SCENE=enclos  # élevage intensif — count:rayon:observateurs
 LANTERNE_SCENE=items|tnt|orbes|villageois|village|champ|lumiere|projectiles|redstone
+LANTERNE_SCENE=entonnoirs|recolte                   # transport d'objets, fusion au sol
+LANTERNE_MODULES=collisions                         # mesurer UN module seul
+LANTERNE_KITCHEN=1    # les fours cuisent-ils au tick près ? et le débit d'une chaîne
 LANTERNE_VOLLEY=1     # une flèche touche-t-elle encore ?
 LANTERNE_YIELD=1      # le rendement d'une ferme
 LANTERNE_SWARM=1      # débit de génération selon le parallélisme
@@ -225,7 +330,7 @@ LANTERNE_PROFILE_ALL=1        # profiler tous les fils, pas seulement le serveur
 LANTERNE_WATCH=<motif>        # qui appelle cette méthode ?
 ```
 
-### Six bancs qui mentaient, et comment on l'a su
+### Dix bancs qui mentaient, et comment on l'a su
 
 | Le banc disait | La vérité | Ce qui l'a révélé |
 |---|---|---|
@@ -235,10 +340,31 @@ LANTERNE_WATCH=<motif>        # qui appelle cette méthode ?
 | Fluides : **perte ×0,47** | Non mesurable | ×0,10 **sans le mod des deux côtés** |
 | Village : ×1,19 | ×1,90 | Les décors s'accumulaient depuis des mois |
 | Génération : ×15 | ×1,0 | Il relisait le disque au lieu de générer |
+| Entonnoirs : **débit ÷2** | Débit **exact** | 3 exécutions identiques : 18/30, 39/16, 16/16 |
+| Le monde entier : ~20 ms | ~10 ms | `random_tick_speed` resté à **256** depuis une autre charge |
+| Chaîne de 6 trémies : **288 944 objets** | 19 | Elle mesurait le chantier d'un autre banc |
+| Fusion au sol : ×1,08 | ×1,42 | Le nettoyage du décor semait 5 175 objets |
 
 **Le tir de contrôle** — lancer le banc avec le mod éteint **des deux côtés** — est devenu la
 première chose à faire devant un résultat surprenant. Sur les fluides, il a rendu ×0,10 alors que rien
 ne changeait : le banc mesurait la gigue de sa propre méthode.
+
+### Le défaut qu'aucun rapport ne montrait
+
+Les quatre derniers ont une famille commune : **ils ne se voyaient pas dans un résultat, mais dans un
+chiffre trop régulier.**
+
+`clearDecor` annonçait avoir effacé 58 081 blocs, puis 58 963 — identiques à un pour cent près, alors
+que douze mille cinq cents blocs de chantier auraient dû s'y ajouter. Un nettoyage qui ne voit pas ce
+qu'il devrait voir.
+
+La cause : l'altitude du chantier était gelée en lisant la carte des hauteurs **en (0,0)** — c'est-à-dire
+au milieu du chantier précédent, où elle répond l'altitude d'un coffre. Le sol montait donc de trois
+blocs à chaque exécution, le nettoyage passait **au-dessus** des ruines, et les charges s'empilaient.
+
+> C'est la même faute que la dalle de pierre qui montait de quatre blocs par reconstruction, revenue
+> ailleurs sous un autre visage. **Le sol se demande maintenant au générateur de terrain**, pas au
+> monde : une propriété du relief, que rien de ce qu'on bâtit dessus ne peut déplacer.
 
 ---
 
@@ -255,8 +381,25 @@ C'est la partie du projet dont il est le plus fier.
 | **Visibilité des explosions** | Coût quadratique | **0 déclenchement sur 3 019 explosions** |
 | **LOD client** | Sodium ne touche pas au tick | **Le tick produit l'état du rendu** — crash |
 | **Recherche d'eau** | 162 positions par appel | Décor résiduel — l'eau n'était jamais trouvée |
-| **Entonnoirs** | Ticker moins souvent | On aurait cassé les fermes, pas optimisé |
+| **Entonnoirs endormis** | Sept ticks sur huit ne font rien | Vrai, et sans valeur : ces sept ticks ne font qu'une décrémentation |
 | *…et cinq autres* | | |
+
+### Celui qui est revenu
+
+Le module des entonnoirs a été retiré une première fois sur un verdict sans appel — *« 47 objets sans
+le mod, 22 avec »*, le débit divisé par deux. **Ce chiffre venait d'un instrument que le projet avait
+lui-même déclaré non reproductible** : trois exécutions identiques rendaient 18/30, 39/16, puis 16/16.
+
+La cause tenait dans le correctif précédent. Casser une trémie n'efface pas son contenu, il le
+**relâche** — précisément là où la boucle suivante reposait les trémies, qui le ré-aspiraient.
+
+Réparé, l'instrument rend trois fois le même chiffre à l'objet près. Et la bonne réponse n'était pas
+d'endormir l'entonnoir mais de lui faire porter **seize objets par recherche de conteneur au lieu
+d'un**, en payant seize fois la recharge : débit moyen identique, travail divisé par seize.
+
+> Vanilla fait déjà cela pour un objet ramassé au sol — `addItem(Container, ItemEntity)` avale une
+> pile entière de 64 pour la même recharge de 8 ticks. La règle « un objet à la fois » n'est pas une
+> loi du jeu : c'est une particularité du transfert entre conteneurs, que vanilla lui-même enfreint.
 
 ### Les deux règles que ces échecs ont installées
 
@@ -303,6 +446,26 @@ qui est écrit.**
 
 C'est l'**instrument**, pas le résultat : un monde vanilla ne contient aucune machine de Create. Posé
 sur un serveur qui porte vraiment le modpack, il dira ce qu'il faut optimiser — et non l'inverse.
+
+```
+/lanterne palette
+```
+
+Compte, pour chaque section de terrain chargée, **combien de bits elle paie et combien il lui en
+faudrait**. Le jeu choisit ainsi :
+
+```java
+case 0          -> ZERO_BITS;           // une seule valeur : aucun stockage
+case 1, 2, 3, 4 -> FOUR_BITS_LINEAR;    // ← ici
+```
+
+Une section à **deux** états distincts — de la pierre et de l'air, le sous-sol ordinaire — aurait
+besoin d'**un** bit par bloc. Elle en reçoit quatre, sur 4 096 blocs. Le gaspillage va du simple au
+quadruple.
+
+Ce que l'outil ne décide pas : **combien** de sections sont dans ce cas. Si c'est un tiers du terrain,
+le gain se compte en dizaines de mégaoctets ; si c'est deux pour cent, l'idée se jette. C'est le
+chiffre qui tranchera, et le module n'est pas écrit avant.
 
 ---
 

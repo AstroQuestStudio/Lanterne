@@ -299,6 +299,38 @@ public final class Settings {
     private static boolean jam = true;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
     private static boolean sleep = true;
+    /**
+     * Le transfert par lots des entonnoirs : seize objets par recherche, et seize fois la recharge.
+     *
+     * <p>Ce module est la <b>seconde</b> tentative sur les entonnoirs. La première — les endormir
+     * pendant leur recharge — ne pouvait rien rapporter : les sept ticks qu'elle évitait ne faisaient
+     * qu'une décrémentation. Voir {@link Bulk} pour ce qui coûte réellement, et pourquoi sortir la
+     * recherche de conteneur de la boucle est la seule chose qui compte ici.
+     */
+    private static boolean bulk = true;
+    /**
+     * La fusion élargie des objets au sol.
+     *
+     * <p>Voir {@link Gather}. Vanilla cherche un demi-bloc à l'horizontale et <b>zéro</b> à la
+     * verticale, et seulement un tick sur quarante pour un objet posé — c'est-à-dire le plus rarement
+     * dans le cas où la fusion réussit le mieux.
+     */
+    private static boolean gather = true;
+    /**
+     * Le balai : un nettoyage périodique, éteint par défaut.
+     *
+     * <p>Seul module du mod qui <b>retire quelque chose au jeu</b>. Le socle fait le même travail pour
+     * moins cher ; le balai, lui, supprime des entités. Il est donc rangé parmi les ajouts et ne
+     * s'allume qu'à la demande expresse d'un administrateur. Voir {@link Broom}.
+     */
+    private static boolean broom;
+    /**
+     * La Lanterne de Veille : aucun monstre n'apparaît dans son chunk.
+     *
+     * <p>Seul ajout du mod qui rend le serveur <b>plus rapide</b> plutôt que plus riche. Voir
+     * {@link Watch} pour le chemin d'apparition qu'une garde épargne en entier.
+     */
+    private static boolean vigil = true;
     /** Le rationnement : réagir pendant le tick, et non au suivant. */
     private static boolean rationing = true;
     /**
@@ -545,6 +577,43 @@ public final class Settings {
         return master && sleep;
     }
 
+    public static boolean bulk() {
+        return master && bulk;
+    }
+
+    public static boolean gather() {
+        return master && gather;
+    }
+
+    /**
+     * La Lanterne ne dépend pas non plus de l'interrupteur général — pour la raison inverse du balai.
+     *
+     * <p>Le balai en est exclu parce qu'il fausserait les mesures. La Lanterne en est exclue parce
+     * qu'elle est un <b>bloc posé dans le monde</b> : l'éteindre en cours de partie ferait apparaître
+     * des monstres dans une base qui en était protégée, sans que rien ne l'annonce. Un interrupteur de
+     * banc ne doit pas pouvoir faire cela.
+     */
+    public static boolean vigil() {
+        return vigil;
+    }
+
+    /**
+     * Le balai ne dépend PAS de l'interrupteur général.
+     *
+     * <p>Tous les autres modules s'éteignent avec {@code master} parce que le banc a besoin de
+     * comparer « le mod » à « pas le mod ». Le balai n'a rien à faire dans cette comparaison : il ne
+     * rend pas le jeu plus rapide à travail égal, il enlève du travail. L'inclure fausserait chaque
+     * mesure du projet, et d'une manière particulièrement pernicieuse — en supprimant la charge même
+     * qu'on est en train de mesurer.
+     */
+    public static boolean broom() {
+        return broom;
+    }
+
+    public static void setBroom(boolean value) {
+        broom = value;
+    }
+
     public static boolean rationing() {
         return master && rationing;
     }
@@ -605,6 +674,8 @@ public final class Settings {
         explosions = wanted.contains("explosion") || wanted.contains("blast");
         jam = wanted.contains("jam");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
+        bulk = wanted.contains("bulk") || wanted.contains("lot") || wanted.contains("entonnoir");
+        gather = wanted.contains("gather") || wanted.contains("fusion") || wanted.contains("objets");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -636,6 +707,10 @@ public final class Settings {
         save = Config.SAVE.get();
         jam = Config.JAM.get();
         sleep = Config.SLEEP.get();
+        bulk = Config.BULK.get();
+        gather = Config.GATHER.get();
+        broom = Config.BROOM.get();
+        vigil = Config.VIGIL.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
         strictYield = Config.STRICT_YIELD.get();
@@ -678,6 +753,12 @@ public final class Settings {
         }
         if (sleep) {
             text.append("sommeil ");
+        }
+        if (bulk) {
+            text.append("entonnoirs ");
+        }
+        if (gather) {
+            text.append("fusion-objets ");
         }
         if (rationing) {
             text.append("ration ");

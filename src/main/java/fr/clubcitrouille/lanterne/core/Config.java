@@ -47,12 +47,21 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SAVE;
     public static final ModConfigSpec.BooleanValue JAM;
     public static final ModConfigSpec.BooleanValue SLEEP;
+    public static final ModConfigSpec.BooleanValue BULK;
     public static final ModConfigSpec.BooleanValue RATIONING;
     public static final ModConfigSpec.BooleanValue SCRATCH_POS;
     public static final ModConfigSpec.BooleanValue STRICT_YIELD;
 
+    public static final ModConfigSpec.BooleanValue GATHER;
+
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
+    public static final ModConfigSpec.BooleanValue VIGIL;
+    public static final ModConfigSpec.BooleanValue BROOM;
+    public static final ModConfigSpec.IntValue BROOM_PERIOD;
+    public static final ModConfigSpec.BooleanValue BROOM_ITEMS;
+    public static final ModConfigSpec.BooleanValue BROOM_MOBS;
+    public static final ModConfigSpec.BooleanValue BROOM_ARROWS;
 
     public static final ModConfigSpec SPEC;
 
@@ -113,6 +122,20 @@ public final class Config {
                 "Sommeil des blocs-entites dont l'echeance est connue : un four qui cuit sait",
                 "quand il aura fini, et n'a rien a faire d'ici la.")
                 .define("sommeil", true);
+        BULK = BUILDER.comment(
+                "Entonnoirs : seize objets par recherche de conteneur, au lieu d'un.",
+                "La recharge suit le lot - seize objets coutent 8x16 ticks - donc le debit moyen",
+                "est EXACTEMENT celui de vanilla. Ce n'est pas un ralentissement.",
+                "Vanilla fait deja cela pour un objet ramasse au sol : une pile entiere de 64",
+                "entre d'un coup, pour la meme recharge de 8 ticks.")
+                .define("entonnoirs", true);
+        GATHER = BUILDER.comment(
+                "Objets au sol : fusion sur 2 blocs a l'horizontale et 1 a la verticale,",
+                "contre 0,5 et ZERO en vanilla - deux objets empiles ne se rejoignent jamais.",
+                "Un objet pose cherche ses voisins tous les 10 ticks au lieu de 40.",
+                "Le plafond d'age de 6000 ticks est CONSERVE : sans lui, un tas mourant",
+                "redeviendrait eternel des qu'on lui jette un objet neuf a cote.")
+                .define("fusion_objets", true);
         RATIONING = BUILDER.comment("Rationnement : reagir pendant le tick, et non au suivant.")
                 .define("ration", true);
         SAVE = BUILDER.comment(
@@ -144,7 +167,49 @@ public final class Config {
                 "Il n'est jamais retire du registre : un bloc absent devient de l'air dans les",
                 "mondes ou il etait pose, et un reglage ne doit pas detruire une construction.")
                 .define("ancre_de_chunk", true);
+        VIGIL = BUILDER.comment(
+                "La Lanterne de Veille : aucun monstre n'apparait dans son chunk.",
+                "C'est le SEUL ajout qui rend le serveur plus rapide au lieu de plus riche :",
+                "la tentative d'apparition est refusee a l'entree, donc le tirage de position,",
+                "la carte des hauteurs, la recherche du joueur le plus proche et la creation de",
+                "la creature n'ont pas lieu. Un chunk garde ne coute pas moins : il ne coute rien.",
+                "Ne touche ni aux generateurs de creatures, ni aux raids, ni aux animaux.",
+                "Coupee, le bloc reste posable et eclaire - il ne garde simplement plus rien.")
+                .define("lanterne_de_veille", true);
 
+        BUILDER.comment(
+                "",
+                "LE BALAI - le seul module qui RETIRE quelque chose au jeu.",
+                "",
+                "Tout le reste de ce mod fait le meme travail pour moins cher. Le balai, lui,",
+                "supprime des entites : c'est un aveu d'echec, pas une optimisation, et c'est",
+                "pourquoi il est ETEINT par defaut.",
+                "",
+                "Il existe parce qu'un administrateur qui en a besoin installera un mod de",
+                "nettoyage de toute facon, et que celui-ci refuse d'effacer ce qui compte :",
+                "  - tout ce qui porte un nom (une etiquette est une declaration d'intention)",
+                "  - tout ce qui est apprivoise, monte, attache, ou persistant",
+                "  - les villageois et les marchands ambulants",
+                "  - tout ce qui est a moins de 16 blocs d'un joueur",
+                "",
+                "La fusion des objets au sol ci-dessus reduit deja le besoin d'y recourir :",
+                "soixante-quatre objets devenus une pile n'ont plus besoin d'etre effaces.")
+                .push("balai");
+
+        BROOM = BUILDER.comment("Allumer le nettoyage periodique.")
+                .define("actif", false);
+        BROOM_PERIOD = BUILDER.comment(
+                "Minutes entre deux passages. Les joueurs sont prevenus 10 s puis 3 s avant.")
+                .defineInRange("periode_minutes", 15, 1, 720);
+        BROOM_ITEMS = BUILDER.comment("Effacer les objets au sol.")
+                .define("objets_au_sol", true);
+        BROOM_MOBS = BUILDER.comment(
+                "Effacer les creatures hostiles. Les apprivoisees, nommees et montees sont gardees.")
+                .define("creatures_hostiles", false);
+        BROOM_ARROWS = BUILDER.comment("Effacer les projectiles plantes.")
+                .define("projectiles", true);
+
+        BUILDER.pop();
         BUILDER.pop();
         SPEC = BUILDER.build();
     }

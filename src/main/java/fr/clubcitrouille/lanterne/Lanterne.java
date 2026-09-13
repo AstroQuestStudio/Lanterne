@@ -112,6 +112,11 @@ public final class Lanterne {
     @SubscribeEvent
     public void onServerTickPost(ServerTickEvent.Post event) {
         TickBudget.endTick();
+        // Le balai bat au rythme du SERVEUR, pas des mondes : sur un serveur à trois dimensions, une
+        // minuterie par monde annoncerait trois nettoyages et en ferait trois, avec trois
+        // avertissements décalés. C'est la même faute que le recensement des cibles avait commise
+        // plus haut, et elle avait coûté six bancs à trouver.
+        fr.clubcitrouille.lanterne.core.Sweeper.tick(event.getServer());
         fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
         SelfTest.tick(event.getServer());
         Bench.endTick(event.getServer().overworld());

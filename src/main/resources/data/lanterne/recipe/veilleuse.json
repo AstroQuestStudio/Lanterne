@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "IGI",
+    "GLG",
+    "IGI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "G": "minecraft:glass",
+    "L": "minecraft:glowstone"
+  },
+  "result": {
+    "id": "lanterne:veilleuse",
+    "count": 1
+  }
+}
