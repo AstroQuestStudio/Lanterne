@@ -96,6 +96,9 @@ public final class SelfTest {
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
     private static boolean swarm;
 
+    /** Vrai si l.on éprouve qu.une flèche touche encore. */
+    private static boolean volley;
+
     /** Vrai si l'on éprouve le devenir des objets au sol. */
     private static boolean tidy;
 
@@ -125,6 +128,13 @@ public final class SelfTest {
             step = Step.SETTLING;
             waiting = SETTLE;
             Lanterne.LOG.info("Épreuve des objets au sol armée.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_VOLLEY"))) {
+            volley = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de tir armée.");
             return;
         }
         if ("1".equals(System.getenv("LANTERNE_SWARM"))) {
@@ -192,7 +202,7 @@ public final class SelfTest {
     public static void tick(MinecraftServer server) {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
-                    && !quarry && !tidy && !vault && !swarm)) {
+                    && !quarry && !tidy && !vault && !swarm && !volley)) {
             return;
         }
         if (!Conformance.running() && !Kitchen.running()
@@ -228,6 +238,16 @@ public final class SelfTest {
             } else if (step == Step.LOADING) {
                 Herd.sweepEntities(server.overworld());
                 fr.clubcitrouille.lanterne.lab.Tidy.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (volley) {
+            if (fr.clubcitrouille.lanterne.lab.Volley.running()) {
+                fr.clubcitrouille.lanterne.lab.Volley.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Volley.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

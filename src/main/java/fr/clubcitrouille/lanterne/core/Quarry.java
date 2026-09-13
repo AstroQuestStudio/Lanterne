@@ -104,9 +104,13 @@ public final class Quarry {
         return entity.isPickable() && entity.isAlive();
     }
 
-    /** Déclare une entité sélectionnable rencontrée pendant le tour des entités. */
+    /** Appels de recensement depuis le démarrage — la preuve que le mixin s.exécute. */
+    private static long noted;
+
+    /** Déclare une entité sélectionnable rencontrée pendant le tour des créatures. */
     public static void note(Entity entity) {
         gathering.add(entity.getBoundingBox());
+        noted++;
     }
 
     /** Clôt le recensement du tick et ouvre le suivant. */
@@ -157,6 +161,10 @@ public final class Quarry {
         return shortcuts;
     }
 
+    public static long noted() {
+        return noted;
+    }
+
     public static int targets() {
         return targets;
     }
@@ -167,5 +175,6 @@ public final class Quarry {
         surveyed = false;
         shortcuts = 0L;
         targets = 0;
+        noted = 0L;
     }
 }

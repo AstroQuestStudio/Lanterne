@@ -230,13 +230,34 @@ public final class Solid {
      * celles qui tickent : un bateau amarré dans un chunk endormi n'y figure pas, et il doit
      * continuer de bloquer ce qui passe à sa portée.
      */
-    public static void rotate(ServerLevel level) {
+    /**
+     * Bascule le recensement du tick — une fois par tick SERVEUR, et non par monde.
+     *
+     * <h2>Un recensement que le monde suivant effaçait</h2>
+     *
+     * <p>Cette méthode a longtemps été appelée depuis {@code LevelTickEvent.Pre}, qui se déclenche
+     * pour chacun des trois mondes. Le recensement de l.Overworld était donc écrasé par celui du
+     * Nether, puis par celui de l.End — tous deux vides sur un serveur ordinaire. La liste du tick
+     * était par conséquent presque toujours vide.
+     *
+     * <p>Le module a néanmoins toujours rendu la bonne réponse, et c.est le rattrapage périodique qui
+     * l.a sauvé : {@code dormant} balaie tous les mondes toutes les quarante ticks, et c.est lui que
+     * l.épreuve du bateau vérifiait sans qu.on le sache. Le défaut ne coûtait donc pas une collision —
+     * il rendait simplement inutile la moitié du mécanisme.
+     *
+     * <p>Il a été trouvé sur le module jumeau des projectiles, où il n.avait pas de filet : là, toutes
+     * les flèches traversaient tout, et l.épreuve de tir l.a pris en deux lignes.
+     */
+    public static void rotate() {
         List<AABB> previous = boxes;
         boxes = gathering;
         previous.clear();
         gathering = previous;
         surveyed = true;
+    }
 
+    /** Le rattrapage périodique, qui a besoin du monde et se fait donc par monde. */
+    public static void sweep(ServerLevel level) {
         // Une fois par tick et par monde : on relit le plus gros attroupement recensé pour savoir si
         // le raccourci vaut son prix. Voir « worthIt » — le même module gagne ×62 sur des entités
         // concentrées et perd 40 % sur des entités dispersées.

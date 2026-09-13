@@ -92,6 +92,13 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.Rationing.beginTick();
         Bench.beginTick();
         Census.resetCounters();
+        // Une fois par tick SERVEUR, et non par monde. LevelTickEvent.Pre se déclenche pour chacun
+        // des trois mondes ; basculer le recensement à chaque fois faisait écraser celui de
+        // l.Overworld par celui du Nether, puis par celui de l.End — tous deux vides. Le recensement
+        // était donc systématiquement nul, le raccourci toujours armé, et toutes les flèches
+        // traversaient tout. L.épreuve de tir l.a établi ; le compteur a nommé la cause.
+        fr.clubcitrouille.lanterne.core.Quarry.rotate();
+        fr.clubcitrouille.lanterne.core.Solid.rotate();
     }
 
     @SubscribeEvent
@@ -117,8 +124,7 @@ public final class Lanterne {
             // Clôt le recensement des bloquantes du tick précédent et ouvre celui du tick en cours.
             // L'ordre importe : les collisions du tick lisent la liste close, complète, et non une
             // liste en cours de remplissage qui serait vide au premier tiers du tour des entités.
-            fr.clubcitrouille.lanterne.core.Solid.rotate(level);
-            fr.clubcitrouille.lanterne.core.Quarry.rotate();
+            fr.clubcitrouille.lanterne.core.Solid.sweep(level);
         }
     }
 

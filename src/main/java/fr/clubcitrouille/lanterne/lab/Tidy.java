@@ -257,7 +257,8 @@ public final class Tidy {
         // Le recensement des bloquantes se clôt au tick suivant : on le force ici pour ne pas dépendre
         // du moment où cette vérification tombe dans le tick.
         fr.clubcitrouille.lanterne.core.Solid.note(boat);
-        fr.clubcitrouille.lanterne.core.Solid.rotate(level);
+        fr.clubcitrouille.lanterne.core.Solid.rotate();
+        fr.clubcitrouille.lanterne.core.Solid.sweep(level);
 
         boolean freeOnBoat = fr.clubcitrouille.lanterne.core.Solid.noneIn(boat.getBoundingBox());
         boolean freeFarAway = fr.clubcitrouille.lanterne.core.Solid.noneIn(
