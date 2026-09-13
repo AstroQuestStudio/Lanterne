@@ -281,6 +281,11 @@ public final class Bench {
         headless = true;
         stopAfter = server;
         listener = null;
+        // La scène est remise à neuf avant la première phase comme avant la seconde. Sans cela, la
+        // phase active héritait des ticks de décantation écoulés depuis la construction — vingt de
+        // plus que sa rivale — et traitait dix-huit pour cent d'explosions de plus. L'écart jouait
+        // contre le mod, mais un banc ne doit pas se tromper, même en sa défaveur.
+        fr.clubcitrouille.lanterne.lab.Scene.rearm(server.overworld());
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
         left = WARMUP;
@@ -555,11 +560,10 @@ public final class Bench {
         if (skew <= 1.25d) {
             say(String.format(Locale.ROOT,
                     "Explosions traitées · avec : %d · sans : %d (écart %.0f %%, les deux phases "
-                    + "sont comparables) · blocs désignés : %d · lancers de rayon évités : %d · "
+                    + "sont comparables) · blocs désignés : %d · "
                     + "relectures de palette évitées : %d",
                     withCount, withoutCount, (skew - 1d) * 100d,
                     fr.clubcitrouille.lanterne.core.Rubble.blocksTouched(),
-                    fr.clubcitrouille.lanterne.core.Rubble.raysSkipped(),
                     fr.clubcitrouille.lanterne.core.Rubble.lookupsSkipped()));
             return false;
         }

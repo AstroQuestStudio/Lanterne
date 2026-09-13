@@ -73,6 +73,57 @@ public final class Settings {
      * comme elle a décidé pour les deux précédents.
      */
     private static boolean explosions = true;
+
+    /**
+     * Le saut des balayages de blocs dans le vide, retiré après mesure — huitième plan démoli.
+     *
+     * <h2>Le poste le plus gros du serveur, et le remède qui ne s'arme jamais</h2>
+     *
+     * <p>Une fois le banc de dynamite réparé, son profil désignait sans ambiguïté le premier poste du
+     * serveur — et ce n'était ni l'explosion ni le réseau :
+     *
+     * <pre>
+     * 73,5 %  PrimedTnt.tick
+     * 51,4 %    Entity.move
+     * 35,6 %      BlockCollisions.computeNext
+     * 30,5 %        PalettedContainer.get
+     * </pre>
+     *
+     * <p>Le raisonnement semblait imparable. {@code BlockCollisions} balaie la boîte de l'entité
+     * élargie d'un bloc : trente-six états de bloc lus un par un, à chaque tick, pour chaque entité qui
+     * bouge. Or une section de seize cubes sait répondre en une comparaison d'entier qu'elle ne
+     * contient que de l'air, et l'air ne bloque rien. Une entité en vol devait donc être servie
+     * gratuitement.
+     *
+     * <p>Le compteur a tranché sans appel :
+     *
+     * <pre>
+     * Balayages de blocs évités : 690 sur 8 510 331   (0,008 %)
+     * 94,42 ms sans · 92,36 ms avec  → aucun effet mesurable
+     * </pre>
+     *
+     * <p>La cause est une ligne de {@code LevelChunk.getBlockState} que je n'avais pas lue :
+     *
+     * <pre>
+     * LevelChunkSection section = this.sections[index];
+     * if (!section.hasOnlyAir()) {
+     *     return section.getBlockState(x &amp; 15, y &amp; 15, z &amp; 15);
+     * }
+     * return Blocks.AIR.defaultBlockState();
+     * </pre>
+     *
+     * <p><b>Vanilla fait déjà ce test</b>, et il le fait mieux : position par position, là où le mien
+     * exigeait que <em>toutes</em> les sections touchées soient vides. Une section fait seize blocs de
+     * haut ; un sol et une entité qui vole dix blocs au-dessus y tiennent ensemble. Mon test échouait
+     * donc toujours, et les trente pour cent de {@code PalettedContainer.get} sont des lectures dans
+     * des sections réellement pleines — du travail que personne ne peut supprimer par cette voie.
+     *
+     * <p>Le module est retiré. Il laisse une leçon qui vaut mieux que lui : <b>avant d'ajouter un
+     * test, vérifier que le jeu ne le fait pas déjà</b>. C'est la troisième fois — après le doublon
+     * des explosions, absorbé par le cache de chunk, et l'allocation de la génération de terrain,
+     * supprimée par le compilateur.
+     */
+    private static final boolean AIRSKIP_REMOVED_AFTER_MEASUREMENT = true;
     /** Le court-circuit de bousculade pour les amas immobiles. */
     private static boolean jam = true;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */

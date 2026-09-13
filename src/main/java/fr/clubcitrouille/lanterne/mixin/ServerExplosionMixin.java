@@ -16,7 +16,6 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ExplosionDamageCalculator;
 import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.block.state.BlockState;
@@ -40,22 +39,6 @@ public abstract class ServerExplosionMixin {
     @Shadow @Final private Vec3 center;
     @Shadow @Final private float radius;
     @Shadow @Final private ExplosionDamageCalculator damageCalculator;
-
-    /**
-     * La visibilité, répondue sans lancer un seul rayon quand la réponse est certaine.
-     *
-     * <p>Le détail du raisonnement est dans {@link Rubble#clearBetween}. Ici, seule compte la
-     * garantie : si la ligne ne traverse que des sections vides, {@code getSeenPercent} aurait
-     * compté autant de succès que d'échantillons et rendu exactement un.
-     */
-    @WrapMethod(method = "getSeenPercent")
-    private static float lanterne$seenWithoutRaycasts(Vec3 center, Entity entity,
-            Operation<Float> original) {
-        if (Settings.explosions() && Rubble.clearBetween(entity.level(), center, entity)) {
-            return 1.0F;
-        }
-        return original.call(center, entity);
-    }
 
     /**
      * Le tracé des rayons, sans les vingt mille objets qu'il créait.
