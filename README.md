@@ -276,6 +276,13 @@ endormi cessait de disparaître : le sol s'accumulerait, et le gain deviendrait 
 | Disparition (durée de vie imposée 120 ticks) | 💚 **0 objet décalé sur 40**, écart maximal 0 tick |
 | Aspiration par une trémie | 💚 identique, avec et sans |
 | Ramassage par un joueur | ⚪ **non mesuré** — une doublure n'exécute pas son `aiStep` |
+| **Un bateau bloque-t-il encore ?** | 💚 raccourci **refusé** sur sa boîte, **autorisé** ailleurs |
+
+<sub>La dernière ligne teste le mécanisme le plus risqué du mod. `Solid` supprime les recherches de
+collision parce que trois classes seulement peuvent bloquer dans tout Minecraft — mais si c'était mal
+implémenté, le symptôme ne serait pas un ralentissement : ce serait **une créature qui traverse un
+bateau**. Aucune autre épreuve n'aurait pu le voir. Les deux réponses comptent autant l'une que
+l'autre : un mécanisme qui refuserait toujours serait sûr et inutile.</sub>
 
 <sub>La dernière ligne est affichée telle quelle plutôt que présentée comme réussie. Ce projet a déjà
 annoncé « exact au tick près » en comparant deux fours qui n'avaient cuit ni l'un ni l'autre.</sub>

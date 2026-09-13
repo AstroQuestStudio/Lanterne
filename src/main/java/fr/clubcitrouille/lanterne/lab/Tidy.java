@@ -219,9 +219,64 @@ public final class Tidy {
         step = Step.DONE;
         Settings.setEnabled(true);
         level.setBlockAndUpdate(hopperAt, Blocks.AIR.defaultBlockState());
+        assertBoatBlocks(level);
         report();
         if (host != null) {
             host.halt(false);
+        }
+    }
+
+    /**
+     * Le court-circuit de collision se désactive-t-il quand quelque chose peut vraiment bloquer ?
+     *
+     * <h2>Le mécanisme le plus risqué du mod, et le seul que rien ne vérifiait</h2>
+     *
+     * <p>{@code Solid} supprime les recherches de collision d'entités en s'appuyant sur un fait vérifié :
+     * {@code Entity.canBeCollidedWith()} rend faux par défaut, et trois classes seulement le
+     * redéfinissent dans tout Minecraft — le bateau, le shulker et le ghast apprivoisé.
+     *
+     * <p>Le raisonnement est juste. Mais s'il est <b>mal implémenté</b>, le symptôme n'est pas un
+     * ralentissement : c'est une créature qui traverse un bateau. Et aucune des épreuves de ce projet
+     * n'aurait pu le voir — la conformité mesure des chutes, le rendement des œufs, le banc du temps.
+     *
+     * <p>On interroge donc le mécanisme directement, sur le seul cas qui compte : un bateau posé dans le
+     * monde doit <b>interdire</b> le raccourci sur sa propre boîte, et le laisser possible ailleurs. Les
+     * deux réponses importent autant l'une que l'autre : un mécanisme qui refuse toujours serait sûr et
+     * inutile.
+     */
+    private static void assertBoatBlocks(ServerLevel level) {
+        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 40, 40);
+        var boat = net.minecraft.world.entity.EntityType.OAK_BOAT.create(
+                level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+        if (boat == null || !level.addFreshEntity(boat)) {
+            Lanterne.LOG.warn("[OBJETS] Bateau — NON MESURÉ : le bateau d'essai n'a pas pu être créé.");
+            return;
+        }
+        boat.snapTo(40.5d, y + 1d, 40.5d, 0f, 0f);
+
+        // Le recensement des bloquantes se clôt au tick suivant : on le force ici pour ne pas dépendre
+        // du moment où cette vérification tombe dans le tick.
+        fr.clubcitrouille.lanterne.core.Solid.note(boat);
+        fr.clubcitrouille.lanterne.core.Solid.rotate(level);
+
+        boolean freeOnBoat = fr.clubcitrouille.lanterne.core.Solid.noneIn(boat.getBoundingBox());
+        boolean freeFarAway = fr.clubcitrouille.lanterne.core.Solid.noneIn(
+                new net.minecraft.world.phys.AABB(400d, y, 400d, 402d, y + 2d, 402d));
+        boat.discard();
+
+        if (!freeOnBoat && freeFarAway) {
+            Lanterne.LOG.info("[OBJETS] Bateau — le raccourci de collision est bien refusé sur la boîte "
+                    + "du bateau, et autorisé ailleurs. Le mécanisme distingue les deux.");
+            return;
+        }
+        if (freeOnBoat) {
+            Lanterne.LOG.warn("[OBJETS] VERDICT : LE RACCOURCI DE COLLISION IGNORE UN BATEAU — les "
+                    + "créatures le traverseront. C'est le défaut le plus grave que ce module puisse "
+                    + "avoir, et il ne se verrait qu'en jeu.");
+        }
+        if (!freeFarAway) {
+            Lanterne.LOG.warn("[OBJETS] Le raccourci est refusé même loin de tout bloquant : sûr, mais "
+                    + "inutile — le module ne rapporte alors rien.");
         }
     }
 

@@ -355,3 +355,16 @@ perdu.
 
 C'est le chiffre le plus représentatif du mod — plus que le ×62 des objets seuls, qui décrit un cas
 extrême, et plus que le ×7,1 de l'anneau, qui décrit un cas facile.
+
+### Le mécanisme le plus risqué, enfin couvert
+
+`Solid` supprime les recherches de collision d'entités parce que trois classes seulement peuvent
+bloquer dans tout Minecraft. Le raisonnement est vérifié. Mais s'il était mal implémenté, le symptôme
+ne serait pas un ralentissement — ce serait **une créature qui traverse un bateau**, et aucune épreuve
+existante n'aurait pu le voir.
+
+L'épreuve des objets interroge donc le mécanisme directement : un bateau posé dans le monde doit
+interdire le raccourci sur sa propre boîte, et le laisser possible ailleurs.
+
+Les deux réponses sont correctes. Et les deux importent : un mécanisme qui refuserait toujours serait
+sûr et parfaitement inutile.
