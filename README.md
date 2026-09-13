@@ -179,6 +179,55 @@ l'optimisation, ce serait retirer le jeu.
 
 ---
 
+## 📡 La compression réseau — et le bloc qui ne cassait pas
+
+### Deflate niveau 1 au lieu de 6
+
+```java
+public CompressionEncoder(int threshold) {
+    this.deflater = new Deflater();     // niveau par défaut = -1, soit SIX
+}
+```
+
+Vanilla compresse **chaque paquet de chunk au niveau six**. Un joueur qui arrive avec 32 chunks de vue
+en reçoit 441 d'affilée. Sur un hébergement à un cœur, les fils réseau ne s'exécutent pas « à côté »
+du fil du serveur : ils lui disputent le même processeur.
+
+| 289 chunks, 12 passes alternées | Temps | Émis | Taux |
+|---|---:|---:|---:|
+| **Niveau 6** *(vanilla)* | 3 086,8 ms | 1,02 Mo | ÷5,40 |
+| **Niveau 1** *(Lanterne)* | **948,3 ms** | 1,23 Mo | ÷4,50 |
+
+**×3,26 plus rapide, pour +20 % d'octets.** Traduit en situation réelle : une arrivée de joueur coûte
+**121 ms de cœur au lieu de 393**.
+
+> **Pourquoi le niveau et non LZ4.** Remplacer l'algorithme aurait exigé une négociation à la poignée
+> de main, un repli, et aurait rendu le serveur **inaccessible à un client vanilla**. Le niveau ne
+> change *rien au format* : un flux zlib de niveau 1 se décompresse par n'importe quel `Inflater`.
+> C'est le seul module du mod qui ne demande rien à l'autre côté.
+
+### Le bloc qui ne casse pas quand le serveur est en retard
+
+Ce n'est ni le client, ni la latence, ni le matériel. C'est une divergence d'horloge :
+
+```java
+this.gameTicks++;                                    // une fois par tick SERVEUR
+int ticksSpentDestroying = this.gameTicks - this.destroyProgressStart;
+float destroyProgress = state.getDestroyProgress(…) * (ticksSpentDestroying + 1);
+if (destroyProgress >= 0.7F) { destroyAndAck(…); }
+```
+
+Le serveur mesure en **ticks serveur**. Le client mesure en **ses ticks**, qui tournent à 20 quoi
+qu'il arrive. À 15 TPS, le client accumule 20 unités là où le serveur en compte 15 — **25 % de moins**,
+souvent juste sous le seuil. Le bloc revient.
+
+**La correction compte le temps qui passe, pas les tours qu'on a faits.** Une unité toutes les 50 ms.
+
+> Ce n'est **pas** un assouplissement du seuil : les 0,7 restent, et la référence reste l'horloge du
+> serveur. On corrige une unité de mesure, pas une tolérance.
+
+---
+
 ## 🧭 Les repères — un carnet, et aucune téléportation
 
 ```
@@ -573,6 +622,10 @@ chiffre qui tranchera, et le module n'est pas écrit avant.
 
 | Piste | Verdict |
 |---|---|
+| **Palettes 1-2 bits en mémoire** | **Mesuré** : 5 834 sections, 11,94 Mo payés, 10,76 nécessaires. **1,17 Mo de gaspillage, soit 9,8 %** — et c'est le maximum théorique. L'instrument a évité le module. |
+| **Autosave étalée** | **Vanilla le fait déjà** : `saveChunksEagerly` sauve au plus **20 chunks par tick**, plafonné à 128 écritures en vol, soumis au budget de temps, à chaque tick. |
+| **Plafond d'apparition** | **Vanilla le teste déjà** avant tout tirage — `canSpawnForCategoryGlobal` filtre les catégories, `canSpawnForCategoryLocal` filtre les chunks. |
+| **Ciblage des monstres** | Même verrou aléatoire que `LookAtPlayerGoal` : 9 appels sur 10 sortent sur un tirage, et la cible joueur passe par la liste des joueurs, pas par une requête spatiale. |
 | **Remplacer Sodium** | Réécrire le pipeline de rendu — maillages, culling, tampons GPU, compatibilité Iris. Hors de portée, et le prétendre serait mentir. |
 | **Worldgen ×7** | Le coût est **étalé et intrinsèque** : `BlendedNoise.compute` fait jusqu'à 40 évaluations de Perlin 3D par point. Pas de gros poisson. |
 | **Sommeil généralisé aux mods** | On ne peut pas endormir ce dont on ne sait pas quand il doit se réveiller. Lire l'état coûte plus que le tick. |

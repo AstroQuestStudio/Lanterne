@@ -338,6 +338,20 @@ public final class Settings {
      * les bêtes décident d'errer, rien ne s'immobilise, donc rien d'autre ne peut se court-circuiter.
      */
     private static boolean pasture = true;
+    /**
+     * Le niveau de compression des paquets, ramené de six à un.
+     *
+     * <p>Voir {@link Wire}. Seul module du mod qui ne demande rien au client : le niveau est une
+     * décision de l'émetteur, pas une propriété du flux.
+     */
+    private static boolean wire = true;
+    /**
+     * Le minage compté à l'horloge réelle plutôt qu'en ticks serveur.
+     *
+     * <p>Voir {@code MiningMixin}. Corrige un défaut visible de vanilla : quand le serveur prend du
+     * retard, les blocs cessent de casser parce que les deux bouts ne comptent pas la même chose.
+     */
+    private static boolean mining = true;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -647,6 +661,21 @@ public final class Settings {
         return master && pasture;
     }
 
+    public static boolean wire() {
+        return master && wire;
+    }
+
+    /**
+     * Le minage ne dépend PAS de l'interrupteur général.
+     *
+     * <p>Ce n'est pas une optimisation mais une <b>correction de justesse</b> : elle ne rend rien plus
+     * rapide, elle fait que deux horloges mesurent la même chose. Un banc qui coupe tout doit continuer
+     * de la porter, sinon il mesurerait un jeu où les blocs ne cassent pas.
+     */
+    public static boolean mining() {
+        return mining;
+    }
+
     /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
@@ -750,6 +779,8 @@ public final class Settings {
         bulk = wanted.contains("bulk") || wanted.contains("lot") || wanted.contains("entonnoir");
         gather = wanted.contains("gather") || wanted.contains("fusion") || wanted.contains("objets");
         pasture = wanted.contains("pasture") || wanted.contains("enclos") || wanted.contains("errance");
+        wire = wanted.contains("wire") || wanted.contains("compression") || wanted.contains("paquet");
+        mining = !wanted.contains("nomining");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -786,6 +817,8 @@ public final class Settings {
         broom = Config.BROOM.get();
         vigil = Config.VIGIL.get();
         pasture = Config.PASTURE.get();
+        wire = Config.WIRE.get();
+        mining = Config.MINING.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -838,6 +871,9 @@ public final class Settings {
         }
         if (pasture) {
             text.append("enclos ");
+        }
+        if (wire) {
+            text.append("compression ");
         }
         if (rationing) {
             text.append("ration ");

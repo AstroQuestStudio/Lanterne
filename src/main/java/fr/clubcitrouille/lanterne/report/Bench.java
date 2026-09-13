@@ -293,6 +293,7 @@ public final class Bench {
         // davantage, mais parce qu'elle héritait d'un préambule de durée variable.
         fr.clubcitrouille.lanterne.core.Rubble.reset();
         fr.clubcitrouille.lanterne.core.Pasture.reset();
+        fr.clubcitrouille.lanterne.core.Wire.reset();
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
         left = WARMUP;
@@ -566,6 +567,12 @@ public final class Bench {
             say(String.format(Locale.ROOT,
                     "Objets au sol absorbés par fusion : %d entité(s) en moins",
                     fr.clubcitrouille.lanterne.core.Gather.merges()));
+        }
+
+        // La compression a lieu sur les fils de Netty, jamais sur celui du serveur : le rapport de
+        // durees ci-dessus ne la voit pas, et ne la verra jamais. On publie donc la chose elle-meme.
+        if (fr.clubcitrouille.lanterne.core.Wire.packets() > 0L) {
+            say("Compression reseau : " + fr.clubcitrouille.lanterne.core.Wire.describe());
         }
 
         if (fr.clubcitrouille.lanterne.core.Pasture.refused() > 0L) {

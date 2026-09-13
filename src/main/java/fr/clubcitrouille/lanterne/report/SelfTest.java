@@ -111,6 +111,12 @@ public final class SelfTest {
     /** Vrai si l'on éprouve le rendement d'une ferme. */
     private static boolean yield;
 
+    /** Vrai si l'on éprouve la compression des paquets de chunk. */
+    private static boolean zip;
+
+    /** Vrai si l'on relève la largeur des palettes de terrain. */
+    private static boolean palette;
+
     /**
      * À quelle distance du troupeau on plante l'observateur.
      *
@@ -136,6 +142,20 @@ public final class SelfTest {
     }
 
     public static void arm() {
+        if ("1".equals(System.getenv("LANTERNE_PALETTE"))) {
+            palette = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Relevé des palettes armé.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_ZIP"))) {
+            zip = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de compression armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_YIELD"))) {
             yield = true;
             step = Step.SETTLING;
@@ -229,7 +249,7 @@ public final class SelfTest {
     public static void tick(MinecraftServer server) {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
-                    && !quarry && !tidy && !vault && !swarm && !volley)) {
+                    && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette)) {
             return;
         }
         if (!Conformance.running() && !Kitchen.running()
@@ -239,6 +259,27 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Quarry.running()
                 && !fr.clubcitrouille.lanterne.lab.Tidy.running()
                 && !fr.clubcitrouille.lanterne.lab.Vault.running() && waiting-- > 0) {
+            return;
+        }
+
+        if (palette) {
+            if (step == Step.SETTLING) {
+                Weave.survey(server.overworld(), 0, 0,
+                        line -> Lanterne.LOG.info("[PALETTES] {}", line));
+                step = Step.LAUNCHED;
+                server.halt(false);
+            }
+            return;
+        }
+
+        if (zip) {
+            // Aucune doublure : cette épreuve compresse des octets, elle n'a besoin d'aucun joueur.
+            // Elle a seulement besoin de chunks chargés, et le monde en fournit dès le démarrage.
+            if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Zip.run(server);
+                step = Step.LAUNCHED;
+                server.halt(false);
+            }
             return;
         }
 

@@ -33,6 +33,8 @@
     "HopperBulkMixin",
     "ItemMergeMixin",
     "SpawnGuardMixin",
-    "StrollMixin"
+    "StrollMixin",
+    "CompressionMixin",
+    "MiningMixin"
   ]
 }

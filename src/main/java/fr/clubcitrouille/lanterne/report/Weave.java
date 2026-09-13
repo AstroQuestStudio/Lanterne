@@ -72,9 +72,23 @@ public final class Weave {
      * Parcourt les sections chargées et dit ce que la largeur des cases coûte.
      */
     public static void survey(CommandSourceStack source) {
-        ServerLevel level = source.getLevel();
         int centreX = SectionPos.blockToSectionCoord((int) source.getPosition().x);
         int centreZ = SectionPos.blockToSectionCoord((int) source.getPosition().z);
+        survey(source.getLevel(), centreX, centreZ,
+                line -> source.sendSuccess(() -> Component.literal(line), false));
+    }
+
+    /**
+     * Le relevé, sans personne aux commandes.
+     *
+     * <p>La première version n'existait qu'en commande, donc ne pouvait être lancée que par un joueur
+     * connecté — c'est-à-dire à la main, c'est-à-dire rarement. Elle n'a jamais été lancée une seule
+     * fois, et le module qu'elle devait trancher est resté en suspens pendant toute une session.
+     *
+     * <p>Un instrument qui demande un humain n'est pas un instrument : c'est une intention.
+     */
+    public static void survey(ServerLevel level, int centreX, int centreZ,
+                              java.util.function.Consumer<String> say) {
 
         // Index = nombre de bits réellement payés. Vanilla ne dépasse guère 8 hors palette globale.
         long[] sectionsAt = new long[33];
@@ -86,9 +100,9 @@ public final class Weave {
 
         for (int dx = -REACH; dx <= REACH; dx++) {
             for (int dz = -REACH; dz <= REACH; dz++) {
-                if (!level.hasChunk(centreX + dx, centreZ + dz)) {
-                    continue;
-                }
+                // On force le chargement : l'épreuve de compression a montré qu'un relevé lancé
+                // tôt après le démarrage ne trouve aucun chunk chargé, et conclut « rien à peser »
+                // sur un monde entier disponible à portée d'un appel.
                 LevelChunk chunk = level.getChunk(centreX + dx, centreZ + dz);
                 for (LevelChunkSection section : chunk.getSections()) {
                     if (section == null || section.hasOnlyAir()) {
@@ -116,8 +130,7 @@ public final class Weave {
         }
 
         if (sections == 0L) {
-            source.sendSuccess(() -> Component.literal(
-                    "Aucune section chargée à peser."), false);
+            say.accept("Aucune section chargée à peser.");
             return;
         }
 
@@ -125,14 +138,14 @@ public final class Weave {
         final long wantTotal = ideal;
         final long seen = sections;
         final long none = empty;
-        source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+        say.accept(String.format(Locale.ROOT,
                 "%d section(s) pesée(s), %d vide(s) ou à valeur unique (déjà gratuites).",
-                seen, none)), false);
-        source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+                seen, none));
+        say.accept(String.format(Locale.ROOT,
                 "Payé %.2f Mo · nécessaire %.2f Mo · gaspillé %.2f Mo, soit %.1f %%.",
                 paidTotal / 1048576d, wantTotal / 1048576d,
                 (paidTotal - wantTotal) / 1048576d,
-                (paidTotal - wantTotal) * 100d / Math.max(1L, paidTotal))), false);
+                (paidTotal - wantTotal) * 100d / Math.max(1L, paidTotal)));
 
         for (int bits = 1; bits < sectionsAt.length; bits++) {
             if (sectionsAt[bits] == 0L) {
@@ -141,9 +154,9 @@ public final class Weave {
             final int width = bits;
             final long howMany = sectionsAt[bits];
             final long wasted = wastedAt[bits];
-            source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+            say.accept(String.format(Locale.ROOT,
                     "  %2d bit(s) : %6d section(s), %7.2f Mo gaspillé(s)",
-                    width, howMany, wasted / 1048576d)), false);
+                    width, howMany, wasted / 1048576d));
         }
 
         Lanterne.LOG.info("[PALETTES] {} section(s) · payé {} o · nécessaire {} o · gaspillé {} o",

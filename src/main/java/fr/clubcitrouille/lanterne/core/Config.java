@@ -54,6 +54,8 @@ public final class Config {
 
     public static final ModConfigSpec.BooleanValue GATHER;
     public static final ModConfigSpec.BooleanValue PASTURE;
+    public static final ModConfigSpec.BooleanValue WIRE;
+    public static final ModConfigSpec.BooleanValue MINING;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -150,6 +152,26 @@ public final class Config {
                 "Jamais applique a ce qui porte un nom, est apprivoise, monte ou tenu en laisse,",
                 "ni a autre chose qu'un animal.")
                 .define("enclos", true);
+        WIRE = BUILDER.comment(
+                "Compression des paquets : niveau 1 au lieu de 6.",
+                "Vanilla compresse CHAQUE paquet de chunk au niveau six. Un joueur qui arrive avec",
+                "32 chunks de vue en recoit 441 d'affilee - sur un coeur unique, les fils reseau",
+                "disputent le processeur au fil du serveur, et ce gel se voit.",
+                "Le niveau ne change RIEN au format : un flux zlib de niveau 1 se decompresse par",
+                "n'importe quel Inflater. Aucune negociation, et un client vanilla ne voit rien.",
+                "Prix : des paquets 10 a 15 % plus gros, compresses 3 a 5 fois plus vite.",
+                "Pris en compte a la CONNEXION : changer ce reglage n'affecte que les suivantes.")
+                .define("compression_reseau", true);
+        MINING = BUILDER.comment(
+                "Minage compte a l'horloge reelle plutot qu'en ticks serveur.",
+                "CORRIGE UN DEFAUT VISIBLE DE VANILLA : quand le serveur prend du retard, les blocs",
+                "cessent de casser. Le serveur compte la progression en ticks SERVEUR, le client en",
+                "SES ticks, qui tournent a 20 quoi qu'il arrive. A 15 TPS, le client accumule 20",
+                "unites la ou le serveur en compte 15 : 25 % de moins, souvent juste sous le seuil",
+                "de 0,7 - et le bloc revient.",
+                "Ce n'est PAS un assouplissement du seuil : les 0,7 restent, et la reference reste",
+                "l'horloge du serveur. On corrige une unite de mesure, pas une tolerance.")
+                .define("minage_horloge_reelle", true);
         RATIONING = BUILDER.comment("Rationnement : reagir pendant le tick, et non au suivant.")
                 .define("ration", true);
         SAVE = BUILDER.comment(
