@@ -23,6 +23,23 @@ neoForge {
     runs {
         client {
             client()
+            // <h2>Ouvrir un monde sans qu'un humain ne clique</h2>
+            //
+            // Le banc d'images ne vaut que s'il est reproductible, et un protocole qui commence par
+            // « cliquer sur Jouer » ne l'est pas : il ne tournerait qu'à la main, c'est-à-dire
+            // rarement, c'est-à-dire jamais.
+            //
+            // « --quickPlaySingleplayer » est une option du jeu lui-même, prévue pour les lanceurs :
+            // elle ouvre directement un monde de « saves » et saute les menus. Le monde « banc » est
+            // une copie du monde du serveur de mesure, pour que les deux côtés observent le même
+            // terrain.
+            //
+            // Conditionnée à la variable d'environnement pour ne pas imposer ce monde à un lancement
+            // ordinaire du client pendant le développement.
+            if (System.getenv('LANTERNE_GLASS') == '1') {
+                programArgument '--quickPlaySingleplayer'
+                programArgument 'banc'
+            }
         }
         server {
             server()

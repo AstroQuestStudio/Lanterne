@@ -122,12 +122,27 @@ public final class Glass {
     /**
      * Images jetées après chaque bascule, avant de commencer à relever.
      *
-     * <p>Deux cents : la fourchette haute que le rapport de recherche indique pour laisser le
-     * premier maillage de chunks se terminer et le compilateur à la volée se fixer — le même ordre
-     * de grandeur que {@code Bench.WARMUP}, choisi pour la même raison, appliqué ici à des images et
-     * non à des ticks.
+     * <h2>Deux cents images ne chauffaient rien du tout</h2>
+     *
+     * <p>Cette valeur a été reprise de {@code Bench.WARMUP}, qui vaut deux cents <em>ticks</em>, soit
+     * dix secondes. Deux cents <em>images</em>, à quatre cents images par seconde, font une demi-seconde.
+     *
+     * <p>La première exécution l'a montré sans ambiguïté. Le mod n'ayant aucun crochet de rendu, les
+     * deux phases auraient dû être indiscernables ; le verdict a rendu <b>« perte ×0,87 »</b>, avec un
+     * centile le plus lent à <b>24,71 ms contre 4,17</b>. Ce ne sont pas des images lentes, ce sont des
+     * chunks qui se construisent encore, des textures qui montent sur la carte graphique, un
+     * compilateur qui n'a pas fini.
+     *
+     * <p>La phase suivante trouvait tout ce travail déjà fait. Le protocole avantageait donc
+     * systématiquement la seconde moitié — <b>exactement le défaut que {@code Bench} avait eu</b>, pour
+     * la même raison, et qu'on avait cru corriger en portant sa chauffe à deux cents ticks.
+     *
+     * <p>On chauffe désormais sur une <b>durée</b> et non sur un compte d'images : trente secondes,
+     * quel que soit le nombre d'images qu'elles contiennent. C'est la seule formulation qui ne dépende
+     * pas de la puissance de la machine — sur un ordinateur deux fois plus rapide, deux mille images ne
+     * chaufferaient pas davantage, mais trente secondes restent trente secondes.
      */
-    private static final int WARMUP_FRAMES = 200;
+    private static final long WARMUP_NANOS = 30_000_000_000L;
 
     /**
      * Images visées par phase de mesure.
@@ -189,6 +204,9 @@ public final class Glass {
     private static int countdown;
     private static long phaseOpened;
     private static int filled;
+    /** Les modules actifs, relevés PENDANT la phase active — voir le commentaire du verdict. */
+    private static String modulesDuringOn = "";
+
     private static int keptOn;
     private static int keptOff;
 
@@ -258,13 +276,13 @@ public final class Glass {
 
         switch (phase) {
             case WARM_ON -> {
-                if (--countdown <= 0) {
+                if (System.nanoTime() - phaseOpened > WARMUP_NANOS) {
                     beginMeasure(true);
                 }
             }
             case MEASURE_ON -> collect(true);
             case WARM_OFF -> {
-                if (--countdown <= 0) {
+                if (System.nanoTime() - phaseOpened > WARMUP_NANOS) {
                     beginMeasure(false);
                 }
             }
@@ -281,7 +299,7 @@ public final class Glass {
         Lanterne.LOG.info("[VITRE] Monde chargé, joueur présent — pose de la caméra, début de la "
                 + "chauffe (mod actif).");
         Settings.setEnabled(true);
-        countdown = WARMUP_FRAMES;
+        // La chauffe se mesure en temps, pas en images : voir WARMUP_NANOS.
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
     }
@@ -307,8 +325,8 @@ public final class Glass {
         filled = 0;
         phaseOpened = System.nanoTime();
         phase = on ? Phase.MEASURE_ON : Phase.MEASURE_OFF;
-        Lanterne.LOG.info("[VITRE] Chauffe terminée ({} images jetées) — mesure {} en cours.",
-                WARMUP_FRAMES, on ? "AVEC Lanterne" : "SANS Lanterne");
+        Lanterne.LOG.info("[VITRE] Chauffe terminée ({} s) — mesure {} en cours.",
+                WARMUP_NANOS / 1_000_000_000L, on ? "AVEC Lanterne" : "SANS Lanterne");
     }
 
     /**
@@ -337,8 +355,9 @@ public final class Glass {
             int kept = Math.min(filled, MEASURE_TARGET_FRAMES);
             if (on) {
                 keptOn = kept;
+                modulesDuringOn = Settings.describe();
                 Settings.setEnabled(false);
-                countdown = WARMUP_FRAMES;
+                // La chauffe se mesure en temps : voir WARMUP_NANOS.
                 phaseOpened = System.nanoTime();
                 phase = Phase.WARM_OFF;
                 Lanterne.LOG.info("[VITRE] Phase AVEC terminée ({} image(s) retenue(s)). Bascule — "
@@ -389,7 +408,10 @@ public final class Glass {
                     MEASURE_BUDGET_NANOS / 1_000_000_000L, MEASURE_TARGET_FRAMES);
         }
 
-        Lanterne.LOG.info("[VITRE] Modules actifs pendant la phase AVEC : {}", Settings.describe());
+        // Relevé pendant la phase active, jamais ici : le verdict s'écrit après la bascule, et
+        // « Settings.describe() » y décrirait le mod éteint. C'est le même défaut que Bench avait sur
+        // sa répartition de cadences — il annonçait « tout éteint » pour la phase où tout était allumé.
+        Lanterne.LOG.info("[VITRE] Modules actifs pendant la phase AVEC : {}", modulesDuringOn);
 
         if (medianOn > 0d && medianOff > 0d) {
             double ratio = medianOff / medianOn;

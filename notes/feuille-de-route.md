@@ -479,3 +479,49 @@ Observation donnée avec prudence : ajouter Lanterne à ce modpack fait remonter
 L'explication la plus probable est qu'Adaptive Performance Tweaks dégrade selon les TPS mesurés — en
 soulageant le serveur, Lanterne lui fait appliquer moins de dégradation. Effet d'interaction non isolé
 mod par mod, à ne pas lire comme une réparation.
+
+## Le client devient mesurable — le déblocage
+
+`Glass` était écrit depuis la nuit mais n'avait jamais tourné. Deux choses manquaient :
+
+1. **Un monde qui s'ouvre sans clic.** `--quickPlaySingleplayer banc` est une option du jeu lui-même,
+   prévue pour les lanceurs. Le monde `run/saves/banc` est une copie du monde du serveur de mesure,
+   pour que les deux côtés observent le même terrain. Conditionné à `LANTERNE_GLASS=1` dans
+   `build.gradle` pour ne pas l'imposer à un lancement ordinaire.
+2. **Une chauffe qui chauffe vraiment.** La valeur de départ — 200 images — avait été reprise de
+   `Bench.WARMUP`, qui vaut 200 *ticks*, soit dix secondes. 200 *images* à 400 images par seconde font
+   une demi-seconde.
+
+Le premier relevé l'a montré sans appel :
+
+| | médiane | 1 % le plus lent |
+|---|---:|---:|
+| phase 1 (avec) | 2,44 ms | **24,71 ms** |
+| phase 2 (sans) | 2,12 ms | **4,17 ms** |
+
+Verdict rendu : « perte ×0,87 ». Or **le mod n'a aucun crochet de rendu** — les deux phases auraient dû
+être indiscernables. Ces 24,7 ms ne sont pas des images lentes : ce sont des chunks qui se construisent
+encore, des textures qui montent sur la carte graphique, un compilateur qui n'a pas fini. La phase
+suivante trouvait tout ce travail déjà fait.
+
+**Exactement le défaut que `Bench` avait eu**, pour la même raison, et qu'on croyait avoir compris.
+
+La chauffe se mesure désormais en **temps** et non en images — trente secondes, quelle que soit la
+puissance de la machine. Résultat :
+
+| | médiane | 1 % le plus lent | images |
+|---|---:|---:|---:|
+| avec Lanterne | 2,53 ms | 5,28 ms | 2 694 |
+| sans Lanterne | 2,63 ms | 5,35 ms | 3 600 |
+
+**« Aucun effet mesurable »** — l'attendu exact. Le banc rend le bon résultat sur un cas dont on connaît
+la réponse : c'est ce qui permettra de le croire le jour où il annoncera un gain.
+
+### Ce que cela ouvre
+
+Sodium optimise le rendu des **blocs statiques** : compilation des maillages de chunk, culling,
+format de sommet. Il ne touche ni aux **entités**, ni aux **blocs-entités** (coffres animés, bannières,
+panneaux), ni aux **particules**.
+
+C'est précisément là que Lanterne peut être complémentaire plutôt que concurrent — et maintenant,
+mesurable.
