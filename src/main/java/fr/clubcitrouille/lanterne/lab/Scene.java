@@ -179,7 +179,19 @@ public final class Scene {
          * aléatoire relevée. C.est sa raison d.être : le classement qu.elle rend doit être celui d.un
          * serveur, pas celui d.un laboratoire.
          */
-        VILLAGE
+        VILLAGE,
+        /**
+         * Un tapis d.orbes d.expérience, jamais mesuré.
+         *
+         * <p>Une orbe fait, à chaque tick, deux appels à {@code noCollision} — le chemin que le module
+         * des collisions court-circuite déjà — plus une recherche du joueur le plus proche, et une fois
+         * sur vingt une recherche des orbes voisines pour fusionner avec elles.
+         *
+         * <p>Les fermes à expérience en produisent par milliers, et c.est une plainte courante. Le
+         * domaine n.avait jamais été éprouvé : cette charge dira s.il reste quelque chose à y prendre
+         * une fois les collisions traitées.
+         */
+        ORBS
     }
 
     /**
@@ -214,6 +226,7 @@ public final class Scene {
             case "arrows", "fleches", "flèches", "projectiles" -> Kind.ARROWS;
             case "farm", "champ", "agriculture", "ble", "blé" -> Kind.FARM;
             case "village", "reel", "réel", "serveur" -> Kind.VILLAGE;
+            case "orbs", "orbes", "xp", "experience" -> Kind.ORBS;
             default -> Kind.RING;
         };
     }
@@ -281,6 +294,24 @@ public final class Scene {
      * n'ont pas abattu la même quantité de travail.
      */
     public static void rearm(ServerLevel level) {
+        if (builtKind == Kind.ORBS) {
+            // Les orbes FUSIONNENT : la première phase en laisse deux fois moins que la seconde n.en
+            // recevrait, et le banc mesurerait deux charges différentes. C.est le cinquième banc de ce
+            // projet à rencontrer ce défaut, et le premier où il était prévisible.
+            java.util.List<net.minecraft.world.entity.Entity> spent = new java.util.ArrayList<>();
+            for (net.minecraft.world.entity.Entity old : level.getAllEntities()) {
+                if (old instanceof net.minecraft.world.entity.ExperienceOrb) {
+                    spent.add(old);
+                }
+            }
+            for (net.minecraft.world.entity.Entity old : spent) {
+                old.discard();
+            }
+            int born = orbs(level, builtCount);
+            Lanterne.LOG.info("[SCÈNE] remise à neuf : {} orbe(s) balayée(s), {} reposée(s).",
+                    spent.size(), born);
+            return;
+        }
         if (builtKind == Kind.FARM) {
             field(level, fieldSide * fieldSide);
             return;
@@ -542,6 +573,32 @@ public final class Scene {
         Lanterne.LOG.info("[SCÈNE] village : {} créature(s), {} objet(s) au sol, {} four(s) allumé(s), "
                 + "{} parcelle(s) cultivée(s) — et aucun réglage touché.",
                 souls, litter, lit, sown);
+        return born;
+    }
+
+    /**
+     * Un tapis d.orbes d.expérience, dispersées comme au pied d.une ferme.
+     *
+     * <p>Les orbes fusionnent entre elles quand elles se touchent : les poser toutes au même endroit
+     * les ferait disparaître en une poignée de ticks, et le banc mesurerait une charge qui fond
+     * pendant qu.il la mesure. Elles sont donc réparties, et le rapport dit combien survivent.
+     */
+    private static int orbs(ServerLevel level, int count) {
+        int side = Math.max(24, (int) Math.ceil(Math.sqrt(Math.max(1, count))) * 2);
+        int ground = ground(level) + 1;
+        Random dice = new Random(SEED);
+        int born = 0;
+        for (int i = 0; i < count; i++) {
+            double x = (dice.nextDouble() - 0.5d) * side;
+            double z = (dice.nextDouble() - 0.5d) * side;
+            var orb = new net.minecraft.world.entity.ExperienceOrb(
+                    level, x, ground, z, 1);
+            if (level.addFreshEntity(orb)) {
+                born++;
+            }
+        }
+        Lanterne.LOG.info("[SCÈNE] orbes : {} orbe(s) d.expérience sur un carré de {} blocs.",
+                born, side);
         return born;
     }
 
@@ -858,6 +915,7 @@ public final class Scene {
             case ARROWS -> volley(level, count);
             case FARM -> field(level, count);
             case VILLAGE -> village(level, count);
+            case ORBS -> orbs(level, count);
         };
     }
 

@@ -77,6 +77,9 @@ public final class Settings {
     /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
     private static boolean projectiles = true;
 
+    /** La fusion des orbes d.expérience, débridée. Voir Clump. */
+    private static boolean clump = true;
+
     /**
      * La forme d.entité construite à la demande, retirée après mesure — treizième plan démoli.
      *
@@ -441,6 +444,10 @@ public final class Settings {
 
     public static boolean projectiles() {
         return master && projectiles;
+    }
+
+    public static boolean clump() {
+        return master && clump;
     }
 
     public static boolean save() {

@@ -509,6 +509,12 @@ public final class Bench {
                 fr.clubcitrouille.lanterne.core.Solid.blockers(),
                 fr.clubcitrouille.lanterne.core.Produce.compensated()));
 
+        if (fr.clubcitrouille.lanterne.core.Clump.freed() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Fusions d.orbes autorisées que vanilla aurait refusées : %d",
+                    fr.clubcitrouille.lanterne.core.Clump.freed()));
+        }
+
         long hunted = fr.clubcitrouille.lanterne.core.Quarry.shortcuts();
         if (hunted > 0L || fr.clubcitrouille.lanterne.core.Quarry.targets() > 0) {
             say(String.format(Locale.ROOT,

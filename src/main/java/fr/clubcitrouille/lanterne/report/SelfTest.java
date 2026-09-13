@@ -69,6 +69,9 @@ public final class SelfTest {
     private static int observers = 1;
     /** Ce que la charge a réellement produit, retenu d.une étape à la suivante. */
     private static int born;
+
+    /** La charge bâtie, retenue pour que le contrôle sache si elle fusionne. */
+    private static fr.clubcitrouille.lanterne.lab.Scene.Kind builtScene;
     private static Step step = Step.OFF;
     private static int waiting;
 
@@ -384,11 +387,11 @@ public final class SelfTest {
                     int made = Herd.ovens(level, Integer.parseInt(ovens.trim()), 80);
                     Lanterne.LOG.info("Auto-test : {} four(s) allumé(s).", made);
                 }
-                var scene = fr.clubcitrouille.lanterne.lab.Scene.parse(
+                builtScene = fr.clubcitrouille.lanterne.lab.Scene.parse(
                         System.getenv("LANTERNE_SCENE"));
                 born = fr.clubcitrouille.lanterne.lab.Scene.build(
-                        level, scene, countWanted, radiusWanted);
-                Lanterne.LOG.info("Auto-test : charge « {} », {} entité(s) créée(s).", scene, born);
+                        level, builtScene, countWanted, radiusWanted);
+                Lanterne.LOG.info("Auto-test : charge « {} », {} entité(s) créée(s).", builtScene, born);
                 step = Step.POPULATING;
                 waiting = POPULATE;
             }
@@ -404,7 +407,17 @@ public final class SelfTest {
                 // coïncident pour un troupeau ou un tas d'objets ; ils diffèrent pour une charge qui
                 // ne crée aucune entité — la lumière bâtit une salle et fait battre des lampes. Lui
                 // réclamer deux mille entités faisait refuser la mesure pour une raison inexistante.
-                Bench.expect(born);
+                // Une charge qui FUSIONNE ne peut pas annoncer son compte d.avance. Les orbes
+                // d.expérience se joignent entre elles — c.est même tout l.intérêt du module qui les
+                // concerne — si bien que quatre mille orbes posées en sont mille neuf cents quarante
+                // secondes plus tard. Le contrôle préalable, qui vérifie qu.on a bien créé ce qu.on
+                // demandait, refusait alors la mesure en croyant à des chunks non chargés.
+                //
+                // Pour ces charges-là, l.attendu est ce qui vit après stabilisation. Le contrôle perd
+                // sa capacité à détecter une évaporation — mais il ne l.avait de toute façon pas ici,
+                // puisqu.il ne sait pas distinguer une orbe fusionnée d.une orbe perdue.
+                Bench.expect(builtScene == fr.clubcitrouille.lanterne.lab.Scene.Kind.ORBS
+                        ? Bench.livingCount(level) : born);
                 Bench.startHeadless(server);
                 step = Step.LAUNCHED;
             }
