@@ -440,3 +440,42 @@ avant d'être gardée, et suivie des épreuves de conformité :
 Sur quatre mille bêtes entassées, cent vingt-cinq décident encore à chaque tick : le troupeau grouille.
 Ce qui rend ces paliers défendables est `Produce` — sans lui, un facteur trente-deux aurait divisé par
 trente-deux la ponte d'une ferme à œufs.
+
+## Comparatif final à quatre configurations
+
+Le modpack de comparaison compte **vingt mods serveur** installés dans `run/mods` : Lithium,
+FerriteCore, ModernFix, ServerCore, Adaptive Performance Tweaks, AI-Improvements, Immersive
+Optimization, LetMeDespawn, Clumps, Get It Together Drops, Chunky, Cupboard, Almanac, Fast IP Ping et
+dépendances.
+
+Astuce de protocole : **une seule exécution du banc donne deux colonnes**, puisqu'il bascule le mod à
+mi-parcours. Deux exécutions — une sans les mods tiers, une avec — suffisent donc aux quatre chiffres.
+
+| Configuration | Serveur peuplé | Base habitée | Mém. allouée | Mém. retenue |
+|---|---:|---:|---:|---:|
+| Vanilla nu | 211,5 ms | 954,1 ms | 21,48 Go | 436,5 Mo |
+| Modpack (20 mods) | 32,9 ms | 26,4 ms | 4,23 Go | 410,3 Mo |
+| **Lanterne seul** | **36,6 ms** | **26,9 ms** | **2,55 Go** | **355,6 Mo** |
+| Modpack + Lanterne | 19,8 ms | 13,1 ms | 1,82 Go | 376,1 Mo |
+
+Trois conclusions :
+1. Sur la **base habitée**, un mod fait jeu égal avec vingt (26,9 contre 26,4 — sous le bruit).
+2. Sur le **serveur peuplé**, le modpack garde 11 % d'avance. Lithium contient à lui seul environ deux
+   cents optimisations ciblées que ce mod n'a pas.
+3. Sur la **mémoire**, Lanterne seul bat les vingt mods de 40 % en allocation et de 55 Mo en occupation.
+
+### Et la conformité du modpack, remesurée à vingt mods
+
+| Configuration | Chute en 25 ticks | Part de la vitesse vanilla |
+|---|---:|---:|
+| Vanilla | 20,3 blocs | 100 % |
+| Lanterne seul | 20,3 blocs | 100 % |
+| **Modpack (20 mods)** | **0,2 bloc** | **1 %** |
+
+Le chiffre était de 20 % avec dix-sept mods ; il tombe à **1 %** avec vingt. Une ferme à chute y
+produit cent fois moins.
+
+Observation donnée avec prudence : ajouter Lanterne à ce modpack fait remonter la chute à 2,1 blocs.
+L'explication la plus probable est qu'Adaptive Performance Tweaks dégrade selon les TPS mesurés — en
+soulageant le serveur, Lanterne lui fait appliquer moins de dégradation. Effet d'interaction non isolé
+mod par mod, à ne pas lire comme une réparation.

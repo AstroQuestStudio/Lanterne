@@ -7,216 +7,181 @@ mais à lui éviter le travail qui ne sert à rien.
 
 <div align="center">
 
-### Un seul mod fait jeu égal avec dix-sept — et les bat sur la mémoire, sans casser les fermes.
+### Un seul mod fait jeu égal avec vingt — et les bat de 40 % sur la mémoire, sans casser les fermes.
 
-**×42** sur une base habitée · **×62** sur un sol jonché · **×7,1** sur un serveur peuplé
+| | Vanilla | Modpack · 20 mods | **Lanterne seul** | **Les deux** |
+|---|---:|---:|---:|---:|
+| **Base habitée** | 954 ms | 26,4 ms | **26,9 ms** | **13,1 ms** |
+| **Serveur peuplé** | 211 ms | 32,9 ms | **36,6 ms** | **19,8 ms** |
+| **Mémoire allouée** | 21,5 Go | 4,2 Go | **2,6 Go** | **1,8 Go** |
 
-*Et le chiffre qui n'arrange pas : **×3,2 seulement à cinquante joueurs**, où les vingt ticks ne sont
-pas tenus. La raison est expliquée plus bas, pas cachée.*
+*Rendement d'une ferme : **100 %**, mesuré — ponte, croissance, reproduction.
+Aucun autre mod d'optimisation ne publie ce chiffre.*
 
-*Rendement d'une ferme : **100 %**, mesuré. Aucun autre mod d'optimisation ne publie ce chiffre.*
+*Et celui qui n'arrange pas : **×3,2 seulement à cinquante joueurs**, où les 20 TPS ne tiennent pas.
+La raison est expliquée, pas cachée.*
 
 </div>
-
 ---
 
 ## 📊 Résultats
 
-Monde pré-généré, un joueur, distance de simulation 10. Serveur dédié NeoForge
-26.1.2, Ryzen 7 5800H. Tous les chiffres sortent de `LANTERNE_SELFTEST` — **aucun n'a été saisi à la
-main**. Les chiffres du tableau ci-dessous sont la médiane de trois exécutions ; ceux du grand
-tableau plus bas datent d'une exécution unique et sont signalés comme tels.
+Serveur dédié NeoForge 26.1.2, Ryzen 7 5800H, monde pré-généré, distance de simulation 10. Tous les
+chiffres sortent de `LANTERNE_SELFTEST` — **aucun n'a été saisi à la main**, et chacun est
+reproductible par quiconque a le dépôt.
+
+Le modpack de comparaison réunit **vingt mods d'optimisation** : Lithium, FerriteCore, ModernFix,
+ServerCore, Adaptive Performance Tweaks, AI-Improvements, Immersive Optimization, LetMeDespawn,
+Clumps, Get It Together Drops, Chunky, Cupboard, Almanac, Fast IP Ping et leurs dépendances.
+
+### Le comparatif, sur deux charges qui ne se ressemblent pas
+
+<table>
+<tr><th></th><th colspan="2">Serveur peuplé<br><sub>10 500 entités réparties</sub></th><th colspan="2">Base habitée<br><sub>4 000 vaches en enclos + 4 000 objets</sub></th></tr>
+<tr><th>Configuration</th><th>ms/tick</th><th>vs vanilla</th><th>ms/tick</th><th>vs vanilla</th></tr>
+<tr><td>Vanilla nu</td><td align="right">211,5</td><td align="right">—</td><td align="right">954,1</td><td align="right">—</td></tr>
+<tr><td>Modpack (20 mods)</td><td align="right">32,9</td><td align="right">×6,4</td><td align="right">26,4</td><td align="right">×36</td></tr>
+<tr><td><b>Lanterne seul</b></td><td align="right"><b>36,6</b></td><td align="right"><b>×5,8</b></td><td align="right"><b>26,9</b></td><td align="right"><b>×35</b></td></tr>
+<tr><td><b>Modpack + Lanterne</b></td><td align="right"><b>19,8</b></td><td align="right"><b>×10,7</b></td><td align="right"><b>13,1</b></td><td align="right"><b>×73</b></td></tr>
+</table>
 
 ```mermaid
 xychart-beta
-    title "Temps de tick (ms) — au-delà de 50, le serveur décroche"
-    x-axis ["Vanilla nu", "Modpack 17 mods", "Lanterne seul", "Les deux"]
-    y-axis "Millisecondes par tick" 0 --> 200
-    bar [193.0, 23.8, 24.4, 11.4]
+    title "Base habitee : millisecondes par tick (moins c'est mieux)"
+    x-axis ["Vanilla", "Modpack 20 mods", "Lanterne seul", "Les deux"]
+    y-axis "ms par tick" 0 --> 960
+    bar [954.1, 26.4, 26.9, 13.1]
 ```
 
-| Configuration | ms/tick | vs vanilla | TPS | Mémoire allouée |
-|---|---:|---:|:---:|---:|
-| Vanilla nu | 193,0 | — | 🔴 **5** | 26,9 Go |
-| Modpack d'optimisation (17 mods) | 23,8 | ×8,1 | 🟢 20 | 3,7 Go |
-| **Lanterne seul** | **24,4** | **×7,9** | 🟢 **20** | **2,7 Go** |
-| Modpack + Lanterne | 11,4 | ×17,0 | 🟢 20 | **0,8 Go** |
+**Un mod fait jeu égal avec vingt.** Sur la base habitée — un élevage et un sol jonché, ce que tout
+serveur finit par avoir — Lanterne seul rend 26,9 ms là où vingt mods en rendent 26,4. L'écart est
+sous le bruit de fond.
 
-<sub>Modpack comparé : Lithium, FerriteCore, ModernFix, ServerCore, Adaptive Performance Tweaks,
-AI-Improvements, Immersive Optimization, LetMeDespawn, Clumps et dépendances.</sub>
+Sur le serveur peuplé, le modpack garde **11 % d'avance** (32,9 contre 36,6). C'est dit tel quel : il
+réunit vingt ans de travail cumulé, et Lithium à lui seul contient environ deux cents optimisations
+ciblées que ce mod n'a pas.
 
-### Quatre charges, et non une moyenne
+Et **les deux ensemble valent mieux que chacun** : ×10,7 et ×73. Ils ne font pas le même travail.
 
-Un chiffre unique cache l'essentiel : **ce qui met un serveur à genoux n'est jamais homogène.** Les
-entités réparties en anneau sont la charge la plus facile à mesurer et la moins représentative. Les
-autres reproduisent les plaintes réelles des administrateurs.
-
-La dernière ligne du tableau est la plus intéressante : c'est une **base habitée**, avec son élevage et
-son sol jonché en même temps. Sans le mod, un tick y dure deux tiers de seconde — le serveur tourne à
-1,5 TPS et le jeu est perdu. Avec, il tient ses vingt ticks avec de la marge.
+### Là où Lanterne prend nettement le dessus
 
 ```mermaid
 xychart-beta
-    title "Millisecondes par tick — échelle logarithmique impossible, lisez les chiffres"
-    x-axis ["10 500 entites", "1 000 vaches 15x15", "8 000 objets", "base habitee"]
-    y-axis "ms par tick" 0 --> 1150
-    bar [202.9, 28.4, 463.5, 1134.8]
-    bar [28.2, 5.4, 7.4, 26.9]
+    title "Charges ou le gradient de Lanterne change tout"
+    x-axis ["1 000 vaches 15x15", "8 000 objets au sol", "Base habitee"]
+    y-axis "Facteur de gain" 0 --> 70
+    bar [5.2, 62.4, 42]
 ```
 
-| Charge | Sans Lanterne | Avec Lanterne | Gain | Ce qu'elle reproduit |
-|---|---:|---:|---:|---|
-| 10 500 entités sur un anneau de 160 blocs | 202,9 ms | **28,2 ms** | **×7,1** | un serveur peuplé, gradient de distance |
-| 1 000 vaches dans un carré de 15 blocs | 28,4 ms | **5,4 ms** | **×5,2** | un élevage intensif, coût quadratique |
-| 8 000 piles d'objets au sol | 463,5 ms | **7,4 ms** | **×62,4** | une ferme qui déborde, un sol jonché |
-| **4 000 vaches en enclos + 4 000 objets** | **1 134,8 ms** | **26,9 ms** | **×42** | une base habitée : élevage *et* sol jonché |
+| Charge | Sans Lanterne | Avec | Gain |
+|---|---:|---:|---:|
+| 8 000 piles d'objets au sol | 463,5 ms | **7,4 ms** | **×62** |
+| Base habitée (4 000 + 4 000) | 1 134,8 ms | **26,9 ms** | **×42** |
+| 1 000 vaches dans 15 × 15 blocs | 28,4 ms | **5,4 ms** | **×5,2** |
 
-<sub>Les deux dernières ne sont pas des aberrations de mesure : sans le mod, un tick y dure **463** puis
-**661 ms**, et le
-chien de garde du serveur finit par le déclarer planté. Le détail de l'analyse est plus bas —
-`Entity.canBeCollidedWith()` rend faux par défaut, et trois classes seulement le redéfinissent dans
-tout Minecraft.</sub>
+<sub>Le ×62 n'est pas une aberration : sans le mod, un tick dure 463 ms et le chien de garde du
+serveur finit par le déclarer planté. Il vient d'un fait vérifié dans le code —
+`Entity.canBeCollidedWith()` rend **faux par défaut**, et trois classes seulement le redéfinissent
+dans tout Minecraft. Mille vaches font donc un million de tests d'intersection par tick pour obtenir
+mille listes vides.</sub>
 
-### Quel module fait quoi — et la surprise
+### Mémoire — le seul domaine où Lanterne bat le modpack sans discussion
 
-Chaque module a son interrupteur, ce qui permet de le mesurer **seul**. Sur la charge « base
-habitée » :
+```mermaid
+xychart-beta
+    title "Gigaoctets alloues en 25 secondes (moins c'est mieux)"
+    x-axis ["Vanilla", "Modpack 20 mods", "Lanterne seul", "Les deux"]
+    y-axis "Go alloues" 0 --> 22
+    bar [21.48, 4.23, 2.55, 1.82]
+```
 
-| Modules actifs | Travail évité | Gain |
+| Configuration | Mémoire **allouée** | Mémoire **retenue** après ramassage |
 |---|---:|---:|
-| `lod` seul — dégrader ce qui est **loin** | 🔴 **0,8 %** | aucun |
-| `lod` + `densite` — et ce qui est **entassé** | 💚 **93,3 %** | **×10,7** |
-| `collisions` seul — le court-circuit de `Solid` | — | **×2,34** |
-| tout ensemble | — | **×42** |
+| Vanilla nu | 21,48 Go | 436,5 Mo |
+| Modpack (20 mods) | 4,23 Go | 410,3 Mo |
+| **Lanterne seul** | **2,55 Go** | **355,6 Mo** |
+| Modpack + Lanterne | 1,82 Go | 376,1 Mo |
 
-**La première ligne est le résultat le plus dérangeant de ce projet.** La thèse d'origine — « dégrader
-ce qui est loin d'un joueur » — ne fait *rien* sur une base habitée. C'est normal, et il fallait le
-mesurer pour le voir : un élevage et un sol jonché sont **à vingt blocs du joueur**, dans la zone que
-le mod s'interdit de toucher.
+**Lanterne seul alloue 40 % de moins que vingt mods réunis**, et retient 55 Mo de moins.
 
-Ce qui porte le gain, là où les joueurs vivent réellement, c'est la **densité** : ce qui est noyé dans
-le nombre ne se distingue pas, qu'il soit loin ou sous vos yeux.
+Les deux colonnes ne disent pas la même chose, et les confondre est une erreur courante :
 
-> C'est aussi ce qui justifie le changement le plus important de la dernière passe : la dégradation
-> par densité est passée d'un facteur 4 à un facteur **16**. Elle ne pouvait pas monter tant que
-> ralentir une bête arrêtait sa ponte et sa croissance. Une fois les horloges de production tenues à
-> la main, elle l'a pu — et le gain sur l'élevage est passé de ×3,0 à ×5,2.
+- la **mémoire allouée** est le débit — combien d'octets le serveur réclame par seconde. C'est elle
+  qui commande la fréquence des ramassages, donc des à-coups. Sur un VPS à un cœur, un ramassage ne
+  s'exécute pas « en parallèle » : il **fige le serveur** ;
+- la **mémoire retenue** est ce qui reste occupé après un ramassage complet — que le banc provoque au
+  lieu de l'attendre. C'est la réponse à « combien de RAM faut-il donner à ce serveur ? ».
 
-### Dix joueurs — la charge que ce mod n'avait jamais mesurée
-
-Tous les chiffres ci-dessus portent sur **un** observateur. C'était une lacune : un serveur, par
-définition, en a plusieurs, et chacun apporte ses chunks, son suivi d'entités et son flux de paquets.
-
-| 10 joueurs, 11 441 entités, 1 881 chunks | ms/tick | TPS |
-|---|---:|:---:|
-| Sans Lanterne | 222,2 | 🔴 **4,5** |
-| **Avec Lanterne** | **44,8** | 🟢 **20** |
-
-**×5,0** (deux exécutions : ×4,73 et ×4,96). Sans le mod, ce serveur est injouable ; avec, il tient
-ses vingt ticks — de justesse, et c'est dit : 45 ms sur 50 disponibles, la marge est mince.
-
-Le réseau suit le même gradient : **560 paquets par tick sans le mod, 387 avec** (×1,45). C'est ce qui
-compte pour un joueur en mauvaise connexion, et ce que le serveur décide d'émettre est la seule part
-sur laquelle un mod puisse agir.
-
-<sub>Il a fallu trois tentatives pour obtenir cette mesure, et les deux premières ont été **refusées
-par le contrôle préalable** : 18 entités vivantes sur 10 500, puis 962. Dix doublures espacées de 500
-blocs réclament 6 250 chunks, que le gestionnaire de distance ne livre pas dans le temps imparti — les
-vaches naissaient dans des chunks inexistants. Sans ce refus, le banc aurait comparé deux mondes
-presque vides et annoncé « aucun effet » avec aplomb. Les joueurs sont désormais posés à 128 blocs les
-uns des autres, ce qui est aussi beaucoup plus proche de la réalité : sur un serveur entre amis, on
-est ensemble.</sub>
-
-### Et à cinquante joueurs — le chiffre qui n'arrange pas
+### Plusieurs joueurs — y compris le chiffre qui n'arrange pas
 
 ```mermaid
 xychart-beta
-    title "Le gain s'érode quand les joueurs se multiplient"
+    title "Le gain s'erode quand les joueurs se multiplient"
     x-axis ["1 joueur", "10 joueurs", "50 joueurs"]
     y-axis "Facteur de gain" 0 --> 8
     line [7.1, 5.0, 3.2]
 ```
 
-| 50 joueurs, 13 378 entités, 5 529 chunks | ms/tick | TPS |
-|---|---:|:---:|
-| Sans Lanterne | 283,9 | 🔴 **3,5** |
-| **Avec Lanterne** | **87,9** | 🟠 **11** |
+| Effectif | Sans Lanterne | Avec | Gain | TPS obtenu |
+|---|---:|---:|---:|:---:|
+| 1 joueur, 10 500 entités | 202,9 ms | **28,2 ms** | ×7,1 | 🟢 20 |
+| 10 joueurs, 11 441 entités | 222,2 ms | **44,8 ms** | ×5,0 | 🟢 20 |
+| **50 joueurs, 13 378 entités** | 283,9 ms | **87,9 ms** | **×3,2** | 🟠 **11** |
 
-**Lanterne ne suffit pas à cinquante joueurs sur cette charge.** Le gain est réel — ×3,2, et un
-serveur à 3,5 TPS devient un serveur à 11 — mais les vingt ticks par seconde ne sont pas tenus.
+**Lanterne ne suffit pas à cinquante joueurs sur cette charge.** Le gain reste réel — un serveur à
+3,5 TPS devient un serveur à 11 — mais les vingt ticks par seconde ne sont pas tenus.
 
-La raison est structurelle, et elle mérite d'être comprise plutôt que masquée : **ce mod dégrade ce
-qui est loin de tout joueur.** Plus il y a de joueurs, moins il existe d'endroits éloignés de tous, et
-moins il reste de travail à éviter. Le gain passe de ×7,1 à ×3,2 pour cette raison précise, pas parce
-que le mod fonctionne moins bien.
+La raison est structurelle et mérite d'être comprise plutôt que masquée : **ce mod dégrade ce qui est
+loin de tout joueur.** Plus il y a de joueurs, moins il existe d'endroits éloignés de tous, et moins
+il reste de travail à éviter.
 
-> C'est aussi pourquoi la cible assumée de ce mod est le **petit serveur** — une poignée d'amis, une
-> ou deux bases, un VPS à un ou deux cœurs. C'est là qu'il donne le meilleur, et c'est là qu'il a été
-> conçu.
+> C'est pourquoi la cible assumée est le **petit serveur** : une poignée d'amis, une ou deux bases, un
+> VPS à un ou deux cœurs. C'est là qu'il donne le meilleur, et c'est là qu'il a été conçu.
 
-### Mémoire occupée, et non seulement allouée
+Le réseau suit le même gradient : **560 paquets par tick sans le mod, 387 avec** (×1,45) — ce qui
+compte pour un joueur en mauvaise connexion.
 
-Le tableau ci-dessus mesure le **débit d'allocation** — combien d'octets le serveur demande par
-seconde. C'est lui qui commande la fréquence des ramassages, donc des à-coups.
+<sub>Il a fallu trois tentatives pour obtenir la mesure à dix joueurs, les deux premières ayant été
+**refusées par le contrôle préalable** : 18 entités vivantes sur 10 500, puis 962. Dix doublures
+espacées de 500 blocs réclament 6 250 chunks que le gestionnaire de distance ne livre pas dans le
+temps imparti. Sans ce refus, le banc aurait comparé deux mondes presque vides et annoncé « aucun
+effet » avec aplomb.</sub>
 
-Il ne dit rien de la question qu'un administrateur se pose vraiment : *combien de mémoire faut-il
-donner à ce serveur ?* La réponse est l'ensemble vivant, ce qui reste occupé **après un ramassage
-complet** — que le banc provoque au lieu de l'attendre.
+### Quel module fait quoi — et la surprise
 
-| Charge de référence | Occupation après ramassage |
-|---|---:|
-| Sans Lanterne | 446,7 Mo |
-| **Avec Lanterne** | **376,9 Mo** |
+Chaque optimisation a son interrupteur, ce qui permet de la mesurer **seule**. Sur la base habitée :
 
-**69,8 Mo de moins**, sur un serveur qui n'a rien déchargé. Le gain est modeste comparé au facteur
-sept sur les allocations — et le dire ainsi vaut mieux que de laisser confondre les deux chiffres.
+| Modules actifs | Travail évité | Gain |
+|---|---:|---:|
+| `lod` seul — dégrader ce qui est **loin** | 🔴 **0,8 %** | aucun |
+| `lod` + `densite` — et ce qui est **entassé** | 💚 **96,1 %** | **×10,7** |
+| `collisions` seul — le court-circuit de `Solid` | — | **×2,34** |
+| tout ensemble | — | **×42** |
 
-### Le gain monte avec la charge
+**La première ligne est le résultat le plus dérangeant du projet.** La thèse d'origine — « dégrader ce
+qui est loin d'un joueur » — ne fait *rien* sur une base habitée. C'est logique une fois mesuré : un
+élevage et un sol jonché sont **à vingt blocs du joueur**, dans la zone que le mod s'interdit de
+toucher.
 
-```mermaid
-xychart-beta
-    title "Facteur de gain selon le nombre d'entités"
-    x-axis ["4 000", "6 500", "7 600", "10 500"]
-    y-axis "Gain" 0 --> 9
-    line [3.4, 4.4, 5.3, 7.9]
-```
-
-C'est la propriété qu'on veut : **le mod s'efface quand le serveur va bien, et travaille d'autant
-plus qu'on en a besoin.** Profileur à l'appui — avec Lanterne, le serveur passe **48 % de son temps
-à dormir**, tick fini, en attente du suivant.
-
-### Mémoire — ce qui compte sur un petit serveur
-
-```mermaid
-xychart-beta
-    title "Mémoire allouée en 25 secondes (Go)"
-    x-axis ["Vanilla", "Modpack", "Lanterne", "Les deux"]
-    y-axis "Gigaoctets" 0 --> 28
-    bar [26.9, 3.7, 2.7, 0.8]
-```
-
-Sur un VPS à un cœur, la mémoire n'est pas un confort : un ramassage n'y tourne pas « en
-parallèle », il **fige le serveur**. Dix fois moins d'allocations, c'est dix fois moins d'à-coups.
+Ce qui porte le gain, là où les joueurs vivent réellement, c'est la **densité** : ce qui est noyé dans
+le nombre ne se distingue pas, qu'il soit loin ou sous vos yeux.
 
 ### Sauvegarde — le réglage à trois lettres que personne n'active
 
 Minecraft sait écrire ses fichiers de région en **LZ4** depuis longtemps. Il ne le fait pas :
-`region-file-compression` vaut `deflate` par défaut. Mesuré sur 64 chunks, 10 relevés par
-compression :
+`region-file-compression` vaut `deflate` par défaut.
 
-| Compression | Temps de sauvegarde | Place sur disque |
+| Compression | 64 chunks sauvegardés | Place sur disque |
 |---|---:|---:|
-| `deflate` (défaut) | 125,32 ms | 20,4 Ko/chunk |
-| **`lz4`** | **33,42 ms** | ~24 Ko/chunk |
+| `deflate` (défaut) | 125,3 ms | 20,4 Ko/chunk |
+| **`lz4`** | **33,4 ms** | ~24 Ko/chunk |
 
-**×3,7 sur la sauvegarde, sans une ligne de code**, pour environ 20 % de place en plus. Sur un petit
-serveur, la sauvegarde s'exécute sur le fil principal : chaque hoquet se voit.
+**×3,7 sans une ligne de code**, pour ~20 % de place en plus. La bascule est sans risque : la version
+de compression est inscrite dans l'en-tête de **chaque chunk**, donc un monde en `deflate` se relit
+sans rien convertir.
 
-Et la bascule est sans risque — la version de compression est inscrite dans l'en-tête de **chaque
-chunk**, donc un monde écrit en `deflate` se relit sans rien convertir.
-
-> Lanterne ne modifie pas votre `server.properties` : la configuration d'un serveur appartient à
-> celui qui l'administre. Il le **détecte au démarrage** et affiche le conseil avec son chiffre.
+> Lanterne ne modifie pas votre `server.properties` — la configuration d'un serveur appartient à celui
+> qui l'administre. Il le **détecte au démarrage** et affiche le conseil avec son chiffre.
 
 ### Génération de chunks — l'ordre de grandeur qui recadre le sujet
 
@@ -225,18 +190,12 @@ chunk**, donc un monde écrit en `deflate` se relit sans rien convertir.
 | **Générer** un chunk neuf | **37 ms** |
 | Relire un chunk déjà généré | **6,8 ms** |
 
-Générer un chunk coûte donc presque **un tick entier**, et cinq fois et demie ce que coûte le
-relire. C'est le vrai goulot de l'exploration, et Lanterne n'y touche **pas encore** — le dire est
-plus utile que de le laisser croire.
+Générer un chunk coûte presque **un tick entier**. Mais le profileur a tranché une question qu'on se
+posait mal : **le fil du serveur attend à 92 %** pendant ce temps. La génération s'exécute sur le pool
+de travail, et ces 37 ms sont une **latence d'exploration**, pas un coût de tick.
 
-<sub>Ce banc a fallu le réparer deux fois avant de le croire. Sa première version générait une région
-avec le mod et une autre sans, à des coordonnées éloignées — seule façon apparente de contourner le
-fait qu'un chunk généré ne se régénère pas. Verdict : « perte ×0,83 ». Sauf qu'une montagne coûte
-plus cher qu'une plaine, et rien dans ce chiffre ne disait laquelle on avait tirée. Il alterne
-désormais **à l'intérieur d'une seule grille** — un chunk avec le mod, le suivant sans — et rend
-« aucun effet mesurable », ce qui est très exactement l'attendu pour un mod qui ne touche pas à la
-génération. Son régime chargement annonçait auparavant un gain de ×30, impossible ; il est retombé à
-×0,89.</sub>
+Optimiser là améliorerait la vitesse d'exploration, pas les TPS. Lanterne n'y touche **pas** — et le
+dire est plus utile que de le laisser croire.
 
 ---
 
@@ -246,17 +205,29 @@ génération. Son régime chargement annonçait auparavant un gain de ×30, impo
 
 ### Chute libre — la mécanique de toutes les fermes à monstres
 
+Une créature en chute libre parcourt **20,3 blocs en 25 ticks**. C'est la mécanique sur laquelle
+repose toute ferme à monstres : on fait tomber d'assez haut pour tuer, et l'on ramasse en bas.
+
 | Configuration | 16 blocs | 40 blocs | 64 blocs |
 |---|:---:|:---:|:---:|
-| Vanilla (référence : 20,3 blocs en 25 ticks) | 💚 100 % | 💚 100 % | 💚 100 % |
-| **Modpack (17 mods)** | 🔴 **20 %** | 🔴 **20 %** | 🔴 **20 %** |
-| **Lanterne** | 💚 **100 %** | 💚 **100 %** | 💚 **93 %** |
+| Vanilla (référence) | 💚 100 % | 💚 100 % | 💚 100 % |
+| **Lanterne seul** | 💚 **100 %** | 💚 **100 %** | 💚 **93 %** |
+| **Modpack (20 mods)** | 🔴 **1 %** | 🔴 **1 %** | 🔴 **1 %** |
+| Modpack + Lanterne | 🟠 10 % | 🟠 10 % | 🟠 8 % |
 
-> ⚠️ **Le modpack réduit les chutes à un cinquième de leur vitesse**, y compris à seize blocs du
-> joueur. Une ferme à chute y produit cinq fois moins — et le joueur l'attribuera à autre chose.
+> ⚠️ **Le modpack réduit les chutes à un centième de leur vitesse** — 0,2 bloc au lieu de 20,3, y
+> compris à seize blocs du joueur. Une ferme à chute y produit **cent fois moins**, et le joueur
+> l'attribuera à autre chose : à la malchance, au spawn, à sa construction.
 
-Son ×8,1 est donc payé, en partie, avec du rendement de jeu. **Lanterne a fait la même erreur**, et
-l'épreuve l'a rattrapée : la correction lui a coûté sa première place au chronomètre.
+Ses excellents chiffres de vitesse sont donc payés, en partie, avec du rendement de jeu. Ce n'est pas
+un procès : **Lanterne a fait exactement la même erreur**, et c'est l'épreuve qui l'a rattrapée — la
+correction lui a coûté sa première place au chronomètre.
+
+<sub>La dernière ligne est une observation inattendue, donnée avec prudence : ajouter Lanterne à ce
+modpack fait remonter les chutes de 0,2 à 2,1 blocs. L'explication la plus probable est qu'Adaptive
+Performance Tweaks dégrade en fonction des TPS mesurés — en soulageant le serveur, Lanterne lui fait
+appliquer moins de dégradation. C'est un effet d'interaction, pas une réparation : il n'a pas été
+isolé mod par mod, et il ne doit pas être lu comme une garantie.</sub>
 
 ### Rendement — le défaut que ce mod s'est découvert à lui-même
 
