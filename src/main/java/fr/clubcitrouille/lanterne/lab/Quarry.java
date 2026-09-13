@@ -176,8 +176,8 @@ public final class Quarry {
     private static final int MEASURED = GRID_CHUNKS - WARMUP_CHUNKS;
 
     /** Origine (en coordonnées de chunk) de la région de génération, mod actif. */
-    private static final int GEN_ON_CX = 7500;
-    private static final int GEN_ON_CZ = 7500;
+    private static final int GEN_ON_CX = 12500;
+    private static final int GEN_ON_CZ = 12500;
     /** Origine de la région de génération témoin — DIFFÉRENTE, un chunk généré ne se régénère pas. */
     private static final int GEN_OFF_CX = 6250;
     private static final int GEN_OFF_CZ = -6250;
@@ -353,7 +353,25 @@ public final class Quarry {
      */
     private static void measurePairedChunk(ServerChunkCache chunkSource) {
         ChunkPos pos = chunkPosAt(GEN_ON_CX, GEN_ON_CZ, shot);
-        boolean active = (shot & 1) == 0;
+
+        // <h2>L'appariement avait son propre biais, et il fallait deux exécutions pour le voir</h2>
+        //
+        // La première version donnait les chunks pairs au mod et les impairs au témoin. Le verdict est
+        // tombé à « PERTE ×0,91 » — et le régime chargement, mesuré juste après sur un protocole
+        // séquentiel, à ×0,84. Or <b>aucun module de ce mod ne touche au chargement</b> : les deux
+        // pertes avaient donc une cause commune, et cette cause ne pouvait pas être le mod.
+        //
+        // C'était l'ordre. Dans une paire de chunks voisins, le premier paie ce que le second réutilise
+        // — structures partagées, caches de bruit, chemins de code que le compilateur vient tout juste
+        // de traiter. En donnant systématiquement le rang impair au témoin, on lui offrait un avantage
+        // à chaque paire.
+        //
+        // On inverse donc la parité à la moitié de la grille : le mod passe premier sur la première
+        // moitié, second sur la seconde. Le biais d'ordre existe toujours, mais il tombe autant d'un
+        // côté que de l'autre — ce qui est la seule façon de s'en débarrasser sans le comprendre
+        // entièrement.
+        boolean firstHalf = shot < GRID_CHUNKS / 2;
+        boolean active = ((shot & 1) == 0) == firstHalf;
         Settings.setEnabled(active);
 
         long start = System.nanoTime();

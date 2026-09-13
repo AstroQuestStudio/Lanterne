@@ -5,9 +5,13 @@ import java.util.Locale;
 /**
  * Les interrupteurs, et pourquoi ils sont le module le plus important du mod.
  *
- * <h2>Cinq plans démolis par la mesure</h2>
+ * <h2>Six plans démolis par la mesure</h2>
  *
  * <p>Ce mod a commencé par des idées séduisantes, défendables, et fausses.
+ *
+ * <p><b>Une allocation par bloc dans la génération de terrain.</b> Un objet jetable créé pour chacun
+ * des quatre-vingt-dix-huit mille blocs d'un chunk. Réel, corrigé ailleurs par C2ME, et sans effet
+ * ici : le compilateur à la volée l'avait déjà éliminée par analyse d'échappement.
  *
  * <p><b>Le doublon des explosions.</b> Le calcul d'une explosion demande deux fois le même
  * renseignement au monde, dix-sept mille fois par tir. Le doublon est réel, vérifié ligne par ligne
@@ -89,6 +93,36 @@ public final class Settings {
      * appartient à celui qui connaît ses mods. {@code LANTERNE_MODULES=…,strict}
      */
     private static boolean strictYield;
+
+    /**
+     * Le module de génération de terrain, retiré après mesure — sixième plan démoli par le banc.
+     *
+     * <h2>Une allocation par bloc, et le compilateur l'avait déjà supprimée</h2>
+     *
+     * <p>{@code Aquifer.NoiseBasedAquifer.computeSubstance} — appelée pour chacun des quatre-vingt-dix
+     * -huit mille blocs d'un chunk en génération — crée un {@code new MutableDouble(Double.NaN)} qui ne
+     * sert que de cache à une case pour les trois appels suivants. Objet jetable, jeté par bloc. C2ME
+     * corrige ce point dans son propre générateur.
+     *
+     * <p>Le remède tient en un champ d'instance réutilisé, à comportement rigoureusement identique. Il
+     * a été écrit, et son Javadoc portait déjà la réserve qui allait le condamner : <em>« le compilateur
+     * à la volée sait parfois supprimer complètement une allocation dont il démontre qu'elle ne quitte
+     * pas la méthode »</em>.
+     *
+     * <p>C'est ce qu'il fait. Trois exécutions du banc de génération apparié :
+     *
+     * <pre>
+     * 34,41 ms contre 34,70  → aucun effet mesurable
+     * 34,31 ms contre 35,74  → aucun effet mesurable
+     * </pre>
+     *
+     * <p>Le module est retiré. Ce qui reste de l'affaire vaut mieux que le module : le <b>banc</b> de
+     * génération, lui, a été réparé deux fois au passage — appariement des chunks dans une même grille,
+     * puis inversion de parité à mi-grille pour annuler le biais d'ordre. Il rend désormais le bon
+     * résultat, de façon reproductible, sur un cas dont on connaît la réponse. C'est ce qui permettra de
+     * croire le jour où il annoncera un gain.
+     */
+    private static final boolean TERRAIN_REMOVED_AFTER_MEASUREMENT = true;
 
     /**
      * Le module des explosions, retiré après mesure — cinquième plan démoli par le banc.
@@ -187,6 +221,7 @@ public final class Settings {
     public static boolean litter() {
         return master && litter;
     }
+
 
 
     /**
