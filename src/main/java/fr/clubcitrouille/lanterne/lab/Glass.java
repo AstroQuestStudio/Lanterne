@@ -291,11 +291,67 @@ public final class Glass {
         }
     }
 
+    /**
+     * Peuple le monde avant de mesurer.
+     *
+     * <h2>Un banc d.images qui mesurait un monde vide</h2>
+     *
+     * <p>La première exécution de ce banc a rendu une <b>perte</b> : 2,57 ms par image avec le mod
+     * contre 2,21 sans, soit x0,86. Le chiffre était juste et la conclusion qu.on en aurait tirée,
+     * fausse.
+     *
+     * <p>Le monde d.essai ne contient rien. Le mod n.y a donc <em>aucun travail à éviter</em>, et seul
+     * son propre coût apparaît — celui de ses recensements, de ses interrupteurs, de ses compteurs.
+     * Mesurer un mod d.optimisation sur une scène vide revient à peser l.outil sans peser ce qu.il
+     * soulève.
+     *
+     * <p>C.est le même défaut que celui du banc de dynamite, à l.envers : là-bas les deux phases ne
+     * subissaient pas la même charge, ici elles n.en subissent aucune.
+     *
+     * <p>On pose donc devant la caméra ce que le mod est fait pour traiter : un troupeau dense, tel
+     * qu.un joueur en rencontre dans une ferme. Le serveur intégré est atteint depuis le client parce
+     * qu.en solo ils partagent le processus — et cette classe ne vit que sur la distribution client,
+     * donc la référence est sans danger pour un serveur dédié.
+     */
+    private static void populate(Minecraft minecraft) {
+        var server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            Lanterne.LOG.warn("[VITRE] pas de serveur intégré — la scène restera vide, et le banc ne "
+                    + "mesurera que le coût du mod, jamais son gain.");
+            return;
+        }
+        var level = server.overworld();
+        server.execute(() -> {
+            int born = Scene.build(level, Scene.Kind.PEN, herdWanted(), 0);
+            Lanterne.LOG.info("[VITRE] scène posée devant la caméra : {} créature(s). Sans elle, le "
+                    + "banc pèse l.outil sans peser ce qu.il soulève.", born);
+        });
+    }
+
+    /** Rebâtit la scène à l.identique entre les deux phases. */
+    private static void repopulate() {
+        populate(Minecraft.getInstance());
+    }
+
+    /** Taille du troupeau posé devant la caméra. */
+    private static int herdWanted() {
+        String raw = System.getenv("LANTERNE_GLASS_HERD");
+        if (raw == null || raw.isBlank()) {
+            return 1000;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException malformed) {
+            return 1000;
+        }
+    }
+
     /** Attend que le monde soit chargé et le joueur présent, sans intervention humaine. */
     private static void waitForWorld(Minecraft minecraft) {
         if (minecraft.level == null || minecraft.player == null) {
             return;
         }
+        populate(minecraft);
         Lanterne.LOG.info("[VITRE] Monde chargé, joueur présent — pose de la caméra, début de la "
                 + "chauffe (mod actif).");
         Settings.setEnabled(true);
@@ -357,6 +413,15 @@ public final class Glass {
                 keptOn = kept;
                 modulesDuringOn = Settings.describe();
                 Settings.setEnabled(false);
+                // La scène est rebâtie entre les phases, et c'est indispensable ici : mille vaches
+                // lâchées ensemble se dispersent en une minute. La première phase voyait donc un
+                // troupeau serré devant la caméra, la seconde un troupeau étalé — c'est-à-dire deux
+                // quantités de rendu différentes, attribuées au mod.
+                //
+                // Pire : le mod RALENTIT les bêtes, donc il les garde groupées plus longtemps. Il se
+                // faisait facturer le rendu des créatures que son propre ralentissement empêchait de
+                // partir. C'est le quatrième banc de ce projet à souffrir du même défaut.
+                repopulate();
                 // La chauffe se mesure en temps : voir WARMUP_NANOS.
                 phaseOpened = System.nanoTime();
                 phase = Phase.WARM_OFF;
