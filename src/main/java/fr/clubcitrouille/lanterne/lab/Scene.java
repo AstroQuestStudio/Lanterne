@@ -993,6 +993,30 @@ public final class Scene {
      * le cas coûteux plutôt que le cas vide.
      */
     private static int volley(ServerLevel level, int count) {
+        // <h2>Une charge refusée deux fois pour des créatures qui n'étaient pas là au balayage</h2>
+        //
+        // Le contrôle préalable a refusé deux mesures d'affilée — 64 puis 81 créatures résiduelles —
+        // alors que le balayage général avait bien eu lieu. Les bêtes apparaissaient APRÈS lui :
+        // clearDecor remet l'apparition naturelle à sa valeur vanilla, et la fenêtre de peuplement
+        // dure assez longtemps pour qu'un monde s'y repeuple.
+        //
+        // Une charge qui exige un monde vide doit donc le tenir vide elle-même, et non compter sur
+        // un balayage fait avant elle. C'est la même règle que pour les entonnoirs et la récolte.
+        level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
+        java.util.List<net.minecraft.world.entity.Entity> strays = new java.util.ArrayList<>();
+        for (net.minecraft.world.entity.Entity soul : level.getAllEntities()) {
+            if (soul instanceof net.minecraft.world.entity.Mob) {
+                strays.add(soul);
+            }
+        }
+        for (net.minecraft.world.entity.Entity soul : strays) {
+            soul.discard();
+        }
+        if (!strays.isEmpty()) {
+            Lanterne.LOG.info("[SCÈNE] {} créature(s) balayée(s) avant la volée, et l'apparition "
+                    + "naturelle éteinte : cette charge exige un ciel vide.", strays.size());
+        }
+
         arrowsWanted = Math.max(16, count);
         arrowDice = new java.util.Random(SEED);
         arrowsFired = 0L;

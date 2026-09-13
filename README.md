@@ -32,12 +32,12 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 |---|---:|---:|:---:|:--:|
 | **8 000 objets au sol** | 494,83 ms | 36,37 ms | **×13,60** | ✅ |
 | **1 000 vaches dans 15×15** | 31,04 ms | **5,91 ms** | **×5,25** | ✅ |
-| **4 000 orbes d'expérience** | 63,21 ms | 14,77 ms | **×4,28** | ⏳ |
-| **Sauvegarde de 64 chunks** | 153,33 ms | 43,35 ms | **×3,54** | ⏳ |
-| **6 000 projectiles en vol** | 97,25 ms | 32,50 ms | **×2,99** | ⏳ |
-| **Serveur habité réaliste** | 33,46 ms | 17,65 ms | **×1,90** | ⏳ |
-| **6 000 TNT** | 64,75 ms | 39,47 ms | **×1,64** | ⏳ |
-| **600 villageois** | 56,30 ms | 38,43 ms | **×1,46** | ⏳ |
+| **4 000 orbes d'expérience** | 55,21 ms | **4,70 ms** | **×11,76** | ✅ |
+| **Sauvegarde de 64 chunks** | 114,59 ms | 38,37 ms | **×2,99** | ✅ |
+| **6 000 projectiles en vol** | 113,74 ms | 23,12 ms | **×4,92** | ✅ |
+| **Serveur habité réaliste** | 33,19 ms | 8,02 ms | **×4,14** | ✅ |
+| **6 000 TNT** | 72,46 ms | 49,64 ms | **×1,46** | ✅ |
+| **600 villageois** | 39,23 ms | 25,93 ms | **×1,51** | ✅ |
 | **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
 | **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
 | **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | **×1,05** | ✅ |
@@ -54,9 +54,12 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 > à l'autre, **toute mesure lancée après elle héritait d'un monde qui ticke 85 fois trop vite.**
 > Trois autres défauts du même genre ont été trouvés le même soir.
 >
-> Les deux chiffres revérifiés se sont révélés **meilleurs** que ce qui était publié — ×13,60 au lieu
-> de ×12,04, ×5,25 au lieu de ×5,02. Les autres sont probablement justes. « Probablement » n'est pas
-> une mesure : ils repassent au banc avant d'être affirmés.
+> **Ce que la reprise a donné.** Six charges sont repassées au banc. Cinq se sont révélées
+> **meilleures** que ce qui était publié — les orbes passent de ×4,28 à **×11,76**, les projectiles
+> de ×2,99 à **×4,92**, le serveur réaliste de ×1,90 à **×4,14**. Une s'est révélée **moins bonne** :
+> la TNT descend de ×1,64 à ×1,46, et c'est le chiffre affiché.
+>
+> Publier celui qui baisse est le seul moyen de rendre croyables ceux qui montent.
 
 <div align="center">
 
@@ -64,9 +67,10 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 
 | | Sans | Avec | |
 |---|---:|---:|:---:|
-| **Élevage intensif** | 2,05 Go | 277 Mo | **×7,58 moins** |
-| **Monde au repos** | 3,15 Go | 254 Mo | **×12,69 moins** |
-| **Serveur réaliste** | 4,05 Go | 978 Mo | **×4,24 moins** |
+| **4 000 orbes** | 7,64 Go | **440 Mo** | **×17,77 moins** |
+| **Élevage intensif** | 3,07 Go | 444 Mo | **×7,09 moins** |
+| **Serveur réaliste** | 2,61 Go | 840 Mo | **×3,18 moins** |
+| **600 villageois** | 4,88 Go | 2,93 Go | **×1,66 moins** |
 
 *Sur une machine à un cœur, un ramassage ne s'exécute pas « en parallèle » : **il fige le serveur**.
 Moins allouer, c'est ramasser moins souvent — le seul levier réel sur la mémoire.*
@@ -480,7 +484,28 @@ C'est la partie du projet dont il est le plus fier.
 | **Recherche d'eau** | 162 positions par appel | Décor résiduel — l'eau n'était jamais trouvée |
 | **Entonnoirs endormis** | Sept ticks sur huit ne font rien | Vrai, et sans valeur : ces sept ticks ne font qu'une décrémentation |
 | **Repos posé** | 15 % du profil part en gravité | Retiré **deux fois** — voir ci-dessous |
+| **Chute libre** | `Entity.move` = 52 % du profil TNT | **0 balayage évité sur 3 437 405** — granularité |
 | *…et cinq autres* | | |
+
+### Celui qui a été tranché en une exécution
+
+Le profil de 6 000 TNT désignait `Entity.move` à **52 % du tick** — et l'explosion elle-même à 1,5 %.
+Chaque TNT qui tombe lit huit états de bloc, en tire huit formes, les fusionne et résout axe par axe,
+pour découvrir qu'elle traverse de l'air.
+
+Or `LevelChunkSection.hasOnlyAir()` est un compteur déjà tenu à jour. Une boîte entièrement dans des
+sections vides ne peut heurter aucun bloc : la certitude coûtait deux lectures de champ.
+
+```
+0 balayage évité sur 3 437 405 examinés   →   taux 0,0 %
+```
+
+**La granularité du cache ne correspond pas à celle de la question.** `hasOnlyAir()` porte sur une
+section de seize blocs de côté ; la boîte d'une entité en fait un. Une TNT qui tombe près du sol est
+dans la même section que le sol. Le raccourci ne pouvait servir qu'à ce qui tombe en plein ciel.
+
+> Sans le compteur de taux, on aurait lu « ×1,61 contre ×1,76 » et conclu « c'est le bruit » — vrai,
+> et pour la mauvaise raison. **Le taux vaut zéro, et zéro multiplié par n'importe quoi vaut zéro.**
 
 ### Celui qui a été retiré deux fois
 

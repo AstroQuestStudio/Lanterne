@@ -346,6 +346,41 @@ public final class Settings {
      */
     private static boolean wire = true;
     /**
+     * La chute libre, retirée après mesure — quinzième plan démoli, et le plus vite tranché.
+     *
+     * <h2>Le raisonnement</h2>
+     *
+     * <p>Le profil de six mille TNT désignait {@code Entity.move} à <b>cinquante-deux pour cent</b> du
+     * tick, et l'explosion elle-même à un et demi. Chaque TNT qui tombe lit huit états de bloc, en
+     * tire huit formes, les fusionne et résout axe par axe — pour découvrir qu'elle traverse de l'air.
+     *
+     * <p>Or {@code LevelChunkSection.hasOnlyAir()} est un compteur déjà tenu à jour. Une boîte
+     * entièrement contenue dans des sections vides ne peut heurter aucun bloc : la certitude coûtait
+     * deux lectures de champ au lieu du balayage entier.
+     *
+     * <h2>Le verdict, en un seul chiffre</h2>
+     *
+     * <pre>
+     * 0 balayage évité sur 3 437 405 examinés   →   taux 0,0 %
+     * </pre>
+     *
+     * <h2>La faute, et elle est de conception</h2>
+     *
+     * <p><b>La granularité du cache ne correspond pas à celle de la question.</b>
+     * {@code hasOnlyAir()} porte sur une section de seize blocs de côté ; la boîte d'une entité en
+     * fait un. Une TNT qui tombe près du sol est dans la même section que le sol, donc la section
+     * n'est jamais vide. Le raccourci ne pouvait se déclencher que pour ce qui tombe en plein ciel,
+     * loin de tout — c'est-à-dire pour presque rien.
+     *
+     * <p>Le compteur de taux l'a dit en une exécution. Sans lui, on aurait lu « ×1,61 contre ×1,76 »
+     * et conclu « c'est le bruit » — vrai, et pour la mauvaise raison.
+     *
+     * <p>La règle des trois nombres — taux, épargne, appels — tenait sur deux d'entre eux :
+     * l'épargne était réelle et les appels nombreux. <b>Le taux vaut zéro, et zéro multiplié par
+     * n'importe quoi vaut zéro.</b>
+     */
+    private static final boolean FREEFALL_REMOVED_AFTER_MEASUREMENT = true;
+    /**
      * Le minage compté à l'horloge réelle plutôt qu'en ticks serveur.
      *
      * <p>Voir {@code MiningMixin}. Corrige un défaut visible de vanilla : quand le serveur prend du
@@ -664,6 +699,7 @@ public final class Settings {
     public static boolean wire() {
         return master && wire;
     }
+
 
     /**
      * Le minage ne dépend PAS de l'interrupteur général.
