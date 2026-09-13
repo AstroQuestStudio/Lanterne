@@ -59,6 +59,26 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * <p>L'eau, elle, attend toujours son banc : elle se <em>stabilise</em>, et au bout de quelques
  * secondes la seconde phase mesurerait une nappe au repos. Le remède est le même — reconstituer — et
  * il n'est pas encore écrit.
+ *
+ * <h2>Les décors s'accumulent, et cela fausse tout ce qui touche aux blocs</h2>
+ *
+ * <p>Le monde d'essai est <b>le même d'une exécution à l'autre</b>. Les entités sont balayées avant
+ * chaque charge — cela, l'auto-test le fait depuis longtemps. Les <b>blocs</b>, non.
+ *
+ * <p>Une dalle de pierre posée par la dynamite, une salle creusée par l'épreuve de lumière, un champ
+ * de quatre mille parcelles laissé par la charge agricole : tout cela subsiste et continue de ticker
+ * pendant les mesures suivantes.
+ *
+ * <p>Le cas s'est présenté et il a coûté un module. Une optimisation de la recherche d'eau des
+ * parcelles cultivées a été écrite, mesurée, et n'a rien rendu — son compteur annonçait
+ * <em>157,1 positions examinées sur 162</em>, c'est-à-dire que l'eau n'était presque jamais trouvée.
+ * La cause n'était pas le module : les deux cent cinquante mille recherches venaient à peu près
+ * toutes d'un champ <b>sans eau</b> laissé par une charge précédente, et non du champ irrigué que la
+ * charge en cours venait de bâtir.
+ *
+ * <p>{@link #clearDecor} efface donc le décor des charges précédentes avant d'en bâtir un nouveau.
+ * Sans quoi chaque charge mesure, en plus d'elle-même, les ruines de toutes celles qui l'ont
+ * précédée — et le rapport attribue au mod ce qui appartient à l'archéologie.
  */
 public final class Scene {
     /** Les charges disponibles. */
@@ -552,11 +572,14 @@ public final class Scene {
         // ce qui gonfle artificiellement son poids dans le profil ; et surtout la terre SE DESSÈCHE
         // pendant la mesure, donc la charge se dégrade en cours de route — le défaut même qui a
         // produit quatre verdicts faux sur la dynamite.
-        int mid = offset + side / 2;
+        // Des canaux tous les huit blocs, ce qui est exactement ce que fait un joueur : la portée
+        // d.irrigation est de quatre, donc huit est l.espacement qui couvre tout sans gâcher de place.
+        // La première version n.avait qu.un canal central, si bien que les parcelles des bords
+        // étaient hors de portée — un champ mal conçu, et non le champ d.un serveur.
         var water = net.minecraft.world.level.block.Blocks.WATER.defaultBlockState();
         for (int x = offset; x < offset + side; x++) {
             for (int z = offset; z < offset + side; z++) {
-                if (z == mid) {
+                if ((z - offset) % 8 == 4) {
                     cursor.set(x, top, z);
                     level.setBlock(cursor, water, 2);
                     continue;
@@ -771,7 +794,48 @@ public final class Scene {
         return Math.max(16, (int) Math.ceil(Math.sqrt(count)) * 2);
     }
 
+    /**
+     * Efface le décor des charges précédentes.
+     *
+     * <h2>Ce qu.on efface, et ce qu.on laisse</h2>
+     *
+     * <p>On remet en air tout ce qui se trouve au-dessus du niveau du sol dans la zone de travail des
+     * charges, et l.on rétablit le sol lui-même. C.est grossier — mais le monde d.essai n.a pas
+     * vocation à être beau, il a vocation à être <b>le même au début de chaque mesure</b>.
+     *
+     * <p>La salle souterraine de l.épreuve de lumière n.est pas rebouchée : elle est à quarante blocs
+     * sous le sol, hors de portée de toutes les autres charges, et la reboucher coûterait soixante-cinq
+     * mille poses de bloc à chaque démarrage.
+     */
+    private static void clearDecor(ServerLevel level) {
+        int top = ground(level);
+        var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        var grass = net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int reach = 120;
+        int cleared = 0;
+        for (int x = -reach; x <= reach; x++) {
+            for (int z = -reach; z <= reach; z++) {
+                for (int y = top + 1; y <= top + 10; y++) {
+                    cursor.set(x, y, z);
+                    if (!level.getBlockState(cursor).isAir() && level.setBlock(cursor, air, 2)) {
+                        cleared++;
+                    }
+                }
+                cursor.set(x, top, z);
+                if (!level.getBlockState(cursor).is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)) {
+                    level.setBlock(cursor, grass, 2);
+                    cleared++;
+                }
+            }
+        }
+        Lanterne.LOG.info("[SCÈNE] décor précédent effacé : {} bloc(s) remis à l.état initial sur un "
+                + "carré de {} blocs. Sans cela, chaque charge mesure les ruines des précédentes.",
+                cleared, reach * 2);
+    }
+
     public static int build(ServerLevel level, Kind kind, int count, int radius) {
+        clearDecor(level);
         builtKind = kind;
         builtCount = count;
         builtRadius = radius;

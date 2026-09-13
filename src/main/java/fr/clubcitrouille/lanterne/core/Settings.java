@@ -77,6 +77,7 @@ public final class Settings {
     /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
     private static boolean projectiles = true;
 
+
     /**
      * Le raccourci du tirage aléatoire, retiré après mesure — dixième plan démoli, et le plus
      * instructif.
