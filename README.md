@@ -17,8 +17,11 @@
 
 ### Chaque chiffre de ce document sort d'un banc automatique.
 
-**Aucun n'a été saisi à la main.** Treize modules ont été écrits puis **retirés** faute de gain prouvé,
-et **dix bancs** ont été réparés parce qu'ils mentaient. C'est cette moitié-là qui rend l'autre croyable.
+**Aucun n'a été saisi à la main.** **Seize modules** ont été écrits puis **retirés** après mesure, et
+**onze bancs** réparés parce qu'ils mentaient. C'est cette moitié-là qui rend l'autre croyable.
+
+*Et le défaut le plus grave de la version 2.0 n'a été trouvé par aucun banc : un joueur l'a vu en
+jouant.*
 
 </div>
 
@@ -42,11 +45,11 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
 | **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
 | **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | **×1,05** | ✅ |
-| **Client — temps par image** | 24,79 ms | 19,80 ms | **×1,25** | ⏳ |
+| **Client — temps par image** | — | — | **non mesurable** | ⚠️ |
 
 <div align="center">
 
-✅ **revérifié après la réparation de l'instrument** &nbsp;·&nbsp; ⏳ **mesuré avant, à reprendre**
+✅ **revérifié après la réparation de l'instrument** &nbsp;·&nbsp; ⚠️ **le banc se contredit, aucun chiffre publié**
 
 </div>
 
@@ -54,6 +57,15 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 > à 256 pour faire pousser son blé — et ne la remettait jamais. Le monde étant conservé d'une épreuve
 > à l'autre, **toute mesure lancée après elle héritait d'un monde qui ticke 85 fois trop vite.**
 > Trois autres défauts du même genre ont été trouvés le même soir.
+>
+> **Le client n'a pas de chiffre, et c'est voulu.** La reprise a rendu ceci : médiane 11,82 ms avec le
+> mod, 8,77 ms sans — soit une **perte** de ×0,74. Mais sur la même durée, la phase « avec » a rendu
+> **2019 images** contre **1797**, ce qui dit l'inverse.
+>
+> Les deux signaux se contredisent, et le banc signale lui-même qu'une phase s'est arrêtée à
+> l'échéance. Le ×1,25 qui figurait ici depuis des mois n'est donc pas confirmé — et le ×0,74 ne l'est
+> pas davantage. **Un banc qui se contredit ne publie rien.** Le côté client demande son propre
+> chantier : un banc d'images qui tienne.
 >
 > **Ce que la reprise a donné.** Six charges sont repassées au banc. Cinq se sont révélées
 > **meilleures** que ce qui était publié — les orbes passent de ×4,28 à **×11,76**, les projectiles
@@ -757,6 +769,25 @@ quadruple.
 Ce que l'outil ne décide pas : **combien** de sections sont dans ce cas. Si c'est un tiers du terrain,
 le gain se compte en dizaines de mégaoctets ; si c'est deux pour cent, l'idée se jette. C'est le
 chiffre qui tranchera, et le module n'est pas écrit avant.
+
+---
+
+## 🧾 Les deux règles d'instrument, et ce qu'elles ont coûté à apprendre
+
+Ce laboratoire a deux profileurs. **Les deux mentent sur les extrêmes, et pour des raisons
+symétriques.**
+
+| | Ce qu'il voit | Où il se trompe | Prix payé |
+|---|---|---|---|
+| **Temps** *(sommet de pile)* | Où est le processeur | Une méthode **courte et très appelée** monte haut sans porter le temps qu'on lui prête — le JIT l'inline et elle absorbe ses voisines | 3 modules |
+| **Allocations** *(JFR)* | Qui alloue | Il **échantillonne et extrapole** : un site qui alloue de **tout petits** objets **très souvent** est surévalué d'ordres de grandeur | 1 module, facteur **70** |
+
+Et un piège commun aux deux : **y poser un mixin retire l'inlinisation**. Le coût du point d'accroche
+peut dépasser celui du travail supprimé — la bordure du monde a coûté **4 ms** pour 3,9 millions de
+recherches économisées.
+
+> **Le correctif est le même dans les deux cas : multiplier le compte par la taille avant d'écrire
+> une ligne de code.** 2,4 M de tableaux × 16 octets = 39 Mo, pas 2 700.
 
 ---
 
