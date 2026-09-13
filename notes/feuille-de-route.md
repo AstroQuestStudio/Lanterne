@@ -170,7 +170,7 @@ Le laboratoire passe de 7 à 15 outils.
 
 | Sujet | État |
 |---|---|
-| Banc des fluides | construit, **ne mesure rien** : la nappe ne se propage pas dans le bassin |
+| Banc des fluides | **corrigé** : il manquait de forcer les chunks du bassin, sans quoi aucun tick de fluide n'y est exécuté. La conformité est fiable (113 blocs des deux côtés, stable) ; le verdict de vitesse est rejeté par le banc lui-même (×1,58 puis ×3,33) |
 | Banc des chunks, régime chargement | verdict **rejeté par le banc lui-même** (×30 impossible) |
 | Débit d'une chaîne de trémies | **non reproductible** : 18/30, 39/16, 16/16 |
 | Banc client `Glass` | écrit et câblé, **jamais exécuté** |

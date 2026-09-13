@@ -234,6 +234,34 @@ public final class Flow {
         poolFloorY = level.getHeight(
                 net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                 CENTER_X, CENTER_Z) + CLEARANCE;
+        // <h2>Un bassin où l'eau ne coulait pas</h2>
+        //
+        // La première exécution a rendu « blocs d'eau en fin de propagation : 1,0 » — la source, et rien
+        // d'autre. Au bout de cent ticks, dans un bassin vide de vingt-et-un blocs de côté.
+        //
+        // La cause n'est pas dans la construction du bassin, qui était correcte, mais dans un fait qu'on
+        // avait oublié de poser : <b>un chunk sans joueur à proximité n'est pas simulé</b>.
+        // {@code ServerLevel.tick} ne traite les ticks de fluide en attente que pour les chunks du rayon
+        // de simulation ; le bassin, à cinq cents blocs de tout, n'en faisait pas partie. La source
+        // était bien posée, son tick d'écoulement bien programmé, et personne ne l'exécutait jamais.
+        //
+        // L'épreuve des explosions n'a pas ce défaut parce qu'une explosion est <em>impérative</em> :
+        // on l'appelle, elle se produit. Un fluide, lui, attend son tour — et il faut donc s'assurer
+        // qu'il y a un tour.
+        //
+        // On force donc le chargement des chunks du chantier, exactement comme le fait la commande
+        // « /forceload » du jeu. C'est aussi ce que l'épreuve de sauvegarde avait dû faire, pour la
+        // même raison.
+        int chunkX = CENTER_X >> 4;
+        int chunkZ = CENTER_Z >> 4;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                level.setChunkForced(chunkX + dx, chunkZ + dz, true);
+            }
+        }
+        Lanterne.LOG.info("[FLOW] Neuf chunks forcés autour de ({}, {}) : sans cela, aucun tick de "
+                + "fluide n'y est exécuté et l'eau reste immobile.", chunkX, chunkZ);
+
         step = Step.RUN_ON;
         stage = Stage.BUILD_DRY;
         reading = 0;
@@ -457,10 +485,24 @@ public final class Flow {
         } else {
             double ratio = without / with;
             if (ratio > 1.05d) {
-                Lanterne.LOG.info(String.format(Locale.ROOT,
-                        "[FLOW] VERDICT DE VITESSE : gain ×%.2f (%.0f %% de temps de propagation en "
-                                + "moins).",
-                        ratio, (1d - with / without) * 100d));
+                // <h2>Un gain qu'il faut refuser de croire</h2>
+                //
+                // Aucun module de ce mod ne touche aux fluides. Un gain sur l'écoulement ne peut donc
+                // pas venir du mod : il vient de la méthode, qui soustrait deux grandes durées bruitées
+                // pour en tirer un petit signal.
+                //
+                // Deux exécutions consécutives du protocole corrigé l'ont confirmé : <b>×1,58 puis
+                // ×3,33</b>. Le même protocole, le même monde, un facteur deux d'écart. Pendant ce
+                // temps, le compte de blocs d'eau — la mesure de conformité — donnait 113 les deux fois.
+                //
+                // On publie donc ce que le banc sait mesurer, et l'on refuse ce qu'il ne sait pas.
+                Lanterne.LOG.warn(String.format(Locale.ROOT,
+                        "[FLOW] VERDICT DE VITESSE : REJETÉ (rapport ×%.2f). Aucun module de ce mod ne "
+                                + "touche aux fluides : un gain ne peut venir que du protocole, qui "
+                                + "soustrait deux fenêtres bruitées. Deux exécutions ont donné ×1,58 "
+                                + "puis ×3,33 — chiffre à ne pas citer. Seule la conformité ci-dessus "
+                                + "est fiable, et elle est stable.",
+                        ratio));
             } else if (ratio < 0.95d) {
                 Lanterne.LOG.info(String.format(Locale.ROOT,
                         "[FLOW] VERDICT DE VITESSE : PERTE ×%.2f — l'écoulement coûterait plus cher "
