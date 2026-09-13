@@ -504,9 +504,31 @@ public final class Flow {
                                 + "est fiable, et elle est stable.",
                         ratio));
             } else if (ratio < 0.95d) {
-                Lanterne.LOG.info(String.format(Locale.ROOT,
-                        "[FLOW] VERDICT DE VITESSE : PERTE ×%.2f — l'écoulement coûterait plus cher "
-                                + "mod actif.",
+                // <h2>Le rejet doit valoir dans les deux sens, et il ne le valait pas</h2>
+                //
+                // Ce banc refusait les gains — puisqu'aucun module ne touche aux fluides, un gain ne
+                // peut venir que du protocole — mais publiait les pertes. L'asymétrie n'avait aucune
+                // justification : le même argument vaut à l'identique dans l'autre sens.
+                //
+                // Un tir de contrôle l'a chiffrée. Mod DÉSACTIVÉ DES DEUX CÔTÉS, c'est-à-dire les deux
+                // moitiés mesurant rigoureusement la même chose :
+                //
+                //     sans : 371,2 µs   ·   avec : 3619,9 µs   →   « PERTE ×0,10 »
+                //
+                // Dix fois, sur deux moitiés identiques. Le banc précédent avait annoncé ×0,47 pour le
+                // mod : ce chiffre ne disait rien de lui, il mesurait la gigue de sa propre méthode.
+                //
+                // La cause est dans la méthode elle-même, et le Javadoc de classe la nommait déjà : on
+                // soustrait deux fenêtres de plusieurs millisecondes pour en tirer quelques centaines
+                // de microsecondes. Le signal cherché est cent fois plus petit que les grandeurs dont
+                // on le tire.
+                Lanterne.LOG.warn(String.format(Locale.ROOT,
+                        "[FLOW] VERDICT DE VITESSE : REJETÉ (rapport ×%.2f). Le rejet vaut dans les "
+                                + "deux sens : aucun module ne touche aux fluides, donc ni gain ni "
+                                + "perte ne peut venir du mod. Un tir de contrôle, mod éteint des deux "
+                                + "côtés, a rendu ×0,10 sur deux moitiés identiques — cette méthode "
+                                + "soustrait deux fenêtres de millisecondes pour en tirer des "
+                                + "microsecondes. Seule la conformité ci-dessus est fiable.",
                         ratio));
             } else {
                 Lanterne.LOG.info(
