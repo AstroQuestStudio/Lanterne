@@ -93,6 +93,33 @@ presque vides et annoncé « aucun effet » avec aplomb. Les joueurs sont désor
 uns des autres, ce qui est aussi beaucoup plus proche de la réalité : sur un serveur entre amis, on
 est ensemble.</sub>
 
+### Et à cinquante joueurs — le chiffre qui n'arrange pas
+
+```mermaid
+xychart-beta
+    title "Le gain s'érode quand les joueurs se multiplient"
+    x-axis ["1 joueur", "10 joueurs", "50 joueurs"]
+    y-axis "Facteur de gain" 0 --> 8
+    line [7.1, 5.0, 3.2]
+```
+
+| 50 joueurs, 13 378 entités, 5 529 chunks | ms/tick | TPS |
+|---|---:|:---:|
+| Sans Lanterne | 283,9 | 🔴 **3,5** |
+| **Avec Lanterne** | **87,9** | 🟠 **11** |
+
+**Lanterne ne suffit pas à cinquante joueurs sur cette charge.** Le gain est réel — ×3,2, et un
+serveur à 3,5 TPS devient un serveur à 11 — mais les vingt ticks par seconde ne sont pas tenus.
+
+La raison est structurelle, et elle mérite d'être comprise plutôt que masquée : **ce mod dégrade ce
+qui est loin de tout joueur.** Plus il y a de joueurs, moins il existe d'endroits éloignés de tous, et
+moins il reste de travail à éviter. Le gain passe de ×7,1 à ×3,2 pour cette raison précise, pas parce
+que le mod fonctionne moins bien.
+
+> C'est aussi pourquoi la cible assumée de ce mod est le **petit serveur** — une poignée d'amis, une
+> ou deux bases, un VPS à un ou deux cœurs. C'est là qu'il donne le meilleur, et c'est là qu'il a été
+> conçu.
+
 ### Mémoire occupée, et non seulement allouée
 
 Le tableau ci-dessus mesure le **débit d'allocation** — combien d'octets le serveur demande par

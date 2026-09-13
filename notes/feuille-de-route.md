@@ -294,3 +294,24 @@ absolue et annonçait « ×0,93 » — le mod émettant *plus* que le témoin. L
 s'était arrêtée à l'échéance au bout de 401 relevés quand la phase active en faisait 500. Le mod avait
 donc émis plus de paquets parce qu'il avait vécu plus de ticks, ce qui est exactement la preuve qu'il
 fonctionne, présentée comme un défaut. Rapporté par tick, le chiffre devient ×1,45.
+
+### Cinquante joueurs — le gain s'érode, et il faut le dire
+
+| Observateurs | Sans | Avec | Gain | TPS obtenu |
+|---|---:|---:|---:|:---:|
+| 1 | 202,9 ms | 28,2 ms | ×7,1 | 20 |
+| 10 | 222,2 ms | 44,8 ms | ×5,0 | 20 |
+| 50 | 283,9 ms | 87,9 ms | **×3,2** | **11** |
+
+**À cinquante joueurs, Lanterne ne tient pas les vingt ticks.** Le gain reste réel — un serveur à
+3,5 TPS devient un serveur à 11 — mais ce n'est pas jouable.
+
+La cause est structurelle : ce mod dégrade ce qui est **loin de tout joueur**. Plus il y a de joueurs,
+moins il existe d'endroits éloignés de tous, et moins il reste de travail à éviter. Ce n'est pas une
+défaillance du mod, c'est la limite de sa thèse — et elle se voit dès qu'on la mesure.
+
+Deux conséquences pour la suite :
+1. La cible assumée reste le **petit serveur**, ce qui était déjà le cahier des charges.
+2. Pour aller plus loin à fort effectif, il faudrait des optimisations qui ne dépendent pas de la
+   distance aux joueurs — c'est-à-dire du travail à la Lithium, système par système. `BlockCollisions`
+   (5,9 %) en est le premier candidat.
