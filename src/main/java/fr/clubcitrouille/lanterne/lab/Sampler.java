@@ -66,6 +66,10 @@ public final class Sampler {
      * et c'est ce que cette vue donne.
      */
     private static final Map<String, int[]> CALLERS = new HashMap<>();
+
+    /** Sommets de pile relevés sur les autres fils, et combien de fois chacun a été vu actif. */
+    private static final Map<String, int[]> ELSEWHERE = new HashMap<>();
+    private static final Map<String, int[]> ELSEWHERE_BUSY = new HashMap<>();
     /**
      * Motif de la méthode dont on veut connaître les appelants.
      *
@@ -159,6 +163,8 @@ public final class Sampler {
         TOPS.clear();
         FRAMES.clear();
         CALLERS.clear();
+        ELSEWHERE.clear();
+        ELSEWHERE_BUSY.clear();
         samples = 0;
         working = 0;
         running = true;
@@ -177,11 +183,75 @@ public final class Sampler {
         worker = null;
     }
 
+    /**
+     * Les autres threads du serveur, échantillonnés à part.
+     *
+     * <h2>Un profileur qui regardait un thread sur douze</h2>
+     *
+     * <p>Ce profileur n'a jamais observé que le thread du serveur. C'était le bon choix tant qu'on
+     * cherchait à faire baisser la durée d'un tick — mais cela rendait <b>invisible</b> tout ce que le
+     * jeu exécute ailleurs, et ce n'est pas peu :
+     *
+     * <ul>
+     *   <li>le <b>moteur de lumière</b>, qui tourne sur son propre fil et dont chaque bloc détruit
+     *       déclenche la propagation ;</li>
+     *   <li>la <b>génération de terrain</b>, répartie sur un bassin de tâches ;</li>
+     *   <li>la <b>sauvegarde</b> et la compression des régions.</li>
+     * </ul>
+     *
+     * <p>Le serveur attend ces travaux — un chunk n'est pas servi tant que sa lumière n'est pas
+     * calculée — mais il attend en dormant, et le profileur classait ce sommeil dans la marge. Trois
+     * domaines entiers, dont deux que ce projet s'est donné pour objectif d'optimiser, n'étaient
+     * mesurés par rien.
+     *
+     * <p>{@code LANTERNE_PROFILE_ALL=1} échantillonne donc tous les fils vivants et non plus un seul.
+     * Le relevé reste séparé : mélanger le thread du serveur et douze threads de travail dans un même
+     * pourcentage donnerait un chiffre que personne ne saurait lire.
+     */
+    private static boolean everyThread() {
+        return "1".equals(System.getenv("LANTERNE_PROFILE_ALL"));
+    }
+
+    /**
+     * Fils qu'on n'échantillonne pas, même en mode complet.
+     *
+     * <p>Le profileur lui-même, et les fils de la machine virtuelle qui dorment en permanence : les
+     * compter reviendrait à noyer les postes réels sous du sommeil.
+     */
+    private static boolean worthWatching(Thread candidate) {
+        if (candidate == worker || !candidate.isAlive()) {
+            return false;
+        }
+        String name = candidate.getName();
+        return !name.startsWith("lanterne-")
+                && !name.equals("Reference Handler")
+                && !name.equals("Finalizer")
+                && !name.equals("Signal Dispatcher")
+                && !name.equals("Notification Thread")
+                && !name.startsWith("Common-Cleaner")
+                && !name.startsWith("process reaper")
+                && !name.startsWith("JFR ")
+                && !name.startsWith("FileSystemWatch")
+                && !name.startsWith("Attach Listener");
+    }
+
     private static void loop(Thread target) {
+        boolean all = everyThread();
         while (running) {
             StackTraceElement[] stack = target.getStackTrace();
             if (stack.length > 0) {
                 record(stack);
+            }
+            if (all) {
+                // getAllStackTraces fige brièvement chaque fil. On l'appelle donc à la même cadence
+                // que le relevé principal et jamais plus souvent : c'est un profileur, il n'a pas le
+                // droit de devenir la cause de ce qu'il mesure.
+                for (var entry : Thread.getAllStackTraces().entrySet()) {
+                    Thread other = entry.getKey();
+                    if (other != target && worthWatching(other) && entry.getValue().length > 0) {
+                        recordElsewhere(other.getName(), entry.getValue());
+                    }
+                }
             }
             try {
                 Thread.sleep(PERIOD_MS);
@@ -294,6 +364,94 @@ public final class Sampler {
             Lanterne.LOG.info("[PROFIL] ── Qui appelle « {} » ──", watched);
             dump(CALLERS, 10);
         }
+
+        reportOtherThreads(limit);
+    }
+
+    /**
+     * Ce que font les autres fils pendant que le serveur travaille.
+     *
+     * <p>Séparé du relevé principal, et volontairement. Le thread du serveur décide de la durée d'un
+     * tick ; les autres décident de ce que le serveur <em>attend</em>. Ce sont deux grandeurs
+     * différentes, et les additionner dans un même pourcentage donnerait un nombre que personne ne
+     * saurait interpréter.
+     *
+     * <p>On affiche d'abord combien de relevés chaque fil a fournis — un fil qui dort n'a pas de
+     * problème de performance, et le dire évite de chercher une optimisation là où il n'y a rien à
+     * gagner.
+     */
+    private static synchronized void reportOtherThreads(int limit) {
+        if (ELSEWHERE.isEmpty()) {
+            return;
+        }
+        Lanterne.LOG.info("[PROFIL] ── Les autres fils (lumière, génération, sauvegarde) ──");
+
+        List<Map.Entry<String, int[]>> busiest = new ArrayList<>(ELSEWHERE_BUSY.entrySet());
+        busiest.sort(Comparator.comparingInt((Map.Entry<String, int[]> e) -> e.getValue()[0]).reversed());
+        for (int i = 0; i < Math.min(8, busiest.size()); i++) {
+            Map.Entry<String, int[]> row = busiest.get(i);
+            if (row.getValue()[0] * 100d / Math.max(1, samples) < 1d) {
+                break;
+            }
+            Lanterne.LOG.info(String.format(Locale.ROOT, "[PROFIL]  %5.1f %% actif  %s",
+                    row.getValue()[0] * 100d / Math.max(1, samples), row.getKey()));
+        }
+
+        int total = 0;
+        for (int[] tally : ELSEWHERE.values()) {
+            total += tally[0];
+        }
+        if (total == 0) {
+            return;
+        }
+        List<Map.Entry<String, int[]>> rows = new ArrayList<>(ELSEWHERE.entrySet());
+        rows.sort(Comparator.comparingInt((Map.Entry<String, int[]> e) -> e.getValue()[0]).reversed());
+        Lanterne.LOG.info("[PROFIL] ── Où ces fils passent leur temps ──");
+        for (int i = 0; i < Math.min(limit, rows.size()); i++) {
+            Map.Entry<String, int[]> row = rows.get(i);
+            double share = row.getValue()[0] * 100d / total;
+            if (share < 0.5d) {
+                break;
+            }
+            Lanterne.LOG.info(String.format(Locale.ROOT, "[PROFIL]  %5.1f %%  %s  (%d)",
+                    share, row.getKey(), row.getValue()[0]));
+        }
+    }
+
+    /**
+     * Relève un autre fil que celui du serveur.
+     *
+     * <p>Un fil de travail qui n'a rien à faire attend sur sa file. Ce sommeil-là est compté à part —
+     * comme l'attente du serveur l'est déjà — sans quoi douze fils oisifs noieraient le seul qui
+     * travaille.
+     */
+    private static synchronized void recordElsewhere(String threadName, StackTraceElement[] stack) {
+        if (parked(stack)) {
+            return;
+        }
+        count(ELSEWHERE_BUSY, threadName);
+        count(ELSEWHERE, label(stack[0]));
+    }
+
+    /** Le fil attend-il une tâche plutôt que d'en exécuter une ? */
+    private static boolean parked(StackTraceElement[] stack) {
+        int depth = Math.min(stack.length, 6);
+        for (int i = 0; i < depth; i++) {
+            String method = stack[i].getMethodName();
+            if (method.equals("park") || method.equals("parkNanos") || method.equals("wait")
+                    || method.equals("epollWait") || method.equals("poll0")
+                    || method.equals("await") || method.equals("sleep")
+                    // Attentes natives. Sans elles, un surveillant de fichiers de Windows bloqué
+                    // dans GetQueuedCompletionStatus0 occupait 95 % du relevé en ne faisant
+                    // rigoureusement rien, et masquait le moteur de lumière derrière lui.
+                    || method.equals("GetQueuedCompletionStatus0") || method.equals("accept0")
+                    || method.equals("select") || method.equals("poll")
+                    || method.equals("takeEvents")
+                    || method.equals("waitForReferencePendingList")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Choisit la méthode dont on veut les appelants. */
