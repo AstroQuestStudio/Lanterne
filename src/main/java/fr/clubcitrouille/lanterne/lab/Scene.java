@@ -114,7 +114,33 @@ public final class Scene {
          * les projectiles sont l.un des rares postes qui montent en flèche sans qu.aucun mod connu ne
          * s.en occupe.
          */
-        ARROWS
+        ARROWS,
+        /**
+         * Un champ de blé sur terre labourée, maintenu jeune pour qu.il pousse sans cesse.
+         *
+         * <p>Chaque tick aléatoire d.une culture appelle {@code CropBlock.getGrowthSpeed}, qui lit
+         * <b>treize blocs</b> autour d.elle et alloue autant de positions — et qui est appelé
+         * <em>avant</em> le tirage au sort de la croissance, donc vingt-quatre fois sur vingt-cinq
+         * pour rien.
+         *
+         * <p>C.est le pendant végétal du four : beaucoup de calculs pour une réponse qui ne change
+         * presque jamais. Un champ ne se relaboure pas tout seul, et l.hydratation d.une parcelle ne
+         * varie qu.au rythme de la pluie.
+         *
+         * <h2>La limite de cette charge, dite avant son premier chiffre</h2>
+         *
+         * <p>Elle porte {@code randomTickSpeed} à 256 au lieu de 3, sans quoi un banc de vingt-cinq
+         * secondes ne verrait qu.une poignée de ticks de culture. Les deux phases subissent le même
+         * réglage, donc la comparaison reste juste — mais le <b>profil</b>, lui, est déformé : il
+         * amplifie d.un facteur quatre-vingt-cinq le coût du tirage aléatoire lui-même par rapport à
+         * celui des cultures.
+         *
+         * <p>C.est ce qui explique {@code PalettedContainer.get} à 33,8 % et
+         * {@code FluidState.isRandomlyTicking} à 9,2 % dans le premier relevé : ce sont les frais du
+         * tirage, et non ceux du blé. Les lire comme des cibles serait répéter l.erreur du compteur
+         * qui doublait le coût de l.étape qu.il mesurait.
+         */
+        FARM
     }
 
     /**
@@ -147,6 +173,7 @@ public final class Scene {
             case "tnt", "dynamite", "boom" -> Kind.TNT;
             case "light", "lumiere", "lumière", "lampes" -> Kind.LIGHT;
             case "arrows", "fleches", "flèches", "projectiles" -> Kind.ARROWS;
+            case "farm", "champ", "agriculture", "ble", "blé" -> Kind.FARM;
             default -> Kind.RING;
         };
     }
@@ -214,6 +241,10 @@ public final class Scene {
      * n'ont pas abattu la même quantité de travail.
      */
     public static void rearm(ServerLevel level) {
+        if (builtKind == Kind.FARM) {
+            field(level, fieldSide * fieldSide);
+            return;
+        }
         if (builtKind == Kind.ARROWS) {
             volley(level, arrowsWanted);
             return;
@@ -405,6 +436,10 @@ public final class Scene {
      * allume ce qui est éteint, on éteint ce qui est allumé.
      */
     public static void stir(ServerLevel level) {
+        if (builtKind == Kind.FARM) {
+            resetCrops(level);
+            return;
+        }
         if (builtKind == Kind.ARROWS) {
             refillArrows(level);
             return;
@@ -433,6 +468,96 @@ public final class Scene {
     /** Bascules de lampe effectuées, pour que le rapport dise sur quoi il a porté. */
     public static long lampToggles() {
         return lampToggles;
+    }
+
+    /** Côté du champ cultivé, et les positions qu'il occupe. */
+    private static int fieldSide;
+    private static long cropsReset;
+
+    /**
+     * Un champ de blé sur terre labourée hydratée.
+     *
+     * <h2>Pourquoi il faut forcer les ticks aléatoires</h2>
+     *
+     * <p>Le jeu tire trois positions au hasard par section et par tick. Sur un champ d'un millier de
+     * parcelles réparties dans quelques sections, cela fait une poignée de ticks de culture par
+     * seconde : bien trop peu pour qu'un banc de vingt-cinq secondes en dise quoi que ce soit.
+     *
+     * <p>On relève donc {@code randomTickSpeed}, exactement comme l'épreuve de l'élevage désarme
+     * l'entassement. Ce n'est pas une tricherie : c'est la même opération que fait un serveur qui veut
+     * des cultures rapides, et surtout <b>les deux phases du banc subissent le même réglage</b>. Ce
+     * qu'on mesure reste le coût d'un tick de culture, simplement observé assez de fois pour que la
+     * médiane veuille dire quelque chose.
+     *
+     * <h2>Et pourquoi le blé est remis à zéro</h2>
+     *
+     * <p>Un blé mûr ne pousse plus : {@code randomTick} sort à la première condition et ne coûte
+     * presque rien. Sans remise à zéro, la seconde phase du banc mesurerait un champ mûr, c'est-à-dire
+     * l'inverse de ce qu'on cherche — le même défaut que la dynamite qui détruisait son propre décor.
+     */
+    private static int field(ServerLevel level, int count) {
+        fieldSide = Math.max(8, (int) Math.ceil(Math.sqrt(Math.max(1, count))));
+        int top = ground(level);
+        var farmland = net.minecraft.world.level.block.Blocks.FARMLAND.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.FarmlandBlock.MOISTURE, 7);
+        var wheat = net.minecraft.world.level.block.Blocks.WHEAT.defaultBlockState();
+        var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int planted = 0;
+        for (int x = -fieldSide / 2; x <= fieldSide / 2; x++) {
+            for (int z = -fieldSide / 2; z <= fieldSide / 2; z++) {
+                cursor.set(x, top, z);
+                level.setBlock(cursor, farmland, 2);
+                cursor.set(x, top + 1, z);
+                level.setBlock(cursor, wheat, 2);
+                cursor.set(x, top + 2, z);
+                level.setBlock(cursor, air, 2);
+                planted++;
+            }
+        }
+        // Un champ souterrain ne pousserait pas : CropBlock exige une luminosité d'au moins neuf.
+        // Le champ est donc à ciel ouvert, et le toit dégagé sur deux blocs.
+        // Poser de la terre labourée fait tomber ce qui s.y trouvait : quelques centaines d.objets
+        // au sol, que le contrôle préalable refuse à juste titre — ils fausseraient la densité.
+        java.util.List<net.minecraft.world.entity.Entity> drops = new java.util.ArrayList<>();
+        for (net.minecraft.world.entity.Entity loose : level.getAllEntities()) {
+            if (loose instanceof ItemEntity || loose instanceof net.minecraft.world.entity.Mob) {
+                drops.add(loose);
+            }
+        }
+        for (net.minecraft.world.entity.Entity loose : drops) {
+            loose.discard();
+        }
+        level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
+        level.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 256, level.getServer());
+        cropsReset = 0L;
+        Lanterne.LOG.info("[SCÈNE] champ : {} parcelle(s) de blé sur terre labourée hydratée, "
+                + "carré de {} blocs, vitesse de tick aléatoire portée à 256.", planted, fieldSide);
+        return 0; // aucune entité : le contrôle préalable compterait un monde vide
+    }
+
+    /** Remet le blé à l'âge zéro : un champ mûr ne pousse plus et ne coûte plus rien. */
+    private static void resetCrops(ServerLevel level) {
+        if (fieldSide <= 0) {
+            return;
+        }
+        int top = ground(level) + 1;
+        var wheat = net.minecraft.world.level.block.Blocks.WHEAT.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int x = -fieldSide / 2; x <= fieldSide / 2; x++) {
+            for (int z = -fieldSide / 2; z <= fieldSide / 2; z++) {
+                cursor.set(x, top, z);
+                if (level.getBlockState(cursor).is(net.minecraft.world.level.block.Blocks.WHEAT)) {
+                    level.setBlock(cursor, wheat, 2);
+                    cropsReset++;
+                }
+            }
+        }
+    }
+
+    /** Parcelles remises à zéro, pour que le rapport dise sur quoi il a porté. */
+    public static long cropsReset() {
+        return cropsReset;
     }
 
     /** Flèches que la volée maintient en vol, et le tirage qui les relance. */
@@ -566,6 +691,7 @@ public final class Scene {
             case TNT -> dynamite(level, count);
             case LIGHT -> hall(level, count);
             case ARROWS -> volley(level, count);
+            case FARM -> field(level, count);
         };
     }
 
