@@ -134,6 +134,7 @@ public final class Lanterne {
         if (event.getLevel() instanceof ServerLevel level) {
             Census.refresh(level);
             fr.clubcitrouille.lanterne.core.Jam.sweep(level.getGameTime());
+            fr.clubcitrouille.lanterne.core.Pasture.sweep(level.getGameTime());
             // Clôt le recensement des bloquantes du tick précédent et ouvre celui du tick en cours.
             // L'ordre importe : les collisions du tick lisent la liste close, complète, et non une
             // liste en cours de remplissage qui serait vide au premier tiers du tour des entités.

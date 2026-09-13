@@ -332,40 +332,61 @@ public final class Settings {
      */
     private static boolean vigil = true;
     /**
-     * Le repos posé, retiré après mesure — quatorzième plan démoli, et le premier dont la cause soit
-     * <b>le point d'accroche lui-même</b>.
+     * L'enclos : une bête qui a prouvé qu'elle n'allait nulle part cesse de décider d'y aller.
      *
-     * <h2>Le raisonnement était juste, et la foule l'a démenti</h2>
+     * <p>Voir {@link Pasture}. C'est le chaînon qui bloquait {@link Jam} et le repos posé : tant que
+     * les bêtes décident d'errer, rien ne s'immobilise, donc rien d'autre ne peut se court-circuiter.
+     */
+    private static boolean pasture = true;
+    /**
+     * Le repos posé, retiré DEUX fois après mesure — quatorzième plan démoli, et le seul que ce
+     * projet ait éprouvé à nouveau après avoir corrigé sa cause d'échec.
      *
-     * <p>Le profil d'un élevage désignait la gravité : une fois l'intelligence traitée,
-     * {@code travelInAir} et ses lectures d'états de bloc pesaient quinze pour cent de ce qui restait.
-     * Une bête posée sur un cube plein ne peut pas tomber ; la collision pouvait donc être conclue au
-     * lieu d'être balayée, en lisant quatre booléens déjà en cache.
+     * <h2>Le raisonnement, et il était juste</h2>
      *
-     * <p>Le raccourci fonctionnait, et il ne servait presque jamais :
+     * <p>Une bête posée sur un cube plein ne peut pas tomber. Sa collision — requête spatiale sur les
+     * entités voisines, relevé des formes de bloc, fusion, résolution axe par axe — pouvait donc être
+     * conclue au lieu d'être calculée, en lisant quatre booléens déjà en cache.
+     *
+     * <h2>Le premier refus, et sa cause</h2>
      *
      * <pre>
-     * 22 674 collisions conclues sans balayage, sur 500 000 tick-entités   →   4,5 %
-     * sans le module : 6,10 ms et 6,55 ms  ·  avec : 7,32 ms et 7,26 ms
+     * taux de déclenchement 4,5 %   ·   sans : 6,10 et 6,55 ms   ·   avec : 7,32 et 7,26 ms
      * </pre>
      *
-     * <p>La cause tient à ce que la charge fait vraiment. Dans un enclos dense, les bêtes <b>se
-     * poussent en permanence</b> : leur mouvement horizontal n'est jamais exactement nul, et la
-     * première condition du raccourci échoue. Rien n'est au repos dans une foule — et la foule est
-     * précisément le cas qui coûte.
+     * <p>Dans un enclos, les bêtes se poussent en permanence : leur mouvement horizontal n'est jamais
+     * exactement nul, et la première condition échouait. Le module ne servait presque jamais.
      *
-     * <h2>La règle que cet échec installe, et qu'aucun des treize précédents n'avait donnée</h2>
+     * <h2>Le second refus, une fois la cause corrigée</h2>
      *
-     * <p>Le module ne perdait pas une milliseconde à cause de son code : il en perdait une à cause de
-     * son <b>point d'injection</b>. {@code Entity.collide} est très courte et très appelée, donc
-     * inlinée par le compilateur à la volée. Y poser un mixin lui retire cette inlinisation, et cette
-     * perte se paie sur les quatre-vingt-seize pour cent d'appels où le raccourci ne sert à rien.
+     * <p>{@link Pasture} a supprimé la décision d'errance des bêtes qui n'allaient nulle part. Neuf
+     * cent quinze sur mille se sont posées, les amas figés sont passés de cent vingt à trois cent
+     * soixante-douze, et le taux de déclenchement de quatre et demi à <b>vingt-six pour cent</b>.
      *
-     * <p><b>Un raccourci dont le taux de déclenchement est faible ne doit pas être posé sur un chemin
-     * chaud</b>, même s'il est exact et même s'il est gratuit quand il réussit. Le droit d'entrée se
-     * paie à chaque passage.
+     * <p>La précondition était remplie. Quatre paires de mesures entrelacées ont tranché quand même :
+     *
+     * <pre>
+     * sans : 6,21 · 7,21 · 8,25 · 6,75   moyenne 7,11 ms
+     * avec : 6,37 · 6,48 · 8,29 · 7,97   moyenne 7,28 ms
+     * </pre>
+     *
+     * <p>Trois fois sur quatre dans le mauvais sens, et un écart de dix-sept centièmes pour une
+     * dispersion de deux millisecondes à l'intérieur de chaque bras.
+     *
+     * <h2>La règle, et elle est arithmétique</h2>
+     *
+     * <p>Le rapport a fini par publier le bon chiffre : <b>78 719 appels examinés sur cinq cents
+     * ticks</b>, soit cent cinquante-sept par tick. Une fois la cadence appliquée, la plupart des
+     * bêtes ne passent plus du tout par {@code collide}. Le raccourci portait donc sur quarante
+     * appels par tick — et son point d'accroche se payait sur les cent cinquante-sept.
+     *
+     * <p>La valeur d'un raccourci est le produit de trois nombres : <b>son taux de déclenchement, ce
+     * qu'il épargne à chaque fois, et le nombre d'appels</b>. Ce projet avait retenu de ne pas se fier
+     * au deuxième seul ; il retient maintenant qu'un taux élevé ne suffit pas non plus si le troisième
+     * est petit. La première publication disait « 22 674 collisions épargnées » — un grand nombre qui
+     * cachait les deux autres.
      */
-    private static final boolean REST_REMOVED_AFTER_MEASUREMENT = true;
+    private static final boolean REST_REMOVED_TWICE_AFTER_MEASUREMENT = true;
     /** Le rationnement : réagir pendant le tick, et non au suivant. */
     private static boolean rationing = true;
     /**
@@ -620,6 +641,11 @@ public final class Settings {
         return master && gather;
     }
 
+    public static boolean pasture() {
+        return master && pasture;
+    }
+
+
 
     /**
      * La Lanterne ne dépend pas non plus de l'interrupteur général — pour la raison inverse du balai.
@@ -712,6 +738,7 @@ public final class Settings {
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         bulk = wanted.contains("bulk") || wanted.contains("lot") || wanted.contains("entonnoir");
         gather = wanted.contains("gather") || wanted.contains("fusion") || wanted.contains("objets");
+        pasture = wanted.contains("pasture") || wanted.contains("enclos") || wanted.contains("errance");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -747,6 +774,7 @@ public final class Settings {
         gather = Config.GATHER.get();
         broom = Config.BROOM.get();
         vigil = Config.VIGIL.get();
+        pasture = Config.PASTURE.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
         strictYield = Config.STRICT_YIELD.get();
@@ -795,6 +823,9 @@ public final class Settings {
         }
         if (gather) {
             text.append("fusion-objets ");
+        }
+        if (pasture) {
+            text.append("enclos ");
         }
         if (rationing) {
             text.append("ration ");

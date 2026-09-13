@@ -292,6 +292,7 @@ public final class Bench {
         // unité ; la phase active, elle, oscillait entre 2951 et 3019 — non parce qu'elle travaillait
         // davantage, mais parce qu'elle héritait d'un préambule de durée variable.
         fr.clubcitrouille.lanterne.core.Rubble.reset();
+        fr.clubcitrouille.lanterne.core.Pasture.reset();
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
         left = WARMUP;
@@ -565,6 +566,13 @@ public final class Bench {
             say(String.format(Locale.ROOT,
                     "Objets au sol absorbés par fusion : %d entité(s) en moins",
                     fr.clubcitrouille.lanterne.core.Gather.merges()));
+        }
+
+        if (fr.clubcitrouille.lanterne.core.Pasture.refused() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Enclos : %d decision(s) d.errance epargnee(s) · %d bete(s) figee(s) au verdict",
+                    fr.clubcitrouille.lanterne.core.Pasture.refused(),
+                    fr.clubcitrouille.lanterne.core.Pasture.penned()));
         }
 
         if (fr.clubcitrouille.lanterne.core.Clump.freed() > 0L) {

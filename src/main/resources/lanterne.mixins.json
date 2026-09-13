@@ -32,6 +32,7 @@
     "RegionFileVersionMixin",
     "HopperBulkMixin",
     "ItemMergeMixin",
-    "SpawnGuardMixin"
+    "SpawnGuardMixin",
+    "StrollMixin"
   ]
 }

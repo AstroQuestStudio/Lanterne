@@ -53,6 +53,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue STRICT_YIELD;
 
     public static final ModConfigSpec.BooleanValue GATHER;
+    public static final ModConfigSpec.BooleanValue PASTURE;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -136,6 +137,16 @@ public final class Config {
                 "Le plafond d'age de 6000 ticks est CONSERVE : sans lui, un tas mourant",
                 "redeviendrait eternel des qu'on lui jette un objet neuf a cote.")
                 .define("fusion_objets", true);
+        PASTURE = BUILDER.comment(
+                "Enclos : une bete qui n'a pas parcouru 2 blocs en 5 secondes cesse de decider",
+                "d'aller se promener. Dans un tas, une telle decision fait calculer un chemin,",
+                "suivre ce chemin, et se faire repousser par les voisines - pour finir au meme",
+                "endroit. Le resultat observable est identique ; seul le calcul disparait.",
+                "Le verdict se refait toutes les 5 secondes : des que la barriere s'ouvre et que",
+                "la bete parcourt ses deux blocs, elle recommence a decider.",
+                "Jamais applique a ce qui porte un nom, est apprivoise, monte ou tenu en laisse,",
+                "ni a autre chose qu'un animal.")
+                .define("enclos", true);
         RATIONING = BUILDER.comment("Rationnement : reagir pendant le tick, et non au suivant.")
                 .define("ration", true);
         SAVE = BUILDER.comment(
