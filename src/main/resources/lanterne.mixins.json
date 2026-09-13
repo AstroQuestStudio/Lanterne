@@ -23,6 +23,7 @@
     "PaceMixin",
     "ServerExplosionMixin",
     "ChunkMapMixin",
-    "ChunkStepMixin"
+    "ChunkStepMixin",
+    "ProjectileUtilMixin"
   ]
 }

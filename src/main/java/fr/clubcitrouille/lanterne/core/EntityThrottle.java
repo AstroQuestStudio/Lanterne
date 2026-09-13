@@ -68,6 +68,12 @@ public final class EntityThrottle {
         if (Settings.collisions() && Solid.mayBlock(entity)) {
             Solid.note(entity);
         }
+        // Et le recensement des cibles possibles de projectile, au même endroit et pour la même
+        // raison : c.est le seul passage où chaque entité se présente une fois par tick. Voir Quarry,
+        // et les cinquante-neuf pour cent de serveur que ce recensement supprime sur une volée.
+        if (Settings.projectiles() && Quarry.mayBeHit(entity)) {
+            Quarry.note(entity);
+        }
         if (mustNeverSkip(entity)) {
             return true;
         }

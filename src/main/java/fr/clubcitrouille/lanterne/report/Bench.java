@@ -509,6 +509,13 @@ public final class Bench {
                 fr.clubcitrouille.lanterne.core.Solid.blockers(),
                 fr.clubcitrouille.lanterne.core.Produce.compensated()));
 
+        long hunted = fr.clubcitrouille.lanterne.core.Quarry.shortcuts();
+        if (hunted > 0L || fr.clubcitrouille.lanterne.core.Quarry.targets() > 0) {
+            say(String.format(Locale.ROOT,
+                    "Recherches de cible évitées : %d · cibles possibles recensées : %d",
+                    hunted, fr.clubcitrouille.lanterne.core.Quarry.targets()));
+        }
+
         long toggles = fr.clubcitrouille.lanterne.lab.Scene.lampToggles();
         if (toggles > 0L) {
             say(String.format(Locale.ROOT,

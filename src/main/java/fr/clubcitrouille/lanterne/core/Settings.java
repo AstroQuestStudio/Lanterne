@@ -74,6 +74,9 @@ public final class Settings {
      */
     private static boolean explosions = true;
 
+    /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
+    private static boolean projectiles = true;
+
 
     /**
      * Le saut des balayages de blocs dans le vide, retiré après mesure — huitième plan démoli.
@@ -323,6 +326,10 @@ public final class Settings {
         return master && explosions;
     }
 
+    public static boolean projectiles() {
+        return master && projectiles;
+    }
+
     public static boolean jam() {
         return master && jam;
     }
@@ -385,6 +392,7 @@ public final class Settings {
         profilerCache = wanted.contains("profiler");
         density = wanted.contains("density") || wanted.contains("densite");
         collisions = wanted.contains("collision");
+        projectiles = wanted.contains("projectile") || wanted.contains("fleche");
         explosions = wanted.contains("explosion") || wanted.contains("blast");
         jam = wanted.contains("jam");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
@@ -417,6 +425,9 @@ public final class Settings {
         }
         if (explosions) {
             text.append("explosions ");
+        }
+        if (projectiles) {
+            text.append("projectiles ");
         }
         if (jam) {
             text.append("amas ");

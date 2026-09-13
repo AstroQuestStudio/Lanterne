@@ -100,7 +100,21 @@ public final class Scene {
          * <p>Sous terre, et non en surface : la lumière du ciel écraserait tout et le moteur n'aurait
          * rien à calculer.
          */
-        LIGHT
+        LIGHT,
+        /**
+         * Un ciel plein de projectiles, qui cherchent tous quelque chose à toucher.
+         *
+         * <p>Chaque flèche en vol appelle, à chaque tick, {@code ProjectileUtil.getEntityHitResult} —
+         * lequel demande à {@code level.getEntities} la liste des entités de sa boîte de déplacement.
+         * C.est une allocation de liste et un parcours de section par projectile et par tick, pour
+         * une réponse qui est presque toujours « rien ».
+         *
+         * <p>C.est le même gaspillage que celui des collisions d.entités, atteint par un autre chemin,
+         * et il n.avait jamais été mesuré. Une bataille, une ferme à flèches, un joueur qui mitraille :
+         * les projectiles sont l.un des rares postes qui montent en flèche sans qu.aucun mod connu ne
+         * s.en occupe.
+         */
+        ARROWS
     }
 
     /**
@@ -132,6 +146,7 @@ public final class Scene {
             case "mixed", "mixte", "tout" -> Kind.MIXED;
             case "tnt", "dynamite", "boom" -> Kind.TNT;
             case "light", "lumiere", "lumière", "lampes" -> Kind.LIGHT;
+            case "arrows", "fleches", "flèches", "projectiles" -> Kind.ARROWS;
             default -> Kind.RING;
         };
     }
@@ -199,6 +214,10 @@ public final class Scene {
      * n'ont pas abattu la même quantité de travail.
      */
     public static void rearm(ServerLevel level) {
+        if (builtKind == Kind.ARROWS) {
+            volley(level, arrowsWanted);
+            return;
+        }
         if (builtKind == Kind.LIGHT) {
             // La salle n.est pas détruite par l.épreuve : seules les lampes changent d.état. Il
             // suffit donc de toutes les éteindre et de remettre le tirage à sa graine.
@@ -386,6 +405,10 @@ public final class Scene {
      * allume ce qui est éteint, on éteint ce qui est allumé.
      */
     public static void stir(ServerLevel level) {
+        if (builtKind == Kind.ARROWS) {
+            refillArrows(level);
+            return;
+        }
         if (builtKind != Kind.LIGHT || LAMP_SPOTS.isEmpty()) {
             return;
         }
@@ -410,6 +433,111 @@ public final class Scene {
     /** Bascules de lampe effectuées, pour que le rapport dise sur quoi il a porté. */
     public static long lampToggles() {
         return lampToggles;
+    }
+
+    /** Flèches que la volée maintient en vol, et le tirage qui les relance. */
+    private static int arrowsWanted;
+    private static java.util.Random arrowDice = new java.util.Random(SEED);
+    private static long arrowsFired;
+
+    /**
+     * Une volée continue de projectiles au-dessus d'un sol dégagé.
+     *
+     * <h2>Pourquoi il faut les relancer sans cesse</h2>
+     *
+     * <p>Une flèche ne vole que quelques secondes : elle se plante, puis ne coûte presque plus rien.
+     * Une charge posée une fois pour toutes mesurerait donc un tapis de flèches plantées, c'est-à-dire
+     * l'inverse de ce qu'on veut. La volée est réapprovisionnée à chaque tick par {@link #stir}, comme
+     * les lampes de l'épreuve de lumière — c'est la seconde charge du projet qui agit <b>pendant</b> la
+     * mesure.
+     *
+     * <p>Elles sont tirées vers le haut et en tous sens depuis un même point, ce qui les fait se
+     * croiser : chacune trouve donc réellement des entités dans sa boîte de recherche, et l'on mesure
+     * le cas coûteux plutôt que le cas vide.
+     */
+    private static int volley(ServerLevel level, int count) {
+        arrowsWanted = Math.max(16, count);
+        arrowDice = new java.util.Random(SEED);
+        arrowsFired = 0L;
+        VOLLEY.clear();
+        // Les flèches plantées au sol ne comptent pas comme des projectiles en vol, et un tapis de
+        // flèches d'une exécution précédente fausserait la densité.
+        java.util.List<net.minecraft.world.entity.Entity> leftovers = new java.util.ArrayList<>();
+        for (net.minecraft.world.entity.Entity old : level.getAllEntities()) {
+            if (old instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) {
+                leftovers.add(old);
+            }
+        }
+        for (net.minecraft.world.entity.Entity old : leftovers) {
+            old.discard();
+        }
+        Lanterne.LOG.info("[SCÈNE] projectiles : {} flèche(s) maintenues en vol, {} ancienne(s) "
+                + "balayée(s).", arrowsWanted, leftovers.size());
+        return 0; // aucune entité durable : le contrôle préalable compterait un monde vide
+    }
+
+    /** Les flèches que cette épreuve a tirées, pour les suivre sans parcourir le monde entier. */
+    private static final java.util.List<net.minecraft.world.entity.projectile.arrow.AbstractArrow>
+            VOLLEY = new java.util.ArrayList<>();
+
+    /**
+     * Relance ce qui est retombé, et retire ce qui s'est planté.
+     *
+     * <h2>La charge qui n'était pas celle qu'on croyait</h2>
+     *
+     * <p>La première version se contentait de compter les flèches en vol et d'en créer jusqu'au
+     * compte voulu. Les flèches plantées, elles, restaient — et une flèche plante en trois secondes.
+     * Le banc a donc mesuré, sans le dire, un tapis de dix-neuf mille flèches immobiles :
+     *
+     * <pre>
+     * Entités dans le monde : 19 482     (pour mille cinq cents demandées)
+     * </pre>
+     *
+     * <p>Ce n'était pas une charge de projectiles : c'était une charge d'objets inertes, qu'on mesure
+     * déjà ailleurs et bien mieux. Les flèches plantées sont donc retirées à mesure, et l'on suit
+     * <b>sa propre volée</b> plutôt que de parcourir toutes les entités du monde — ce parcours coûtait
+     * lui-même, à dix-neuf mille entités, plus cher que ce qu'il mesurait.
+     */
+    private static void refillArrows(ServerLevel level) {
+        int flying = 0;
+        for (java.util.Iterator<net.minecraft.world.entity.projectile.arrow.AbstractArrow> pass =
+                VOLLEY.iterator(); pass.hasNext(); ) {
+            var arrow = pass.next();
+            // isInGround() est protégée ; une flèche plantée a une vitesse nulle, ce qui est le même
+            // renseignement obtenu par l'API publique.
+            if (!arrow.isAlive() || arrow.getDeltaMovement().lengthSqr() <= 1.0E-4d) {
+                arrow.discard();
+                pass.remove();
+                continue;
+            }
+            flying++;
+        }
+        int ground = ground(level);
+        while (flying < arrowsWanted) {
+            var arrow = net.minecraft.world.entity.EntityType.ARROW.create(
+                    level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+            if (arrow == null) {
+                return;
+            }
+            arrow.snapTo(0d, ground + 3d, 0d, 0f, 0f);
+            // Vers le haut et en tous sens : les trajectoires se croisent, donc chaque flèche trouve
+            // vraiment des voisines dans sa boîte de recherche.
+            arrow.setDeltaMovement(
+                    (arrowDice.nextDouble() - 0.5d) * 2.4d,
+                    0.8d + arrowDice.nextDouble() * 1.2d,
+                    (arrowDice.nextDouble() - 0.5d) * 2.4d);
+            if (!level.addFreshEntity(arrow)) {
+                return;
+            }
+            VOLLEY.add(arrow);
+            arrowsFired++;
+            flying++;
+        }
+    }
+
+    /** Flèches tirées depuis le début, pour que le rapport dise sur quoi il a porté. */
+    public static long arrowsFired() {
+        return arrowsFired;
     }
 
     /** L'étendue du champ de charges, calculée au même endroit par la pose et par la reconstruction. */
@@ -437,6 +565,7 @@ public final class Scene {
             }
             case TNT -> dynamite(level, count);
             case LIGHT -> hall(level, count);
+            case ARROWS -> volley(level, count);
         };
     }
 
