@@ -162,6 +162,21 @@ public final class LanterneCommand {
         line(source, "Chunks recensés", String.valueOf(Census.chunksSeen()));
         line(source, "Entités classées", String.valueOf(Census.entitiesSeen()));
 
+        // Ce que les trois modules ajoutés en dernier ont réellement fait, et non ce qu'ils sont censés
+        // faire. Un module mesuré « sans effet » parce qu'il ne s'est jamais déclenché et un module sans
+        // effet réel donnent le même chiffre au banc — ces compteurs séparent les deux cas, en jeu.
+        line(source, "Objets au sol endormis",
+                fr.clubcitrouille.lanterne.core.Litter.sleepCount() + " endormissement(s), "
+                        + fr.clubcitrouille.lanterne.core.Litter.wakeCount() + " réveil(s)");
+        line(source, "Recherches de collision évitées",
+                String.valueOf(fr.clubcitrouille.lanterne.core.Solid.shortcuts()));
+        line(source, "Entités capables de bloquer",
+                fr.clubcitrouille.lanterne.core.Solid.blockers()
+                        + " (bateaux, shulkers, ghasts apprivoisés — tout le reste ne bloque rien)");
+        line(source, "Ticks de production rattrapés",
+                fr.clubcitrouille.lanterne.core.Produce.compensated()
+                        + " — ponte, croissance et reproduction restent à l'heure");
+
         for (var entry : Census.buckets().entrySet()) {
             line(source, "  " + entry.getKey(), entry.getValue()[0] + " entité(s)");
         }

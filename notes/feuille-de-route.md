@@ -222,3 +222,26 @@ Mesures sur la charge de référence : **28,23 / 31,41 / 27,65 ms**, médiane 28
 trois mesures à une mesure unique n'est pas une comparaison. Le chiffre publié (28,2 ms, ×7,1) est
 simplement mieux étayé que le précédent. Le module est conservé parce que supprimer un calcul
 redondant ne peut pas nuire, pas parce qu'on lui a prouvé un gain.
+
+### Qui demande vraiment les lectures de bloc
+
+Le profileur, doté d'un suivi multi-motifs capable de traverser toute la chaîne d'accès (palette →
+section → chunk → monde), a répondu sur la charge de référence :
+
+| Demandeur | Part du travail |
+|---|---:|
+| `BlockCollisions.computeNext` | **5,9 %** |
+| `PathNavigationRegion.getBlockState` | 2,0 % |
+| `LevelChunk.getFluidState` | 0,9 % |
+| `ServerLevel.tickChunk` | 0,6 % |
+
+Sur les 18,1 % de `PalettedContainer.get`, environ neuf sont identifiés ; le reste est diffus.
+
+`BlockCollisions.computeNext` est le parcours des blocs pendant le déplacement d'une entité. C'est le
+terrain de Lithium, qui y pose un chemin rapide évitant de matérialiser une forme de collision pour
+les blocs entièrement pleins ou entièrement vides.
+
+**Non attaqué, et délibérément.** Une erreur sur ce chemin ne produit pas un ralentissement : elle
+fait passer une entité à travers le sol. Le gain envisageable — quelques pour cent — ne justifie pas
+d'y toucher sans pouvoir répéter les mesures et les épreuves plusieurs fois. C'est la première cible
+d'une prochaine session, avec le temps qu'elle mérite.
