@@ -72,7 +72,35 @@ public final class Scene {
         /** Les deux à la fois, ce qui est la situation d'un serveur habité. */
         MIXED,
         /** Un duplicateur qui part : des milliers de charges amorcées, échelonnées. */
-        TNT
+        TNT,
+        /**
+         * Des sources de lumière qui s'allument et s'éteignent sans arrêt, sous terre.
+         *
+         * <h2>Pourquoi il a fallu inventer cette charge</h2>
+         *
+         * <p>Le profileur, une fois ouvert à tous les fils, a été braqué sur les deux charges les plus
+         * lourdes du projet pour y trouver le moteur de lumière. Il n'y a trouvé presque rien :
+         *
+         * <pre>
+         * dynamite, 2,5 M de blocs détruits  →  SkyLightEngine.propagateIncrease   0,6 %
+         * génération de chunks               →  aucune trace du moteur de lumière
+         * </pre>
+         *
+         * <p>Ce n'est pas une preuve que la lumière est gratuite : c'est la preuve qu'aucune de ces
+         * deux charges ne la sollicite. Une explosion à ciel ouvert ne fait que <em>descendre</em> la
+         * colonne de ciel, ce qui est le cas le moins cher du moteur ; et la lumière d'un chunk en
+         * génération est calculée une fois, en bloc, sur un fil qui dort le reste du temps.
+         *
+         * <p>Le cas coûteux est ailleurs, et c'est un cas que les joueurs construisent tous les
+         * jours : <b>une source de lumière qui change d'état dans une pièce fermée</b>. Une lampe de
+         * redstone qui clignote, un four qui s'allume, un portail qui bat. Chaque changement force le
+         * moteur à effacer puis à repropager une sphère de quinze blocs de rayon — quelques milliers
+         * de cases, deux fois, par bascule.
+         *
+         * <p>Sous terre, et non en surface : la lumière du ciel écraserait tout et le moteur n'aurait
+         * rien à calculer.
+         */
+        LIGHT
     }
 
     /**
@@ -103,6 +131,7 @@ public final class Scene {
             case "items", "objets", "sol" -> Kind.ITEMS;
             case "mixed", "mixte", "tout" -> Kind.MIXED;
             case "tnt", "dynamite", "boom" -> Kind.TNT;
+            case "light", "lumiere", "lumière", "lampes" -> Kind.LIGHT;
             default -> Kind.RING;
         };
     }
@@ -170,8 +199,21 @@ public final class Scene {
      * n'ont pas abattu la même quantité de travail.
      */
     public static void rearm(ServerLevel level) {
+        if (builtKind == Kind.LIGHT) {
+            // La salle n.est pas détruite par l.épreuve : seules les lampes changent d.état. Il
+            // suffit donc de toutes les éteindre et de remettre le tirage à sa graine.
+            var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+            for (long key : LIT) {
+                level.setBlock(BlockPos.of(key), air, 3);
+            }
+            LIT.clear();
+            lampDice = new java.util.Random(SEED);
+            lampToggles = 0;
+            Lanterne.LOG.info("[SCÈNE] remise à neuf : toutes les lampes éteintes, tirage réarmé.");
+            return;
+        }
         if (builtKind != Kind.TNT) {
-            return; // seule la dynamite modifie le monde ; les autres charges sont réversibles
+            return; // ni la dynamite ni la lumière : les autres charges sont réversibles
         }
         // Collecter d'abord, supprimer ensuite : discard() retire l'entité de la table que l'on est
         // en train de parcourir, et fastutil rend alors un index hors bornes plutôt qu'une erreur de
@@ -240,6 +282,136 @@ public final class Scene {
         return builtGround;
     }
 
+    /** Côté de la salle creusée pour l'épreuve de lumière, et sa hauteur. */
+    private static final int HALL_SIDE = 64;
+    private static final int HALL_HEIGHT = 16;
+
+    /** Altitude du plancher de la salle, sous le niveau du sol pour échapper à la lumière du ciel. */
+    private static int hallFloor;
+
+    /** Positions où une source de lumière peut apparaître, et celles qui sont allumées. */
+    private static final java.util.List<BlockPos> LAMP_SPOTS = new java.util.ArrayList<>();
+    private static final it.unimi.dsi.fastutil.longs.LongOpenHashSet LIT =
+            new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+    private static java.util.Random lampDice = new java.util.Random(SEED);
+    private static long lampToggles;
+
+    /**
+     * Creuse la salle et choisit les emplacements de lampes.
+     *
+     * <p>Quarante blocs sous le sol : assez profond pour que la lumière du ciel n'atteigne jamais la
+     * salle, et donc que chaque lampe soit seule à éclairer ce qu'elle éclaire. En surface, le moteur
+     * n'aurait presque rien à calculer et l'épreuve mesurerait le vide.
+     *
+     * <p>La salle est vidée en air, sans mise à jour de voisinage : soixante-cinq mille poses de bloc
+     * qui cascaderaient prendraient des minutes, et elles ont lieu hors de toute fenêtre chronométrée.
+     */
+    private static int hall(ServerLevel level, int count) {
+        hallFloor = ground(level) - 40;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        int dug = 0;
+        for (int x = -HALL_SIDE / 2; x <= HALL_SIDE / 2; x++) {
+            for (int z = -HALL_SIDE / 2; z <= HALL_SIDE / 2; z++) {
+                for (int y = hallFloor; y < hallFloor + HALL_HEIGHT; y++) {
+                    cursor.set(x, y, z);
+                    if (level.setBlock(cursor, air, 2)) {
+                        dug++;
+                    }
+                }
+            }
+        }
+
+        // Cette épreuve mesure un moteur de lumière, pas une faune. Les créatures qui apparaissent
+        // naturellement dans une salle souterraine obscure fausseraient la mesure — et le contrôle
+        // préalable refuse à juste titre de mesurer une charge qu.il ne reconnaît pas.
+        level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
+        java.util.List<net.minecraft.world.entity.Entity> strays = new java.util.ArrayList<>();
+        for (net.minecraft.world.entity.Entity wanderer : level.getAllEntities()) {
+            if (wanderer instanceof net.minecraft.world.entity.Mob) {
+                strays.add(wanderer);
+            }
+        }
+        for (net.minecraft.world.entity.Entity wanderer : strays) {
+            wanderer.discard();
+        }
+
+        LAMP_SPOTS.clear();
+        LIT.clear();
+        lampDice = new java.util.Random(SEED);
+        // Les emplacements sont tirés une fois et figés : deux exécutions du banc doivent allumer les
+        // mêmes lampes aux mêmes endroits, sinon l'écart entre deux mesures contiendrait du hasard.
+        int wanted = Math.max(64, Math.min(count, 4096));
+        for (int i = 0; i < wanted; i++) {
+            LAMP_SPOTS.add(new BlockPos(
+                    lampDice.nextInt(HALL_SIDE) - HALL_SIDE / 2,
+                    hallFloor + 1 + lampDice.nextInt(Math.max(1, HALL_HEIGHT - 2)),
+                    lampDice.nextInt(HALL_SIDE) - HALL_SIDE / 2));
+        }
+        Lanterne.LOG.info("[SCÈNE] lumière : salle de {}×{}×{} creusée à y={} ({} bloc(s) retirés), "
+                + "{} emplacement(s) de lampe, {} bascule(s) par tick.",
+                HALL_SIDE, HALL_HEIGHT, HALL_SIDE, hallFloor, dug, LAMP_SPOTS.size(), togglesPerTick());
+        // Zéro : cette charge ne crée aucune entité, et le contrôle préalable compte des entités.
+        // Lui annoncer deux mille lampes lui ferait refuser la mesure pour une raison inexistante.
+        // La vérification qui convient ici est le nombre de bascules réellement effectuées, que le
+        // rapport affiche — une charge de lumière qui n.a rien basculé n.a rien mesuré.
+        return 0;
+    }
+
+    /**
+     * Bascules de lampe par tick.
+     *
+     * <p>Chacune force le moteur à effacer puis à repropager une sphère de quinze blocs de rayon.
+     * Huit par tick suffisent à saturer un moteur de lumière ; le réglage existe pour pouvoir chercher
+     * le point où il cède.
+     */
+    private static int togglesPerTick() {
+        String raw = System.getenv("LANTERNE_TOGGLES");
+        if (raw == null || raw.isBlank()) {
+            return 8;
+        }
+        try {
+            return Math.max(1, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException malformed) {
+            return 8;
+        }
+    }
+
+    /**
+     * Fait battre les lampes — appelé à chaque tick du banc, dans les deux phases.
+     *
+     * <p>C'est la seule charge du projet qui <b>agit pendant la mesure</b> plutôt que d'être posée
+     * avant elle. Une lampe immobile ne coûte rien : le moteur de lumière ne travaille que sur le
+     * changement. Il fallait donc un mécanisme, et le plus fidèle est aussi le plus simple — on
+     * allume ce qui est éteint, on éteint ce qui est allumé.
+     */
+    public static void stir(ServerLevel level) {
+        if (builtKind != Kind.LIGHT || LAMP_SPOTS.isEmpty()) {
+            return;
+        }
+        var glow = net.minecraft.world.level.block.Blocks.GLOWSTONE.defaultBlockState();
+        var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        int toggles = togglesPerTick();
+        for (int i = 0; i < toggles; i++) {
+            BlockPos spot = LAMP_SPOTS.get(lampDice.nextInt(LAMP_SPOTS.size()));
+            long key = spot.asLong();
+            // Drapeau 3 : notifier les clients et les voisins. C'est ce que fait une lampe de
+            // redstone, et c'est ce qui déclenche réellement le moteur de lumière.
+            if (LIT.remove(key)) {
+                level.setBlock(spot, air, 3);
+            } else {
+                LIT.add(key);
+                level.setBlock(spot, glow, 3);
+            }
+            lampToggles++;
+        }
+    }
+
+    /** Bascules de lampe effectuées, pour que le rapport dise sur quoi il a porté. */
+    public static long lampToggles() {
+        return lampToggles;
+    }
+
     /** L'étendue du champ de charges, calculée au même endroit par la pose et par la reconstruction. */
     private static int side(int count) {
         return Math.max(16, (int) Math.ceil(Math.sqrt(count)) * 2);
@@ -249,6 +421,7 @@ public final class Scene {
         builtKind = kind;
         builtCount = count;
         builtRadius = radius;
+        builtKind = kind;
         if (kind == Kind.TNT) {
             Lanterne.LOG.info("[SCÈNE] dalle de pierre : {} bloc(s) posé(s) — la matière à enlever.",
                     slab(level, count));
@@ -263,6 +436,7 @@ public final class Scene {
                 yield born;
             }
             case TNT -> dynamite(level, count);
+            case LIGHT -> hall(level, count);
         };
     }
 

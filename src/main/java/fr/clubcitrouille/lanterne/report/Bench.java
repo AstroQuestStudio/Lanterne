@@ -334,6 +334,11 @@ public final class Bench {
         if (!running()) {
             return;
         }
+        // La charge de lumière agit pendant la mesure, et non avant elle : une lampe immobile ne
+        // coûte rien, le moteur ne travaille que sur le changement. Elle est donc déclenchée avant
+        // l'arrêt du chronomètre, pour que son prix entre dans le tick qu'on mesure. Les autres
+        // charges ignorent cet appel.
+        fr.clubcitrouille.lanterne.lab.Scene.stir(level);
         long elapsed = System.nanoTime() - tickStart;
 
         switch (phase) {
@@ -503,6 +508,13 @@ public final class Bench {
                 fr.clubcitrouille.lanterne.core.Solid.shortcuts(),
                 fr.clubcitrouille.lanterne.core.Solid.blockers(),
                 fr.clubcitrouille.lanterne.core.Produce.compensated()));
+
+        long toggles = fr.clubcitrouille.lanterne.lab.Scene.lampToggles();
+        if (toggles > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Bascules de lampe pendant la phase témoin : %d (chacune efface puis repropage "
+                    + "une sphère de quinze blocs de rayon)", toggles));
+        }
 
         // Les deux phases ont-elles seulement subi la même charge ? Voir refuseUnequal.
         if (refuseUnequal()) {

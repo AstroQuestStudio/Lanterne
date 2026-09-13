@@ -67,6 +67,8 @@ public final class SelfTest {
     private static int countWanted;
     private static int radiusWanted;
     private static int observers = 1;
+    /** Ce que la charge a réellement produit, retenu d.une étape à la suivante. */
+    private static int born;
     private static Step step = Step.OFF;
     private static int waiting;
 
@@ -90,6 +92,9 @@ public final class SelfTest {
 
     /** Vrai si l'on éprouve la génération et le chargement des chunks. */
     private static boolean quarry;
+
+    /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
+    private static boolean swarm;
 
     /** Vrai si l'on éprouve le devenir des objets au sol. */
     private static boolean tidy;
@@ -120,6 +125,13 @@ public final class SelfTest {
             step = Step.SETTLING;
             waiting = SETTLE;
             Lanterne.LOG.info("Épreuve des objets au sol armée.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_SWARM"))) {
+            swarm = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de débit de génération armée.");
             return;
         }
         if ("1".equals(System.getenv("LANTERNE_QUARRY"))) {
@@ -180,7 +192,7 @@ public final class SelfTest {
     public static void tick(MinecraftServer server) {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
-                    && !quarry && !tidy && !vault)) {
+                    && !quarry && !tidy && !vault && !swarm)) {
             return;
         }
         if (!Conformance.running() && !Kitchen.running()
@@ -216,6 +228,16 @@ public final class SelfTest {
             } else if (step == Step.LOADING) {
                 Herd.sweepEntities(server.overworld());
                 fr.clubcitrouille.lanterne.lab.Tidy.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (swarm) {
+            if (fr.clubcitrouille.lanterne.lab.Swarm.running()) {
+                fr.clubcitrouille.lanterne.lab.Swarm.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Swarm.begin(server);
                 step = Step.LAUNCHED;
             }
             return;
@@ -344,7 +366,7 @@ public final class SelfTest {
                 }
                 var scene = fr.clubcitrouille.lanterne.lab.Scene.parse(
                         System.getenv("LANTERNE_SCENE"));
-                int born = fr.clubcitrouille.lanterne.lab.Scene.build(
+                born = fr.clubcitrouille.lanterne.lab.Scene.build(
                         level, scene, countWanted, radiusWanted);
                 Lanterne.LOG.info("Auto-test : charge « {} », {} entité(s) créée(s).", scene, born);
                 step = Step.POPULATING;
@@ -358,7 +380,11 @@ public final class SelfTest {
                 // laisse croire que deux exécutions sont comparables quand elles ne le sont pas.
                 Lanterne.LOG.info("Auto-test : composition — {}",
                         fr.clubcitrouille.lanterne.lab.Scene.describe(level));
-                Bench.expect(countWanted);
+                // Ce que la charge a réellement produit, et non ce qu'on lui avait demandé. Les deux
+                // coïncident pour un troupeau ou un tas d'objets ; ils diffèrent pour une charge qui
+                // ne crée aucune entité — la lumière bâtit une salle et fait battre des lampes. Lui
+                // réclamer deux mille entités faisait refuser la mesure pour une raison inexistante.
+                Bench.expect(born);
                 Bench.startHeadless(server);
                 step = Step.LAUNCHED;
             }
