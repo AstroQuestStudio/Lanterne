@@ -110,6 +110,10 @@ public final class Crowd {
 
     private static long currentTick = Long.MIN_VALUE;
 
+    /** Plus gros attroupement du tick précédent, tenu au fil de l'eau plutôt que recalculé. */
+    private static int peak;
+    private static int risingPeak;
+
     private Crowd() {}
 
     /**
@@ -136,7 +140,10 @@ public final class Crowd {
         long key = ChunkPos.pack(
                 SectionPos.blockToSectionCoord(entity.getBlockX()),
                 SectionPos.blockToSectionCoord(entity.getBlockZ()));
-        counting.addTo(key, 1);
+        int now = counting.addTo(key, 1) + 1;
+        if (now > risingPeak) {
+            risingPeak = now;
+        }
 
         int neighbours = tallied.get(key);
         if (neighbours < CROWDED) {
@@ -157,21 +164,36 @@ public final class Crowd {
         tallied = counting;
         previous.clear();
         counting = previous; // les deux tables se relaient ; aucune n'est jamais créée
+        peak = risingPeak;
+        risingPeak = 0;
         currentTick = gameTime;
     }
 
-    /** Le plus gros attroupement observé, pour le rapport. */
+    /**
+     * Le plus gros attroupement observé au tick précédent.
+     *
+     * <h2>Une méthode de rapport appelée dans une boucle chaude</h2>
+     *
+     * <p>Cette méthode parcourait toute la table des chunks recensés. C'était sans conséquence tant
+     * qu'elle ne servait qu'à écrire une ligne de rapport, une fois par banc.
+     *
+     * <p>Le court-circuit de collision a voulu la consulter une fois par tick pour savoir s'il valait
+     * son prix. Sur un monde où plusieurs milliers de chunks sont recensés, ce parcours a fait passer
+     * la charge dynamite de 62,99 à <b>96,64 ms</b> — le remède coûtant trois fois le mal qu'il
+     * soignait.
+     *
+     * <p>Le maximum est donc tenu au fil de l'eau : une comparaison d'entiers par entité, dans une
+     * méthode qui en fait déjà plusieurs, contre un parcours complet par tick.
+     */
     public static int densest() {
-        int most = 0;
-        for (int value : tallied.values()) {
-            most = Math.max(most, value);
-        }
-        return most;
+        return peak;
     }
 
     public static void reset() {
         counting.clear();
         tallied.clear();
         currentTick = Long.MIN_VALUE;
+        peak = 0;
+        risingPeak = 0;
     }
 }

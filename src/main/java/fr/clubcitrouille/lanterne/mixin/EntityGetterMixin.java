@@ -4,8 +4,6 @@ import java.util.List;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.EntityGetter;
@@ -51,11 +49,43 @@ import fr.clubcitrouille.lanterne.core.Solid;
  */
 @Mixin(EntityGetter.class)
 public interface EntityGetterMixin {
-    @Inject(method = "getEntityCollisions", at = @At("HEAD"), cancellable = true)
-    private void lanterne$skipWhenNothingBlocks(Entity source, AABB testArea,
-                                                CallbackInfoReturnable<List<VoxelShape>> callback) {
+    /**
+     * Le raccourci, posé sans rien allouer.
+     *
+     * <h2>L'injection qui coûtait plus qu'elle ne rapportait</h2>
+     *
+     * <p>La première version était un {@code @Inject(cancellable = true)}. C'est l'outil le plus lisible
+     * de Mixin, et il a un prix que sa lisibilité cache : <b>il alloue un {@code CallbackInfoReturnable}
+     * à chaque appel</b>, qu'il annule ou non.
+     *
+     * <p>Sur un chemin emprunté par chaque entité qui se déplace, à chaque tick, cela se paie. La charge
+     * dynamite — six mille charges amorcées, mèches étalées — l'a mis au jour :
+     *
+     * <pre>
+     * sans le mod   : 41,68 ms   5,28 Go alloués
+     * module seul   : 70,68 ms  10,63 Go alloués
+     * </pre>
+     *
+     * <p>Le même module donne ×62 sur un sol jonché d'objets. Il n'est donc pas mauvais : il était
+     * <b>mal posé</b>. Là où les entités sont concentrées, le parcours qu'il supprime est énorme et son
+     * coût disparaît dans le gain ; là où elles sont dispersées, le parcours vanilla est déjà court et
+     * il ne reste que le coût.
+     *
+     * <p>{@code @WrapMethod} de MixinExtras donne le même contrôle — décider avant, ou laisser passer —
+     * sans créer d'objet : la suite de la méthode est atteinte par une opération, pas par un rappel.
+     *
+     * <h2>Et la sortie anticipée, avant même de regarder</h2>
+     *
+     * <p>Le test de {@link Solid} est déjà bon marché, mais « bon marché » multiplié par des centaines
+     * de milliers d'appels reste une addition. On sort donc sur la condition la moins chère qui
+     * existe — un booléen — avant de toucher à la moindre coordonnée.
+     */
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method = "getEntityCollisions")
+    private List<VoxelShape> lanterne$skipWhenNothingBlocks(Entity source, AABB testArea,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<List<VoxelShape>> original) {
         if (Settings.collisions() && Solid.noneIn(testArea)) {
-            callback.setReturnValue(List.of());
+            return List.of();
         }
+        return original.call(source, testArea);
     }
 }
