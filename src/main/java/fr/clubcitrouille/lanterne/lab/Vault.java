@@ -183,8 +183,22 @@ public final class Vault {
      * {@code (-6250,6250)} y sont déjà pris) — loin de tout ce qu'un joueur aurait pu visiter, et sans
      * risque de recouper une grille d'une autre épreuve du même monde.
      */
-    private static final int CHUNK_ORIGIN_X = -6250;
-    private static final int CHUNK_ORIGIN_Z = -6250;
+    /**
+     * Origine de la grille, décalée à chaque exécution.
+     *
+     * <h2>Un delta de taille toujours nul</h2>
+     *
+     * <p>L.origine était fixe, si bien que la deuxième exécution réécrivait la région de la première.
+     * Le rapport annonçait alors « 0,0 Ko par chunk » — et il le signalait lui-même, ce qui est déjà
+     * mieux que de le taire, mais ne rendait pas le chiffre pour autant.
+     *
+     * <p>Or la place occupée est la moitié de la question : comparer deux compressions demande de
+     * savoir ce qu.elles coûtent en octets autant qu.en millisecondes. Le tirage rend cette moitié
+     * mesurable.
+     */
+    private static final int DRIFT = new java.util.Random().nextInt(2000);
+    private static final int CHUNK_ORIGIN_X = -6250 - DRIFT;
+    private static final int CHUNK_ORIGIN_Z = -6250 - DRIFT;
 
     /** Côté de la grille carrée de chunks : {@value #SIDE} × {@value #SIDE}. */
     private static final int SIDE = 8;

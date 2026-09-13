@@ -109,7 +109,7 @@ public final class Herald {
             }
             return java.util.List.of(
                     "  Conseil     region-file-compression=lz4 (server.properties)",
-                    "              sauvegarde 3,7× plus vite : 125 ms → 33 ms",
+                    "        sauvegarde 3,7× plus vite : 153 ms → 42 ms, +23 % de place",
                     "              +20 % de disque · rétrocompatible, rien à convertir");
         } catch (Throwable unavailable) {
             // Un conseil qu'on n'arrive pas à formuler ne vaut pas un démarrage raté.

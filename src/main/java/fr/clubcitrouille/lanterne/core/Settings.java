@@ -77,6 +77,44 @@ public final class Settings {
     /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
     private static boolean projectiles = true;
 
+    /**
+     * Le niveau de détail porté sur le client, retiré après essai — douzième plan démoli, et le seul
+     * qui ait cassé le jeu.
+     *
+     * <h2>Le créneau était juste, la mise en œuvre non</h2>
+     *
+     * <p>Sodium et les mods de rendu optimisent ce qui est <b>dessiné</b>. Personne ne touche à ce qui
+     * est <b>simulé côté client</b> — or {@code ClientLevel.tickEntities} appelle {@code tick()} sur
+     * chaque entité chargée, vingt fois par seconde, qu.elle soit à trois blocs ou à cent cinquante.
+     * Y porter le niveau de détail du mod était l.idée évidente, et elle reste bonne.
+     *
+     * <p>L.accroche, elle, était fausse. {@code ClientLevel.tickNonPassenger} contient ceci :
+     *
+     * <pre>
+     * entity.setOldPosAndRot();
+     * entity.tickCount++;          // ← ici
+     * entity.tick();
+     * </pre>
+     *
+     * <p>Annuler la méthode entière fige donc {@code tickCount}. Le décalage par identifiant qui
+     * devait répartir les entités sur plusieurs ticks devenait constant : l.entité n.était plus jamais
+     * simulée, son animation restait bloquée au même pas, et le client s.arrêtait sur un
+     * {@code ArrayIndexOutOfBoundsException} quelques secondes après le chargement du monde.
+     *
+     * <p>Une version chirurgicale — n.annuler que {@code entity.tick()} en laissant le compteur
+     * avancer — serait possible. Elle n.a pas été écrite, pour une raison mesurée et non par
+     * prudence : le gain côté client est <b>déjà</b> de ×1,25 sans toucher une ligne de rendu, obtenu
+     * en libérant du processeur au serveur intégré. Risquer l.animation des créatures pour un module
+     * dont le seuil de soixante-quatre blocs ne s.armerait presque jamais dans le cas mesuré n.est pas
+     * un échange raisonnable.
+     *
+     * <p>La leçon est celle qu.un crash enseigne mieux qu.un raisonnement : <b>un compteur incrémenté
+     * à l.intérieur de la méthode qu.on annule cesse d.avancer</b>, et toute logique de cadence qui
+     * s.appuie dessus se bloque sur sa première valeur.
+     */
+    private static final boolean HAZE_REMOVED_AFTER_CRASH = true;
+
+
 
     /**
      * Le raccourci du tirage aléatoire, retiré après mesure — dixième plan démoli, et le plus
