@@ -463,7 +463,7 @@ deçà desquels l'ordonnancement coûte plus qu'il ne rapporte.
 
 ## 🧭 Ce que ce projet a appris en se trompant
 
-> Le banc a rendu **treize verdicts négatifs**, et chacun avait raison. Ce qui suit n'est pas une
+> Le banc a rendu **quinze verdicts négatifs**, et chacun avait raison. Ce qui suit n'est pas une
 > liste d'échecs : c'est la raison pour laquelle les chiffres du haut de page sont fiables.
 
 <details>
@@ -516,19 +516,44 @@ passer d'un facteur 4 à 16.
 </details>
 
 <details>
-<summary><b>💤 Deux bugs dans le sommeil des objets, avant le ×62</b></summary>
+<summary><b>💤 Le sommeil des objets — l'idée phare, écartée par son propre banc</b></summary>
 
 <br>
 
+C'était l'innovation la mieux fondée de ce projet. Un objet posé au sol refait vingt fois par seconde
+une requête de collision complète dont la réponse n'a pas changé depuis trois minutes — et l'on pouvait
+démontrer, code du jeu à l'appui, que l'endormir ne cassait **rien** : c'est le joueur qui ramasse, la
+trémie qui aspire, l'explosion qui cherche.
+
+Quatre fichiers, deux mixins, un compteur de modifications par section de chunk pour le réveil
+événementiel, une épreuve de conformité dédiée. Et deux bugs à corriger avant qu'il ne fonctionne :
+
 **La condition ne se déclenchait jamais.** Elle exigeait une vitesse nulle. Or un objet posé au sol
 n'a **jamais** une vitesse nulle en vanilla : `applyGravity()` lui retire 0,04 en y à chaque tick, et
-le sol ne les lui rend qu'un tick sur quatre, quand `move()` a effectivement lieu. Sa vitesse oscille
-perpétuellement, à plus de mille fois le seuil demandé. Le bon critère est le **déplacement réel**.
+le sol ne les lui rend qu'un tick sur quatre. Le bon critère est le **déplacement réel**.
 
 **Le compteur comptait les mauvais ticks.** Il s'incrémentait à chaque passage — mais la dégradation
 par densité ralentit déjà un tas d'objets à un tick sur seize. Atteindre 45 demandait **720 ticks de
-jeu**, plus que la durée de la mesure. Deux modules du même mod se gênaient sans que rien ne le
-signale.
+jeu**. Deux modules du même mod se gênaient sans que rien ne le signale.
+
+Une fois réparé, il a été mesuré. Et **retiré** :
+
+| | |
+|---|---|
+| module seul, 2 000 objets | 38,46 contre 38,84 ms → **aucun effet** |
+| tout **sauf** lui, 8 000 objets | **×62,24** |
+| tout **avec** lui, 8 000 objets | ×62,36 |
+
+La cadence et le court-circuit de collision faisaient déjà tout le travail ; le sommeil n'arrivait
+qu'après eux, sur un tick déjà supprimé.
+
+**Ce que son retrait laisse en place est la vraie trouvaille.** En cherchant pourquoi la disparition
+des objets était décalée — 152 ticks au lieu de 120 — on a découvert que la cadence arrêtait leur
+horloge d'âge, exactement comme elle arrêtait la ponte des poules. Cette correction reste, et
+l'épreuve confirme 0 décalage sur 40 objets **sans** le module de sommeil.
+
+Le retrait supprime au passage un mixin sur `LevelChunk.setBlockState` — sur **chaque pose de bloc du
+serveur**. Un chemin très chaud, allégé pour de bon.
 </details>
 
 <details>
