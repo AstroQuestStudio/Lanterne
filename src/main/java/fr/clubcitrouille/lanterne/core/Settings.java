@@ -338,6 +338,8 @@ public final class Settings {
      * les bêtes décident d'errer, rien ne s'immobilise, donc rien d'autre ne peut se court-circuiter.
      */
     private static boolean pasture = true;
+    /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
+    private static boolean waypoints = true;
     /**
      * Le repos posé, retiré DEUX fois après mesure — quatorzième plan démoli, et le seul que ce
      * projet ait éprouvé à nouveau après avoir corrigé sa cause d'échec.
@@ -645,6 +647,15 @@ public final class Settings {
         return master && pasture;
     }
 
+    /**
+     * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
+     * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
+     * carnet invisible en cours de partie.
+     */
+    public static boolean waypoints() {
+        return waypoints;
+    }
+
 
 
     /**
@@ -775,6 +786,7 @@ public final class Settings {
         broom = Config.BROOM.get();
         vigil = Config.VIGIL.get();
         pasture = Config.PASTURE.get();
+        waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
         strictYield = Config.STRICT_YIELD.get();

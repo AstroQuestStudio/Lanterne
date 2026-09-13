@@ -3,5 +3,7 @@
   "item.lanterne.anchor": "Ancre de chunk",
   "block.lanterne.veilleuse": "Lanterne de Veille",
   "item.lanterne.veilleuse": "Lanterne de Veille",
-  "itemGroup.lanterne": "Lanterne"
+  "itemGroup.lanterne": "Lanterne",
+  "key.lanterne.waypoints": "Carnet de repères",
+  "key.categories.lanterne": "Lanterne"
 }

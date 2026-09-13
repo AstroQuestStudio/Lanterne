@@ -40,6 +40,7 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **600 villageois** | 56,30 ms | 38,43 ms | **×1,46** | ⏳ |
 | **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
 | **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
+| **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | **×1,05** | ✅ |
 | **Client — temps par image** | 24,79 ms | 19,80 ms | **×1,25** | ⏳ |
 
 <div align="center">
@@ -178,6 +179,39 @@ l'optimisation, ce serait retirer le jeu.
 
 ---
 
+## 🧭 Les repères — un carnet, et aucune téléportation
+
+```
+Touche B          → le carnet
+/lanterne wp add|remove|share <nom>
+```
+
+Les mods de carte offrent presque tous le saut vers un repère. C'est commode pour un opérateur, et
+cela **détruit la survie** : plus rien ne coûte de distance, donc plus rien ne coûte de temps, donc le
+monde cesse d'être grand.
+
+**Un repère dit *où c'est* et *à quelle distance*. Le chemin reste à faire.**
+
+| | |
+|---|---|
+| **Quota** | 5 par joueur, réglable — un carnet sans limite devient une liste de courses |
+| **Partage** | public ou privé, d'un clic. Un repère public reste la propriété de son auteur |
+| **Affichage** | les 3 plus proches en permanence, avec une flèche **relative au regard** |
+| **Couleurs** | huit teintes — au-delà, deux pastilles voisines ne se distinguent plus |
+
+> **Pourquoi une flèche et non un cap.** « 247° » demande de savoir où l'on regarde pour servir à
+> quelque chose. Un joueur ne sait pas où est le nord ; il sait où il regarde.
+
+Le serveur envoie le carnet **entier** à chaque changement. Le client n'ajoute, ne retire et ne
+modifie jamais rien de lui-même : il remplace. C'est ce qui rend impossible le défaut classique de ces
+systèmes — un repère qu'on croit partagé et qui ne l'est pas, un repère supprimé qui reste affiché.
+
+Et le serveur ne croit **rien** de ce qu'un client dit sur lui-même : l'identifiant du propriétaire
+est lu dans la connexion, jamais dans le paquet. Un client modifié ne peut pas toucher au carnet d'un
+autre.
+
+---
+
 ## 🧹 Le balai — et pourquoi il est éteint par défaut
 
 ```
@@ -246,6 +280,20 @@ rendu à la mesure.**
 Deux sections, et la distinction compte. Le **socle** ne change rien au jeu — il enlève du travail
 inutile, et son seul effet visible est que le serveur va plus vite. Les **ajouts** changent le jeu.
 On doit pouvoir prendre le premier sans le second.
+
+### Les boîtes de Shulker
+
+Java 26.1 sait **déjà** les reteindre, et mieux qu'on ne le croit :
+
+```json
+{ "type": "minecraft:crafting_transmute",
+  "input": "#minecraft:shulker_boxes",
+  "material": "minecraft:red_dye" }
+```
+
+`crafting_transmute` **conserve les composants** : on reteint une boîte déjà colorée, autant de fois
+qu'on veut, **sans perdre son contenu**. Seul manquait le retour au violet d'origine — ajouté ici :
+boîte colorée + carapace de Shulker.
 
 **Le bloc reste enregistré même réglage coupé.** Un bloc absent du registre devient de l'air dans les
 mondes où il était posé : un interrupteur de performance n'a pas le droit de détruire une construction.
@@ -382,7 +430,59 @@ C'est la partie du projet dont il est le plus fier.
 | **LOD client** | Sodium ne touche pas au tick | **Le tick produit l'état du rendu** — crash |
 | **Recherche d'eau** | 162 positions par appel | Décor résiduel — l'eau n'était jamais trouvée |
 | **Entonnoirs endormis** | Sept ticks sur huit ne font rien | Vrai, et sans valeur : ces sept ticks ne font qu'une décrémentation |
+| **Repos posé** | 15 % du profil part en gravité | Retiré **deux fois** — voir ci-dessous |
 | *…et cinq autres* | | |
+
+### Celui qui a été retiré deux fois
+
+Une bête posée sur un cube plein ne peut pas tomber : sa collision pouvait être **conclue** au lieu
+d'être calculée. Le raisonnement était juste ; le verdict ne l'a pas été.
+
+**Premier refus** — taux de déclenchement **4,5 %**, coût net d'une milliseconde. La cause n'était pas
+le code mais l'état du monde : dans un tas, les bêtes se poussent en permanence et rien n'est jamais
+immobile.
+
+**L'enclos a corrigé cette cause.** 915 bêtes sur 1000 se sont posées, le taux est monté à **26 %**.
+Quatre paires de mesures entrelacées ont tranché quand même :
+
+```
+sans : 6,21 · 7,21 · 8,25 · 6,75   moyenne 7,11 ms
+avec : 6,37 · 6,48 · 8,29 · 7,97   moyenne 7,28 ms
+```
+
+Trois fois sur quatre dans le mauvais sens.
+
+> **La règle, et elle est arithmétique.** Le rapport a fini par publier le bon chiffre : **157 appels
+> à `collide` par tick**, une fois la cadence appliquée. Le raccourci portait sur quarante ; son point
+> d'accroche se payait sur cent cinquante-sept.
+>
+> La valeur d'un raccourci est le produit de **trois** nombres : son taux de déclenchement, ce qu'il
+> épargne, et le nombre d'appels. La première publication disait « 22 674 collisions épargnées » — un
+> grand nombre qui cachait les deux autres.
+
+### L'enclos, ou comment un module en débloque trois
+
+Trois modules attendaient que les bêtes s'immobilisent, et aucun n'y arrivait. `Jam` exige vingt
+ticks d'immobilité consécutifs et n'en trouvait que **152 sur 1000**.
+
+La cause était en amont des trois : **les bêtes décident d'aller se promener.** Le compteur
+d'immobilité se remet à zéro, l'amas ne se déclare jamais figé, et plus rien ne peut se poser.
+
+Or une vache au milieu d'un enclos plein qui décide de marcher fait calculer un chemin, le suit, se
+fait repousser par ses voisines, et **finit là où elle était**. Le résultat observable est identique ;
+seul le calcul disparaît.
+
+Le critère ne suppose rien sur la forme du lieu — pas la densité, qui aurait figé douze bêtes
+parfaitement libres réparties sur un chunk. **Cette bête est-elle allée quelque part ?** On note sa
+position, on revient cent ticks plus tard. Moins de deux blocs en cinq secondes, elle cesse de
+décider. Dès qu'elle en parcourt deux, elle recommence.
+
+> Aucune barrière à surveiller : **bouger est sa propre preuve.**
+
+```
+amas figés   121 / 162  →  372 / 422      Jam se déclenche 3× plus
+915 bêtes figées sur 1000 · 23 649 décisions d'errance épargnées
+```
 
 ### Celui qui est revenu
 

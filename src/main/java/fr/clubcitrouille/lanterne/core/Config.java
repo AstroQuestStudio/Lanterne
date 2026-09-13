@@ -58,6 +58,9 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
     public static final ModConfigSpec.BooleanValue VIGIL;
+    public static final ModConfigSpec.BooleanValue WAYPOINTS;
+    public static final ModConfigSpec.IntValue WAYPOINT_QUOTA;
+    public static final ModConfigSpec.IntValue WAYPOINT_SHARED_CAP;
     public static final ModConfigSpec.BooleanValue BROOM;
     public static final ModConfigSpec.IntValue BROOM_PERIOD;
     public static final ModConfigSpec.BooleanValue BROOM_ITEMS;
@@ -187,6 +190,35 @@ public final class Config {
                 "Ne touche ni aux generateurs de creatures, ni aux raids, ni aux animaux.",
                 "Coupee, le bloc reste posable et eclaire - il ne garde simplement plus rien.")
                 .define("lanterne_de_veille", true);
+
+        BUILDER.comment(
+                "",
+                "LES REPERES - un carnet, et AUCUNE teleportation.",
+                "",
+                "Les mods de carte offrent presque tous le saut vers un repere. C'est commode pour",
+                "un operateur, et cela detruit la survie : plus rien ne coute de distance, donc",
+                "plus rien ne coute de temps, donc le monde cesse d'etre grand.",
+                "",
+                "Un repere dit OU c'est et A QUELLE DISTANCE. Le chemin reste a faire.",
+                "",
+                "Touche B par defaut pour le carnet. Trois reperes s'affichent en permanence,",
+                "avec une fleche relative au REGARD du joueur - il ne sait pas ou est le nord,",
+                "il sait ou il regarde.").push("reperes");
+
+        WAYPOINTS = BUILDER.comment("Allumer le carnet de reperes.")
+                .define("actifs", true);
+        WAYPOINT_QUOTA = BUILDER.comment(
+                "Reperes par joueur. Un carnet sans limite devient une liste de courses : on y",
+                "jette tout, on n'y retrouve rien, et le choix de ce qui merite un repere - qui",
+                "est la partie interessante - disparait.",
+                "Cinq : la base, la ferme, le portail, le village, et un projet en cours.")
+                .defineInRange("par_joueur", 5, 1, 64);
+        WAYPOINT_SHARED_CAP = BUILDER.comment(
+                "Reperes publics du serveur entier. Un repere public est visible de tous sans",
+                "cesser d'appartenir a celui qui l'a pose : lui seul peut le retirer.")
+                .defineInRange("publics_maximum", 32, 0, 256);
+
+        BUILDER.pop();
 
         BUILDER.comment(
                 "",

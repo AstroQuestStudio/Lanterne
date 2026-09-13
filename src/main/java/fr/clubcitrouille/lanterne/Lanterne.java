@@ -75,6 +75,13 @@ public final class Lanterne {
         Settings.configureFromEnvironment();
         fr.clubcitrouille.lanterne.core.Hush.install();
         fr.clubcitrouille.lanterne.core.Machine.appraise();
+        fr.clubcitrouille.lanterne.content.waypoint.Waypoints.register(modBus);
+        // Les touches et les couches d'interface passent par le bus du MOD et n'existent que côté
+        // client. L'appel est donc gardé : un serveur dédié ne doit jamais charger ces classes, et
+        // la garde suffit — une classe n'est chargée qu'au moment où l'on s'en sert.
+        if (net.neoforged.fml.loading.FMLEnvironment.getDist().isClient()) {
+            fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
+        }
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,
         // Profiler.getDefaultFiller() fait une recherche ThreadLocal à chaque appel — c'est-à-dire

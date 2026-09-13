@@ -70,6 +70,88 @@ public final class LanterneCommand {
                                             IntegerArgumentType.getInteger(context, "lignes"));
                                     return 1;
                                 })))
+                .then(Commands.literal("wp")
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("nom", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                                        .executes(context -> {
+                                            var player = context.getSource().getPlayerOrException();
+                                            var atlas = fr.clubcitrouille.lanterne.content.waypoint.Atlas
+                                                    .of(context.getSource().getServer());
+                                            String name = fr.clubcitrouille.lanterne.content.waypoint
+                                                    .Waypoints.clean(com.mojang.brigadier.arguments
+                                                    .StringArgumentType.getString(context, "nom"));
+                                            var mark = new fr.clubcitrouille.lanterne.content.waypoint.Waypoint(
+                                                    player.getUUID(), player.getGameProfile().name(), name,
+                                                    player.level().dimension().identifier(),
+                                                    player.blockPosition(),
+                                                    fr.clubcitrouille.lanterne.content.waypoint.Waypoint.PALETTE[0],
+                                                    false);
+                                            String refusal = atlas.add(mark);
+                                            fr.clubcitrouille.lanterne.content.waypoint.Waypoints.tell(
+                                                    player, refusal != null ? refusal
+                                                            : "Repère « " + name + " » posé.");
+                                            atlas.syncAll(context.getSource().getServer());
+                                            return 1;
+                                        })))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("nom", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                                        .executes(context -> {
+                                            var player = context.getSource().getPlayerOrException();
+                                            var atlas = fr.clubcitrouille.lanterne.content.waypoint.Atlas
+                                                    .of(context.getSource().getServer());
+                                            String name = com.mojang.brigadier.arguments
+                                                    .StringArgumentType.getString(context, "nom");
+                                            boolean gone = atlas.remove(player.getUUID(), name);
+                                            fr.clubcitrouille.lanterne.content.waypoint.Waypoints.tell(
+                                                    player, gone ? "Repère « " + name + " » retiré."
+                                                            : "Aucun repère de ce nom.");
+                                            atlas.syncAll(context.getSource().getServer());
+                                            return 1;
+                                        })))
+                        .then(Commands.literal("share")
+                                .then(Commands.argument("nom", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                                        .executes(context -> {
+                                            var player = context.getSource().getPlayerOrException();
+                                            var atlas = fr.clubcitrouille.lanterne.content.waypoint.Atlas
+                                                    .of(context.getSource().getServer());
+                                            String name = com.mojang.brigadier.arguments
+                                                    .StringArgumentType.getString(context, "nom");
+                                            var mark = atlas.find(player.getUUID(), name);
+                                            if (mark == null) {
+                                                fr.clubcitrouille.lanterne.content.waypoint.Waypoints
+                                                        .tell(player, "Aucun repère de ce nom.");
+                                                return 0;
+                                            }
+                                            boolean wanted = !mark.shared();
+                                            atlas.replace(player.getUUID(), name,
+                                                    m -> m.withShared(wanted));
+                                            fr.clubcitrouille.lanterne.content.waypoint.Waypoints.tell(
+                                                    player, "Repère « " + name + (wanted
+                                                            ? " » rendu public." : " » redevenu privé."));
+                                            atlas.syncAll(context.getSource().getServer());
+                                            return 1;
+                                        })))
+                        .executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            var atlas = fr.clubcitrouille.lanterne.content.waypoint.Atlas
+                                    .of(context.getSource().getServer());
+                            var seen = atlas.visibleTo(player.getUUID());
+                            if (seen.isEmpty()) {
+                                context.getSource().sendSuccess(() -> Component.literal(
+                                        "Aucun repère. « /lanterne wp add <nom> » pour en poser un.")
+                                        .withStyle(ChatFormatting.GRAY), false);
+                                return 0;
+                            }
+                            for (var mark : seen) {
+                                context.getSource().sendSuccess(() -> Component.literal(String.format(
+                                        Locale.ROOT, "  %s  %d %d %d  (%s)%s",
+                                        mark.name(), mark.pos().getX(), mark.pos().getY(),
+                                        mark.pos().getZ(), mark.dimension().getPath(),
+                                        mark.shared() ? " · public de " + mark.ownerName() : ""))
+                                        .withStyle(style -> style.withColor(mark.colour())), false);
+                            }
+                            return seen.size();
+                        }))
                 .then(Commands.literal("clear")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> {
