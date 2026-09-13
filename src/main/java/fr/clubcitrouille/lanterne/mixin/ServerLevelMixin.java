@@ -63,9 +63,41 @@ import fr.clubcitrouille.lanterne.core.EntityThrottle;
 public abstract class ServerLevelMixin {
     @Inject(method = "tickNonPassenger", at = @At("HEAD"), cancellable = true)
     private void lanterne$skipBeforeEvent(Entity entity, CallbackInfo callback) {
+        // <h2>Pourquoi les créatures ne passent plus par ici</h2>
+        //
+        // Annuler le tick entier d'une créature est grossier, et le prix en a été découvert tard.
+        // Les compteurs qui font le <b>rendement</b> d'une ferme vivent dans les {@code aiStep()} des
+        // sous-classes :
+        //
+        // <pre>
+        // AgeableMob.aiStep : if (this.canAgeUp()) this.setAge(++age);   // la croissance
+        // Animal.aiStep     : if (this.inLove > 0) this.inLove--;        // la reproduction
+        // Chicken.aiStep    : if (--this.eggTime <= 0) ... pond un œuf   // la ponte
+        // </pre>
+        //
+        // Une poule tickée une fois sur huit pondait donc <b>huit fois moins d'œufs</b>, et un veau
+        // grandissait huit fois plus lentement. Personne ne l'aurait relié au mod : la ferme
+        // fonctionne, elle rend simplement moins, et on accuse la chance.
+        //
+        // Les créatures sont donc traitées un cran plus bas, dans {@code LivingEntity.aiStep}, où l'on
+        // peut retirer ce qui coûte — l'intelligence et le déplacement — en laissant tourner ce qui
+        // produit. Voir LivingEntityMixin.
+        // Les créatures sont donc traitées un cran plus bas, dans {@code LivingEntity.aiStep} — mais
+        // seulement si l'on a demandé la préservation stricte du rendement. Par défaut, on garde
+        // l'annulation totale, qui est bien plus rapide (10,01 ms contre 14,31 sur la même charge), et
+        // l'on rattrape les compteurs à la main. Voir Produce, qui chiffre les deux voies.
+        if (fr.clubcitrouille.lanterne.core.Settings.strictYield()
+                && entity instanceof net.minecraft.world.entity.LivingEntity) {
+            return;
+        }
         if (EntityThrottle.shouldTick(entity)) {
             return;
         }
+
+        // Les horloges de production avancent même quand la créature ne fait rien d'autre : un veau
+        // grandit, un délai de reproduction s'écoule, une poule approche de sa ponte. Sans cette
+        // ligne, une ferme éloignée rendait proportionnellement moins, et rien ne le signalait.
+        fr.clubcitrouille.lanterne.core.Produce.compensate(entity);
 
         // <h2>Deux effets à reproduire, et le second est vital</h2>
         //

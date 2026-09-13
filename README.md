@@ -9,6 +9,10 @@ mais à lui éviter le travail qui ne sert à rien.
 
 ### Un seul mod fait jeu égal avec dix-sept — et les bat sur la mémoire, sans casser les fermes.
 
+**×6,3** sur un serveur peuplé · **×5,2** sur un élevage intensif · **×62** sur un sol jonché d'objets
+
+*Rendement d'une ferme : **100 %**, mesuré. Aucun autre mod d'optimisation ne publie ce chiffre.*
+
 </div>
 
 ---
@@ -37,6 +41,49 @@ xychart-beta
 <sub>Modpack comparé : Lithium, FerriteCore, ModernFix, ServerCore, Adaptive Performance Tweaks,
 AI-Improvements, Immersive Optimization, LetMeDespawn, Clumps et dépendances.</sub>
 
+### Trois charges, et non une moyenne
+
+Un chiffre unique cache l'essentiel : **ce qui met un serveur à genoux n'est jamais homogène.** Les
+entités réparties en anneau sont la charge la plus facile à mesurer et la moins représentative. Les
+deux autres reproduisent les plaintes réelles des administrateurs.
+
+```mermaid
+xychart-beta
+    title "Millisecondes par tick — échelle logarithmique impossible, lisez les chiffres"
+    x-axis ["10 500 entités", "1 000 vaches en 15x15", "8 000 objets au sol"]
+    y-axis "ms par tick" 0 --> 480
+    bar [200.3, 28.4, 463.5]
+    bar [31.6, 5.4, 7.4]
+```
+
+| Charge | Sans Lanterne | Avec Lanterne | Gain | Ce qu'elle reproduit |
+|---|---:|---:|---:|---|
+| 10 500 entités sur un anneau de 160 blocs | 200,3 ms | **31,6 ms** | **×6,3** | un serveur peuplé, gradient de distance |
+| 1 000 vaches dans un carré de 15 blocs | 28,4 ms | **5,4 ms** | **×5,2** | un élevage intensif, coût quadratique |
+| 8 000 piles d'objets au sol | 463,5 ms | **7,4 ms** | **×62,4** | une ferme qui déborde, un sol jonché |
+
+<sub>La dernière n'est pas une aberration de mesure : sans le mod, un tick dure **463 ms**, et le
+chien de garde du serveur finit par le déclarer planté. Le détail de l'analyse est plus bas —
+`Entity.canBeCollidedWith()` rend faux par défaut, et trois classes seulement le redéfinissent dans
+tout Minecraft.</sub>
+
+### Mémoire occupée, et non seulement allouée
+
+Le tableau ci-dessus mesure le **débit d'allocation** — combien d'octets le serveur demande par
+seconde. C'est lui qui commande la fréquence des ramassages, donc des à-coups.
+
+Il ne dit rien de la question qu'un administrateur se pose vraiment : *combien de mémoire faut-il
+donner à ce serveur ?* La réponse est l'ensemble vivant, ce qui reste occupé **après un ramassage
+complet** — que le banc provoque au lieu de l'attendre.
+
+| Charge de référence | Occupation après ramassage |
+|---|---:|
+| Sans Lanterne | 446,7 Mo |
+| **Avec Lanterne** | **376,9 Mo** |
+
+**69,8 Mo de moins**, sur un serveur qui n'a rien déchargé. Le gain est modeste comparé au facteur
+sept sur les allocations — et le dire ainsi vaut mieux que de laisser confondre les deux chiffres.
+
 ### Le gain monte avec la charge
 
 ```mermaid
@@ -64,6 +111,41 @@ xychart-beta
 Sur un VPS à un cœur, la mémoire n'est pas un confort : un ramassage n'y tourne pas « en
 parallèle », il **fige le serveur**. Dix fois moins d'allocations, c'est dix fois moins d'à-coups.
 
+### Sauvegarde — le réglage à trois lettres que personne n'active
+
+Minecraft sait écrire ses fichiers de région en **LZ4** depuis longtemps. Il ne le fait pas :
+`region-file-compression` vaut `deflate` par défaut. Mesuré sur 64 chunks, 10 relevés par
+compression :
+
+| Compression | Temps de sauvegarde | Place sur disque |
+|---|---:|---:|
+| `deflate` (défaut) | 125,32 ms | 20,4 Ko/chunk |
+| **`lz4`** | **33,42 ms** | ~24 Ko/chunk |
+
+**×3,7 sur la sauvegarde, sans une ligne de code**, pour environ 20 % de place en plus. Sur un petit
+serveur, la sauvegarde s'exécute sur le fil principal : chaque hoquet se voit.
+
+Et la bascule est sans risque — la version de compression est inscrite dans l'en-tête de **chaque
+chunk**, donc un monde écrit en `deflate` se relit sans rien convertir.
+
+> Lanterne ne modifie pas votre `server.properties` : la configuration d'un serveur appartient à
+> celui qui l'administre. Il le **détecte au démarrage** et affiche le conseil avec son chiffre.
+
+### Génération de chunks — l'ordre de grandeur qui recadre le sujet
+
+| Opération | Coût médian par chunk |
+|---|---:|
+| **Générer** un chunk neuf | **36 à 44 ms** |
+| Relire un chunk existant | ~0,2 ms |
+
+Générer un chunk coûte donc presque **un tick entier**. C'est le vrai goulot de l'exploration, et
+Lanterne n'y touche pas encore — le dire est plus utile que de le laisser croire.
+
+<sub>Ce banc rend aussi deux verdicts comparatifs que **le mod refuse de publier** : la « perte » en
+génération compare deux régions au relief différent, et le « gain » en chargement atteint ×30, ce qui
+est impossible puisque aucun module ne touche au chargement. Le banc les rejette lui-même et dit
+pourquoi.</sub>
+
 ---
 
 ## ✅ Conformité — ce qu'aucun autre mod ne mesure
@@ -83,6 +165,53 @@ parallèle », il **fige le serveur**. Dix fois moins d'allocations, c'est dix f
 
 Son ×8,1 est donc payé, en partie, avec du rendement de jeu. **Lanterne a fait la même erreur**, et
 l'épreuve l'a rattrapée : la correction lui a coûté sa première place au chronomètre.
+
+### Rendement — le défaut que ce mod s'est découvert à lui-même
+
+C'est la découverte la plus importante de ce projet, et elle est arrivée tard.
+
+Les compteurs qui font le **rendement** d'une ferme ne sont pas rangés à part dans Minecraft. Ils
+vivent au milieu de l'intelligence, dans les `aiStep()` des sous-classes :
+
+```java
+Chicken.aiStep    : if (--this.eggTime <= 0) { ... pond un œuf ... }
+AgeableMob.aiStep : if (this.canAgeUp()) this.setAge(++age);
+Animal.aiStep     : if (this.inLove > 0) this.inLove--;
+```
+
+Tant que ralentir une créature voulait dire **annuler son tick**, ces trois horloges s'arrêtaient avec
+elle. Mesuré, à 120 blocs d'un joueur :
+
+| | Œufs pondus | Croissance des petits |
+|---|:---:|:---:|
+| Lanterne avant la correction | 🔴 **3 %** | 🔴 **19 %** |
+| **Lanterne après** | 💚 **100 %** | 💚 **100 %** |
+
+**Une ferme à œufs éloignée perdait 97 % de sa production.** Aucune des trois épreuves existantes ne
+pouvait le voir : l'une mesure les chutes, l'autre les fours, la troisième la vitesse. Personne ne
+mesurait la production.
+
+> Le remède n'est pas de ralentir moins. C'est de **tenir les horloges à la main** pendant le
+> sommeil — un veau vieillit, un délai de reproduction s'écoule, et une poule est réveillée juste
+> avant sa ponte pour que l'œuf sorte au tick exact.
+
+Et c'est ce qui a permis d'aller **plus loin** ensuite : puisque la cadence ne coûte plus de
+production, la dégradation des foules a pu passer d'un facteur 4 à un facteur 16. Le gain sur
+l'élevage intensif est passé de ×3,0 à ×5,3 — payé par la correction, pas malgré elle.
+
+### Objets au sol — disparition au tick exact
+
+Le sommeil des objets rend le plus gros chiffre du projet (×62). Il ne vaudrait rien si un objet
+endormi cessait de disparaître : le sol s'accumulerait, et le gain deviendrait une fuite de mémoire.
+
+| Vérification | Résultat |
+|---|---|
+| Disparition (durée de vie imposée 120 ticks) | 💚 **0 objet décalé sur 40**, écart maximal 0 tick |
+| Aspiration par une trémie | 💚 identique, avec et sans |
+| Ramassage par un joueur | ⚪ **non mesuré** — une doublure n'exécute pas son `aiStep` |
+
+<sub>La dernière ligne est affichée telle quelle plutôt que présentée comme réussie. Ce projet a déjà
+annoncé « exact au tick près » en comparant deux fours qui n'avaient cuit ni l'un ni l'autre.</sub>
 
 ### Cuisson — exact au tick près
 
@@ -117,11 +246,24 @@ trente ans dans le rendu 3D, et absent de la simulation de Minecraft.
 
 | | |
 |:---:|---|
-| 🛡️ | **Rien n'est dégradé près d'un joueur.** En deçà de 24 blocs, le jeu est le jeu. |
+| 🛡️ | **Le rendement ne dépend jamais de la cadence.** Ponte, croissance, reproduction, durée de vie des objets : tenus au tick exact, quelle que soit la distance. **Mesuré, pas promis.** |
 | 🛡️ | **Rien n'est jamais arrêté**, seulement espacé. |
 | 🛡️ | **Ce qui produit garde sa cadence.** Villageois et pillards : jamais sous 1 tick sur 4. |
 | 🛡️ | **Ce qui tombe tombe.** Chute, projectiles, TNT amorcée, véhicules montés : jamais espacés. |
+| 🛡️ | **Une bête isolée près d'un joueur** n'est pas touchée : en deçà de 24 blocs, le jeu est le jeu. |
 | 🛡️ | **Quand le serveur va bien, le mod ne fait presque rien.** |
+
+### Et ce qui est dégradé, dit franchement
+
+| | |
+|:---:|---|
+| ⚖️ | **Dans une foule, une bête réfléchit jusqu'à 16 fois moins souvent** — y compris à sept blocs du joueur. Elle continue de vieillir, de pondre et de se reproduire à l'heure ; c'est sa *décision* qui est espacée, pas sa production. |
+| ⚖️ | **Dans un tas, la bousculade est plafonnée** à 26 voisines au lieu de toutes. Dans un tas de deux cents, personne ne peut dire qui a poussé qui. |
+
+<sub>La première ligne de ce tableau corrige une garantie que ce README affichait à tort : il
+promettait « rien n'est dégradé près d'un joueur » alors que la dégradation par densité s'applique à
+sept blocs comme à cent. Une garantie inexacte est pire qu'une garantie absente — elle empêche celui
+qui constate un écart de soupçonner le bon coupable.</sub>
 
 ---
 
@@ -192,12 +334,37 @@ En jeu : `/lanterne`, `/lanterne bench`, `/lanterne on|off`.
 | Outil | Ce qu'il apporte |
 |---|---|
 | `Preflight` | **Refuse de mesurer** si les conditions ne sont pas réunies |
-| `Bench` | Comparaison A/B, médiane, 200 ticks de chauffe |
-| `Sampler` | Profileur par échantillonnage, avec vue « qui appelle qui » |
+| `Bench` | Comparaison A/B, médiane, chauffe **et échéance** — un banc doit toujours finir |
+| `Scene` | Les charges d'essai : anneau, **enclos intensif**, **sol jonché d'objets** |
+| `Sampler` | Profileur par échantillonnage — parts sur le **travail réel**, pas sur l'attente |
 | `Allocations` | Profileur d'**allocations** (JFR) — qui alloue, et combien |
 | `Understudy` | **De vrais joueurs simulés** — ni client, ni réseau |
 | `Conformance` | L'épreuve de chute, 5 sujets par distance, médiane |
 | `Kitchen` | L'épreuve de cuisson, au tick près |
+| **`Yield`** | **L'épreuve de rendement** — œufs pondus, croissance des petits |
+| **`Tidy`** | **L'épreuve des objets** — disparition, trémie, ramassage |
+| **`Boom`** | Le coût d'une explosion, à charge reconstituée avant chaque tir |
+| **`Flow`** | Le coût d'un écoulement d'eau, par différence avec un bassin sec |
+| **`Quarry`** | Génération **contre** chargement de chunks, mesurés séparément |
+| **`Vault`** | Sauvegarde sur disque : **temps et place**, jamais l'un sans l'autre |
+| **`Glass`** | Images par seconde côté client, sans intervention humaine |
+
+<sub>Les sept derniers ont été construits en une nuit. Deux d'entre eux ont immédiatement trouvé des
+défauts dans le mod — `Yield` les 97 % de rendement perdus, `Tidy` les objets qui ne disparaissaient
+plus à l'heure. Un banc qui ne trouve rien n'a pas encore prouvé qu'il fonctionne.</sub>
+
+### Sept outils qui savent refuser de conclure
+
+C'est la propriété la plus utile du laboratoire, et la plus difficile à obtenir : **un banc qui
+préfère dire « je ne sais pas ».**
+
+| Cas rencontré cette nuit | Ce que le banc a fait |
+|---|---|
+| Débit d'une chaîne de trémies : 18/30, puis 39/16, puis 16/16 | **refuse de citer le chiffre** — trois exécutions identiques, résultats incohérents |
+| Chargement de chunks : « gain ×30 » | **rejette son propre verdict** — aucun module ne touche au chargement, donc c'est le protocole |
+| Coût d'un écoulement d'eau : différence négative | **refuse de publier un ratio** — le signal est sous le bruit |
+| Ramassage par un joueur : « non » des deux côtés | **dit « non mesuré »** — une doublure n'exécute pas son `aiStep` |
+| Charge témoin à 135 ms/tick, 500 ticks demandés | **s'arrête à l'échéance** et dit sur combien de relevés il conclut |
 
 `Understudy` est la pièce qui rend tout le reste possible : de vrais `ServerPlayer`, inscrits dans la
 liste du serveur, avec une connexion qui absorbe les paquets. **Cent doublures coûtent ce que
@@ -218,8 +385,73 @@ deçà desquels l'ordonnancement coûte plus qu'il ne rapporte.
 
 ## 🧭 Ce que ce projet a appris en se trompant
 
-> Le banc a rendu **huit verdicts négatifs**, et chacun avait raison. Ce qui suit n'est pas une liste
-> d'échecs : c'est la raison pour laquelle les chiffres du haut de page sont fiables.
+> Le banc a rendu **treize verdicts négatifs**, et chacun avait raison. Ce qui suit n'est pas une
+> liste d'échecs : c'est la raison pour laquelle les chiffres du haut de page sont fiables.
+
+<details>
+<summary><b>🔴 Quatre fois où l'outil de mesure mentait, et non le mod</b></summary>
+
+<br>
+
+C'est la catégorie la plus dangereuse. Un mod lent se voit ; **un banc faux se croit**.
+
+**Le profileur diluait tout dans l'attente.** Un serveur qui tient ses 20 ticks par seconde passe le
+plus clair de son temps à dormir. 76 % des relevés surprenaient le serveur au repos, et tous les
+postes étaient donc divisés par quatre : `EntitySection.getEntities` passait pour 5,6 % alors qu'il
+pesait **24 % du travail réel**. Un profil qui sous-évalue d'un facteur quatre le poste le plus lourd
+ne désigne pas la bonne cible.
+
+**Le rapport décrivait la phase témoin.** Le verdict s'écrit à la fin de la seconde phase, mod
+éteint — il lisait donc des compteurs remis à plat. Il annonçait « travail évité : 4,5 % » là où la
+mesure réelle est 90 %. Deux chiffres du même rapport se contredisaient ; c'est ce qui a mis la puce
+à l'oreille.
+
+**Le banc ne finissait pas.** Le protocole demandait 700 ticks par exécution, en supposant sans le
+dire qu'un tick dure 50 ms. Sur la charge des objets au sol, un tick durait **135 secondes** : 26
+heures d'attente. Il ne rendait pas un chiffre faux, il ne rendait rien — ce qui est pire.
+
+**Deux protocoles fabriquaient leur propre écart.** La chaîne de trémies n'était pas vidée entre les
+phases (136 objets arrivés au bout d'une chaîne qui n'en reçoit que 64) et le relevé se faisait sur
+deux durées différentes. L'écart de 18 % imputé au mod venait entièrement du banc.
+</details>
+
+<details>
+<summary><b>🐣 Le défaut le plus grave : 97 % du rendement d'une ferme</b></summary>
+
+<br>
+
+Les compteurs de production vivent **dans** le tick, mêlés à l'intelligence : `eggTime` pour la
+ponte, `age` pour la croissance, `inLove` pour la reproduction. Annuler le tick d'une créature —
+c'est-à-dire la façon la moins coûteuse de ne rien faire — arrêtait ces trois horloges.
+
+Une poule à 120 blocs pondait **3 %** de sa production normale. Un veau grandissait à **19 %** de sa
+vitesse. Le mod tenait sa promesse de vitesse en prélevant la différence sur la production, sans le
+savoir, et sans qu'aucune de ses trois épreuves ne puisse le voir.
+
+Deux remèdes ont été écrits et mesurés. Le premier — laisser le tick s'exécuter et n'en retirer que
+l'intelligence — est plus élégant, plus général, et couvre automatiquement les créatures des mods. Le
+banc l'a chiffré : **14,31 ms contre 10,01**. Il est conservé, mais en option.
+
+Le second, retenu : tenir les horloges à la main pendant le sommeil. Et c'est lui qui a permis
+d'aller *plus loin* — puisque la cadence ne coûte plus de production, la dégradation des foules a pu
+passer d'un facteur 4 à 16.
+</details>
+
+<details>
+<summary><b>💤 Deux bugs dans le sommeil des objets, avant le ×62</b></summary>
+
+<br>
+
+**La condition ne se déclenchait jamais.** Elle exigeait une vitesse nulle. Or un objet posé au sol
+n'a **jamais** une vitesse nulle en vanilla : `applyGravity()` lui retire 0,04 en y à chaque tick, et
+le sol ne les lui rend qu'un tick sur quatre, quand `move()` a effectivement lieu. Sa vitesse oscille
+perpétuellement, à plus de mille fois le seuil demandé. Le bon critère est le **déplacement réel**.
+
+**Le compteur comptait les mauvais ticks.** Il s'incrémentait à chaque passage — mais la dégradation
+par densité ralentit déjà un tas d'objets à un tick sur seize. Atteindre 45 demandait **720 ticks de
+jeu**, plus que la durée de la mesure. Deux modules du même mod se gênaient sans que rien ne le
+signale.
+</details>
 
 <details>
 <summary><b>Deux plans démolis avant d'être codés</b></summary>

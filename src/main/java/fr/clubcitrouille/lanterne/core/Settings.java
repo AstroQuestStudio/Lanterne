@@ -5,9 +5,14 @@ import java.util.Locale;
 /**
  * Les interrupteurs, et pourquoi ils sont le module le plus important du mod.
  *
- * <h2>Quatre plans démolis par la mesure</h2>
+ * <h2>Cinq plans démolis par la mesure</h2>
  *
  * <p>Ce mod a commencé par des idées séduisantes, défendables, et fausses.
+ *
+ * <p><b>Le doublon des explosions.</b> Le calcul d'une explosion demande deux fois le même
+ * renseignement au monde, dix-sept mille fois par tir. Le doublon est réel, vérifié ligne par ligne
+ * dans le code du jeu — et le supprimer ne fait gagner <b>rien</b> : 972 µs contre 1022. Le cache de
+ * chunk de vanilla rendait déjà la seconde demande gratuite.
  *
  * <p><b>La compensation des ticks aléatoires.</b> Ne tirer qu'une fois sur seize, mais seize fois
  * plus. La loi est préservée — c'est exact — et le gain est <b>nul</b> : même nombre total de
@@ -59,6 +64,54 @@ public final class Settings {
     private static boolean rationing = true;
     /** La position réutilisée pour les tirages aléatoires de blocs. */
     private static boolean scratchPos = true;
+    /**
+     * Le sommeil des objets posés au sol.
+     *
+     * <p>Le seul module de ce mod qui ne concède rien : il ne ralentit pas les objets, il cesse de
+     * recalculer une réponse déjà connue. Le raisonnement complet est dans {@code Litter}.
+     */
+    private static boolean litter = true;
+
+    /**
+     * La préservation stricte du rendement, pour les créatures venues de mods.
+     *
+     * <h2>Un choix chiffré, laissé à l'administrateur</h2>
+     *
+     * <p>Éteint — le défaut — une créature ralentie voit son tick annulé, et ce mod rattrape à la main
+     * les compteurs de production du jeu de base : croissance, reproduction, ponte. C'est la voie
+     * rapide : <b>10,01 ms</b> sur la charge d'essai.
+     *
+     * <p>Allumé, le tick s'exécute et l'on n'en retire que l'intelligence et le déplacement. Tous les
+     * compteurs de toutes les créatures survivent, y compris ceux qu'un mod aurait ajoutés et qu'on ne
+     * peut pas connaître. C'est la voie sûre : <b>14,31 ms</b> sur la même charge.
+     *
+     * <p>Quarante pour cent du gain contre une garantie universelle. Le chiffre est mesuré, la décision
+     * appartient à celui qui connaît ses mods. {@code LANTERNE_MODULES=…,strict}
+     */
+    private static boolean strictYield;
+
+    /**
+     * Le module des explosions, retiré après mesure — cinquième plan démoli par le banc.
+     *
+     * <h2>Un doublon réel, et sans conséquence</h2>
+     *
+     * <p>Le calcul d'une explosion interroge le monde deux fois pour la même position :
+     * {@code getBlockState(pos)} puis {@code getFluidState(pos)}. Le second est un doublon strict du
+     * premier — la chaîne d'appels descend jusqu'à {@code BlockStateBase.getFluidState()}, qui rend un
+     * champ déjà calculé. Dix-sept mille fois par explosion.
+     *
+     * <p>Le raisonnement était juste, vérifié ligne par ligne, et le gain <b>nul</b> : 972 µs sans,
+     * 1022 µs avec, sur trente tirs par moitié. L'écart est du bruit.
+     *
+     * <p>L'explication tient à ce qu'on n'avait pas mesuré : {@code getChunkAt} garde le dernier chunk
+     * consulté. La seconde interrogation, portant sur la même position que la première, ne paie donc
+     * jamais la résolution qu'on croyait lui économiser.
+     *
+     * <p>Le module est retiré. Un doublon qui ne coûte rien n'est pas une optimisation en attente —
+     * c'est du code en plus, un mixin en plus, un conflit possible en plus, pour zéro microseconde.
+     * C'est la même règle qui a fait retirer le ralentissement des entonnoirs.
+     */
+    private static final boolean BLAST_REMOVED_AFTER_MEASUREMENT = true;
     /**
      * Le filtre qui écarte les avertissements dont l'innocuité est démontrée.
      *
@@ -131,6 +184,21 @@ public final class Settings {
         return master && scratchPos;
     }
 
+    public static boolean litter() {
+        return master && litter;
+    }
+
+
+    /**
+     * La préservation stricte du rendement n'est pas coupée par l'interrupteur général.
+     *
+     * <p>Elle choisit <em>comment</em> on ralentit, et non <em>si</em> l'on ralentit. Le banc éteint le
+     * mod pour comparer ; il n'a pas à changer d'architecture au milieu d'une mesure.
+     */
+    public static boolean strictYield() {
+        return strictYield;
+    }
+
     /**
      * Le filtre de journal ne dépend pas de l'interrupteur général.
      *
@@ -165,6 +233,8 @@ public final class Settings {
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
+        litter = wanted.contains("litter") || wanted.contains("objets") || wanted.contains("sol");
+        strictYield = wanted.contains("strict");
         hush = wanted.contains("silence");
     }
 
@@ -200,6 +270,9 @@ public final class Settings {
         }
         if (scratchPos) {
             text.append("positions ");
+        }
+        if (litter) {
+            text.append("objets ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

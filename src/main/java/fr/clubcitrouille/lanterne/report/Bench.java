@@ -50,8 +50,38 @@ public final class Bench {
      * une erreur reste une erreur. Deux cents ticks laissent au compilateur le temps de se fixer.
      */
     private static final int WARMUP = 200;
-    /** Ticks mesurés par phase. Cinq cents ticks valent vingt-cinq secondes. */
+    /** Ticks mesurés par phase. Cinq cents ticks valent vingt-cinq secondes — si le serveur tient. */
     private static final int SAMPLE = 500;
+
+    /**
+     * Budget de temps réel par phase, en nanosecondes.
+     *
+     * <h2>Un banc qui n'aurait jamais rendu son verdict</h2>
+     *
+     * <p>Le protocole demandait cinq cents ticks par phase. Cela suppose, sans le dire, qu'un tick dure
+     * à peu près cinquante millisecondes.
+     *
+     * <p>La charge « huit mille objets au sol » a détruit cette hypothèse. Phase témoin, mod éteint :
+     * <b>cent trente-cinq secondes par tick</b>. Cinq cents de ces ticks font dix-huit heures. Le banc
+     * ne mesurait pas mal — il ne finissait pas, ce qui est pire : aucun chiffre, aucun verdict, et une
+     * nuit de mesure perdue à attendre.
+     *
+     * <p>Une phase s'arrête donc à l'échéance, même si elle n'a pas son compte de relevés. Quatre-vingt
+     * -dix secondes suffisent : quand un tick dure deux minutes, trente relevés donnent une médiane
+     * aussi solide que cinq cents, parce que le bruit relatif d'un tick de deux minutes est minuscule.
+     *
+     * <p>Le rapport dit alors <b>combien de relevés ont servi</b>. Un verdict tiré de trente ticks n'est
+     * pas moins vrai qu'un verdict tiré de cinq cents, mais le lecteur a le droit de le savoir.
+     */
+    private static final long BUDGET_NANOS = 90_000_000_000L;
+
+    /**
+     * Relevés minimaux avant d'accepter d'arrêter une phase à l'échéance.
+     *
+     * <p>En dessous, la médiane ne veut rien dire et l'on préfère dépasser le budget. Mieux vaut un banc
+     * qui déborde qu'un chiffre tiré de trois mesures.
+     */
+    private static final int LEAST = 15;
 
     private enum Phase { IDLE, WARM_ON, MEASURE_ON, WARM_OFF, MEASURE_OFF, DONE }
 
@@ -66,6 +96,12 @@ public final class Bench {
     private static final long[] WITH = new long[SAMPLE];
     private static final long[] WITHOUT = new long[SAMPLE];
     private static int filled;
+
+    /** Relevés réellement obtenus dans chaque phase : ils peuvent différer si l'échéance a tranché. */
+    private static int keptWith;
+    private static int keptWithout;
+    /** Instant d'ouverture de la phase de mesure, pour savoir quand l'échéance tombe. */
+    private static long phaseOpened;
 
     private static long tickStart;
     /** Entités que l'épreuve a demandées, pour que le contrôle sache quoi vérifier. */
@@ -107,7 +143,122 @@ public final class Bench {
     private static long packetsWith;
     private static long packetsWithout;
 
+    /**
+     * La répartition des cadences, relevée pendant la phase où le mod agit.
+     *
+     * <h2>Un rapport qui décrivait la phase témoin</h2>
+     *
+     * <p>Le verdict s'écrit à la fin de la <b>seconde</b> phase, celle où le mod est éteint. Il lisait
+     * donc les compteurs de cadence dans l'état où la phase témoin les avait laissés : mod inactif,
+     * aucune dégradation, tout en pleine simulation.
+     *
+     * <p>Le premier banc de l'enclos l'a rendu visible. Il annonçait « pleine simulation : 967 » et
+     * « travail évité : 4,5 % » pour une charge de mille vaches dont le gain mesuré était de ×2,48.
+     * Les deux chiffres étaient incohérents entre eux, et c'est le second qui mentait.
+     *
+     * <p>La conclusion qu'on en aurait tirée était la mauvaise : « la dégradation par densité ne
+     * s'applique pas, il faut la brancher ». Elle est branchée, et elle fonctionne. C'est le
+     * <em>rapport</em> qui regardait au mauvais endroit — et c'est le troisième chiffre faux que ce
+     * banc produit avec assurance.
+     *
+     * <p>On relève donc la répartition à la fin de la phase active, et on l'étiquette comme telle.
+     */
+    private static String repartitionWith = "";
+    private static double avoidedWith;
+    private static int jammedWith;
+
+    /**
+     * Mémoire réellement retenue à la fin de chaque phase, en octets.
+     *
+     * <h2>Pourquoi « 26,9 Go » n'était probablement pas vrai</h2>
+     *
+     * <p>Ce projet a publié un tableau annonçant vingt-six virgule neuf gigaoctets pour le jeu nu
+     * contre deux virgule sept avec le mod. Le chiffre a été obtenu en lisant l'occupation du tas à un
+     * instant donné — c'est-à-dire <b>juste avant un ramassage</b>, au sommet de la dent de scie.
+     *
+     * <p>Or ce sommet ne mesure pas ce que le serveur a besoin de retenir. Il mesure à quel point la
+     * machine virtuelle a laissé le tas gonfler avant de se décider à nettoyer, ce qui dépend de la
+     * taille maximale accordée et du ramasse-miettes choisi, et pas du tout du contenu du monde. Deux
+     * relevés du même serveur peuvent différer d'un facteur dix sans que rien n'ait changé.
+     *
+     * <p>La question qui compte pour un administrateur est autre : <b>combien faut-il de mémoire pour
+     * que ce serveur tienne ?</b> Et la réponse est l'ensemble vivant — ce qui reste occupé après un
+     * ramassage complet. C'est ce qu'on relève ici, en provoquant le ramassage plutôt qu'en l'attendant.
+     *
+     * <p>Le débit d'allocation reste mesuré à côté : il commande la fréquence des à-coups, et c'est
+     * une autre question, tout aussi réelle. Les deux chiffres disent des choses différentes, et les
+     * confondre est ce qui a produit le premier.
+     */
+    private static long liveWith;
+    private static long liveWithout;
+
     private Bench() {}
+
+    /**
+     * Mémoire retenue après un ramassage complet.
+     *
+     * <p>Deux passages : le premier libère l'essentiel, le second ramasse ce que les finaliseurs du
+     * premier ont rendu joignable. C'est la pratique habituelle, et elle suffit ici — on cherche un
+     * ordre de grandeur comparable entre deux phases, pas une comptabilité à l'octet.
+     *
+     * <p>Le coût — quelques centaines de millisecondes de serveur figé — est payé <b>hors</b> de
+     * toute fenêtre de mesure : en fin de phase, juste avant les deux cents ticks de chauffe qui sont
+     * jetés de toute façon.
+     */
+    private static long liveBytes() {
+        try {
+            System.gc();
+            Thread.sleep(120L);
+            System.gc();
+            Thread.sleep(80L);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+        return java.lang.management.ManagementFactory.getMemoryMXBean()
+                .getHeapMemoryUsage().getUsed();
+    }
+
+    /**
+     * L'échéance de la phase est-elle passée ?
+     *
+     * <p>On exige un minimum de relevés avant de laisser l'échéance trancher : une médiane sur trois
+     * valeurs n'est pas une médiane, c'est une valeur prise au hasard parmi trois.
+     */
+    private static boolean overdue() {
+        return filled >= LEAST && System.nanoTime() - phaseOpened > BUDGET_NANOS;
+    }
+
+    /**
+     * La chauffe a-t-elle assez duré ?
+     *
+     * <h2>Le budget qui ne couvrait que la moitié du chemin</h2>
+     *
+     * <p>Borner la phase de mesure ne suffisait pas. Sur la charge témoin des objets au sol, un tick
+     * durait cent trois secondes — et la <b>chauffe</b> en demandait deux cents. Cinq heures et demie
+     * avant le premier relevé, donc avant que l'échéance de mesure n'ait la moindre chance de tomber.
+     *
+     * <p>Deux cents ticks de chauffe se justifient quand un tick dure cinquante millisecondes : dix
+     * secondes, le temps que le compilateur se fixe. Quand un tick dure deux minutes, le compilateur a
+     * tout compilé avant la fin du premier — et la phase précédente l'avait déjà fait.
+     *
+     * <p>La chauffe s'arrête donc elle aussi à l'échéance. Le tiers du budget de mesure : assez pour
+     * laisser passer un pic, jamais assez pour perdre une nuit.
+     */
+    private static boolean warmEnough() {
+        return System.nanoTime() - phaseOpened > BUDGET_NANOS / 3L;
+    }
+
+    /** La répartition des cadences en une ligne, pour pouvoir la retenir telle quelle. */
+    private static String repartition() {
+        StringBuilder text = new StringBuilder();
+        for (var entry : fr.clubcitrouille.lanterne.core.Census.buckets().entrySet()) {
+            if (!text.isEmpty()) {
+                text.append(" · ");
+            }
+            text.append(entry.getKey()).append(" : ").append(entry.getValue()[0]);
+        }
+        return text.isEmpty() ? "aucune entité recensée" : text.toString();
+    }
 
     public static boolean running() {
         return phase != Phase.IDLE && phase != Phase.DONE;
@@ -131,6 +282,7 @@ public final class Bench {
         stopAfter = server;
         listener = null;
         phase = Phase.WARM_ON;
+        phaseOpened = System.nanoTime();
         left = WARMUP;
         filled = 0;
         Settings.setEnabled(true);
@@ -143,6 +295,7 @@ public final class Bench {
         stopAfter = null;
         listener = source;
         phase = Phase.WARM_ON;
+        phaseOpened = System.nanoTime();
         left = WARMUP;
         filled = 0;
         Settings.setEnabled(true);
@@ -174,10 +327,11 @@ public final class Bench {
 
         switch (phase) {
             case WARM_ON -> {
-                if (--left <= 0) {
+                if (--left <= 0 || warmEnough()) {
                     phase = Phase.MEASURE_ON;
                     filled = 0;
                     allocMark = allocatedBytes();
+                    phaseOpened = System.nanoTime();
                     gcMark = gcCount();
                     fr.clubcitrouille.lanterne.lab.Understudy.resetPackets();
                     fr.clubcitrouille.lanterne.lab.Sampler.start(Thread.currentThread());
@@ -192,25 +346,34 @@ public final class Bench {
             }
             case MEASURE_ON -> {
                 WITH[filled++] = elapsed;
-                if (filled >= SAMPLE) {
+                if (filled >= SAMPLE || overdue()) {
+                    keptWith = filled;
                     allocWith = allocatedBytes() - allocMark;
                     gcWith = gcCount() - gcMark;
                     packetsWith = fr.clubcitrouille.lanterne.lab.Understudy.packetsSent();
+                    // Relevé ici, et non dans le verdict : dans deux phases d'ici le mod sera éteint
+                    // et ces compteurs ne diront plus rien de lui.
+                    repartitionWith = repartition();
+                    avoidedWith = fr.clubcitrouille.lanterne.core.Census.workAvoided();
+                    jammedWith = fr.clubcitrouille.lanterne.core.Jam.held();
+                    liveWith = liveBytes();
                     phase = Phase.WARM_OFF;
+                    phaseOpened = System.nanoTime();
                     left = WARMUP;
                     Settings.setEnabled(false);
                     fr.clubcitrouille.lanterne.lab.Sampler.stop();
                     say("── Profil AVEC Lanterne ──");
-                    fr.clubcitrouille.lanterne.lab.Sampler.report(14);
+                    fr.clubcitrouille.lanterne.lab.Sampler.report(24);
                     fr.clubcitrouille.lanterne.lab.Allocations.stopAndReport(20);
                     say("Phase 1 terminée (mod actif). Bascule — phase 2 sans le mod.");
                 }
             }
             case WARM_OFF -> {
-                if (--left <= 0) {
+                if (--left <= 0 || warmEnough()) {
                     phase = Phase.MEASURE_OFF;
                     filled = 0;
                     allocMark = allocatedBytes();
+                    phaseOpened = System.nanoTime();
                     gcMark = gcCount();
                     fr.clubcitrouille.lanterne.lab.Understudy.resetPackets();
                     // On profile la phase témoin, c'est-à-dire le jeu tel qu'il est. C'est cette
@@ -220,10 +383,12 @@ public final class Bench {
             }
             case MEASURE_OFF -> {
                 WITHOUT[filled++] = elapsed;
-                if (filled >= SAMPLE) {
+                if (filled >= SAMPLE || overdue()) {
+                    keptWithout = filled;
                     allocWithout = allocatedBytes() - allocMark;
                     gcWithout = gcCount() - gcMark;
                     packetsWithout = fr.clubcitrouille.lanterne.lab.Understudy.packetsSent();
+                    liveWithout = liveBytes();
                     phase = Phase.DONE;
                     Settings.setEnabled(true);
                     fr.clubcitrouille.lanterne.lab.Sampler.stop();
@@ -240,13 +405,19 @@ public final class Bench {
     }
 
     private static void conclude(ServerLevel level) {
-        double with = median(WITH);
-        double without = median(WITHOUT);
+        double with = median(WITH, keptWith);
+        double without = median(WITHOUT, keptWithout);
         double ratio = with <= 0d ? 0d : without / with;
 
         say("── Résultat ──");
-        say(String.format(Locale.ROOT, "Sans Lanterne : %.2f ms par tick (médiane)", without / 1e6));
-        say(String.format(Locale.ROOT, "Avec Lanterne : %.2f ms par tick (médiane)", with / 1e6));
+        say(String.format(Locale.ROOT, "Sans Lanterne : %.2f ms par tick (médiane de %d relevés)",
+                without / 1e6, keptWithout));
+        say(String.format(Locale.ROOT, "Avec Lanterne : %.2f ms par tick (médiane de %d relevés)",
+                with / 1e6, keptWith));
+        if (keptWith < SAMPLE || keptWithout < SAMPLE) {
+            say("Une phase au moins s'est arrêtée à l'échéance : la charge dépassait ce qu'un tick "
+                    + "peut absorber. Le chiffre reste valable, il porte sur moins de ticks.");
+        }
         say(String.format(Locale.ROOT, "Entités dans le monde : %d", count(level)));
         say(String.format(Locale.ROOT, "Modules actifs : %s", Settings.describe()));
 
@@ -257,6 +428,19 @@ public final class Bench {
                     bytes(allocWithout), bytes(allocWith), memoryRatio));
             say(String.format(Locale.ROOT, "Ramassages — sans : %d · avec : %d",
                     gcWithout, gcWith));
+        }
+        if (liveWithout > 0L) {
+            // L'ensemble vivant, et non le sommet de la dent de scie. C'est le chiffre qui dit
+            // combien de mémoire il faut donner à ce serveur ; l'autre disait surtout à quel point
+            // la machine virtuelle était patiente.
+            say(String.format(Locale.ROOT,
+                    "Mémoire retenue après ramassage — sans : %s · avec : %s  (%s)",
+                    bytes(liveWithout), bytes(liveWith),
+                    liveWith <= liveWithout
+                            ? String.format(Locale.ROOT, "%s de moins",
+                                    bytes(liveWithout - liveWith))
+                            : String.format(Locale.ROOT, "%s de PLUS",
+                                    bytes(liveWith - liveWithout))));
         }
 
         if (packetsWithout > 0L) {
@@ -272,11 +456,27 @@ public final class Bench {
         say(String.format(Locale.ROOT, "Observateurs : %d · chunks recensés : %d",
                 fr.clubcitrouille.lanterne.core.Census.probeCount(),
                 fr.clubcitrouille.lanterne.core.Census.chunksSeen()));
-        for (var entry : fr.clubcitrouille.lanterne.core.Census.buckets().entrySet()) {
-            say(String.format(Locale.ROOT, "  %s : %d", entry.getKey(), entry.getValue()[0]));
-        }
-        say(String.format(Locale.ROOT, "Travail évité (calculé) : %.1f %%",
-                fr.clubcitrouille.lanterne.core.Census.workAvoided() * 100d));
+        // Étiqueté « pendant la phase active », parce que ces compteurs ont déjà décrit la phase
+        // témoin une fois, et que personne ne s'en est aperçu avant que deux chiffres du même
+        // rapport ne se contredisent.
+        say("Cadences pendant la phase active — " + repartitionWith);
+        say(String.format(Locale.ROOT,
+                "Travail évité pendant la phase active : %.1f %% · amas figés : %d",
+                avoidedWith * 100d, jammedWith));
+        // Ces deux lignes existent parce qu'un module a été mesuré « sans effet » alors qu'il ne
+        // s'était en réalité jamais déclenché. Sans compteur d'activation, un gain nul et une
+        // optimisation morte donnent le même chiffre — et appellent des corrections opposées.
+        say(String.format(Locale.ROOT,
+                "Objets endormis : %d · réveillés : %d · sections suivies : %d",
+                fr.clubcitrouille.lanterne.core.Litter.sleepCount(),
+                fr.clubcitrouille.lanterne.core.Litter.wakeCount(),
+                fr.clubcitrouille.lanterne.core.Churn.tracked()));
+        say(String.format(Locale.ROOT,
+                "Recherches de collision évitées : %d · entités bloquantes : %d · "
+                + "ticks de production rattrapés : %d",
+                fr.clubcitrouille.lanterne.core.Solid.shortcuts(),
+                fr.clubcitrouille.lanterne.core.Solid.blockers(),
+                fr.clubcitrouille.lanterne.core.Produce.compensated()));
 
         // Le verdict, formulé pour être vérifiable et non pour flatter. Un gain sous cinq pour cent
         // n'est pas un gain : c'est du bruit, et le dire est la seule façon de rester crédible
@@ -354,11 +554,17 @@ public final class Bench {
      * <p>Le tri coûte, mais il a lieu une fois en fin de banc : c'est exactement le genre d'endroit
      * où la simplicité vaut mieux que l'astuce.
      */
-    private static double median(long[] values) {
-        long[] copy = values.clone();
+    private static double median(long[] values, int count) {
+        // Ne trier que ce qui a été rempli. Depuis qu'une phase peut s'arrêter à l'échéance, le reste
+        // du tableau contient des zéros : les inclure donnerait une médiane de zéro, donc un gain
+        // infini, donc un verdict absurde présenté avec le même aplomb que les autres.
+        if (count <= 0) {
+            return 0d;
+        }
+        long[] copy = java.util.Arrays.copyOf(values, count);
         java.util.Arrays.sort(copy);
-        int middle = copy.length / 2;
-        return copy.length % 2 == 0
+        int middle = count / 2;
+        return count % 2 == 0
                 ? (copy[middle - 1] + copy[middle]) / 2d
                 : copy[middle];
     }

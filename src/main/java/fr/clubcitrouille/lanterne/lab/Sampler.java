@@ -66,9 +66,84 @@ public final class Sampler {
      * et c'est ce que cette vue donne.
      */
     private static final Map<String, int[]> CALLERS = new HashMap<>();
-    /** Motif de la méthode dont on veut connaître les appelants. */
-    private static volatile String watched = "ThreadLocal";
+    /**
+     * Motif de la méthode dont on veut connaître les appelants.
+     *
+     * <h2>Le réglage qui manquait</h2>
+     *
+     * <p>Cette vue répond à la seule question qui compte quand un poste remonte : <b>qui l'appelle ?</b>
+     * Savoir que {@code PalettedContainer.get} pèse dix-sept pour cent ne mène nulle part — on
+     * n'optimise pas une lecture de palette. Savoir que c'est {@code LivingEntity.onClimbable} qui la
+     * demande vingt fois par seconde pour une vache qui ne grimpera jamais, si.
+     *
+     * <p>Elle était pourtant figée sur {@code ThreadLocal}, cible du jour où elle a été écrite, et
+     * réglée depuis. Elle observait donc consciencieusement un problème résolu pendant que le suivant
+     * passait inaperçu. Un outil de diagnostic qu'on ne peut pas rediriger finit par ne plus rien
+     * apprendre.
+     *
+     * <p>{@code LANTERNE_WATCH=PalettedContainer} la pointe où l'on veut.
+     */
+    private static volatile String watched = envWatch();
+
+    private static String envWatch() {
+        String wanted = System.getenv("LANTERNE_WATCH");
+        return wanted == null || wanted.isBlank() ? "ThreadLocal" : wanted.trim();
+    }
+
+    /**
+     * Les motifs à traverser pour trouver le véritable demandeur.
+     *
+     * <h2>Un appelant qui n'apprenait rien</h2>
+     *
+     * <p>Interrogé sur {@code PalettedContainer}, le profileur répondait :
+     * {@code LevelChunkSection.getBlockState — 15,2 %}. C'est exact et parfaitement inutile. Bien sûr
+     * que c'est la section qui lit la palette ; la question est <b>qui demande à la section</b>.
+     *
+     * <p>Le défaut venait de la règle : on remontait jusqu'au premier cadre différent du motif. Or
+     * l'accès à un bloc traverse quatre ou cinq couches d'infrastructure — palette, section, chunk,
+     * monde — et chacune est « différente » de la précédente. On s'arrêtait donc systématiquement au
+     * premier étage d'un escalier de cinq.
+     *
+     * <p>Le motif peut désormais énumérer toute la chaîne, séparée par des virgules. On remonte jusqu'au
+     * premier cadre qui n'en fait pas partie — c'est-à-dire jusqu'à celui qui a vraiment posé la
+     * question, et qui est le seul qu'on puisse corriger.
+     */
+    private static String[] probes() {
+        String raw = watched;
+        return raw == null ? new String[0] : raw.split(",");
+    }
+
+    private static boolean matchesProbe(String label, String[] probes) {
+        for (String probe : probes) {
+            String trimmed = probe.trim();
+            if (!trimmed.isEmpty() && label.contains(trimmed)) {
+                return true;
+            }
+        }
+        return false;
+    }
     private static int samples;
+    /**
+     * Relevés pris pendant que le serveur travaille vraiment.
+     *
+     * <h2>Le pourcentage qui divisait tout par quatre</h2>
+     *
+     * <p>Un serveur qui tient ses vingt ticks par seconde passe le plus clair de son temps à
+     * <b>attendre</b> : le tick fini, il dort jusqu'au suivant. Sur l'épreuve de l'enclos, le premier
+     * relevé a donné {@code Unsafe.park : 75,9 %} — c'est-à-dire que trois relevés sur quatre ont
+     * surpris le serveur à ne rien faire.
+     *
+     * <p>La conséquence était sournoise. Tous les autres chiffres étaient exprimés en part du temps
+     * <em>écoulé</em>, attente comprise : {@code EntitySection.getEntities : 5,6 %} laissait croire à
+     * un poste négligeable, alors qu'il pesait près d'un quart du travail réel. Un profil qui
+     * sous-évalue d'un facteur quatre le poste le plus lourd ne désigne pas la bonne cible — et ce
+     * projet a déjà perdu six bancs à poursuivre une cible mal désignée.
+     *
+     * <p>On compte donc séparément les relevés utiles, et c'est sur eux que portent les pourcentages.
+     * L'attente reste affichée, mais à sa place : comme une <b>marge</b>, qui est une bonne nouvelle,
+     * et non comme un poste de dépense.
+     */
+    private static int working;
 
     private Sampler() {}
 
@@ -85,6 +160,7 @@ public final class Sampler {
         FRAMES.clear();
         CALLERS.clear();
         samples = 0;
+        working = 0;
         running = true;
 
         worker = new Thread(() -> loop(target), "lanterne-sampler");
@@ -116,17 +192,44 @@ public final class Sampler {
         }
     }
 
+    /**
+     * Le serveur attendait-il à cet instant ?
+     *
+     * <p>On cherche le cadre d'attente dans les quelques premiers niveaux de pile seulement : quand
+     * le serveur dort, {@code waitUntilNextTick} est tout en haut. Parcourir la pile entière
+     * classerait comme « attente » n'importe quel travail fait <em>depuis</em> cette attente — par
+     * exemple les tâches différées, qui sont du vrai travail.
+     */
+    private static boolean idle(StackTraceElement[] stack) {
+        int depth = Math.min(stack.length, 8);
+        for (int i = 0; i < depth; i++) {
+            String method = stack[i].getMethodName();
+            if (method.equals("waitForTasks") || method.equals("waitUntilNextTick")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static synchronized void record(StackTraceElement[] stack) {
         samples++;
+        if (idle(stack)) {
+            // Le serveur dort : ce relevé compte pour la marge, pas pour la dépense. L'inclure dans
+            // le dénominateur divisait tous les postes par quatre et faisait passer le plus lourd
+            // d'entre eux pour un détail.
+            return;
+        }
+        working++;
         String top = label(stack[0]);
         count(TOPS, top);
 
-        // Le premier cadre hors de la méthode surveillée : son appelant utile.
-        String probe = watched;
-        if (probe != null && top.contains(probe)) {
-            for (int i = 1; i < Math.min(stack.length, 6); i++) {
+        // Le premier cadre au-dessus de toute la chaîne surveillée : le demandeur véritable. On
+        // cherche plus haut que six niveaux — l'accès à un bloc en traverse cinq à lui seul.
+        String[] probes = probes();
+        if (probes.length > 0 && matchesProbe(top, probes)) {
+            for (int i = 1; i < Math.min(stack.length, 14); i++) {
                 String caller = label(stack[i]);
-                if (!caller.contains(probe)) {
+                if (!matchesProbe(caller, probes)) {
                     count(CALLERS, caller);
                     break;
                 }
@@ -168,7 +271,18 @@ public final class Sampler {
             Lanterne.LOG.info("[PROFIL] Aucun relevé.");
             return;
         }
-        Lanterne.LOG.info("[PROFIL] {} relevés, un toutes les {} ms.", samples, PERIOD_MS);
+        if (working == 0) {
+            Lanterne.LOG.info("[PROFIL] {} relevés, tous pris pendant que le serveur attendait — "
+                    + "la charge est trop légère pour qu'un profil ait un sens.", samples);
+            return;
+        }
+        // La marge d'abord, parce que c'est elle qui dit si le reste vaut la peine d'être lu. Un
+        // serveur qui dort les trois quarts du temps n'a pas de problème de performance ; les postes
+        // qu'on listerait ensuite seraient exacts et sans intérêt.
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[PROFIL] %d relevés dont %d pendant le travail (%.0f %% du temps dormi — c'est la "
+                + "marge). Les parts ci-dessous portent sur le travail seul.",
+                samples, working, (samples - working) * 100d / samples));
 
         Lanterne.LOG.info("[PROFIL] ── Où le processeur se trouve (sommet de pile) ──");
         dump(TOPS, limit);
@@ -193,7 +307,7 @@ public final class Sampler {
 
         for (int i = 0; i < Math.min(limit, rows.size()); i++) {
             Map.Entry<String, int[]> row = rows.get(i);
-            double share = row.getValue()[0] * 100d / samples;
+            double share = row.getValue()[0] * 100d / working;
             if (share < 0.5d) {
                 break; // sous un demi pour cent, c'est du bruit et cela allonge le rapport pour rien
             }

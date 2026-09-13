@@ -61,6 +61,13 @@ public final class EntityThrottle {
      * @return vrai si l'entité doit s'exécuter normalement, faux si son tick peut être sauté
      */
     public static boolean shouldTick(Entity entity) {
+        // Le recensement des entités capables de bloquer un déplacement se fait ici, avant toute
+        // décision : c'est le seul endroit où chaque entité passe à chaque tick, et le compter
+        // ailleurs demanderait un parcours de plus. Voir Solid, et le million de tests d'intersection
+        // que ce recensement supprime.
+        if (Settings.collisions() && Solid.mayBlock(entity)) {
+            Solid.note(entity);
+        }
         if (mustNeverSkip(entity)) {
             return true;
         }
@@ -84,8 +91,11 @@ public final class EntityThrottle {
             // moins ». Le plafond propre à l'espèce s'applique ensuite — un villageois serré dans
             // une ferme reste un villageois qui travaille.
             int crowd = Crowd.noteAndPenalty(entity, now);
-            if (crowd > 0) {
-                period = Math.min(period << crowd, Cadence.ceiling(entity));
+            if (crowd > 1) {
+                // Une multiplication et non un décalage : la foule se mesure désormais de façon
+                // continue, comme la distance, et « deux fois plus serré » doit se traduire par
+                // « deux fois moins souvent », pas par le palier le plus proche.
+                period = Math.min(period * crowd, Cadence.ceiling(entity));
             }
         }
         Census.count(period);
@@ -122,6 +132,29 @@ public final class EntityThrottle {
         if (entity instanceof Player) {
             return true;
         }
+        // Une échéance de production qui arrive : la poule doit pondre dans le vrai code, au tick
+        // exact. Le même principe que le sommeil des fours — on dort jusqu'à l'échéance, pas au
+        // travers. Voir Produce.
+        if (Produce.dueSoon(entity)) {
+            return true;
+        }
+
+        // <h2>Deux tentatives avant de trouver la bonne</h2>
+        //
+        // L'épreuve des objets a d'abord montré que la cadence décalait leur disparition : durée de vie
+        // demandée cent vingt ticks, obtenue cent cinquante-deux, sur les quarante objets mesurés. La
+        // cause est structurelle — l'annulation du tick a lieu ici, avant que le sommeil des objets
+        // n'ait la moindre chance de compter quoi que ce soit.
+        //
+        // Premier remède : exempter les objets de toute cadence, et laisser leur sommeil faire le
+        // travail. Conforme, élégant, et mesuré à <b>vingt-neuf millisecondes par tick contre huit</b>,
+        // avec un débit d'allocation passé à sept virgule sept gigaoctets — plus que sans le mod.
+        // Rejeté par le banc.
+        //
+        // Second remède, retenu : garder la cadence, et tenir l'horloge à la main pendant le sommeil,
+        // exactement comme pour la ponte des poules. Voir Produce.age, appelé au moment du saut. Les
+        // deux mécanismes se complètent au lieu de se gêner : la cadence réduit la fréquence, le
+        // sommeil supprime ce qui reste, et le compteur ne perd pas un tick.
         if (entity instanceof Projectile || entity instanceof PrimedTnt
                 || entity instanceof FallingBlockEntity) {
             return true;

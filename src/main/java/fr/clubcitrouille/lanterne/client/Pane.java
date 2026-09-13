@@ -1,0 +1,54 @@
+package fr.clubcitrouille.lanterne.client;
+
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.RenderFrameEvent;
+
+import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.lab.Glass;
+
+/**
+ * Le seul point du mod qui touche au client, et pourquoi il est seul.
+ *
+ * <h2>Une classe que le serveur ne doit jamais voir</h2>
+ *
+ * <p>Sur un serveur dédié, les classes {@code net.minecraft.client.*} <b>n'existent pas</b>. Il ne
+ * s'agit pas d'une bonne pratique mais d'une contrainte matérielle : la moindre référence chargée
+ * provoque un {@code NoClassDefFoundError} au démarrage, et le serveur ne démarre pas du tout.
+ *
+ * <p>Tout le code de mesure du rendu vit donc dans {@code Glass}, et {@code Glass} n'est nommé que
+ * depuis <b>ici</b>. Cette classe-ci porte {@code @EventBusSubscriber(value = Dist.CLIENT)}, ce qui
+ * demande à NeoForge de ne la découvrir que sur la distribution client : sur un serveur, elle n'est
+ * jamais chargée, donc {@code Glass} non plus, donc aucune classe de rendu n'est atteinte.
+ *
+ * <p>C'est la raison pour laquelle il n'y a qu'un seul fichier dans ce paquet. Chaque référence
+ * supplémentaire au code client depuis le code commun serait une occasion de casser tous les serveurs
+ * dédiés — la panne la plus visible qu'un mod puisse provoquer, et celle qu'aucun essai en solo ne
+ * révèle.
+ *
+ * <h2>Pourquoi après l'image et non avant</h2>
+ *
+ * <p>{@code Minecraft} calcule la durée d'une image juste après avoir tiré cet évènement. Se brancher
+ * ici signifie donc lire la durée de l'image <em>précédente</em>, et non de celle qui vient de finir.
+ *
+ * <p>Le décalage est d'un rang, sur des centaines de relevés dont on prend la médiane : il est sans
+ * conséquence. Il est signalé parce qu'il aurait pu en avoir une, et parce que c'est exactement le
+ * genre de détail qu'on découvre trop tard quand on ne l'écrit pas.
+ */
+@EventBusSubscriber(modid = Lanterne.ID, value = Dist.CLIENT)
+public final class Pane {
+    private Pane() {}
+
+    @SubscribeEvent
+    public static void onFrame(RenderFrameEvent.Post event) {
+        if (!Glass.armed()) {
+            return;
+        }
+        if (!Glass.running()) {
+            Glass.begin();
+            return;
+        }
+        Glass.frame();
+    }
+}

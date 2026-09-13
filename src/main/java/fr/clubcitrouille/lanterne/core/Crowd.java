@@ -51,8 +51,44 @@ public final class Crowd {
      * masse.
      */
     private static final int CROWDED = 8;
-    /** Au-delà, c'est une ferme : deux crans de dégradation se justifient. */
-    private static final int PACKED = 32;
+
+    /**
+     * Voisines par cran de ralentissement supplémentaire.
+     *
+     * <h2>Pourquoi les deux crans fixes ont sauté</h2>
+     *
+     * <p>La densité ne connaissait que trois états : normal, foule, ferme — soit un facteur un, deux
+     * ou quatre. C'était le même défaut que les paliers de distance, abandonnés depuis longtemps pour
+     * la même raison : <b>un palier est trop prudent en haut de tranche et trop brutal en bas</b>. Une
+     * vache entourée de trente-deux voisines et une vache entourée de mille recevaient exactement le
+     * même traitement.
+     *
+     * <p>Or mille vaches dans un chunk, ce n'est pas « une ferme un peu plus grande » : c'est trente
+     * fois plus de travail pour une image qui, à l'écran, est la même bouillie de taches blanches et
+     * noires. C'est très précisément la situation où la dégradation se voit le moins et rapporte le
+     * plus.
+     */
+    private static final int PER_STEP = 16;
+
+    /**
+     * Ralentissement maximal dû à la seule foule.
+     *
+     * <h2>Ce qui a autorisé à monter si haut</h2>
+     *
+     * <p>Ce plafond était à quatre, et il n'aurait pas dû monter d'un cran de plus tant que ralentir
+     * une créature revenait à <b>arrêter ses horloges de production</b>. Un facteur seize aurait
+     * divisé par seize la ponte d'une ferme à œufs.
+     *
+     * <p>Depuis que {@code Produce} tient ces horloges à jour pendant le sommeil — et que l'épreuve de
+     * rendement le prouve, dans les deux sens — la cadence ne décide plus que d'une chose :
+     * <b>à quelle fréquence une bête réfléchit et se déplace</b>. Dans un tas de mille, elle ne va
+     * nulle part de toute façon.
+     *
+     * <p>Seize ticks au plus, soit un réveil toutes les huit dixièmes de seconde. Sur mille bêtes,
+     * soixante-trois bougent à chaque tick : le troupeau grouille encore, il grouille simplement sans
+     * coûter trente fois son prix.
+     */
+    private static final int MOST = 16;
 
     /** Comptage du tick en cours. */
     private static Long2IntOpenHashMap counting = new Long2IntOpenHashMap();
@@ -69,7 +105,7 @@ public final class Crowd {
      * <p>Les deux gestes sont réunis parce qu'ils portent sur la même case d'une même table : les
      * séparer doublerait le coût de la recherche pour rien.
      *
-     * @return nombre de crans à descendre dans l'échelle des niveaux, de 0 à 2
+     * @return facteur par lequel multiplier la cadence, de 1 à {@value #MOST}
      */
     /** Nombre de créatures recensées dans le chunk de celle-ci, au tick précédent. */
     public static int neighbours(Entity entity) {
@@ -90,10 +126,10 @@ public final class Crowd {
         counting.addTo(key, 1);
 
         int neighbours = tallied.get(key);
-        if (neighbours >= PACKED) {
-            return 2;
+        if (neighbours < CROWDED) {
+            return 1; // pas de foule : le jeu garde ses droits, sans un geste de moins
         }
-        return neighbours >= CROWDED ? 1 : 0;
+        return Math.min(1 + neighbours / PER_STEP, MOST);
     }
 
     /**

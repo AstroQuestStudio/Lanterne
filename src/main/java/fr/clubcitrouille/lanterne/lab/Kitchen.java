@@ -58,6 +58,14 @@ public final class Kitchen {
     private static BlockPos hopperEnd;
     private static final int[] MOVED = new int[2];
 
+    /**
+     * Tick auquel on relève le débit des entonnoirs.
+     *
+     * <p>Cent cinquante : bien avant la fin de la cuisson, donc atteint dans les deux phases, et assez
+     * tard pour qu'une chaîne de six entonnoirs ait eu le temps de s'amorcer.
+     */
+    private static final int FLOW_MARK = 150;
+
     private static Step step = Step.OFF;
     private static int elapsed;
     private static MinecraftServer host;
@@ -111,6 +119,20 @@ public final class Kitchen {
      * que le compteur prétend.
      */
     private static void chain(ServerLevel level) {
+        // <h2>Cent trente-six objets arrivés au bout d'une chaîne qui n'en reçoit que soixante-quatre</h2>
+        //
+        // Le chiffre était impossible, et il a fallu le voir écrit pour s'en apercevoir. La seconde
+        // moitié de l'épreuve reposait ses trémies <b>aux mêmes emplacements</b> que la première ; or
+        // poser un bloc identique sur lui-même ne recrée pas son bloc-entité. Les trémies gardaient donc
+        // leur contenu, et la phase témoin commençait avec l'avance accumulée par la phase précédente.
+        //
+        // L'écart mesuré — dix-huit pour cent de débit en moins pour le mod — était entièrement
+        // fabriqué par le protocole. On efface donc d'abord, ce qui détruit les blocs-entités et leur
+        // contenu, avant de reconstruire.
+        for (int i = 0; i < CHAIN; i++) {
+            level.setBlockAndUpdate(new BlockPos(BASE_X + i, 80, BASE_Z + 8),
+                    Blocks.AIR.defaultBlockState());
+        }
         for (int i = 0; i < CHAIN; i++) {
             BlockPos pos = new BlockPos(BASE_X + i, 80, BASE_Z + 8);
             level.setBlockAndUpdate(pos, Blocks.HOPPER.defaultBlockState()
@@ -133,6 +155,18 @@ public final class Kitchen {
         }
         ServerLevel level = server.overworld();
         elapsed++;
+
+        // <h2>Un débit compté sur deux durées différentes</h2>
+        //
+        // Le relevé des entonnoirs se faisait en fin de phase — c'est-à-dire quand les fours avaient
+        // fini de cuire. Or les deux phases ne s'achèvent pas au même tick : quelques ticks d'écart
+        // suffisent à décaler un débit continu de plusieurs objets.
+        //
+        // La mesure dépendait donc d'un évènement sans rapport avec elle. On relève maintenant à un
+        // tick fixe, identique des deux côtés : c'est la seule façon de comparer deux débits.
+        if (elapsed == FLOW_MARK) {
+            MOVED[step == Step.COOKING_ON ? 0 : 1] = countAtEnd(level);
+        }
 
         int[] into = step == Step.COOKING_ON ? WITH : WITHOUT;
         boolean allDone = true;
@@ -163,7 +197,7 @@ public final class Kitchen {
 
     private static void advance(ServerLevel level) {
         if (step == Step.COOKING_ON) {
-            MOVED[0] = countAtEnd(level);
+            // Le relevé a lieu au tick fixe, plus haut : ici la phase peut s'achever à un autre moment.
             step = Step.COOKING_OFF;
             Settings.setEnabled(false);
             light(level);
@@ -171,7 +205,7 @@ public final class Kitchen {
             Lanterne.LOG.info("[CUISSON] Seconde moitié, mod éteint.");
             return;
         }
-        MOVED[1] = countAtEnd(level);
+        // Idem : ne rien relever ici, la durée de cette phase n'est pas celle de l'autre.
         step = Step.DONE;
         Settings.setEnabled(true);
         report();
@@ -202,8 +236,26 @@ public final class Kitchen {
     }
 
     private static void report() {
-        Lanterne.LOG.info("[ENTONNOIR] au bout de la chaîne — sans {} objet(s) · avec {} objet(s)",
-                MOVED[1], MOVED[0]);
+        // <h2>Un volet qu'on cesse de publier, faute de pouvoir le reproduire</h2>
+        //
+        // Deux défauts de protocole ont été corrigés ici : les trémies n'étaient pas vidées entre les
+        // phases (d'où cent trente-six objets arrivés au bout d'une chaîne qui n'en reçoit que
+        // soixante-quatre), et le relevé se faisait en fin de phase, donc sur deux durées différentes.
+        //
+        // Les deux corrections étaient justes, et elles n'ont pas suffi. Trois exécutions du protocole
+        // corrigé, strictement identiques, ont rendu : <b>18 / 30</b>, puis <b>39 / 16</b>, puis
+        // <b>16 / 16</b>. Le témoin lui-même varie du simple au double.
+        //
+        // On ne sait donc pas mesurer le débit d'une chaîne d'entonnoirs de façon reproductible, et un
+        // chiffre qu'on ne sait pas reproduire n'est pas une mesure — c'est un tirage. Il est affiché
+        // pour information, accompagné de ce qu'il vaut, et il ne doit être cité nulle part tant que ce
+        // protocole n'aura pas été refait.
+        //
+        // Ce que l'on peut dire, et c'est déjà quelque chose : les trois relevés vont dans les deux
+        // sens. Si le mod ralentissait réellement les entonnoirs, ils iraient tous dans le même.
+        Lanterne.LOG.warn("[ENTONNOIR] au bout de la chaîne — sans {} objet(s) · avec {} objet(s) "
+                + "— CHIFFRE NON REPRODUCTIBLE, à ne pas citer : trois exécutions identiques ont "
+                + "donné 18/30, 39/16 et 16/16.", MOVED[1], MOVED[0]);
         Lanterne.LOG.info("[CUISSON] ── Ticks jusqu'au premier lingot ──");
         int mismatches = 0;
         for (int i = 0; i < PLACES.size() || i < OVENS; i++) {

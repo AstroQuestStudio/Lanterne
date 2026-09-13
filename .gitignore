@@ -2,3 +2,8 @@ build/
 run/
 .gradle/
 *.log
+
+# Sources décompilées de Minecraft, extraites du cache Gradle pour pouvoir vérifier
+# chaque nom de méthode au lieu de le deviner. 6 596 fichiers qui n'appartiennent pas
+# à ce projet et se régénèrent en une commande — voir notes/feuille-de-route.md.
+.mcsrc/

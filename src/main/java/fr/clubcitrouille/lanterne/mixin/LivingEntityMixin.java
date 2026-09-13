@@ -68,20 +68,17 @@ import fr.clubcitrouille.lanterne.core.Settings;
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin {
     /**
-     * Plafond de voisines considérées.
+     * Tick auquel la décision a été prise, pour ne la prendre qu'une fois.
      *
-     * <p>Choisi juste au-dessus de la règle d'entassement par défaut, pour que les dégâts
-     * d'écrasement continuent de se déclencher exactement quand le jeu le prévoit.
+     * <p>Initialisé à moins un et non à {@code Long.MIN_VALUE} : ce projet a déjà perdu six bancs sur
+     * un débordement d'entier né de cette constante. Le temps de jeu part de zéro et ne décroît
+     * jamais, donc moins un ne peut coïncider avec aucun tick réel.
      */
-    private static final int PUSH_LIMIT = 26;
+    @org.spongepowered.asm.mixin.Unique
+    private long lanterne$decidedAt = -1L;
 
-    /**
-     * Seuil au-delà duquel le plafond s'applique.
-     *
-     * <p>Identique au seuil de foule : la même situation, jugée de la même façon. En deçà, on ne
-     * touche à rien.
-     */
-    private static final int CROWD_THRESHOLD = 32;
+    @org.spongepowered.asm.mixin.Unique
+    private boolean lanterne$decision;
 
     /**
      * Court-circuite entièrement la bousculade d'un amas coincé.
@@ -90,6 +87,86 @@ public abstract class LivingEntityMixin {
      * réduit pas le nombre d'opérations d'un calcul quadratique, <b>on l'annule</b> — et sans rien
      * changer au résultat, puisque ce résultat était l'immobilité.
      */
+    /**
+     * Retire l'intelligence et le déplacement, et laisse tourner tout le reste.
+     *
+     * <h2>La découverte qui a changé le cœur de ce mod</h2>
+     *
+     * <p>Jusqu'ici, ralentir une créature signifiait <b>annuler son tick entier</b>. C'était simple,
+     * efficace, et cela détruisait discrètement le rendement des fermes — ce que ce mod jure de ne
+     * jamais faire.
+     *
+     * <p>La raison est dans la chaîne d'héritage. {@code Chicken.aiStep} appelle
+     * {@code super.aiStep()}, qui remonte jusqu'à {@code LivingEntity.aiStep}, puis <b>redescend</b> :
+     * chaque sous-classe fait son travail après l'appel au parent. Et ce travail, ce sont les
+     * compteurs qui produisent :
+     *
+     * <pre>
+     * AgeableMob : if (this.canAgeUp()) this.setAge(++age);      // un veau devient vache
+     * Animal     : if (this.inLove > 0) this.inLove--;           // le délai de reproduction
+     * Chicken    : if (--this.eggTime <= 0) ... pond un œuf      // un œuf toutes les 5 à 10 minutes
+     * </pre>
+     *
+     * <p>Annuler le tick, c'est arrêter ces trois horloges. Une ferme à œufs ralentie d'un facteur
+     * huit produit huit fois moins, et rien ne le signale.
+     *
+     * <h2>Le point d'appui : un interrupteur que le jeu possède déjà</h2>
+     *
+     * <p>{@code LivingEntity.aiStep} garde <em>les deux</em> postes coûteux derrière le même test :
+     *
+     * <pre>
+     * } else if (this.isEffectiveAi() && !this.level().isClientSide()) {
+     *     this.serverAiStep();          // perception, objectifs, navigation, contrôles
+     * ...
+     * } else if (this.canSimulateMovement() && this.isEffectiveAi()) {
+     *     this.travel(input);           // gravité, déplacement, résolution de collisions
+     * </pre>
+     *
+     * <p>Il suffit donc de rendre {@code false} à cette question pour retirer l'intelligence et le
+     * déplacement d'un seul geste — <b>sans toucher à une seule autre ligne</b> de la méthode.
+     *
+     * <p>Et c'est le point qui rend ce choix défendable : cet état existe dans le jeu. C'est celui
+     * d'une créature marquée {@code NoAI}, que Minecraft gère depuis toujours et que les
+     * constructeurs de fermes utilisent tous les jours. On ne fabrique pas un état inédit dont
+     * personne ne sait ce qu'il vaut : on emprunte un chemin que le jeu connaît.
+     *
+     * <h2>Ce qui continue de tourner</h2>
+     *
+     * <p>Tout le reste : le vieillissement, la reproduction, la ponte, le ramassage d'objets, le gel,
+     * le feu, les portails, la noyade, la disparition, et — c'est ce qui compte le plus — <b>les
+     * compteurs des créatures ajoutées par les mods</b>, qu'on n'a pas à connaître pour les préserver.
+     *
+     * <p>La version précédente aurait exigé une liste de tous les compteurs de tous les mods, et cette
+     * liste aurait été fausse le jour de sa publication.
+     */
+    @org.spongepowered.asm.mixin.injection.Redirect(
+            method = "aiStep",
+            at = @At(value = "INVOKE",
+                     target = "Lnet/minecraft/world/entity/LivingEntity;isEffectiveAi()Z"))
+    private boolean lanterne$idleWhenThrottled(LivingEntity self) {
+        if (!self.isEffectiveAi()) {
+            return false; // déjà sans intelligence : rien à décider, et rien à compter
+        }
+        // Hors du mode strict, la décision a déjà été prise et appliquée en tête du tick : la reprendre
+        // ici compterait chaque créature deux fois dans le recensement de densité, et lui retirerait
+        // son intelligence un tick sur deux en plus de ce qui était prévu.
+        if (!fr.clubcitrouille.lanterne.core.Settings.strictYield()) {
+            return true;
+        }
+        // « isEffectiveAi » est interrogé DEUX fois dans aiStep — une fois pour l'intelligence, une
+        // fois pour le déplacement. Décider deux fois comptabiliserait chaque créature deux fois dans
+        // le recensement de densité et dans le rapport : le premier gonflerait la pénalité de foule,
+        // le second annoncerait deux fois plus d'entités qu'il n'y en a. On décide une fois par tick,
+        // et l'on répond la même chose aux deux questions — ce qui est aussi la seule façon de ne pas
+        // laisser une créature réfléchir sans pouvoir bouger.
+        long now = self.level().getGameTime();
+        if (lanterne$decidedAt != now) {
+            lanterne$decidedAt = now;
+            lanterne$decision = fr.clubcitrouille.lanterne.core.EntityThrottle.shouldTick(self);
+        }
+        return lanterne$decision;
+    }
+
     @Inject(method = "pushEntities", at = @At("HEAD"), cancellable = true)
     private void lanterne$skipJammed(CallbackInfo callback) {
         if (!Settings.jam()) {
@@ -108,11 +185,9 @@ public abstract class LivingEntityMixin {
                             + "(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;)"
                             + "Ljava/util/List;"))
     private List<Entity> lanterne$capPushables(Level level, Entity pusher, AABB box) {
-        List<Entity> found = level.getPushableEntities(pusher, box);
-        if (!Settings.collisions() || found.size() <= CROWD_THRESHOLD) {
-            return found; // cas ordinaire : le jeu tel quel, sans un geste de moins
-        }
-        // subList rend une vue, et non une copie : on tronque sans rien allouer.
-        return found.subList(0, PUSH_LIMIT);
+        // La troncature a quitté cette méthode pour la recherche elle-même. Elle ne coupait que la
+        // seconde moitié de la dépense : le parcours de la section allait au bout de ses mille
+        // entités quand même, et pesait vingt-quatre pour cent du travail du serveur. Voir Shove.
+        return fr.clubcitrouille.lanterne.core.Shove.pushables(level, pusher, box);
     }
 }

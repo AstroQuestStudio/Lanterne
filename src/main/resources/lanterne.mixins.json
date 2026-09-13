@@ -16,6 +16,11 @@
     "LevelMixin",
     "NaturalSpawnerMixin",
     "MobMixin",
-    "BlockEntityMixin"
+    "BlockEntityMixin",
+    "EntityGetterAccessor",
+    "LevelChunkMixin",
+    "EntityGetterMixin",
+    "ItemEntityMixin",
+    "ItemAgeAccessor"
   ]
 }

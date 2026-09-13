@@ -56,15 +56,65 @@ public final class Herald {
         }
 
         say("├" + LINE + "┤");
-        say(pad("  Ce qui ne sera jamais dégradé :"));
-        say(pad("    · rien à moins de 24 blocs d'un joueur"));
+        // Cette liste a été refaite parce que sa première ligne était fausse. Elle promettait « rien
+        // à moins de 24 blocs » alors que la dégradation par densité s'applique à sept blocs comme à
+        // cent. Une garantie inexacte est pire qu'une garantie absente : elle empêche celui qui
+        // constate un écart de soupçonner le bon coupable.
+        say(pad("  Ce qui ne sera jamais dégradé — mesuré, pas promis :"));
+        say(pad("    · le rendement : ponte, croissance, reproduction"));
+        say(pad("    · la durée de vie des objets au sol, au tick près"));
         say(pad("    · ce qui tombe, les projectiles, la TNT amorcée"));
-        say(pad("    · les villageois : jamais sous un tick sur quatre"));
         say(pad("    · les fours : exacts au tick près"));
+        say(pad("    · les villageois : jamais sous un tick sur quatre"));
+        say(pad("    · une bête isolée à moins de 24 blocs d'un joueur"));
+        say(pad("  Ce qui l'est, et assumé :"));
+        say(pad("    · en foule, une bête décide jusqu'à 16 fois moins souvent"));
+        say(pad("      mais elle pond et grandit à l'heure exacte"));
+        for (String line : advice()) {
+            say(pad(line));
+        }
+
         say("├" + LINE + "┤");
         say(pad("  /lanterne  ·  ce que le mod économise, en direct et chiffré"));
         say("└" + LINE + "┘");
         say("");
+    }
+
+    /**
+     * Ce que ce mod ne peut pas faire à la place de l'administrateur, mais peut lui dire.
+     *
+     * <h2>Le seul conseil de ce mod, et il est chiffré</h2>
+     *
+     * <p>Minecraft sait écrire ses fichiers de région en LZ4 depuis longtemps —
+     * {@code RegionFileVersion.VERSION_LZ4} est enregistré dans le jeu de base — et il ne le fait pas :
+     * le réglage {@code region-file-compression} vaut {@code deflate} par défaut.
+     *
+     * <p>Le banc de sauvegarde de ce projet a mesuré l'écart sur soixante-quatre chunks, dix relevés
+     * par compression : <b>125,32 ms en deflate contre 33,42 ms en LZ4</b>. Un facteur trois trois
+     * quarts, pour environ vingt pour cent de place en plus sur le disque.
+     *
+     * <p>Sur un petit serveur, ce n'est pas une affaire de confort : la sauvegarde s'exécute sur le fil
+     * principal et chaque hoquet se voit. Et la bascule est <b>sans risque</b> : la version de
+     * compression est inscrite dans l'en-tête de <em>chaque chunk</em>, si bien qu'un monde écrit en
+     * deflate se relit sans rien faire après le changement.
+     *
+     * <p>Ce mod ne modifie pas {@code server.properties} — la configuration d'un serveur appartient à
+     * celui qui l'administre. Il se contente de dire ce qu'il a mesuré, et de laisser décider.
+     */
+    private static java.util.List<String> advice() {
+        try {
+            var active = net.minecraft.world.level.chunk.storage.RegionFileVersion.getSelected();
+            if (active == net.minecraft.world.level.chunk.storage.RegionFileVersion.VERSION_LZ4) {
+                return java.util.List.of();
+            }
+            return java.util.List.of(
+                    "  Conseil     region-file-compression=lz4 (server.properties)",
+                    "              sauvegarde 3,7× plus vite : 125 ms → 33 ms",
+                    "              +20 % de disque · rétrocompatible, rien à convertir");
+        } catch (Throwable unavailable) {
+            // Un conseil qu'on n'arrive pas à formuler ne vaut pas un démarrage raté.
+            return java.util.List.of();
+        }
     }
 
     /** Replie un texte long en lignes qui tiennent dans le cadre, sans couper un mot. */
@@ -100,6 +150,13 @@ public final class Herald {
             if (Character.isSurrogate(text.charAt(i)) || text.charAt(i) > 0x2500) {
                 visible++;
             }
+        }
+        // Un cadre de travers donne à tout le reste un air d'à-peu-près, et il a suffi d'ajouter trois
+        // lignes de texte pour que cela arrive. Plutôt que de compter les caractères à la main à chaque
+        // retouche, on tronque : une ligne trop longue perd sa fin, le cadre reste droit.
+        if (visible > LINE.length()) {
+            int keep = Math.max(0, text.length() - (visible - LINE.length()) - 1);
+            return "│" + text.substring(0, keep) + "…│";
         }
         int fill = Math.max(0, LINE.length() - visible);
         return "│" + text + " ".repeat(fill) + "│";
