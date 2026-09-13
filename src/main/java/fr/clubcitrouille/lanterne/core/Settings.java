@@ -77,6 +77,9 @@ public final class Settings {
     /** Le court-circuit de recherche de cible pour les projectiles. Voir Quarry. */
     private static boolean projectiles = true;
 
+    /** Les comportements composites parcourus sans streams. Voir Mind. */
+    private static boolean mind = true;
+
     /** La fusion des orbes d.expérience, débridée. Voir Clump. */
     private static boolean clump = true;
 
@@ -250,7 +253,31 @@ public final class Settings {
     private static boolean sleep = true;
     /** Le rationnement : réagir pendant le tick, et non au suivant. */
     private static boolean rationing = true;
-    /** La position réutilisée pour les tirages aléatoires de blocs. */
+    /**
+     * La position réutilisée pour les tirages aléatoires de blocs — et le premier contributeur du mod
+     * sur la mémoire.
+     *
+     * <h2>Un module rangé comme un détail, mesuré seul pour la première fois</h2>
+     *
+     * <p>{@code NaturalSpawner.getRandomPosWithin} crée une position par tirage, et le spawner en tire
+     * beaucoup. Éviter cette allocation semblait un détail d.hygiène, et le module avait été écrit puis
+     * oublié parmi les autres.
+     *
+     * <p>Mesuré seul sur la charge du village — un serveur réaliste, aucun réglage touché :
+     *
+     * <pre>
+     * 20,58 ms sans  ·  19,74 ms avec        →  aucun effet sur le temps
+     * 4,08 Go alloués  ·  1,36 Go alloués     →  ×3,01 SUR LA MÉMOIRE
+     * </pre>
+     *
+     * <p>Aucun effet sur le temps de tick, et un facteur trois sur la mémoire allouée. C.est lui qui
+     * porte l.essentiel du ×4,24 que le mod complet obtient sur cette charge.
+     *
+     * <p>La leçon rejoint celle des interrupteurs séparés, et elle est plus forte : un module jugé sur
+     * le seul temps de tick aurait été <b>retiré comme sans effet</b>. Mesuré sur la bonne grandeur, il
+     * est le premier contributeur du mod sur ce qui décide des à-coups d.un serveur à un cœur — la
+     * fréquence des ramassages, qui suit le débit d.allocation et rien d.autre.
+     */
     private static boolean scratchPos = true;
     /**
      * Le sommeil des objets au sol, retiré après mesure — septième plan démoli, et le plus coûteux.
@@ -444,6 +471,10 @@ public final class Settings {
 
     public static boolean projectiles() {
         return master && projectiles;
+    }
+
+    public static boolean mind() {
+        return master && mind;
     }
 
     public static boolean clump() {

@@ -524,6 +524,12 @@ public final class Bench {
                     + "qui doit rester constant, et non le nombre d.orbes.", orbCount, xp));
         }
 
+        if (fr.clubcitrouille.lanterne.core.Mind.gates() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Comportements composites parcourus sans streams : %d",
+                    fr.clubcitrouille.lanterne.core.Mind.gates()));
+        }
+
         if (fr.clubcitrouille.lanterne.core.Clump.freed() > 0L) {
             say(String.format(Locale.ROOT,
                     "Fusions d.orbes autorisées que vanilla aurait refusées : %d",

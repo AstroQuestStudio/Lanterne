@@ -191,7 +191,19 @@ public final class Scene {
          * domaine n.avait jamais été éprouvé : cette charge dira s.il reste quelque chose à y prendre
          * une fois les collisions traitées.
          */
-        ORBS
+        ORBS,
+        /**
+         * Un village entier de villageois, l.intelligence la plus chère du jeu.
+         *
+         * <p>Un villageois ne se contente pas d.un objectif : il porte un {@code Brain} avec des
+         * dizaines de comportements, des souvenirs, des capteurs qui balaient son voisinage, un métier,
+         * un horaire et un lieu de travail. C.est, de loin, la créature la plus coûteuse de vanilla —
+         * et la plainte la plus fréquente des serveurs qui ont un vrai village.
+         *
+         * <p>Le domaine n.avait jamais été éprouvé. Cette charge dira ce que le niveau de détail et la
+         * densité y font déjà, et s.il reste un poste propre aux villageois.
+         */
+        VILLAGERS
     }
 
     /**
@@ -227,6 +239,7 @@ public final class Scene {
             case "farm", "champ", "agriculture", "ble", "blé" -> Kind.FARM;
             case "village", "reel", "réel", "serveur" -> Kind.VILLAGE;
             case "orbs", "orbes", "xp", "experience" -> Kind.ORBS;
+            case "villagers", "villageois", "pnj" -> Kind.VILLAGERS;
             default -> Kind.RING;
         };
     }
@@ -294,6 +307,25 @@ public final class Scene {
      * n'ont pas abattu la même quantité de travail.
      */
     public static void rearm(ServerLevel level) {
+        if (builtKind == Kind.VILLAGERS) {
+            // Six cents villageois se dispersent en une minute, et leur intelligence dépend de leur
+            // voisinage : la seconde phase mesurerait un village étalé là où la première voyait une
+            // foule. Un tir de contrôle, mod éteint des deux côtés, a rendu 54,07 contre 43,66 ms sur
+            // cette charge — vingt pour cent d.écart pour rien.
+            java.util.List<net.minecraft.world.entity.Entity> old = new java.util.ArrayList<>();
+            for (net.minecraft.world.entity.Entity soul : level.getAllEntities()) {
+                if (soul instanceof net.minecraft.world.entity.npc.villager.Villager) {
+                    old.add(soul);
+                }
+            }
+            for (net.minecraft.world.entity.Entity soul : old) {
+                soul.discard();
+            }
+            int born = villagers(level, builtCount);
+            Lanterne.LOG.info("[SCÈNE] remise à neuf : {} villageois balayé(s), {} reposé(s).",
+                    old.size(), born);
+            return;
+        }
         if (builtKind == Kind.ORBS) {
             // Les orbes FUSIONNENT : la première phase en laisse deux fois moins que la seconde n.en
             // recevrait, et le banc mesurerait deux charges différentes. C.est le cinquième banc de ce
@@ -599,6 +631,37 @@ public final class Scene {
         }
         Lanterne.LOG.info("[SCÈNE] orbes : {} orbe(s) d.expérience sur un carré de {} blocs.",
                 born, side);
+        return born;
+    }
+
+    /**
+     * Un village de villageois, répartis comme dans une bourgade.
+     *
+     * <p>Ils sont posés sans métier ni lit : c.est leur <b>intelligence</b> qu.on mesure, pas leur
+     * commerce. Un villageois sans emploi cherche du travail, ce qui fait tourner ses capteurs
+     * exactement comme un villageois occupé — et sans dépendre d.un village bâti à la main qu.il
+     * faudrait reconstruire entre les phases.
+     */
+    private static int villagers(ServerLevel level, int count) {
+        int side = Math.max(24, (int) Math.ceil(Math.sqrt(Math.max(1, count))) * 3);
+        int ground = ground(level) + 1;
+        Random dice = new Random(SEED);
+        int born = 0;
+        for (int i = 0; i < count; i++) {
+            double x = (dice.nextDouble() - 0.5d) * side;
+            double z = (dice.nextDouble() - 0.5d) * side;
+            var villager = net.minecraft.world.entity.EntityType.VILLAGER.create(
+                    level, EntitySpawnReason.COMMAND);
+            if (villager == null) {
+                continue;
+            }
+            villager.snapTo(x, ground, z, 0f, 0f);
+            if (level.addFreshEntity(villager)) {
+                born++;
+            }
+        }
+        level.getGameRules().set(GameRules.MAX_ENTITY_CRAMMING, 0, level.getServer());
+        Lanterne.LOG.info("[SCÈNE] villageois : {} sur un carré de {} blocs.", born, side);
         return born;
     }
 
@@ -916,6 +979,7 @@ public final class Scene {
             case FARM -> field(level, count);
             case VILLAGE -> village(level, count);
             case ORBS -> orbs(level, count);
+            case VILLAGERS -> villagers(level, count);
         };
     }
 
