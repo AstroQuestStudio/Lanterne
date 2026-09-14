@@ -56,22 +56,50 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 
 | Charge | Sans Lanterne | Avec | Gain | |
 |---|---:|---:|:---:|:--:|
-| **1 000 vaches sous un toit** *(le Voile, seul)* | 29,9 im/s | **95,4 im/s** | **×3,19** | ✅ |
+| **1 000 vaches sous un toit** *(le Voile, seul)* | 29,9 im/s | **238,8 im/s** | **×7,98** | ✅ |
 
 <div align="center">
 
-Deux fenêtres de **60 s exactement**, chauffe de 30 s, scène reconstruite entre les phases.
+Deux fenêtres de **60,0 s exactement**, chauffe de 30 s, synchronisation verticale coupée,
+scène reconstruite entre les phases, module **isolé** (`LANTERNE_MODULES=voile`).
 
 </div>
 
-> **Ce chiffre a mis trois corrections de banc à devenir publiable.** Le banc d'images mesurait
-> `getFrameTimeNs()`, qui n'enveloppe que `gameRenderer.render(...)` — en solo, le même fil enchaîne
-> aussi le tick du serveur intégré et la présentation, soit les deux tiers du temps. La caméra, elle,
-> visait `Y≈127` pour une scène posée à `Y=64` : mille vaches chargées **hors du champ de vision**.
-> Et les deux phases duraient 31 s et 60 s.
+> **Six défauts de banc ont dû tomber avant que ce chiffre veuille dire quelque chose.** Aucun n'a
+> été trouvé par relecture ; tous par un relevé qui ne collait pas.
 >
-> Le premier relevé propre annonçait ×3,69. À fenêtres égales, ×3,19. **C'est le second qui est
-> publié** — la correction a fait baisser le chiffre, donc le biais était réel.
+> | Ce que le banc croyait mesurer | Ce qu'il mesurait |
+> |---|---|
+> | Le temps d'une image | `gameRenderer.render` seul — soit **un tiers** du temps, et le tiers où le mod ne travaille pas |
+> | Mille vaches devant la caméra | Le ciel : la pose visait `Y≈127` pour une scène posée à `Y=64` |
+> | Deux fenêtres comparables | 31 s d'un côté, 60 s de l'autre |
+> | Le débit du jeu | **La fréquence de l'écran** : 95,4 im/s sur un moniteur à 120 Hz |
+> | Une distribution symétrique | `images × médiane = durée` n'est vrai que dans ce cas — le critère de cohérence était faux |
+> | Toute la fenêtre | Les 18,7 premières secondes, une fois le tableau de relevés plein |
+>
+> **Le plus instructif est la vsync.** Elle ne plafonnait pas, elle *divisait* : 120 → 60 → 30. La
+> phase lente se figeait à 29,9 im/s — qui se trouve être aussi sa vraie valeur, reproductible à
+> l'identique sur cinq exécutions. Cette coïncidence rendait les relevés faussement crédibles.
+>
+> Le banc avait pourtant signalé lui-même que débit (×3,19) et médiane (×3,99) ne s'accordaient pas,
+> et ce projet a mis ça sur le compte d'un « gain inégalement réparti ». La vraie raison :
+> `getFrameTimeNs()` est calculé **avant** le limiteur (`Minecraft.java`, ligne 1403), donc la
+> médiane ignorait le plafond pendant que le débit s'y écrasait.
+>
+> La Vitre coupe maintenant la synchronisation elle-même, refuse un débit à la fois proche d'une
+> fréquence d'écran **et** anormalement régulier, et échantillonne par réservoir pour que la médiane
+> porte sur toute la fenêtre quelle que soit la vitesse de la phase.
+
+**Où va le temps.** Le Voile n'agit presque pas sur le dessin :
+
+| | Avec | Sans |
+|---|---:|---:|
+| Rendu seul | 3,43 ms | 9,21 ms |
+| **Hors rendu** *(extraction des états, tick)* | **0,32 ms** | **24,17 ms** |
+
+En 26.1, `extractVisibleEntities` construit l'état de rendu de chaque créature **en dehors** de
+`gameRenderer.render`. C'est là que vivent les mille vaches, et c'est pourquoi le module s'accroche
+à `shouldRender` plutôt qu'au dessin : intercepter plus tard n'aurait économisé que les 9 ms.
 
 > **Pourquoi cette colonne existe.** Une charge de ce laboratoire portait la vitesse de tick aléatoire
 > à 256 pour faire pousser son blé — et ne la remettait jamais. Le monde étant conservé d'une épreuve

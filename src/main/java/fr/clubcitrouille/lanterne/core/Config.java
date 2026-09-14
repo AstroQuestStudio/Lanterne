@@ -63,6 +63,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue SHROUD_BUDGET;
     public static final ModConfigSpec.IntValue SHROUD_FAR;
     public static final ModConfigSpec.IntValue SHROUD_BULKY;
+    public static final ModConfigSpec.BooleanValue STATIC_CHESTS;
     public static final ModConfigSpec.IntValue NEAR_RADIUS;
     public static final ModConfigSpec.BooleanValue MINING;
 
@@ -222,6 +223,20 @@ public final class Config {
                 "boite depasse largement le bloc depasse aussi du mur, et la faire disparaitre se",
                 "verrait de loin.")
                 .defineInRange("voile_taille_max_blocs", 4, 1, 64);
+        STATIC_CHESTS = BUILDER.comment(
+                "COFFRES STATIQUES - cote CLIENT : un coffre rendu comme un bloc ordinaire.",
+                "Un bloc ordinaire est maille UNE FOIS dans son chunk puis dessine avec lui. Un",
+                "coffre porte son propre dessinateur, reexecute A CHAQUE IMAGE pour animer un",
+                "couvercle - meme ferme, meme a quarante blocs, meme dans un entrepot de trois cents",
+                "coffres dont aucun ne s'ouvrira.",
+                "",
+                "PRIX A PAYER : le couvercle ne s'anime plus a l'ouverture.",
+                "Les boites de shulker ne sont PAS concernees : leur couvercle est un retour",
+                "d'information utile, pas une decoration.",
+                "",
+                "Un changement ne se voit qu'apres reconstruction des chunks - donc au prochain",
+                "chargement du monde.")
+                .define("coffres_statiques", true);
         NEAR_RADIUS = BUILDER.comment(
                 "Rayon de la zone franche, en blocs : rien n'y est degrade, ni par la distance ni",
                 "par la foule. C'est le seul reglage qui arbitre un COMPROMIS et non un gain.",

@@ -168,7 +168,7 @@ public final class Shroud {
 
         spent++;
         boolean blocked = !reachable(entity, camX, camY, camZ);
-        NEXT.put(id, now + delayNanos);
+        NEXT.put(id, now + stagger(id));
         if (blocked) {
             HIDDEN.add(id);
             veiled++;
@@ -334,6 +334,34 @@ public final class Shroud {
 
     private static double frac(double value) {
         return value - Math.floor(value);
+    }
+
+    /**
+     * Le délai avant réexamen, décalé d'une créature à l'autre.
+     *
+     * <h2>Mille échéances tombant ensemble</h2>
+     *
+     * <p>Toutes les bêtes d'un troupeau entrent dans le champ à la même image. Avec un délai fixe,
+     * elles en ressortent donc aussi à la même image : cent millisecondes plus tard, les mille
+     * échéances expirent d'un coup, et le plafond par image étale la rafale sur seize images
+     * consécutives — puis plus rien pendant six autres, puis la rafale recommence.
+     *
+     * <p>Le premier relevé libre du Voile porte cette signature : une médiane <b>excellente</b>
+     * (5,03 ms contre 12,61 sans le module) et un centile le plus lent <b>pire</b> que sans lui
+     * (48,22 ms contre 45,78). Beaucoup d'images très rapides, et un battement périodique qui mange
+     * le gain — c'est exactement ce qu'un travail groupé produit.
+     *
+     * <p>Le décalage est tiré de l'identifiant de la créature, donc stable pour elle : sa prochaine
+     * échéance ne dérive pas d'un examen à l'autre, elle est simplement décalée de celle de sa
+     * voisine. Le mélange par multiplication et décalage suffit à disperser des identifiants
+     * consécutifs, qui sont le cas normal pour un troupeau né d'une même boucle.
+     */
+    private static long stagger(int id) {
+        int mixed = id * 0x9E3779B9;
+        mixed ^= mixed >>> 16;
+        // Entre la moitié et la totalité du délai : jamais zéro, jamais plus que demandé.
+        long spread = delayNanos / 2L;
+        return delayNanos - (spread == 0L ? 0L : Math.floorMod(mixed, spread));
     }
 
     // --- Réglages et rapport ------------------------------------------------

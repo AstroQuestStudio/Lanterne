@@ -102,6 +102,15 @@ public final class Scene {
          * l'écran n'en montre aucune, et vanilla les prépare toutes.
          */
         BARN,
+        /**
+         * L'entrepôt : des centaines de coffres dans le champ de vision, tous fermés.
+         *
+         * <p>La charge qui met à l'épreuve le rendu des entités de bloc. Un coffre fermé ne bouge
+         * pas, ne change pas, et son dessinateur est pourtant réexécuté à chaque image. C'est la
+         * situation de toute base un peu sérieuse, et c'est celle qu'aucune charge de ce laboratoire
+         * ne couvrait — toutes portaient sur des créatures ou des objets au sol.
+         */
+        DEPOT,
         /** Le sol jonché : des milliers d'objets posés, immobiles, qui tickent quand même. */
         ITEMS,
         /** Les deux à la fois, ce qui est la situation d'un serveur habité. */
@@ -303,6 +312,7 @@ public final class Scene {
         return switch (raw.trim().toLowerCase(Locale.ROOT)) {
             case "pen", "enclos", "elevage", "élevage" -> Kind.PEN;
             case "barn", "grange", "couvert" -> Kind.BARN;
+            case "depot", "entrepot", "entrepôt", "coffres" -> Kind.DEPOT;
             case "items", "objets", "sol" -> Kind.ITEMS;
             case "mixed", "mixte", "tout" -> Kind.MIXED;
             case "tnt", "dynamite", "boom" -> Kind.TNT;
@@ -1230,6 +1240,7 @@ public final class Scene {
             case RING -> fr.clubcitrouille.lanterne.report.Herd.populate(level, 0d, 0d, count, radius);
             case PEN -> pen(level, count);
             case BARN -> barn(level, count);
+            case DEPOT -> depot(level, count);
             case ITEMS -> items(level, count);
             case MIXED -> {
                 int born = pen(level, count / 2);
@@ -1463,6 +1474,50 @@ public final class Scene {
                 born, PEN_SIDE, String.format(Locale.ROOT, "%.1f",
                         born / (double) (PEN_SIDE * PEN_SIDE)));
         return born;
+    }
+
+    /**
+     * L'entrepôt : des coffres alignés, tous fermés, tous dans le champ.
+     *
+     * <h2>Pourquoi deux blocs d'écart et non un</h2>
+     *
+     * <p>Deux coffres côte à côte se marient en un coffre double : le jeu les rend alors comme une
+     * seule pièce à deux moitiés, et le compte de dessinateurs cesse de correspondre au compte de
+     * blocs posés. Un banc dont la charge ne vaut pas ce qu'il croit avoir posé est un banc qui
+     * ment, et celui-ci en a déjà produit assez. L'écart d'un bloc garantit que chaque coffre est
+     * seul, donc qu'il porte son propre dessinateur.
+     *
+     * <h2>Pourquoi les coffres montent en étages</h2>
+     *
+     * <p>Posés à plat, mille coffres couvrent soixante-trois blocs de côté, et la caméra n'en voit
+     * qu'une bande : le reste passe sous l'horizon ou hors du champ. Empilés par couches de deux
+     * blocs, ils forment un mur que la caméra embrasse en entier — et c'est bien un mur de coffres
+     * que ce module doit accélérer, pas une esplanade.
+     */
+    private static int depot(ServerLevel level, int count) {
+        int ground = ground(level);
+        net.minecraft.world.level.block.state.BlockState chest =
+                net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+
+        int side = Math.max(4, (int) Math.ceil(Math.sqrt(count / 4d)));
+        int placed = 0;
+        int layer = 0;
+        while (placed < count && layer < 32) {
+            int y = ground + 1 + layer * 2;
+            for (int gx = 0; gx < side && placed < count; gx++) {
+                for (int gz = 0; gz < side && placed < count; gz++) {
+                    cursor.set(-side + gx * 2, y, -side + gz * 2);
+                    if (level.setBlock(cursor, chest, 2)) {
+                        placed++;
+                    }
+                }
+            }
+            layer++;
+        }
+        Lanterne.LOG.info("[SCÈNE] entrepôt : {} coffre(s) sur {} étage(s), grille de {} de côté. "
+                + "Chacun porte son dessinateur, réexécuté à chaque image.", placed, layer, side);
+        return placed;
     }
 
     /**

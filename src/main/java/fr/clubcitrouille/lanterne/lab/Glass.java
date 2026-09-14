@@ -176,6 +176,33 @@ public final class Glass {
     private static final int MEASURE_LEAST_FRAMES = 100;
 
     /**
+     * Plafond d'images posé pendant la mesure.
+     *
+     * <p>{@code Minecraft.java} ligne 1403 n'applique son limiteur que {@code if (framerateLimit <
+     * 260)}. Porter le réglage à cette valeur revient donc à retirer le plafond, sans avoir à
+     * toucher au limiteur lui-même.
+     */
+    private static final int UNCAPPED = 260;
+
+    /**
+     * Débit au-delà duquel on soupçonne une butée plutôt qu'une mesure.
+     *
+     * <p>Un relevé qui frôle une fréquence d'écran courante — 60, 75, 120, 144, 165, 240 — ne dit
+     * plus rien du mod. On refuse donc au lieu de publier, et le seuil est volontairement bas :
+     * mieux vaut refuser une mesure honnête que publier une butée.
+     */
+    private static final double SUSPECT_RATE = 0.95d;
+
+    /**
+     * Part des intervalles collés à la médiane au-delà de laquelle on parle de cadence imposée.
+     *
+     * <p>Un affichage synchronisé rend des intervalles quasi identiques ; un affichage libre, non.
+     * La moitié de l'échantillon groupée à cinq pour cent près est déjà une régularité que le rendu
+     * d'un monde vivant ne produit pas de lui-même.
+     */
+    private static final double STEADY_SHARE = 0.50d;
+
+    /**
      * Coordonnées et angles fixes de la pose de caméra.
      *
      * <h2>Pourquoi ces valeurs précisément</h2>
@@ -286,6 +313,15 @@ public final class Glass {
     private static long spanOn;
 
     private static long spanOff;
+
+    /**
+     * Le tirage de l'échantillonnage par réservoir — voir {@link #reserve}.
+     *
+     * <p>Graine fixe : deux exécutions du banc doivent retenir les mêmes rangs d'images, sans quoi
+     * la médiane bougerait d'un passage à l'autre pour une raison qui n'aurait rien à voir avec le
+     * mod mesuré.
+     */
+    private static final java.util.Random SHUFFLE = new java.util.Random(20260914L);
 
     private Glass() {}
 
@@ -428,6 +464,64 @@ public final class Glass {
         populate(Minecraft.getInstance());
     }
 
+    /**
+     * Force la reconstruction de toute la géométrie de chunk après une bascule.
+     *
+     * <h2>Un module que ce banc aurait mesuré à zéro</h2>
+     *
+     * <p>Le maillage d'un chunk est calculé une fois puis conservé tant que rien n'y change. Un
+     * module qui agit sur la <em>manière de mailler</em> — les coffres rendus comme des blocs
+     * ordinaires, par exemple — n'a donc aucun effet visible sur une géométrie déjà construite.
+     *
+     * <p>Sans cet appel, la phase « sans » aurait continué d'afficher le maillage produit par la
+     * phase « avec », et le banc aurait conclu « aucun effet mesurable » avec une parfaite
+     * assurance. C'est la cinquième fois dans ce projet qu'un état conservé d'une phase à l'autre
+     * menace de transformer un gain réel en zéro, ou l'inverse.
+     *
+     * <p>La chauffe de trente secondes qui suit absorbe le coût de la reconstruction elle-même.
+     */
+    /**
+     * Retire la laisse : ni synchronisation verticale, ni plafond d'images.
+     *
+     * <h2>Le banc mesurait l'écran, pas le mod</h2>
+     *
+     * <p>Le premier relevé publié du Voile donnait <b>95,4 images par seconde</b> avec le module,
+     * contre 29,9 sans — un gain de ×3,19. Sur une machine dont la synchronisation verticale
+     * plafonne à cent vingt, 95,4 n'est pas une mesure : c'est une <b>butée</b>. La phase rapide
+     * passait son temps à attendre l'écran, la phase lente non, et l'écart entre les deux mesurait
+     * autant la fréquence du moniteur que le travail économisé.
+     *
+     * <p>Le signe était dans le relevé, et il a été mal lu. Le banc avait bien remarqué que le débit
+     * (×3,19) et la médiane (×3,99) ne s'accordaient pas sur l'ampleur, et il l'avait mis sur le
+     * compte d'un « gain inégalement réparti entre les images ». La vraie raison est ailleurs :
+     * {@code getFrameTimeNs()} est calculé <b>avant</b> le limiteur d'images
+     * ({@code Minecraft.java}, ligne 1403 : {@code if (framerateLimit < 260)}), donc la médiane
+     * ignorait le plafond pendant que le débit s'y écrasait. Les deux chiffres ne divergeaient pas
+     * par hasard : l'un était bridé et l'autre pas.
+     *
+     * <p>Deux réglages suffisent à les remettre d'accord. Le plafond est comparé à deux cent
+     * soixante dans le code du jeu : l'y porter revient à le supprimer. La synchronisation, elle,
+     * demande en plus d'être poussée jusqu'à la fenêtre — {@code Minecraft.java} ligne 677 ne lit
+     * l'option qu'au démarrage.
+     *
+     * <p>Ces réglages ne touchent que le monde de développement ({@code run/options.txt}), jamais
+     * l'installation du joueur.
+     */
+    private static void unchain(Minecraft minecraft) {
+        minecraft.options.enableVsync().set(false);
+        minecraft.options.framerateLimit().set(UNCAPPED);
+        minecraft.getWindow().updateVsync(false);
+        Lanterne.LOG.info("[VITRE] Laisse retirée : synchronisation verticale coupée, plafond porté "
+                + "à {}. Sans cela, le banc mesure la fréquence de l'écran.", UNCAPPED);
+    }
+
+    private static void invalidateTerrain() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.levelRenderer != null) {
+            minecraft.levelRenderer.allChanged();
+        }
+    }
+
     /** Taille du troupeau posé devant la caméra. */
     private static int herdWanted() {
         String raw = System.getenv("LANTERNE_GLASS_HERD");
@@ -449,7 +543,11 @@ public final class Glass {
         populate(minecraft);
         Lanterne.LOG.info("[VITRE] Monde chargé, joueur présent — pose de la caméra, début de la "
                 + "chauffe (mod actif).");
+        unchain(minecraft);
         Settings.setEnabled(true);
+        // Le monde vient d'être maillé pendant le chargement, alors que les interrupteurs n'étaient
+        // pas encore posés. Même raisonnement qu'à la bascule : voir invalidateTerrain.
+        invalidateTerrain();
         // La chauffe se mesure en temps, pas en images : voir WARMUP_NANOS.
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
@@ -511,9 +609,15 @@ public final class Glass {
 
         long[] target = on ? SAMPLES_ON : SAMPLES_OFF;
         long[] render = on ? RENDER_ON : RENDER_OFF;
-        if (filled < target.length) {
-            target[filled] = gap;
-            render[filled] = Minecraft.getInstance().getFrameTimeNs();
+        // Compter et stocker sont deux choses différentes, et les confondre a coûté un relevé.
+        // Le débit a besoin du COMPTE sur toute la fenêtre ; la médiane n'a besoin que d'un
+        // échantillon. Arrêter la phase quand le tableau est plein revenait à écourter la fenêtre
+        // de la phase rapide — 18,7 s contre 60 — et donc à rétablir l'inégalité de fenêtres que la
+        // correction précédente venait justement de supprimer.
+        int slot = reserve(target.length);
+        if (slot >= 0) {
+            target[slot] = gap;
+            render[slot] = Minecraft.getInstance().getFrameTimeNs();
         }
         filled++;
         if (overdue()) {
@@ -523,6 +627,7 @@ public final class Glass {
                 spanOn = now - phaseOpened;
                 modulesDuringOn = Settings.describe();
                 Settings.setEnabled(false);
+                invalidateTerrain();
                 // La scène est rebâtie entre les phases, et c'est indispensable ici : mille vaches
                 // lâchées ensemble se dispersent en une minute. La première phase voyait donc un
                 // troupeau serré devant la caméra, la seconde un troupeau étalé — c'est-à-dire deux
@@ -567,9 +672,31 @@ public final class Glass {
      * seconde soutenues pendant une minute, il ne serait pas atteint.
      */
     private static boolean overdue() {
-        return (filled >= MEASURE_LEAST_FRAMES
-                && System.nanoTime() - phaseOpened > MEASURE_BUDGET_NANOS)
-                || filled >= MEASURE_TARGET_FRAMES;
+        return filled >= MEASURE_LEAST_FRAMES
+                && System.nanoTime() - phaseOpened > MEASURE_BUDGET_NANOS;
+    }
+
+    /**
+     * Où ranger le relevé de cette image, ou {@code -1} pour ne pas le ranger.
+     *
+     * <h2>L'échantillonnage par réservoir, et pourquoi il faut celui-là</h2>
+     *
+     * <p>Tant que le tableau n'est pas plein, on range à la suite. Une fois plein, garder les
+     * premiers relevés donnerait une médiane du début de la phase, et écraser en rond donnerait une
+     * médiane de la fin : deux façons de décrire une portion de fenêtre en croyant décrire la
+     * fenêtre entière.
+     *
+     * <p>L'algorithme de Vitter donne à chaque image de la phase la <b>même probabilité</b> de
+     * figurer dans l'échantillon final, quelle que soit sa position. La médiane porte alors sur
+     * toute la fenêtre, avec un tableau de taille fixe — ce qui compte quand une phase rapide peut
+     * rendre cinquante mille images là où la lente en rend deux mille.
+     */
+    private static int reserve(int capacity) {
+        if (filled < capacity) {
+            return filled;
+        }
+        int candidate = SHUFFLE.nextInt(filled + 1);
+        return candidate < capacity ? candidate : -1;
     }
 
     /**
@@ -608,6 +735,21 @@ public final class Glass {
         double rateOff = keptOff / (spanOff / 1e9d);
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[VITRE] Débit : %.1f image(s)/s avec, %.1f sans.", rateOn, rateOff));
+        // La moyenne à côté de la médiane : leur écart mesure la queue de distribution, c'est-à-dire
+        // les à-coups. Une médiane qui s'améliore pendant que la moyenne se dégrade décrit un module
+        // qui accélère le cas courant et paie ailleurs — un renseignement que ni l'une ni l'autre ne
+        // donne seule.
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[VITRE] Moyenne : %.2f ms avec (médiane %.2f), %.2f ms sans (médiane %.2f).",
+                spanOn / 1e6d / Math.max(1, keptOn), medianOn / 1e6,
+                spanOff / 1e6d / Math.max(1, keptOff), medianOff / 1e6));
+
+        if (!unchained(rateOn, rateOff)) {
+            Settings.setEnabled(true);
+            phase = Phase.REFUSED;
+            Minecraft.getInstance().stop();
+            return;
+        }
 
         if (!coherent(rateOn, rateOff, medianOn, medianOff)) {
             Settings.setEnabled(true);
@@ -686,6 +828,82 @@ public final class Glass {
      * sens</b>. Leurs amplitudes peuvent différer — le débit intègre tout, la médiane décrit le cas
      * typique. Leurs signes, non.
      */
+    /**
+     * Le relevé a-t-il buté sur un plafond au lieu de mesurer ?
+     *
+     * <p>{@link #unchain} coupe la synchronisation et retire le plafond d'images, mais rien ne
+     * garantit que le pilote graphique obéisse : certaines configurations imposent la
+     * synchronisation au niveau du pilote, et le jeu n'a alors pas voix au chapitre. Ce contrôle
+     * s'assure donc du résultat plutôt que de l'intention.
+     *
+     * <p>Le critère est le voisinage d'une fréquence d'écran courante. Un débit de 119 images par
+     * seconde sur un écran à 120 ne mesure pas un mod ; il mesure le moniteur, et l'écart avec la
+     * phase lente sous-estime le gain d'autant.
+     */
+    private static boolean unchained(double rateOn, double rateOff) {
+        return free(rateOn, SAMPLES_ON, keptOn, "AVEC")
+                && free(rateOff, SAMPLES_OFF, keptOff, "SANS");
+    }
+
+    /**
+     * Une phase est-elle libre, ou cadencée par l'écran ?
+     *
+     * <h2>Pourquoi le voisinage d'une fréquence ne suffit pas</h2>
+     *
+     * <p>Le premier critère écrit ici refusait tout débit proche d'une fréquence d'écran courante.
+     * Il a aussitôt refusé un relevé parfaitement valable : 72,5 images par seconde, à trois pour
+     * cent des 75 Hz — une coïncidence, pas une butée. Un banc qui refuse les mesures honnêtes ne
+     * vaut pas mieux qu'un banc qui publie les fausses ; il rend seulement l'erreur invisible.
+     *
+     * <p>Ce qui distingue vraiment une cadence imposée, c'est la <b>régularité</b>. Un affichage
+     * synchronisé rend des intervalles quasi identiques — l'écran dicte le rythme, et le jeu attend.
+     * Un affichage libre produit une distribution étalée, parce que chaque image coûte ce qu'elle
+     * coûte. On exige donc les deux signes à la fois : un débit au voisinage d'une fréquence
+     * <b>et</b> une concentration anormale des intervalles autour de la médiane.
+     *
+     * <p>Le relevé qui a motivé ce garde-fou avait une médiane de 5,03 ms et un centile le plus lent
+     * à 48,22 : tout sauf régulier. Il passe désormais, et c'est justice.
+     */
+    private static boolean free(double rate, long[] samples, int count, String label) {
+        boolean nearRefresh = false;
+        int matched = 0;
+        for (int refresh : new int[] {60, 75, 90, 100, 120, 144, 165, 240}) {
+            if (rate > refresh * SUSPECT_RATE && rate < refresh * 1.02d) {
+                nearRefresh = true;
+                matched = refresh;
+                break;
+            }
+        }
+        if (!nearRefresh) {
+            return true;
+        }
+
+        double median = median(samples, count);
+        if (median <= 0d) {
+            return true;
+        }
+        int tight = 0;
+        for (int i = 0; i < count; i++) {
+            if (Math.abs(samples[i] - median) < median * 0.05d) {
+                tight++;
+            }
+        }
+        double concentration = tight / (double) count;
+        if (concentration < STEADY_SHARE) {
+            Lanterne.LOG.info(String.format(Locale.ROOT,
+                    "[VITRE] Phase %s : %.1f image(s)/s tombe près de %d Hz, mais les intervalles "
+                            + "sont étalés (%.0f %% groupés). Coïncidence, pas une butée.",
+                    label, rate, matched, concentration * 100d));
+            return true;
+        }
+        Lanterne.LOG.error(String.format(Locale.ROOT,
+                "[VITRE] MESURE REFUSÉE : phase %s cadencée par l'écran — %.1f image(s)/s à %d Hz, "
+                        + "et %.0f %% des intervalles collés à la médiane. Le banc a mesuré le "
+                        + "moniteur. Couper la synchronisation au niveau du PILOTE et relancer.",
+                label, rate, matched, concentration * 100d));
+        return false;
+    }
+
     private static boolean coherent(double rateOn, double rateOff, double medianOn,
             double medianOff) {
         if (rateOn <= 0d || rateOff <= 0d || medianOn <= 0d || medianOff <= 0d) {

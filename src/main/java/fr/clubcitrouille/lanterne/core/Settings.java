@@ -364,6 +364,14 @@ public final class Settings {
      */
     private static boolean shroud = true;
     /**
+     * Les coffres rendus comme des blocs ordinaires plutot que comme des entites animees.
+     *
+     * <p>Voir {@code StaticChestRendererMixin}. Repris de Faster Block Entities, sous GPL-3.0 —
+     * premier module de ce projet dont le code vient d'ailleurs, et la raison pour laquelle Lanterne
+     * a change de licence.
+     */
+    private static boolean staticChests = true;
+    /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
      *
@@ -765,6 +773,10 @@ public final class Settings {
         return master && shroud;
     }
 
+    public static boolean staticChests() {
+        return master && staticChests;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -890,6 +902,7 @@ public final class Settings {
         poi = wanted.contains("poi") || wanted.contains("interet");
         spill = wanted.contains("spill") || wanted.contains("effets") || wanted.contains("tableau");
         shroud = wanted.contains("shroud") || wanted.contains("voile") || wanted.contains("occlusion");
+        staticChests = wanted.contains("chests") || wanted.contains("coffres");
         mining = !wanted.contains("nomining");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
@@ -931,6 +944,7 @@ public final class Settings {
         poi = Config.POI.get();
         spill = Config.SPILL.get();
         shroud = Config.SHROUD.get();
+        staticChests = Config.STATIC_CHESTS.get();
         Shroud.tune(Config.SHROUD_DELAY.get(), Config.SHROUD_NEAR.get(),
                 Config.SHROUD_BUDGET.get(), Config.SHROUD_FAR.get(), Config.SHROUD_BULKY.get());
         mining = Config.MINING.get();
@@ -998,6 +1012,9 @@ public final class Settings {
         }
         if (shroud) {
             text.append("voile ");
+        }
+        if (staticChests) {
+            text.append("coffres ");
         }
         if (rationing) {
             text.append("ration ");

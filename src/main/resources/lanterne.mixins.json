@@ -41,6 +41,8 @@
     "InsideEffectsMixin"
   ],
   "client": [
-    "EntityCullMixin"
+    "EntityCullMixin",
+    "StaticChestRendererMixin",
+    "StaticChestShapeMixin"
   ]
 }
