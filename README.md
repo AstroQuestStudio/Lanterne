@@ -8,10 +8,10 @@
 
 <br>
 
-![Version](https://img.shields.io/badge/version-2.1.0-brightgreen?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.2.0-brightgreen?style=for-the-badge)
 ![NeoForge](https://img.shields.io/badge/NeoForge-26.1.2-orange?style=for-the-badge)
 ![Java](https://img.shields.io/badge/Java-21-blue?style=for-the-badge)
-![Licence](https://img.shields.io/badge/licence-tous%20droits%20r%C3%A9serv%C3%A9s-lightgrey?style=for-the-badge)
+![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue?style=for-the-badge)
 
 <br>
 
@@ -63,7 +63,7 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 <div align="center">
 
 Deux fenêtres de **60,0 s exactement**, chauffe de 30 s, synchronisation verticale coupée,
-scène reconstruite entre les phases, module **isolé** (`LANTERNE_MODULES=voile`).
+scène reconstruite entre les phases, **un seul module allumé à la fois**.
 
 </div>
 
@@ -108,14 +108,14 @@ En 26.1, `extractVisibleEntities` construit l'état de rendu de chaque créature
 > à l'autre, **toute mesure lancée après elle héritait d'un monde qui ticke 85 fois trop vite.**
 > Trois autres défauts du même genre ont été trouvés le même soir.
 >
-> **Le client n'a pas de chiffre, et c'est voulu.** La reprise a rendu ceci : médiane 11,82 ms avec le
-> mod, 8,77 ms sans — soit une **perte** de ×0,74. Mais sur la même durée, la phase « avec » a rendu
-> **2019 images** contre **1797**, ce qui dit l'inverse.
+> **Le client avait refusé de rendre un chiffre, et il avait raison.** La reprise donnait médiane
+> 11,82 ms avec le mod contre 8,77 sans — une perte — mais 2019 images contre 1797 sur la même
+> minute, ce qui disait l'inverse. Rien n'a été publié ce jour-là.
 >
-> Les deux signaux se contredisent, et le banc signale lui-même qu'une phase s'est arrêtée à
-> l'échéance. Le ×1,25 qui figurait ici depuis des mois n'est donc pas confirmé — et le ×0,74 ne l'est
-> pas davantage. **Un banc qui se contredit ne publie rien.** Le côté client demande son propre
-> chantier : un banc d'images qui tienne.
+> Le chantier a été mené depuis : **six défauts** trouvés, le banc réparé, et trois modules de rendu
+> mesurés. Le tableau client ci-dessus en est le produit. C'est la démonstration la plus nette de ce
+> que vaut un refus : la contradiction n'était pas du bruit, c'était un instrument cassé qui le
+> disait.
 >
 > **Ce que la reprise a donné.** Six charges sont repassées au banc. Cinq se sont révélées
 > **meilleures** que ce qui était publié — les orbes passent de ×4,28 à **×11,76**, les projectiles
