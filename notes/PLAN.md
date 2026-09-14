@@ -97,7 +97,61 @@ qu'il annonce datent d'une version où le défaut existait. Il faut remesurer, j
 ### Ce qui n'a pas pu être fait, et pourquoi
 
 **MoreCulling**, **ImmediatelyFast**, **RRLS**, **DynamicFPS** ciblent tous **26.2**, pas 26.1.2.
-Leur code ne s'applique pas tel quel, et le rétro-porter est un chantier par mod.
+
+L'historique de ces dépôts a été récupéré et fouillé — c'était la bonne idée, et elle a rendu des
+renseignements précis :
+
+| Dépôt | Ce que l'historique contient | Verdict |
+|---|---|---|
+| **ImmediatelyFast** | commit `980355d` « Added support for Minecraft **26.1.2** » | Code applicable, mais voir ci-dessous |
+| **RRLS** | tags `26.1-5.2.4`, `26.1-5.2.5`, `26.1-5.2.6` | Une version 26.1 existe |
+| **MoreCulling** | commit `d0bac28` « Port to 26.2 » | L'avant-dernier état ciblait 1.21 |
+
+**Le blocage d'`enhanced_batching`, trouvé en lisant le code 26.1.1.** C'est le cœur
+d'ImmediatelyFast : un `BufferSource` qui regroupe les lots au lieu de les clore un par un. Son
+`drawDirect` réassigne `this.sharedBuffer`. Or en **26.1.2**, `MultiBufferSource.BufferSource`
+déclare ce champ `protected **final**` — et leur configuration de mixins ne contient aucun
+accesseur pour le rendre modifiable, ce qui signifie qu'il ne l'était pas encore en 26.1.1.
+
+Leur code ne compile donc pas sur 26.1.2 sans un mixin supplémentaire levant ce `final` sur une
+classe centrale du rendu. C'est faisable, ce n'est pas anodin : ce tampon sert **toutes** les
+entités, et `ByteBufferBuilderPool` gère de la mémoire native.
+
+**Deux modules écartés pour fragilité, pas pour difficulté.**
+`skip_text_translucency_sorting` cible des lambdas par numéro (`lambda$static$22`) — un numéro qui
+dépend de l'ordre de compilation et change d'une version corrective à l'autre.
+`fast_text_lookup` cible une classe anonyme (`Font$GlyphVisitor$1`). Ni l'un ni l'autre n'est
+mesurable sur les charges de ce laboratoire, et un mod qu'on installe sans y penser ne doit pas
+reposer sur des noms que Mojang ne promet pas.
+
+## La super-résolution, et donc le DLSS
+
+La question était ouverte depuis le premier jour : ce projet avait refusé de promettre DLSS avant
+d'avoir lu comment un mod Java obtient un contexte graphique. C'est fait — `superresolution`
+(GPL-3.0-or-later) cible **26.1.x**, donc exactement cette version.
+
+**Ce que le dépôt contient, vérifié :**
+
+- **Aucun binaire natif.** Zéro `.dll`, zéro `.so`. Les bibliothèques propriétaires ne sont pas
+  redistribuées, et ne pourraient pas l'être.
+- **Les algorithmes d'AMD sont des shaders GLSL**, livrés en source, sous **licence MIT**
+  (`ffx_a.h`, `ffx_fsr1.h` — « Copyright (c) 2021 Advanced Micro Devices »).
+- **DLSS et XeSS passent par Vulkan** : le mod embarque sa propre couche
+  (`io.homo.superresolution.core.graphics.vulkan.VulkanDevice`). C'est la raison de ses
+  **997 fichiers**.
+
+**La conclusion est nette, et elle sépare deux choses qu'on confond souvent :**
+
+| | Faisable dans Lanterne ? | Pourquoi |
+|---|---|---|
+| **DLSS** | **Non** | Exige un contexte Vulkan — Minecraft rend en OpenGL — *et* la bibliothèque NVIDIA, qui n'est pas redistribuable. Bâtir une couche Vulkan est un projet à part entière, pas un module. |
+| **XeSS** | Non | Même dépendance Vulkan. |
+| **FSR 1** | **Oui** | Un shader de post-traitement pur, en GLSL, sous MIT. Rend à résolution réduite puis rehausse. Aucune dépendance propriétaire, aucun Vulkan. |
+
+Autrement dit : **le bénéfice recherché — plus d'images en échange d'un peu de netteté — est
+atteignable sans DLSS**, par FSR 1, et c'est la seule voie qu'un mod puisse emprunter sans
+embarquer un pilote graphique. C'est la prochaine grosse pièce client, et elle mérite sa propre
+étape plutôt qu'une ligne en fin de vague.
 
 **Exordium** demande un tampon d'image séparé et son propre auteur annonce « still work in
 progress, there will be issues ». Hors de question dans un mod qui se veut celui qu'on installe
