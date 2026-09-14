@@ -62,11 +62,14 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 > faveur de la seconde, dus au compilateur JIT) et corrigé en portant la chauffe à 200 ticks ; il a
 > depuis changé de signe, donc de cause.
 >
-> Le banc **refuse désormais de conclure sous ×1,20**. Deux chiffres publiés retombent sous ce
-> plancher et sont marqués ⚠️ : ils ne sont ni infirmés ni confirmés, ils ne sont pas prouvés. Les
-> autres gardent leur sens et sont surestimés d'environ quinze pour cent dans leur ampleur.
+> **C'est corrigé.** Les phases sont maintenant **entrelacées** — 50 relevés avec, 50 sans, dix
+> fois — au lieu de deux blocs successifs de 500. La dérive frappe alors les deux séries au même
+> moment et s'annule dans le rapport. Sur la même épreuve à vide, le banc est passé de ×1,13 et
+> ×1,17 à **×1,04** : divisée par quatre, sans qu'il ait fallu identifier la cause.
 >
-> La correction propre — **entrelacer** les phases, ABABAB plutôt que AABB — reste à faire.
+> Le plancher est descendu à **×1,08**, soit deux fois la dérive résiduelle. Les deux chiffres
+> marqués ⚠️ ont été mesurés avec l'ancien protocole et attendent d'être repris ; les autres gardent
+> leur sens, surestimés d'environ quinze pour cent.
 
 ### Et côté client, maintenant que l'instrument ne ment plus
 

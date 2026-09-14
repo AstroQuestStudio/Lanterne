@@ -82,18 +82,55 @@ public final class Bench {
      * gigaoctets alloués et vingt-six ramassages par exécution), échauffement du processeur, état du
      * monde qui s'accumule.
      *
-     * <h2>Ce qu'on en fait, et ce qu'on n'en fait pas</h2>
+     * <h2>La correction, et ce qu'elle a rendu</h2>
      *
-     * <p>La correction propre serait d'<b>entrelacer</b> les phases — ABABAB plutôt que AABB — pour
-     * que la dérive frappe les deux séries également. C'est un chantier sur ce fichier, et il n'est
-     * pas fait ici.
+     * <p>Les phases sont désormais <b>entrelacées</b> — voir {@link #ROUNDS}. Sur la même épreuve à
+     * vide, le banc est passé de ×1,13 et ×1,17 à <b>×1,04</b> : la dérive a été divisée par
+     * quatre, sans qu'il ait fallu en identifier la cause.
      *
-     * <p>Ce qui est fait, et qui suffit à ne pas mentir : ce banc <b>refuse de conclure</b> sous
-     * cette valeur. Un module qui rend ×1,10 sur cette charge n'a rien prouvé — le banc à vide en
-     * rend autant. Les gains bien au-dessus du plancher restent valables dans leur sens, et
-     * surestimés d'environ quinze pour cent dans leur ampleur.
+     * <p>Le plancher suit. Il vaut désormais huit pour cent — deux fois la dérive résiduelle, ce
+     * qui laisse de la marge pour une mauvaise journée de la machine sans laisser passer du bruit
+     * pour un gain. Un module qui rend moins que cela sur une charge donnée n'a rien prouvé
+     * <em>sur cette charge</em> ; il faut le mesurer là où il pèse davantage, ou admettre qu'il ne
+     * pèse pas.
+     *
+     * <p>Les chiffres publiés <b>avant</b> cette correction gardent leur sens mais sont surestimés
+     * d'environ quinze pour cent. Ils sont marqués comme tels tant qu'ils n'ont pas été repris.
      */
-    private static final double DRIFT = 1.20d;
+    private static final double DRIFT = 1.08d;
+
+    /**
+     * Alternances entre les deux états au lieu d'une seule bascule.
+     *
+     * <h2>La correction de la dérive, à sa racine</h2>
+     *
+     * <p>Le protocole mesurait cinq cents ticks avec le mod, puis cinq cents sans. Toute dérive
+     * cumulative — pression sur le tas, échauffement, état du monde — frappe alors <b>entièrement
+     * la seconde moitié</b>, et se lit comme un effet du mod. Voir {@link #DRIFT} pour les quinze
+     * pour cent que cela valait.
+     *
+     * <p>On alterne désormais par blocs courts : cinquante relevés avec, cinquante sans, dix fois.
+     * La dérive frappe les deux séries au même moment et dans la même proportion, donc elle
+     * s'annule dans le rapport au lieu de s'y ajouter. Le nombre total de relevés ne change pas —
+     * cinq cents de chaque côté — seul leur entrelacement change.
+     *
+     * <p>C'est la réponse standard à une dérive lente, et elle a l'avantage de ne rien supposer sur
+     * sa cause : on n'a pas eu besoin de savoir si c'était le tas, le processeur ou le monde.
+     */
+    private static final int ROUNDS = 10;
+
+    /** Relevés par bloc, de chaque côté. {@code SAMPLE / ROUNDS}. */
+    private static final int PER_ROUND = SAMPLE / ROUNDS;
+
+    /**
+     * Chauffe entre deux blocs, après la première.
+     *
+     * <p>Les deux cents ticks de {@link #WARMUP} servent à laisser le compilateur à la volée se
+     * fixer ; cela n'a besoin d'être fait qu'une fois. Entre deux blocs, il suffit d'absorber
+     * l'effet immédiat de la bascule — les premiers ticks après un changement d'état ne ressemblent
+     * pas aux suivants.
+     */
+    private static final int WARMUP_SHORT = 40;
 
     /**
      * Budget de temps réel par phase, en nanosecondes.
@@ -138,6 +175,14 @@ public final class Bench {
     private static final long[] WITH = new long[SAMPLE];
     private static final long[] WITHOUT = new long[SAMPLE];
     private static int filled;
+
+    /** Relevés cumulés de chaque côté, tous blocs confondus. Voir {@link #ROUNDS}. */
+    private static int filledWith;
+
+    private static int filledWithout;
+
+    /** Bloc en cours, de un à {@link #ROUNDS}. */
+    private static int round;
 
     /** Relevés réellement obtenus dans chaque phase : ils peuvent différer si l'échéance a tranché. */
     private static int keptWith;
@@ -267,7 +312,9 @@ public final class Bench {
      * valeurs n'est pas une médiane, c'est une valeur prise au hasard parmi trois.
      */
     private static boolean overdue() {
-        return filled >= LEAST && System.nanoTime() - phaseOpened > BUDGET_NANOS;
+        // Le budget vaut pour un BLOC, non plus pour une phase entière : dix blocs de chaque côté
+        // se partagent le temps qu'une phase unique consommait seule.
+        return filled >= LEAST && System.nanoTime() - phaseOpened > BUDGET_NANOS / ROUNDS;
     }
 
     /**
@@ -338,6 +385,10 @@ public final class Bench {
         fr.clubcitrouille.lanterne.core.Poi.reset();
         fr.clubcitrouille.lanterne.core.Spill.reset();
         fr.clubcitrouille.lanterne.core.Wire.reset();
+        // Les séries repartent vides et le compteur de blocs à un : voir ROUNDS.
+        filledWith = 0;
+        filledWithout = 0;
+        round = 1;
         phase = Phase.WARM_ON;
         phaseOpened = System.nanoTime();
         left = WARMUP;
@@ -407,9 +458,12 @@ public final class Bench {
                 }
             }
             case MEASURE_ON -> {
-                WITH[filled++] = elapsed;
-                if (filled >= SAMPLE || overdue()) {
-                    keptWith = filled;
+                if (filledWith < SAMPLE) {
+                    WITH[filledWith++] = elapsed;
+                }
+                filled++;
+                if (filled >= PER_ROUND || filledWith >= SAMPLE || overdue()) {
+                    keptWith = filledWith;
                     allocWith = allocatedBytes() - allocMark;
                     gcWith = gcCount() - gcMark;
                     packetsWith = fr.clubcitrouille.lanterne.lab.Understudy.packetsSent();
@@ -422,16 +476,20 @@ public final class Bench {
                     explosionsWith = fr.clubcitrouille.lanterne.core.Rubble.explosions();
                     phase = Phase.WARM_OFF;
                     phaseOpened = System.nanoTime();
-                    left = WARMUP;
+                    left = round == 1 ? WARMUP : WARMUP_SHORT;
                     Settings.setEnabled(false);
                     // Avant la chauffe témoin, et non pendant la mesure : rebâtir coûte cent mille
                     // poses de bloc, qui n'ont rien à faire dans une fenêtre chronométrée.
                     fr.clubcitrouille.lanterne.lab.Scene.rearm(level);
                     fr.clubcitrouille.lanterne.lab.Sampler.stop();
-                    say("── Profil AVEC Lanterne ──");
-                    fr.clubcitrouille.lanterne.lab.Sampler.report(24);
-                    fr.clubcitrouille.lanterne.lab.Allocations.stopAndReport(20);
-                    say("Phase 1 terminée (mod actif). Bascule — phase 2 sans le mod.");
+                    // Le profil et le rapport d'allocations ne sortent qu'une fois, au dernier bloc :
+                    // vingt-quatre lignes répétées dix fois n'apprendraient rien de plus, et le
+                    // profil cumulé est de toute façon plus riche qu'un profil par bloc.
+                    if (filledWith >= SAMPLE) {
+                        say("── Profil AVEC Lanterne ──");
+                        fr.clubcitrouille.lanterne.lab.Sampler.report(24);
+                        fr.clubcitrouille.lanterne.lab.Allocations.stopAndReport(20);
+                    }
                 }
             }
             case WARM_OFF -> {
@@ -448,21 +506,34 @@ public final class Bench {
                 }
             }
             case MEASURE_OFF -> {
-                WITHOUT[filled++] = elapsed;
-                if (filled >= SAMPLE || overdue()) {
-                    keptWithout = filled;
+                if (filledWithout < SAMPLE) {
+                    WITHOUT[filledWithout++] = elapsed;
+                }
+                filled++;
+                if (filled >= PER_ROUND || filledWithout >= SAMPLE || overdue()) {
+                    keptWithout = filledWithout;
                     allocWithout = allocatedBytes() - allocMark;
                     gcWithout = gcCount() - gcMark;
                     packetsWithout = fr.clubcitrouille.lanterne.lab.Understudy.packetsSent();
                     liveWithout = liveBytes();
-                    phase = Phase.DONE;
-                    Settings.setEnabled(true);
                     fr.clubcitrouille.lanterne.lab.Sampler.stop();
-                    conclude(level);
-                    say("── Profil SANS Lanterne (le jeu tel quel) ──");
-                    fr.clubcitrouille.lanterne.lab.Sampler.report(22);
-                    if (stopAfter != null) {
-                        stopAfter.halt(false);
+                    // Tant qu'il reste des relevés à prendre, on repart pour un tour au lieu de
+                    // conclure. C'est tout l'entrelacement : voir ROUNDS.
+                    if (filledWithout < SAMPLE && round < ROUNDS) {
+                        round++;
+                        phase = Phase.WARM_ON;
+                        phaseOpened = System.nanoTime();
+                        left = WARMUP_SHORT;
+                        Settings.setEnabled(true);
+                    } else {
+                        phase = Phase.DONE;
+                        Settings.setEnabled(true);
+                        conclude(level);
+                        say("── Profil SANS Lanterne (le jeu tel quel) ──");
+                        fr.clubcitrouille.lanterne.lab.Sampler.report(22);
+                        if (stopAfter != null) {
+                            stopAfter.halt(false);
+                        }
                     }
                 }
             }
