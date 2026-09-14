@@ -150,8 +150,45 @@ d'avoir lu comment un mod Java obtient un contexte graphique. C'est fait — `su
 
 Autrement dit : **le bénéfice recherché — plus d'images en échange d'un peu de netteté — est
 atteignable sans DLSS**, par FSR 1, et c'est la seule voie qu'un mod puisse emprunter sans
-embarquer un pilote graphique. C'est la prochaine grosse pièce client, et elle mérite sa propre
-étape plutôt qu'une ligne en fin de vague.
+embarquer un pilote graphique.
+
+### Une confusion à lever, parce qu'elle change la décision
+
+**FSR n'est pas réservé aux cartes AMD.** C'est un shader ordinaire, qui s'exécute sur n'importe
+quel processeur graphique — NVIDIA, AMD, Intel. C'est précisément ce qui l'oppose à DLSS, lequel
+exige une carte NVIDIA RTX *et* la bibliothèque du constructeur.
+
+Un parc entièrement NVIDIA n'est donc pas une raison de préférer DLSS : c'est une raison de plus
+de choisir FSR, qui marchera pour tout le monde sans dépendance ni exclusion.
+
+### Le chemin technique, et où il bute
+
+La mise à l'échelle se décompose en deux, et **le gain vient de la première moitié** :
+
+1. **Rendre à résolution réduite.** Le gain est proportionnel à la surface : rendre à 67 % de
+   chaque dimension, c'est 45 % de pixels en moins. C'est là qu'est la performance.
+2. **Rehausser proprement** avec EASU puis RCAS, les deux passes de FSR 1. C'est là qu'est la
+   qualité — sans quoi l'étirement bilinéaire du jeu suffit, en plus flou.
+
+Ce qui est établi : `RenderTarget` expose `resize(int, int)`, `blitToScreen()` et ses dimensions
+publiquement (vérifié par `javap` sur le jar, les sources de `com.mojang.blaze3d` n'étant pas
+décompilées dans ce dépôt). Un `blitToScreen` depuis une cible plus petite que la fenêtre étire
+tout seul.
+
+Ce qui bloque, et qu'il faut instruire avant d'écrire une ligne :
+
+- **26.1 n'a plus de `resizeDisplay`** dans `Minecraft` — seulement `resizeGui`. Le point où la
+  cible principale suit la fenêtre n'a pas été trouvé, et il est probablement passé dans le
+  `FrameGraph`, dont les sources ne sont pas lisibles ici.
+- **L'interface doit rester à résolution native.** Réduire la cible principale réduirait aussi le
+  texte et le HUD, qui deviendraient flous — un défaut bien plus visible que le gain. Il faut donc
+  réduire la cible du *monde* seulement, ce qui suppose de savoir où le monde et l'interface se
+  séparent dans le nouveau pipeline.
+
+**Conclusion de méthode.** Coder à l'aveugle dans le pipeline graphique est exactement ce que ce
+projet refuse de faire ailleurs ; il n'y a pas de raison de s'y autoriser ici. La super-résolution
+mérite sa propre étape, ouverte par la décompilation de `com.mojang.blaze3d` — et sa validation ne
+pourra pas être automatique : la qualité d'image se juge à l'œil, pas au banc.
 
 **Exordium** demande un tampon d'image séparé et son propre auteur annonce « still work in
 progress, there will be issues ». Hors de question dans un mod qui se veut celui qu'on installe
