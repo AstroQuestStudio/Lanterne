@@ -11,6 +11,10 @@ package fr.clubcitrouille.lanterne.core;
 public final class Mind {
     private static long gates;
 
+    private static long brains;
+
+    private static long boxes;
+
     private Mind() {}
 
     public static void noteGate() {
@@ -21,7 +25,27 @@ public final class Mind {
         return gates;
     }
 
+    /** Combien de fois un cerveau a proposé ses comportements depuis une liste plate. */
+    public static void noteBrain() {
+        brains++;
+    }
+
+    public static long brains() {
+        return brains;
+    }
+
+    /** Combien de boites vides ont ete partagees plutot que refabriquees. */
+    public static void noteBox() {
+        boxes++;
+    }
+
+    public static long boxes() {
+        return boxes;
+    }
+
     public static void reset() {
         gates = 0L;
+        brains = 0L;
+        boxes = 0L;
     }
 }

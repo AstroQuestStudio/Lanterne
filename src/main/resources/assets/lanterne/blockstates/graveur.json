@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "lit=false,has_record=false": {
+      "model": "lanterne:block/graveur"
+    },
+    "lit=false,has_record=true": {
+      "model": "lanterne:block/graveur"
+    },
+    "lit=true,has_record=false": {
+      "model": "lanterne:block/graveur_actif"
+    },
+    "lit=true,has_record=true": {
+      "model": "lanterne:block/graveur_actif"
+    }
+  }
+}

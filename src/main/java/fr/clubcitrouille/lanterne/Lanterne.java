@@ -79,6 +79,28 @@ public final class Lanterne {
         modBus.addListener(fr.clubcitrouille.lanterne.core.ClientConfig::apply);
         // Les réglages d'abord : le filtre de journal les consulte, et la première version
         // l'installait avant de les avoir lus — si bien qu'aucun réglage ne pouvait l'en empêcher.
+        // L'atelier : les tableaux personnalisés et les disques personnalisés. Un seul fichier de
+        // réglages pour les deux, de type COMMON — les limites d'import engagent le serveur qui les
+        // fait respecter autant que le client qui prépare les fichiers. Voir content.painting.Studio.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.COMMON,
+                fr.clubcitrouille.lanterne.content.painting.Studio.SPEC);
+        modBus.addListener(fr.clubcitrouille.lanterne.content.painting.Studio::apply);
+        fr.clubcitrouille.lanterne.content.painting.Easel.register(modBus);
+        fr.clubcitrouille.lanterne.content.disc.Groove.register(modBus);
+        NeoForge.EVENT_BUS.addListener(
+                fr.clubcitrouille.lanterne.content.painting.Easel::onRegisterCommands);
+        NeoForge.EVENT_BUS.addListener(
+                fr.clubcitrouille.lanterne.content.disc.Groove::onRegisterCommands);
+        // La boutique et l'economie. Le fichier de reglages est de type SERVER : les regles du
+        // marche engagent le serveur seul, et un client ne doit jamais pouvoir s'inventer une
+        // amplitude de derive. Le nom de fichier est explicite parce que Config.SPEC occupe deja
+        // le fichier SERVER par defaut.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                fr.clubcitrouille.lanterne.content.shop.Tariff.SPEC, "lanterne-boutique.toml");
+        modBus.addListener(fr.clubcitrouille.lanterne.content.shop.Tariff::apply);
+        fr.clubcitrouille.lanterne.content.shop.Bazaar.register(modBus);
+        NeoForge.EVENT_BUS.addListener(
+                fr.clubcitrouille.lanterne.content.shop.Bazaar::onRegisterCommands);
         Settings.configureFromEnvironment();
         fr.clubcitrouille.lanterne.core.Hush.install();
         fr.clubcitrouille.lanterne.core.Machine.appraise();
@@ -88,7 +110,14 @@ public final class Lanterne {
         // la garde suffit — une classe n'est chargée qu'au moment où l'on s'en sert.
         if (net.neoforged.fml.loading.FMLEnvironment.getDist().isClient()) {
             fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
+            // Apres Compass : la touche de la boutique reutilise la categorie de
+            // raccourcis qu'il declare, et NeoForge refuse un identifiant en double.
+            fr.clubcitrouille.lanterne.client.shop.Bell.register(modBus);
             fr.clubcitrouille.lanterne.client.Gauge.register(modBus);
+            // Le rendu des tableaux : la mosaïque, le magot et le dessin n'existent que côté client
+            // et ne doivent jamais être chargés par un serveur dédié.
+            fr.clubcitrouille.lanterne.content.painting.CanvasRenderer.register(modBus);
+            fr.clubcitrouille.lanterne.content.disc.Wheel.install();
         }
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,
@@ -132,6 +161,7 @@ public final class Lanterne {
         // avertissements décalés. C'est la même faute que le recensement des cibles avait commise
         // plus haut, et elle avait coûté six bancs à trouver.
         fr.clubcitrouille.lanterne.core.Sweeper.tick(event.getServer());
+        fr.clubcitrouille.lanterne.core.Tide.tick(event.getServer());
         fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
         SelfTest.tick(event.getServer());
         Bench.endTick(event.getServer().overworld());
@@ -170,6 +200,8 @@ public final class Lanterne {
         // rien a reconnaitre. Les garder reviendrait a retenir de la memoire pour rien — c'est
         // exactement ce que la premiere version de ce module faisait, et le banc l'avait vu.
         fr.clubcitrouille.lanterne.core.Moulds.seal();
+        // Les plafonds de la maree : ce que server.properties demande, jamais depasse.
+        fr.clubcitrouille.lanterne.core.Tide.anchor(event.getServer());
         fr.clubcitrouille.lanterne.core.Ballast.appraise();
         fr.clubcitrouille.lanterne.core.Herald.welcome(
                 (System.nanoTime() - AWOKEN) / 1_000_000L,

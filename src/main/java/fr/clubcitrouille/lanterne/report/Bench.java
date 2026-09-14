@@ -368,6 +368,11 @@ public final class Bench {
             return;
         }
         headless = true;
+        // La maree est mise en sommeil pour toute la duree de la mesure. Elle ajusterait les
+        // distances de vue et de simulation en cours de route, si bien que les deux phases
+        // compareraient des mondes de tailles differentes en croyant comparer deux versions du
+        // meme code — et l'ecart irait dans le sens du mod, ce qui est le pire des cas.
+        Settings.setTide(false);
         stopAfter = server;
         listener = null;
         // La scène est remise à neuf avant la première phase comme avant la seconde. Sans cela, la
@@ -400,6 +405,11 @@ public final class Bench {
 
     public static void start(CommandSourceStack source) {
         headless = false;
+        // La maree est mise en sommeil pour toute la duree de la mesure. Elle ajusterait les
+        // distances de vue et de simulation en cours de route, si bien que les deux phases
+        // compareraient des mondes de tailles differentes en croyant comparer deux versions du
+        // meme code — et l'ecart irait dans le sens du mod, ce qui est le pire des cas.
+        Settings.setTide(false);
         stopAfter = null;
         listener = source;
         phase = Phase.WARM_ON;
@@ -645,6 +655,18 @@ public final class Bench {
             say(String.format(Locale.ROOT,
                     "Comportements composites parcourus sans streams : %d",
                     fr.clubcitrouille.lanterne.core.Mind.gates()));
+        }
+
+        if (fr.clubcitrouille.lanterne.core.Mind.boxes() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Boites vides partagees plutot que refabriquees : %d",
+                    fr.clubcitrouille.lanterne.core.Mind.boxes()));
+        }
+
+        if (fr.clubcitrouille.lanterne.core.Mind.brains() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Cerveaux servis depuis une liste plate : %d",
+                    fr.clubcitrouille.lanterne.core.Mind.brains()));
         }
 
         // <h2>Le garde-fou propre à la charge des entonnoirs</h2>

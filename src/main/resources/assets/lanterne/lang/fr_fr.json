@@ -7,5 +7,11 @@
   "key.lanterne.waypoints": "Carnet de repères",
   "key.categories.lanterne": "Lanterne",
   "item.lanterne.carnet": "Carnet de repères",
-  "item.lanterne.boussole_ancre": "Boussole d'Ancre"
+  "item.lanterne.boussole_ancre": "Boussole d'Ancre",
+  "item.lanterne.pinceau": "Pinceau",
+  "item.lanterne.disque": "Disque",
+  "key.lanterne.boutique": "Boutique",
+  "item.lanterne.disque_vierge": "Disque vierge",
+  "block.lanterne.graveur": "Graveur de vinyle",
+  "item.lanterne.graveur": "Graveur de vinyle"
 }

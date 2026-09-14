@@ -41,7 +41,8 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **6 000 projectiles en vol** | 113,74 ms | 23,12 ms | **×4,92** | ✅ |
 | **Serveur habité réaliste** | 33,19 ms | 8,02 ms | **×4,14** | ✅ |
 | **6 000 TNT** | 72,46 ms | 49,64 ms | **×1,46** | ✅ |
-| **600 villageois** | 61,00 ms | 34,84 ms | **×1,75** | ✅ |
+| **600 villageois** | 47,34 ms | 27,93 ms | **×1,69** | ✅ |
+| **600 villageois** *(un seul cœur)* | 32,60 ms | 20,63 ms | **×1,58** | ✅ |
 | **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
 | **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
 | **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | ×1,05 | ⚠️ |
@@ -49,6 +50,33 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 <div align="center">
 
 ✅ **au-dessus de la dérive du banc** &nbsp;·&nbsp; ⚠️ **sous la dérive : non prouvé**
+
+</div>
+
+### Le cerveau des créatures — ×1,32 pour ce module seul
+
+Le profileur désignait `Brain.startEachNonRunningBehavior` à **38,7 %** de la pile, et trois
+tentatives ont cherché ce temps au mauvais endroit avant de le trouver. La cause :
+`tickEachRunningBehavior` appelle `getRunningBehaviors()` — une méthode que Mojang a marquée
+`@Deprecated @VisibleForDebug` — **à chaque tick, pour chaque créature à cerveau**. Elle alloue une
+liste et traverse trois niveaux de tables imbriquées, y compris les comportements des activités
+*inactives*, pour n'en retenir que deux ou trois.
+
+Deux collections tenues à jour remplacent les deux parcours, et le balayage des mémoires ne
+s'exécute plus que si quelque chose a pu expirer. Résultat : **32,11 → 24,41 ms**, et **153 Mo
+alloués en moins** par fenêtre de mesure.
+
+### Sur une machine à un seul cœur
+
+Le banc a été relancé avec le processus serveur **épinglé sur un cœur**. Vanilla y fait **32,60 ms**
+là où il en fait 47,34 sur huit — il n'est donc pas plus lent. La conclusion oriente tout le reste :
+sur une charge d'entités, **le serveur est mono-thread de toute façon**. Ce qui compte est le travail
+par tick et le ramasse-miettes, qui sur un cœur unique ne tourne plus *à côté* du tick mais le lui
+prend. D'où l'importance des **×1,79 sur la mémoire allouée**, qu'on aurait pu croire secondaires.
+
+Voir `notes/serveur-un-coeur.md` pour le réglage complet d'un petit serveur.
+
+<div align="center">
 
 </div>
 
@@ -436,6 +464,296 @@ autre.
 
 ---
 
+## 🖼️ Les Tableaux — tes images sur tes murs
+
+<div align="center">
+
+<img src="docs/images/tableau.png" width="640" alt="Un tableau personnalisé accroché à un mur">
+
+**Tu accroches une toile vide. Tu cliques dessus. Tu la remplis — sans quitter le jeu.**
+
+<img src="docs/images/pinceau.png" width="110" alt="Le Pinceau">
+
+*Le Pinceau — soie chargée de couleur, virole d'acier, manche de bois.*
+
+</div>
+
+### Le geste, en trois temps
+
+1. **Pose et tu vois.** Clic droit sur un mur avec un Pinceau → une toile vierge de 2 × 2 s'accroche
+   **immédiatement**. Aucun écran ne s'interpose : tu vois son emprise, sa taille, son cadre. Tu peux
+   en accrocher dix à la suite sans rien fermer.
+2. **Remplis.** Clic droit sur la toile → l'atelier s'ouvre. **Trois voies** vers la même image :
+   - **Un lien** — tu colles une adresse, c'est **ton** client qui télécharge ;
+   - **Depuis mon PC** — le sélecteur de fichiers de ton système s'ouvre, celui que tu connais ;
+   - **La bibliothèque** du serveur, si un administrateur en a préparé une.
+3. **Accroche.** L'aperçu montre déjà le rectangle du mur avec ton image dedans, à la taille et dans
+   le cadre exacts que tu règles. Ce que tu vois est ce que tu auras.
+
+Clic du **milieu** sur une toile accrochée : tu récupères un Pinceau chargé de la même image, de la
+même taille et du même cadre — un presse-papier pour dupliquer une fresque d'un mur à l'autre.
+
+### 🖼️ Cinq présentations, dont le graffiti
+
+| Cadre | Ce que ça donne |
+|---|---|
+| **sans cadre** | l'image seule, plaquée contre le mur — le style **affiche / graffiti**. Pas de dos, pas de tranches : ce n'est plus un objet accroché, c'est un motif peint *sur* le mur |
+| **bois** · **or** · **pierre** · **fer** | une bande qui mord sur le bord de l'image, comme un vrai cadre. Le fer est presque un liseré, l'or se voit de loin |
+
+Le cadre se change **après coup** sur une toile déjà posée : on rouvre l'atelier, on clique, on
+accroche. Aucune image n'est retransmise — seul un entier change dans le paquet de pose.
+
+> **Détail technique, pour qu'il soit corrigeable.** Un motif sans cadre doit épouser le mur sans
+> clignoter. Il avance de `0,015` bloc — un quart de pixel — au lieu des `0,03125` d'un tableau
+> encadré. La valeur est isolée dans `Trim.skin()` : si un damier apparaissait entre le motif et le
+> mur à distance, c'est ce nombre qu'il faut augmenter, et lui seul. Le compromis n'a pas pu être
+> arbitré en jeu.
+
+Le dossier reste, en troisième voie, pour un serveur qui veut préparer une bibliothèque :
+
+```
+config/lanterne/tableaux/       → dépose tes PNG ou JPEG ici
+/tableau liste                  → ce que le serveur a reconnu
+/tableau prendre "<image>" 4 3  → un Pinceau déjà chargé, taille imposée
+```
+
+| | |
+|---|---|
+| **Formats** | PNG · JPEG · BMP · GIF |
+| **Taille** | jusqu'à **1024 px** de côté après import, **8 × 8 blocs** sur le mur — réglable |
+| **Proportions** | calculées pour coller à celles de l'image. Une recherche exhaustive sur les 256 couples possibles : rien n'est étiré |
+| **Quota** | 64 images par défaut. Au-delà, refus **annoncé**, jamais subi |
+
+### 🔒 C'est le client qui télécharge, jamais le serveur
+
+Ce n'est pas un détail d'implémentation, c'est **la** décision de sécurité de cette fonctionnalité.
+
+Un serveur Minecraft tourne presque toujours dans un réseau où d'autres choses écoutent : une base
+de données, un panneau d'administration, l'interface de métadonnées d'un hébergeur. Si le serveur
+allait chercher une adresse fournie par un joueur, n'importe qui pourrait lui faire interroger ce
+réseau interne et se faire rendre le résultat — c'est la faille dite **SSRF**, et aucune liste
+d'adresses interdites ne la referme complètement : les redirections, les noms qui résolvent vers des
+adresses privées et l'IPv6 laissent toujours un passage.
+
+**La porte se referme en ne la construisant pas.** Le client télécharge, réduit, puis envoie des
+pixels. Le serveur ne voit jamais une adresse, et borne ces pixels comme s'ils venaient d'un dossier :
+taille en octets, taille en pixels, quota, et un délai de trois secondes entre deux images d'un même
+joueur.
+
+| Ce que le serveur **fait respecter** | Ce qu'il **annonce seulement** |
+|---|---|
+| taille en octets, taille en pixels, quota, cadence, portée (64 blocs), droits d'édition | la liste de domaines autorisés — appliquée par le client, donc contournable par un client modifié |
+
+C'est écrit dans les deux sens dans `lanterne-atelier.toml` : un réglage qui protégerait moins qu'il
+n'en a l'air doit le dire lui-même.
+
+### 🧩 Une seule texture, pas une par tableau
+
+<div align="center">
+
+<img src="docs/images/mosaique.png" width="520" alt="La mosaïque : l'atlas partagé">
+
+</div>
+
+C'est **tout** le sujet. Le mod de référence sur cette idée enregistre jusqu'à **cinq textures par
+tableau** — une par palier de distance, toutes résidentes en mémoire vidéo. Vingt tableaux dans une
+salle, c'est cent textures, cent types de rendu, **cent lots de dessin séparés**. Or un lot de dessin
+est un changement d'état de la carte graphique, c'est-à-dire exactement ce que Sodium et
+ImmediatelyFast passent leur temps à supprimer.
+
+**Ici, une seule mosaïque.** Vingt tableaux à l'écran : **un** changement de texture. Deux cents
+aussi. C'est un gain qui ne se dégrade pas avec le nombre — ce qui est rare.
+
+| Immersive Paintings | Lanterne |
+|---|---|
+| Jusqu'à 5 textures par tableau | **1 mosaïque pour tout le monde** |
+| Niveau de détail calculé en Java **à chaque image** (distance, champ de vision, tangente) | **Mipmaps matériels** — le même travail, gratuit et meilleur |
+| Géométrie de cadre repoussée sommet par sommet depuis des `.obj` | Quelques quads, un sommet par jointure de bloc pour la lumière |
+| Redimensionnement pixel par pixel en Java pur | Réduction **par moitiés successives** puis passe bicubique |
+
+Le ré-échantillonnage a lieu **une seule fois, à l'import**. Jamais pendant une image. Mesuré sur
+40 images réelles : **1,27 s au total**, sur un fil de fond, et jamais refait — un index retient ce
+qui a déjà été préparé.
+
+### 📡 Une image ne traverse le réseau qu'une fois. Jamais deux.
+
+Le serveur **n'envoie jamais** une image de sa propre initiative. Il annonce un catalogue — des noms
+et des dimensions, **pas un pixel** — et le client demande ce qui lui manque. Chaque fichier est
+nommé par l'**empreinte de son contenu** : savoir si on le possède, c'est tester l'existence d'un
+fichier. Pas d'index à tenir, pas de désynchronisation possible.
+
+**En partie solo, rien ne transite du tout** : le serveur intégré vient d'écrire les images préparées
+dans le dossier que le client lit. Ce n'est pas un cas particulier traité à part — c'est la même
+ligne de code qui, par construction, donne le bon résultat des deux côtés.
+
+Le transfert est découpé en segments de 24 Kio, **4 par tick et par joueur**. Le grandeur qui compte
+n'est pas le débit moyen mais le travail fait *pendant une image* : un mébioctet d'un bloc gèle le
+fil réseau et fait sauter une image, le même en quarante tranches ne se voit jamais.
+
+### 🔁 Tu viens d'Immersive Paintings ? Tu ne perds rien.
+
+**Automatique, sans rien faire.** Deux mécanismes, indépendants :
+
+| Ce qui est repris | Comment |
+|---|---|
+| **Ta bibliothèque d'images** | Le dossier `immersive_paintings_cache/` survit à la désinstallation. Chaque image y est relue et rejoint ton catalogue. Les copies réduites (`_half`, `_quarter`, `_thumbnail`) sont ignorées — sur le dossier qui a servi à écrire ceci : **80 fichiers pour 20 tableaux** |
+| **Tes tableaux déjà posés** | Un **alias de registre** : `immersive_paintings:painting` est déclaré comme un autre nom de `lanterne:tableau`. Tes entités ne sont pas supprimées au chargement du chunk, elles deviennent des toiles |
+| **Leurs noms et leurs tailles exactes** | Lus dans `data/immersive_paintings.dat` avec le lecteur NBT du jeu — **aucune dépendance** envers le mod d'origine. Un tableau posé en 4 × 3 le reste ; il ne devient pas 5 × 4 parce qu'on aurait deviné d'après les proportions |
+
+**L'alias dort tant que l'autre mod est installé** : NeoForge ne consulte un alias que si le nom réel
+est absent du registre. Les deux mods cohabitent, et le jour où tu retires le premier, le relais se
+fait tout seul. Il n'y a rien à activer.
+
+> Et si l'import de fond n'a pas fini quand un chunk se charge, le motif d'origine est **réécrit tel
+> quel** à la sauvegarde et réessayé chaque seconde. La seule chose irréversible ici serait de perdre
+> l'information : c'est justement celle qu'on empêche.
+
+Ce qui n'est **pas** repris : les cadres 3D (ce sont eux qui coûtaient cher) et les graffitis
+(entités d'un autre type, posées à plat — les faire passer pour des tableaux donnerait des objets
+tournés n'importe comment).
+
+---
+
+## 💿 Les Disques — ta musique dans le jukebox
+
+<div align="center">
+
+<img src="docs/images/graveur.png" width="300" alt="Le Graveur de vinyle">
+
+**Tu poses un graveur. Tu y glisses un disque vierge. Tu colles un lien. Il ressort gravé.**
+
+<img src="docs/images/disque_vierge.png" width="110" alt="Le Disque vierge"> &nbsp;&nbsp;&nbsp; <img src="docs/images/disque.png" width="110" alt="Le Disque gravé">
+
+*Le vierge — cire pâle et mate. Le gravé — vinyle noir, étiquette d'ambre.*
+
+</div>
+
+### Le geste, en quatre temps
+
+1. **Fabrique.** Un **Graveur de vinyle** (cuivre, fer, bloc de note) et des **disques vierges**
+   (huit d'un coup, teinture noire et pépite de fer).
+2. **Charge.** Clic droit sur le graveur avec un disque vierge : il entre dedans.
+3. **Grave.** Clic droit à main nue → l'écran s'ouvre. Un lien, ou **Depuis mon PC** — le même
+   sélecteur que pour les tableaux. Un titre. Et on grave.
+4. **Récupère.** La machine tourne **six secondes** en fumant et en grinçant, puis le disque sort
+   avec son titre. Clic droit pour le prendre, et direction le jukebox.
+
+**Si ça rate, le vierge revient.** Lien mort, format refusé, ffmpeg absent, plus de sillon libre :
+dans tous les cas la gravure s'annule et le disque vierge reste dans le bloc. Il n'est **jamais**
+consommé au lancement — seulement remplacé à la seconde où le gravé est prêt. Il n'existe aucun
+instant où l'objet n'est nulle part.
+
+| | |
+|---|---|
+| **Formats** | OGG directement · mp3 · wav · flac · m4a · aac · opus · wma **si ffmpeg est installé** |
+| **Poids / durée** | 24 Mio · 15 min par défaut, réglables |
+| **Lecture** | **en flux**, jamais chargé entier en mémoire |
+| **Effacer un gravé ?** | **Non.** Voir ci-dessous — un opérateur peut libérer un sillon avec `/disque liberer <n>` |
+
+```
+/disque liste                   → le dossier et les sillons gravés
+/disque prendre "<titre>"       → un disque en main (secours d'administrateur)
+/disque liberer <n>             → libère un sillon (opérateur)
+/disque recharger               → relit le dossier (opérateur)
+/disque etat                    → ffmpeg présent ? combien de sillons libres ?
+```
+
+### 🧷 Pourquoi des « sillons », et le seul défaut du système
+
+Un disque se joue parce qu'une entrée existe dans le registre `jukebox_song`. Ce registre est bâti au
+chargement du monde **puis scellé** : on ne peut rien y ajouter en cours de partie.
+
+La solution évidente — forcer un rechargement des données après chaque gravure — a été examinée, et
+elle est **dangereuse**. Un rechargement reconstruit le registre, donc tous ses porteurs. Les disques
+déjà dans les inventaires gardent les anciens, que `RegistryFixedCodec` refuse d'écrire
+(`Holder.canSerializeIn`) : leur composant serait **perdu à la sauvegarde**. Tous les disques du
+serveur redeviendraient muets.
+
+Lanterne réserve donc à l'avance **64 sillons vides** qui existent dès le premier démarrage. Graver
+n'ajoute rien : cela *occupe* un sillon déjà là. Aucun rechargement, aucun porteur périmé, aucune
+perte. Et comme le fichier n'est ouvert qu'à l'instant où le morceau démarre, **changer son contenu
+change ce qu'on entend, sans rien recharger**.
+
+> **Le défaut, dit franchement.** Un sillon déclare sa durée une fois pour toutes, et le jukebox
+> s'arrête à cette durée. Les durées sont donc réparties **géométriquement** — chaque sillon est ~6 %
+> plus long que le précédent — et la gravure prend le plus petit sillon libre assez long. Le silence
+> résiduel vaut au pire ces 6 % : **onze secondes sur un morceau de trois minutes**. Augmenter
+> `sillons` dans la configuration le réduit encore.
+>
+> C'est aussi pourquoi on **n'efface pas** un disque gravé : le sillon resterait occupé de toute
+> façon, et rendre un vierge en échange de rien serait une duplication déguisée.
+
+Les morceaux, eux, **transitent** vers les autres joueurs : chaque client réclame ce qu'il n'a pas,
+reçoit par tranches réglées au tick, et le garde sur son disque nommé par son empreinte. Une musique
+gravée s'entend chez tout le monde, et n'est transmise qu'une fois à chacun.
+
+| | |
+|---|---|
+| **Format** | **OGG/Vorbis**, et rien d'autre — voir ci-dessous |
+| **Conversion** | mp3 · wav · flac · m4a · aac · opus · wma, **si ffmpeg est installé**. Sinon : message clair avec la ligne de commande exacte |
+| **Poids / durée** | 24 Mio · 15 min par défaut, réglables |
+| **Lecture** | **en flux**. Jamais chargé entier en mémoire |
+
+### 📂 La bibliothèque, en troisième voie
+
+Le dossier reste, pour un serveur qui veut préparer une discothèque avant l'ouverture :
+
+```
+config/lanterne/disques/        → dépose tes fichiers OGG ici
+```
+
+Ces morceaux-là obtiennent une entrée de registre à eux, avec leur **durée exacte** — pas de sillon,
+pas de silence résiduel. En contrepartie ils demandent un `/reload`, puisqu'une entrée de registre ne
+naît qu'au chargement. C'est l'inverse exact du graveur, et c'est pour cela que les deux chemins
+existent.
+
+### 🎼 Pourquoi OGG/Vorbis et pas autre chose
+
+Ce n'est pas une préférence : **c'est tout le décodeur que Minecraft embarque**. La classe
+`JOrbisAudioStream`, construite sur jorbis, et rien à côté. `SoundBufferLibrary.getStream` l'instancie
+sans jamais regarder le contenu du fichier — lui donner un mp3 produit du bruit ou une exception,
+selon la chance.
+
+Ajouter un décodeur mp3 serait possible et serait une mauvaise idée : il faudrait doubler tout le
+chemin de lecture jusqu'au tampon OpenAL, embarquer une bibliothèque de plus, et **refaire le mode
+flux** — celui qui permet de jouer vingt minutes de musique sans les charger en mémoire. Convertir une
+fois vaut mieux que décoder à chaque lecture.
+
+`"stream": true` est le réglage qui commande tout. Sans lui, Minecraft décompresse le morceau entier
+avant la première note : cinq minutes de musique, c'est **50 Mio de son décodé et une seconde de
+gel**. Avec lui, le coût mémoire est celui d'un tampon de quelques dizaines de kilo-octets.
+
+### 🎩 Le tour de passe-passe : un paquet de ressources qui n'existe sur aucun disque
+
+Un disque de Minecraft demande trois choses qui doivent exister **avant** la partie : une entrée dans
+`sounds.json`, un fichier `.ogg` au bon chemin, et une entrée `jukebox_song`. Or tes fichiers
+arrivent après la compilation du mod.
+
+Lanterne **fabrique une archive de ressources à l'exécution** — pas un zip écrit sur le disque, mais
+un objet qui répond aux questions du gestionnaire de ressources comme le ferait une archive, en
+lisant ton dossier et en composant le JSON à la volée. C'est plus propre que les deux alternatives :
+un vrai zip dans `resourcepacks/` (à activer à la main, à nettoyer, qui vieillit mal) ou un mixin sur
+le chargement des sons (toucher au cœur du moteur pour du confort).
+
+**Et surtout : il n'y a aucune limite au nombre de disques.** La plupart des mods de disques
+personnalisés réservent un nombre fixe de fentes — `disque_1` à `disque_64` — parce que le registre
+des `SoundEvent` est scellé à la fin du chargement des mods. Ce mur n'existe pas ici : le champ
+`sound_event` de `JukeboxSong` utilise `RegistryFileCodec`, qui accepte **l'objet écrit en toutes
+lettres** au lieu d'un identifiant. Le son est donc valide sans jamais être enregistré nulle part.
+
+> **La durée est lue, pas estimée.** Un fichier Ogg est une suite de pages, chacune portant le numéro
+> de son dernier échantillon ; la dernière page porte donc le total. Deux lectures de quelques
+> kilo-octets suffisent. Vérifié sur les disques de vanilla : **11 → 71 s, 13 → 178 s, 5 → 178 s**,
+> exact au centième.
+
+**Ce qui ne marche pas, et qu'il faut dire :** sur un serveur dédié, le fichier audio **n'est pas
+transmis**. Le serveur envoie le registre des morceaux — titres et durées — mais pas les octets : un
+morceau pèse plusieurs mébioctets, et les envoyer à chaque connexion transformerait l'entrée en
+partie en téléchargement. Chaque joueur doit avoir le même dossier. Les images, elles, sont
+transmises : elles pèsent cent fois moins.
+
+---
+
 ## 🧹 Le balai — et pourquoi il est éteint par défaut
 
 ```
@@ -465,7 +783,100 @@ courir, le second celui de lâcher ce qu'on fait.
 
 ---
 
+## 🌊 La Marée — 10 de vue et 10 de simulation, sans lag
+
+Un administrateur choisit une distance de vue une fois pour toutes. À dix, son serveur est
+magnifique à deux joueurs et s'effondre à vingt. À six, il ne ramera jamais — et il aura rogné
+l'expérience de tout le monde pendant les quatre-vingt-dix pour cent du temps où la machine
+s'ennuyait.
+
+Le réglage juste n'existe pas, parce que la charge n'est pas constante. **Ce qui existe, c'est un
+réglage qui suit la charge.**
+
+Une fois par seconde, la Marée lit le temps de tick lissé. Au-dessus de la cible elle retire **un**
+palier ; en dessous elle en rend un ; entre les deux elle ne touche à rien.
+
+**La simulation est sacrifiée avant la vue**, et ce sens compte : personne ne voit qu'un mouton s'est
+arrêté de brouter à cent quatre-vingts blocs, tout le monde voit un horizon qui recule.
+
+**Elle ne dépasse jamais ce que `server.properties` demande.** Réglé en 10, vous restez plafonné à
+10 : la Marée peut descendre et revenir, jamais aller au-delà.
+
+| | |
+|---|---|
+| `/lanterne maree` | l'état courant, et le nombre d'ajustements |
+| `/lanterne maree on` / `off` | l'allumer ou la figer |
+
+Éprouvée par `Surge` : sous 3 000 villageois à 71,6 ms, elle descend la simulation de **10 à 5**,
+puis la remonte de **5 à 10** une fois la charge retirée — sans jamais avoir touché à la distance de
+vue, et sans jamais dépasser le plafond. Elle observe aussi **90 secondes de grâce** au démarrage :
+les premières secondes d'un monde ne ressemblent à rien de ce qui suit, et réagir à ce bruit ferait
+reculer l'horizon d'un joueur dans les secondes suivant son arrivée.
+
+---
+
+## 🛒 La Boutique et l'Économie
+
+Deux onglets — **Acheter** et **Vendre** — un solde par joueur, et une boutique administrateur qui
+**ancre les prix** de tout le serveur.
+
+### Le catalogue n'est pas écrit : il est calculé
+
+**1 381 articles** engendrés au premier démarrage, en 74 ms. Seules les **matières premières** ont un
+prix posé à la main (427 entrées) ; les **954 autres sont déduits des recettes du jeu** — artisanat,
+fonte, tailleur de pierre, forgeron.
+
+Ce n'est pas un raccourci d'écriture, c'est ce qui rend l'économie **sûre par construction**. Un prix
+posé au jugé est une boucle d'arbitrage en puissance : il suffit qu'un objet se rachète plus cher que
+ses ingrédients pour qu'un joueur fabrique de l'argent en boucle. En partant des recettes, le produit
+vaut toujours plus que la somme de ses parties, et revendre est toujours perdant.
+
+**Conséquence heureuse : les objets de mods se tarifent tout seuls**, dès que leurs recettes
+redescendent à des matières premières connues. Ce qui ne se résout pas est nommé dans le journal —
+la liste de courses de l'administrateur, exhaustive.
+
+### Le taux de rachat, et un calcul qui semblait juste
+
+Le rachat était d'abord fixé à 40 %, et l'audit sur les prix d'ancrage était parfaitement vert.
+Mais les prix d'ancrage ne sont pas les prix pratiqués : deux articles dérivent indépendamment, et
+il suffit que les ingrédients soient au plancher pendant que le produit est au plafond.
+
+| Rachat | Recettes exploitables *(sur 1 446)* |
+|---|---|
+| 40 % | **1 290** |
+| 30 % | 1 065 |
+| 27 % | 0 |
+| **25 %** *(retenu)* | **0**, avec 5,6 % de marge |
+
+Neuf recettes sur dix devenaient une machine à fabriquer de l'argent. La condition est désormais
+vérifiée au chargement, et écrite dans le journal si elle est enfreinte.
+
+### Les prix bougent
+
+Un objet massivement vendu au serveur perd de la valeur, un objet massivement acheté en gagne —
+dans une bande de ±50 % autour de l'ancre, avec une détente qui ramène doucement au prix
+d'ancrage. La dérive applique **le même facteur aux deux prix**, donc le rapport achat/rachat ne
+bouge jamais : la marge reste garantie quoi qu'il arrive au marché.
+
+| | |
+|---|---|
+| `/boutique` | ouvre l'écran |
+| `/boutique cours [objet]` | le cours du moment, l'ancre, le volume net |
+| `/banque` · `/banque payer` | ton solde, un virement |
+| `/boutique poser` · `recharger` · `generer` | administration |
+
+La monnaie est **un nombre, jamais un objet** : une pièce se perdrait à la mort, se dupliquerait au
+moindre exploit ailleurs dans le modpack, et ne se compterait pas.
+
+---
+
 ## ⚙️ Configuration
+
+| Fichier | Ce qu'il commande | Qui décide |
+|---|---|---|
+| `config/lanterne-server.toml` | les modules d'optimisation | l'administrateur, pour tout le monde |
+| `config/lanterne-client.toml` | le rendu — Voile, coffres, feuilles, jauge | **toi**, même en multijoueur |
+| `config/lanterne-atelier.toml` | les tableaux et les disques | les deux : le serveur fait respecter les limites, le client prépare les fichiers |
 
 `config/lanterne-server.toml` — **une ligne par module, et chaque commentaire dit ce que le module a
 rendu à la mesure.**

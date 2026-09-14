@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "lanterne_disque",
+  "pattern": [
+    "NNN",
+    "NCN",
+    "NNN"
+  ],
+  "key": {
+    "N": "minecraft:black_dye",
+    "C": "minecraft:iron_nugget"
+  },
+  "result": {
+    "id": "lanterne:disque_vierge",
+    "count": 8
+  }
+}

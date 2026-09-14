@@ -50,6 +50,9 @@ public final class Settings {
     /** Coupe tout, d'un coup. Sert au banc et au diagnostic. */
     private static boolean master = true;
 
+    /** Le compteur de basculements. Voir {@link #epoch()} pour ce qu'il protège. */
+    private static long epoch;
+
     /** Le niveau de détail appliqué au tick des entités. Le cœur du mod. */
     private static boolean lod = true;
     /** L'espacement des paquets de position pour les entités lointaines. */
@@ -99,6 +102,12 @@ public final class Settings {
 
     /** Les comportements composites parcourus sans streams. Voir Mind. */
     private static boolean mind = true;
+
+    /** La boite vide partagee des conditions de memoire. Voir MemoryBoxMixin. */
+    private static boolean boxes = true;
+
+    /** L'ajustement automatique des distances selon la charge. Voir Tide. */
+    private static boolean tide = true;
 
 
     /** La fusion des orbes d.expérience, débridée. Voir Clump. */
@@ -375,6 +384,8 @@ public final class Settings {
     /** Les formes de collision partagees entre etats. Voir {@link Moulds}. */
     /** Le calculateur de redstone de Mojang, celui qui traite le reseau entier. */
     /** Les conditions d'entree des comportements, mises en cache. Voir {@code BehaviorMemoryMixin}. */
+    /** Le capteur de joueurs sans flux. Voir {@code PlayerSensorMixin}. */
+    private static boolean senses = true;
     private static boolean recall = true;
     private static boolean redstone;
     private static boolean moulds = true;
@@ -779,7 +790,33 @@ public final class Settings {
     }
 
     public static void setEnabled(boolean value) {
+        if (master != value) {
+            epoch++;
+        }
         master = value;
+    }
+
+    /**
+     * Le numéro de génération des réglages.
+     *
+     * <h2>À quoi sert de compter les basculements</h2>
+     *
+     * <p>Certains modules ne se contentent pas de lire un réglage : ils <b>entretiennent un état</b>
+     * qui n'est juste que tant qu'ils tournent. {@code BrainMixin} tient la liste des comportements
+     * en cours d'une créature en la mettant à jour à chaque démarrage et à chaque arrêt ; si le mod
+     * s'éteint, vanilla reprend la main et fait changer ces statuts <em>sans prévenir personne</em>.
+     * Rallumer le mod ferait alors travailler une liste périmée — une créature figée, ou un
+     * comportement tické alors qu'il ne tourne plus.
+     *
+     * <p>Ce n'est pas un cas d'école. {@code /lanterne off} puis {@code /lanterne on} suffit à le
+     * produire en jeu, et le banc entrelacé le produit <b>vingt fois par mesure</b>, puisqu'il
+     * bascule le maître toutes les cinquante ticks.
+     *
+     * <p>Un module concerné retient le numéro qu'il a vu et jette son état dès qu'il change. La
+     * vérification coûte une comparaison d'entiers longs par tick.
+     */
+    public static long epoch() {
+        return epoch;
     }
 
     public static boolean lod() {
@@ -816,6 +853,30 @@ public final class Settings {
 
     public static boolean mind() {
         return master && mind;
+    }
+
+    /** La boite vide partagee. Voir {@code MemoryBoxMixin}. */
+    public static boolean boxes() {
+        return master && boxes;
+    }
+
+    /**
+     * La maree, qui n'obeit pas au maitre.
+     *
+     * <p>Tous les autres modules s'eteignent avec {@code master}, parce que le banc bascule celui-ci
+     * vingt fois par mesure pour comparer. La maree ne le peut pas : elle changerait les distances
+     * pendant la mesure, et l'on comparerait deux mondes de tailles differentes en croyant comparer
+     * deux versions du meme code.
+     *
+     * <p>Elle a donc son propre interrupteur, et le banc la met en sommeil de son cote.
+     */
+    public static boolean tide() {
+        return tide;
+    }
+
+    /** Met la maree en sommeil pendant une mesure, et la rend ensuite. */
+    public static void setTide(boolean value) {
+        tide = value;
     }
 
     public static boolean clump() {
@@ -883,6 +944,10 @@ public final class Settings {
 
     public static boolean recall() {
         return master && recall;
+    }
+
+    public static boolean senses() {
+        return master && senses;
     }
 
     public static int decayDelay() {
@@ -1053,6 +1118,26 @@ public final class Settings {
         moulds = wanted.contains("moules");
         redstone = wanted.contains("redstone");
         recall = wanted.contains("memoire") || wanted.contains("conditions");
+        senses = wanted.contains("capteur") || wanted.contains("sens");
+        // Quatre modules manquaient à cet appel, et c'est le troisième défaut du même genre.
+        //
+        // Un drapeau absent d'ici ne vaut pas « éteint » : il garde sa valeur par défaut, qui est
+        // VRAIE. La phase active d'un banc lancé avec LANTERNE_MODULES=chute allumait donc aussi les
+        // comportements composites, la fusion des orbes et la garde d'apparition — et le rapport
+        // portait leur travail au crédit du module qu'on croyait isoler.
+        //
+        // Ces trois-là n'ont probablement rien faussé en pratique : aucune des charges déjà mesurées
+        // ne contient de villageois ni d'orbes, et ils n'avaient donc rien à faire. Mais l'isolation
+        // d'un banc ne doit pas dépendre du hasard de la charge choisie, et « mind » allait
+        // précisément être mesuré sur six cents villageois — où la fuite, elle, aurait compté.
+        mind = wanted.contains("mind") || wanted.contains("esprit") || wanted.contains("composite");
+        tide = wanted.contains("maree") || wanted.contains("tide");
+        boxes = wanted.contains("boites") || wanted.contains("boxes");
+        clump = wanted.contains("clump") || wanted.contains("orbes");
+        vigil = wanted.contains("vigil") || wanted.contains("garde");
+        waypoints = wanted.contains("waypoint") || wanted.contains("reperes");
+        // Les réglages viennent de changer en bloc : les modules à état jettent le leur. Voir epoch().
+        epoch++;
         // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
         // branche AUTO dépend d'une option vidéo VRAIE par défaut en vanilla. Un banc qui se
         // contenterait d'allumer le module mesurerait donc zéro, sans rien signaler. On force ici la
@@ -1160,6 +1245,10 @@ public final class Settings {
         projectiles = Config.PROJECTILES.get();
         explosions = Config.EXPLOSIONS.get();
         mind = Config.MIND.get();
+        tide = Config.TIDE.get();
+        boxes = Config.BOXES.get();
+        // Idem : le fichier de configuration peut être rechargé en cours de partie. Voir epoch().
+        epoch++;
         save = Config.SAVE.get();
         jam = Config.JAM.get();
         sleep = Config.SLEEP.get();
@@ -1174,6 +1263,7 @@ public final class Settings {
         moulds = Config.MOULDS.get();
         redstone = Config.REDSTONE.get();
         recall = Config.RECALL.get();
+        senses = Config.SENSES.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
@@ -1247,6 +1337,9 @@ public final class Settings {
         }
         if (recall) {
             text.append("memoire ");
+        }
+        if (senses) {
+            text.append("capteurs ");
         }
         if (decay) {
             text.append("chute-feuilles ");

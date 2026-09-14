@@ -97,11 +97,21 @@ public abstract class MemoryPulseMixin implements MemoryPulseAccess {
      * appelant ne l'ait demandé. On ne sait pas ici <em>si</em> l'une d'elles a expiré — seulement
      * que le moment où cela peut arriver vient de passer. On compte donc à chaque tick.
      *
-     * <p>Cela revient à invalider le cache une fois par tick de cerveau, ce qui semble annuler tout
-     * le bénéfice. Ce n'est pas le cas : {@code startEachNonRunningBehavior} teste quinze
-     * comportements <b>dans le même tick</b>, et les tests qui suivent le premier profitent tous du
-     * cache tant qu'aucune écriture n'a lieu entre eux. C'est la prudence qui commande : une
-     * créature figée coûte plus cher qu'une vérification refaite.
+     * <p>Cela revient à invalider le cache une fois par tick de cerveau, ce qui en annule presque
+     * tout le bénéfice — et explique que ce module n'ait jamais rendu mieux que ×1,01. Seuls
+     * profitaient du cache les quinze comportements testés <em>dans le même tick</em>, tant
+     * qu'aucune écriture n'avait lieu entre eux.
+     *
+     * <h2>Ce que {@code BrainMixin} a changé</h2>
+     *
+     * <p>Cette prudence tenait à une ignorance : on ne savait pas, ici, si une mémoire avait
+     * réellement expiré. {@code BrainMixin} le sait, parce que c'est désormais <b>sa</b> boucle qui
+     * appelle {@code MemorySlot.tick} et qui voit la case se vider.
+     *
+     * <p>Quand le module des cerveaux est actif, il enveloppe {@code forgetOutdatedMemories} et
+     * n'appelle pas la version d'origine : l'incrément ci-dessous n'a donc pas lieu, et c'est
+     * {@code BrainMixin} qui le pose lui-même — mais seulement si quelque chose a réellement expiré.
+     * Quand il est éteint, ce chemin-ci reprend, avec sa prudence intacte.
      */
     @Inject(method = "forgetOutdatedMemories", at = @At("RETURN"))
     private void lanterne$onExpiry(CallbackInfo callback) {

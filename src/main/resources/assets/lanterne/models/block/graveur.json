@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "lanterne:block/graveur_top",
+    "bottom": "lanterne:block/graveur_bottom",
+    "side": "lanterne:block/graveur_side"
+  }
+}

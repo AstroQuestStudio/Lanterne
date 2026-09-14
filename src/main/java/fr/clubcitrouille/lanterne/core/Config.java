@@ -44,6 +44,8 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue PROJECTILES;
     public static final ModConfigSpec.BooleanValue EXPLOSIONS;
     public static final ModConfigSpec.BooleanValue MIND;
+    public static final ModConfigSpec.BooleanValue TIDE;
+    public static final ModConfigSpec.BooleanValue BOXES;
     public static final ModConfigSpec.BooleanValue SAVE;
     public static final ModConfigSpec.BooleanValue JAM;
     public static final ModConfigSpec.BooleanValue SLEEP;
@@ -57,6 +59,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue WIRE;
     public static final ModConfigSpec.BooleanValue POI;
     public static final ModConfigSpec.BooleanValue SPILL;
+    public static final ModConfigSpec.BooleanValue SENSES;
     public static final ModConfigSpec.BooleanValue RECALL;
     public static final ModConfigSpec.BooleanValue REDSTONE;
     public static final ModConfigSpec.BooleanValue MOULDS;
@@ -114,9 +117,24 @@ public final class Config {
                 "6000 TNT : x1,11 pour ce module seul.")
                 .define("explosions", true);
         MIND = BUILDER.comment(
-                "Intelligence : les comportements composites parcourus sans streams.",
-                "600 villageois : x1,08 pour ce module seul.")
+                "Intelligence : le cerveau des creatures, qui cesse de redecouvrir a chaque",
+                "tick ce qu'il savait deja (comportements en cours, memoires a expirer).",
+                "600 villageois : x1,32 pour ce module seul, et 153 Mo alloues en moins.")
                 .define("intelligence", true);
+        TIDE = BUILDER.comment(
+                "Maree : ajuste automatiquement les distances de vue et de simulation selon",
+                "le temps de tick reel. Elle ne depasse JAMAIS ce que server.properties",
+                "demande : elle descend quand le serveur souffre, et remonte ensuite.",
+                "C'est le seul module qui change ce que voit le joueur. Il est actif par",
+                "defaut parce qu'un horizon qui recule quelques secondes vaut mieux qu'un",
+                "serveur qui rame ; le mettre a false rend les distances fixes.")
+                .define("maree", true);
+        BOXES = BUILDER.comment(
+                "Boite vide partagee : les conditions d'entree des comportements",
+                "emballent une valeur absente dans un objet neuf a chaque essai.",
+                "600 villageois : 1,88 Go alloues pour ranger du vide, soit 10,5 %",
+                "du total. L'objet est immuable (verifie par javap), donc partageable.")
+                .define("boites", true);
         PROFILER = BUILDER.comment(
                 "Cache du profileur : Profiler.get() consulte une variable de fil a chaque",
                 "deplacement d'entite. 6000 TNT : x1,10 pour ce module seul.")
@@ -185,6 +203,24 @@ public final class Config {
                 "600 villageois : 2,4 millions de tableaux evites, 20 Mo sur 2900.",
                 "Modeste et gratuit - un serveur rapide est fait de la somme de ces gains-la.")
                 .define("effets_traverses", true);
+        SENSES = BUILDER.comment(
+                "CAPTEUR DE JOUEURS : le meme travail, sans ses trois pipelines de flux.",
+                "",
+                "PlayerSensor.doTick construit TROIS pipelines successifs, dont le premier comporte",
+                "un TRI. Chacun alloue son objet de flux, ses maillons, ses lambdas et sa liste de",
+                "sortie.",
+                "",
+                "Ce capteur equipe TOUTE creature a cerveau - villageois, piglins, axolotls,",
+                "gardiens - et se releve toutes les quelques ticks. Sur 600 villageois : mille huit",
+                "cents pipelines par releve.",
+                "",
+                "Le profileur a designe la machinerie de flux comme premier poste du serveur, a 24 %",
+                "du temps. Trois tentatives sur le CERVEAU n'avaient rien rendu - 26.1 en a deja",
+                "retire les flux. Les CAPTEURS, eux, en ont garde.",
+                "",
+                "Rien ne change au comportement : meme ordre de tri, memes filtres dans le meme",
+                "ordre, memes quatre memoires ecrites avec les memes valeurs.")
+                .define("capteur_joueurs", true);
         RECALL = BUILDER.comment(
                 "MEMOIRE DES CONDITIONS : ne pas retester ce qui n'a pas change.",
                 "",

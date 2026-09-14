@@ -53,6 +53,28 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `mixin/BlockEntityVeilMixin.java` | **Rien.** Extension du Voile, écrite pour ce projet. | — |
 | `core/Din.java` + `mixin/SoundLimitMixin.java` | **Rien.** Idée de [SoundCulling](https://github.com/Cukkoo12/SoundCulling) (MIT), écriture différente. | — |
 | `core/Moulds.java` + `mixin/StateCacheDedupMixin.java` | Idée de [FerriteCore](https://github.com/malte0811/FerriteCore) (malte0811) | MIT |
+| `content/painting/*` — l'Atelier, les tableaux | **Rien.** Idée de [Immersive Paintings](https://github.com/Luke100000/ImmersivePaintings) (Luke100000), architecture entièrement différente. | GPL-3.0 (compatible) |
+| `content/disc/*` — le Sillon, les disques | **Rien.** Écrit pour ce projet. | — |
+
+Les tableaux méritent le même genre de précision que le Voile. **Immersive
+Paintings** est sous GPL-3.0, donc parfaitement absorbable ; son code n'a pourtant
+pas été repris, parce que ce qui coûte cher chez lui est justement ce qu'on
+voulait éviter. Trois différences de fond, toutes mesurables :
+
+- **Une texture par tableau et par palier de distance** chez lui — jusqu'à cinq
+  par image, toutes résidentes — contre **une seule mosaïque** pour tout le monde
+  ici. Vingt tableaux à l'écran : cent changements de texture chez lui, un chez
+  nous. Voir `content/painting/Mosaic.java`.
+- **Un niveau de détail calculé en Java à chaque image** — distance, champ de
+  vision, tangente, par tableau visible — contre des **mipmaps matériels**, qui
+  font le même travail gratuitement et mieux. Voir `content/painting/Mill.java`.
+- **Une géométrie repoussée sommet par sommet depuis des fichiers `.obj`** pour
+  les cadres, contre pas de cadre du tout et une géométrie de quelques quads.
+
+Ce qui lui est repris, en revanche, est son **idée**, qui est bonne : nommer une
+image par l'empreinte de son contenu, annoncer un catalogue, et ne transmettre
+que ce qui manque. La reprise s'arrête là, et le chemin de migration depuis son
+format est décrit dans `content/painting/Relic.java`.
 
 Les ressources de shulker fournies par Faster Block Entities n'ont pas été
 reprises : leur couvercle qui s'ouvre est un retour d'information utile, et le

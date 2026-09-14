@@ -102,6 +102,21 @@ public final class SelfTest {
     /** Vrai si l.on éprouve qu.une flèche touche encore. */
     private static boolean volley;
 
+    /**
+     * Vrai si l'on éprouve que les cerveaux accélérés pensent encore.
+     *
+     * <p>Seule épreuve qui réutilise la charge du banc au lieu de bâtir la sienne : il lui faut six
+     * cents villageois, et le chemin qui les pose est déjà écrit et éprouvé. Elle se substitue donc
+     * au banc de vitesse au moment où celui-ci démarrerait.
+     */
+    private static boolean wits;
+
+    /** Vrai si l'on éprouve que les villageois moissonnent encore. */
+    private static boolean reap;
+
+    /** Vrai si l'on eprouve que la maree descend puis remonte. */
+    private static boolean surge;
+
     /** Vrai si l'on éprouve le devenir des objets au sol. */
     private static boolean tidy;
 
@@ -226,6 +241,24 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de conformité armée.");
             return;
         }
+        // Lue sans interrompre la suite : cette épreuve a besoin de la charge que LANTERNE_SELFTEST
+        // va poser, et ne fait que remplacer ce qui se passe une fois la charge en place.
+        wits = "1".equals(System.getenv("LANTERNE_WITS"));
+        if ("1".equals(System.getenv("LANTERNE_SURGE"))) {
+            surge = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Epreuve de maree armee.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_REAP"))) {
+            reap = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de moisson armée.");
+            return;
+        }
+
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
             return;
@@ -249,7 +282,8 @@ public final class SelfTest {
     public static void tick(MinecraftServer server) {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
-                    && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette)) {
+                    && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
+                    && !wits && !reap && !surge)) {
             return;
         }
         if (!Conformance.running() && !Kitchen.running()
@@ -258,7 +292,10 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Flow.running()
                 && !fr.clubcitrouille.lanterne.lab.Quarry.running()
                 && !fr.clubcitrouille.lanterne.lab.Tidy.running()
-                && !fr.clubcitrouille.lanterne.lab.Vault.running() && waiting-- > 0) {
+                && !fr.clubcitrouille.lanterne.lab.Vault.running()
+                && !fr.clubcitrouille.lanterne.lab.Wits.running()
+                && !fr.clubcitrouille.lanterne.lab.Reap.running()
+                && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
             return;
         }
 
@@ -308,6 +345,39 @@ public final class SelfTest {
                 fr.clubcitrouille.lanterne.lab.Tidy.begin(server);
                 step = Step.LAUNCHED;
             }
+            return;
+        }
+
+        if (surge) {
+            // La maree ne se voit qu'avec un joueur : sans observateur, aucun chunk n'est charge,
+            // rien n'est simule, et douze cents villageois laissent le serveur a douze
+            // millisecondes. La premiere execution de cette epreuve l'a constate et a refuse de
+            // conclure, ce qui etait le bon comportement mais ne prouvait rien.
+            if (fr.clubcitrouille.lanterne.lab.Surge.running()) {
+                fr.clubcitrouille.lanterne.lab.Surge.tick(server);
+            } else if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                fr.clubcitrouille.lanterne.lab.Surge.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (reap) {
+            if (fr.clubcitrouille.lanterne.lab.Reap.running()) {
+                fr.clubcitrouille.lanterne.lab.Reap.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Reap.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (wits && fr.clubcitrouille.lanterne.lab.Wits.running()) {
+            fr.clubcitrouille.lanterne.lab.Wits.tick(server);
             return;
         }
 
@@ -500,7 +570,12 @@ public final class SelfTest {
                 boolean merges = builtScene == fr.clubcitrouille.lanterne.lab.Scene.Kind.ORBS
                         || builtScene == fr.clubcitrouille.lanterne.lab.Scene.Kind.DROPS;
                 Bench.expect(merges ? Bench.livingCount(level) : born);
-                Bench.startHeadless(server);
+                // L'épreuve des cerveaux prend la place du banc : même charge, autre question.
+                if (wits) {
+                    fr.clubcitrouille.lanterne.lab.Wits.begin(server);
+                } else {
+                    Bench.startHeadless(server);
+                }
                 step = Step.LAUNCHED;
             }
             default -> { }

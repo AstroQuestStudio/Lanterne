@@ -44,6 +44,22 @@ neoForge {
         server {
             server()
             programArgument '--nogui'
+            // <h2>Choisir le ramasse-miettes depuis la ligne de commande</h2>
+            //
+            // La machine visee n'a qu'un coeur. Sur un coeur, les fils concurrents de G1 ne
+            // travaillent pas A COTE du tick : ils le lui prennent. Il faut donc pouvoir comparer
+            // G1 et le ramasse-miettes serie, et cela se mesure, cela ne se suppose pas.
+            //
+            //   ./gradlew runServer -Pgc=serial
+            //
+            // Sans la propriete, rien n'est impose et la machine virtuelle choisit comme d'habitude.
+            if (project.hasProperty('gc')) {
+                if (project.property('gc') == 'serial') {
+                    jvmArgument '-XX:+UseSerialGC'
+                } else if (project.property('gc') == 'g1') {
+                    jvmArgument '-XX:+UseG1GC'
+                }
+            }
         }
     }
 
@@ -73,4 +89,19 @@ tasks.withType(ProcessResources).configureEach {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// Compilation partielle, pour travailler a deux sur ce depot.
+//
+// Quand un second chantier est en cours dans fr.clubcitrouille.lanterne.content, ses classes
+// peuvent etre momentanement incompletes et empecher toute compilation — y compris celle des
+// modules qui n'ont rien a voir avec elles. `-Psanscontenu` les met de cote le temps de verifier
+// le reste. Sans la propriete, rien ne change : le mod se compile en entier.
+tasks.withType(JavaCompile).configureEach {
+    if (project.hasProperty('sanscontenu')) {
+        // Seulement le chantier en cours. Les paquets deja branches dans Lanterne.java ne peuvent
+        // plus etre exclus : leur absence casserait la classe principale.
+        exclude 'fr/clubcitrouille/lanterne/content/shop/**'
+        exclude 'fr/clubcitrouille/lanterne/client/shop/**'
+    }
 }

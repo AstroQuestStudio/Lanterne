@@ -28,6 +28,10 @@
     "LivingTargetMixin",
     "ExperienceOrbMixin",
     "GateBehaviorMixin",
+    "ShufflingListMixin",
+    "BrainMixin",
+    "MemoryBoxMixin",
+    "ThreadCountMixin",
     "ExperienceOrbAccessor",
     "RegionFileVersionMixin",
     "HopperBulkMixin",
@@ -43,7 +47,8 @@
     "StateCacheDedupMixin",
     "RedstoneEvaluatorMixin",
     "MemoryPulseMixin",
-    "BehaviorMemoryMixin"
+    "BehaviorMemoryMixin",
+    "PlayerSensorMixin"
   ],
   "client": [
     "EntityCullMixin",

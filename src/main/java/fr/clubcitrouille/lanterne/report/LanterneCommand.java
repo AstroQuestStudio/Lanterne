@@ -218,6 +218,35 @@ public final class LanterneCommand {
                                             .withStyle(ChatFormatting.GRAY), false);
                                     return 1;
                                 })))
+                .then(Commands.literal("maree")
+                        .executes(context -> {
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "Marée — " + fr.clubcitrouille.lanterne.core.Tide.describe(
+                                            context.getSource().getServer()))
+                                    .withStyle(ChatFormatting.AQUA), false);
+                            return 1;
+                        })
+                        .then(Commands.literal("on")
+                                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                                .executes(context -> {
+                                    Settings.setTide(true);
+                                    fr.clubcitrouille.lanterne.core.Tide.anchor(
+                                            context.getSource().getServer());
+                                    context.getSource().sendSuccess(() -> Component.literal(
+                                            "Marée allumée — les distances suivront la charge.")
+                                            .withStyle(ChatFormatting.GREEN), true);
+                                    return 1;
+                                }))
+                        .then(Commands.literal("off")
+                                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                                .executes(context -> {
+                                    Settings.setTide(false);
+                                    context.getSource().sendSuccess(() -> Component.literal(
+                                            "Marée éteinte — les distances restent où elles sont. "
+                                            + "Elles ne remonteront pas d'elles-mêmes.")
+                                            .withStyle(ChatFormatting.GOLD), true);
+                                    return 1;
+                                })))
                 .then(Commands.literal("palette")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> {

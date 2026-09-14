@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "L",
+    "S",
+    "S"
+  ],
+  "key": {
+    "L": "minecraft:white_wool",
+    "S": "minecraft:stick"
+  },
+  "result": {
+    "id": "lanterne:pinceau",
+    "count": 4
+  }
+}
