@@ -87,6 +87,21 @@ public final class Scene {
         RING,
         /** L'élevage intensif : tout le troupeau dans un carré de quinze blocs. */
         PEN,
+        /**
+         * Le même élevage, mais sous un toit — la charge qui met le voile à l'épreuve.
+         *
+         * <h2>Pourquoi l'enclos à ciel ouvert ne pouvait rien prouver</h2>
+         *
+         * <p>Le voile n'écarte que ce qu'un bloc opaque cache. Sur un troupeau posé en plein champ,
+         * il n'écarte donc <b>rien</b>, et le mesurer là reviendrait à mesurer son coût sans jamais
+         * mesurer son gain — le défaut exact que le banc d'images avait déjà commis une fois en
+         * mesurant un monde vide.
+         *
+         * <p>Cette charge est l'enclos, entouré de murs et couvert. C'est le cas réel : une ferme
+         * sous une colline, une grange vue depuis la cour. Le joueur sait que les bêtes sont là,
+         * l'écran n'en montre aucune, et vanilla les prépare toutes.
+         */
+        BARN,
         /** Le sol jonché : des milliers d'objets posés, immobiles, qui tickent quand même. */
         ITEMS,
         /** Les deux à la fois, ce qui est la situation d'un serveur habité. */
@@ -267,6 +282,9 @@ public final class Scene {
      */
     private static final int PEN_SIDE = 15;
 
+    /** Hauteur des murs de la grange — voir {@code barn}. */
+    private static final int BARN_HEIGHT = 6;
+
     /**
      * Graine fixe du tirage de positions.
      *
@@ -284,6 +302,7 @@ public final class Scene {
         }
         return switch (raw.trim().toLowerCase(Locale.ROOT)) {
             case "pen", "enclos", "elevage", "élevage" -> Kind.PEN;
+            case "barn", "grange", "couvert" -> Kind.BARN;
             case "items", "objets", "sol" -> Kind.ITEMS;
             case "mixed", "mixte", "tout" -> Kind.MIXED;
             case "tnt", "dynamite", "boom" -> Kind.TNT;
@@ -515,6 +534,16 @@ public final class Scene {
      * <p>Voir {@link #builtGround} : la recalculer après une phase destructive ferait bâtir la scène
      * suivante sur les décombres de la précédente.
      */
+    /**
+     * L'altitude du sol de banc, pour qui doit poser une caméra dessus.
+     *
+     * <p>Ouverte pour {@code Glass} : sa pose de caméra était écrite en dur à cent cinquante blocs,
+     * une altitude sans rapport avec le relief où la scène est bâtie.
+     */
+    public static int groundLevel(ServerLevel level) {
+        return ground(level);
+    }
+
     private static int ground(ServerLevel level) {
         if (builtGround == Integer.MIN_VALUE) {
             // <h2>La carte des hauteurs compte ce qu'on a bâti dessus</h2>
@@ -1200,6 +1229,7 @@ public final class Scene {
         return switch (kind) {
             case RING -> fr.clubcitrouille.lanterne.report.Herd.populate(level, 0d, 0d, count, radius);
             case PEN -> pen(level, count);
+            case BARN -> barn(level, count);
             case ITEMS -> items(level, count);
             case MIXED -> {
                 int born = pen(level, count / 2);
@@ -1432,6 +1462,54 @@ public final class Scene {
         Lanterne.LOG.info("[SCÈNE] enclos : {} bête(s) dans un carré de {} blocs — soit {} par bloc.",
                 born, PEN_SIDE, String.format(Locale.ROOT, "%.1f",
                         born / (double) (PEN_SIDE * PEN_SIDE)));
+        return born;
+    }
+
+    /**
+     * L'enclos, muré et couvert.
+     *
+     * <h2>Hauteur des murs</h2>
+     *
+     * <p>Six blocs, et un toit plein. {@code clearDecor} efface de « sol + 1 » à « sol + 10 » : la
+     * grange tient donc entièrement dans la zone que le banc sait nettoyer, et deux charges
+     * successives ne s'empilent pas — c'est la faute qui avait fait monter le sol gelé de trois
+     * blocs à chaque exécution, et elle ne se répétera pas ici.
+     *
+     * <h2>Un mur plein, et non une palissade</h2>
+     *
+     * <p>Le voile interroge {@code isSolidRender()}. Une clôture, une vitre ou une dalle ne
+     * bloqueraient rien et la charge mesurerait zéro — en donnant l'impression d'avoir mesuré. La
+     * pierre est le seul matériau qui rende le résultat lisible.
+     */
+    private static int barn(ServerLevel level, int count) {
+        int born = pen(level, count);
+
+        int ground = ground(level);
+        int half = PEN_SIDE / 2 + 2;
+        int roof = ground + BARN_HEIGHT;
+        net.minecraft.world.level.block.state.BlockState stone =
+                net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int laidStone = 0;
+
+        for (int x = -half; x <= half; x++) {
+            for (int z = -half; z <= half; z++) {
+                boolean edge = x == -half || x == half || z == -half || z == half;
+                for (int y = ground + 1; y <= roof; y++) {
+                    // Les côtés sur toute la hauteur, et le toit seulement tout en haut : l'intérieur
+                    // doit rester creux, sinon les bêtes sont dans la pierre et non derrière elle.
+                    if (!edge && y != roof) {
+                        continue;
+                    }
+                    cursor.set(x, y, z);
+                    if (level.setBlock(cursor, stone, 2)) {
+                        laidStone++;
+                    }
+                }
+            }
+        }
+        Lanterne.LOG.info("[SCÈNE] grange : {} bête(s) sous {} bloc(s) de pierre, murs de {} de haut. "
+                + "Depuis dehors, l'écran ne doit en montrer aucune.", born, laidStone, BARN_HEIGHT);
         return born;
     }
 

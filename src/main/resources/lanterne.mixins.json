@@ -39,5 +39,8 @@
     "SectionStorageAccessor",
     "PoiStreamMixin",
     "InsideEffectsMixin"
+  ],
+  "client": [
+    "EntityCullMixin"
   ]
 }

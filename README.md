@@ -45,13 +45,33 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
 | **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
 | **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | **×1,05** | ✅ |
-| **Client — temps par image** | — | — | **non mesurable** | ⚠️ |
 
 <div align="center">
 
-✅ **revérifié après la réparation de l'instrument** &nbsp;·&nbsp; ⚠️ **le banc se contredit, aucun chiffre publié**
+✅ **revérifié après la réparation de l'instrument**
 
 </div>
+
+### Et côté client, maintenant que l'instrument ne ment plus
+
+| Charge | Sans Lanterne | Avec | Gain | |
+|---|---:|---:|:---:|:--:|
+| **1 000 vaches sous un toit** *(le Voile, seul)* | 29,9 im/s | **95,4 im/s** | **×3,19** | ✅ |
+
+<div align="center">
+
+Deux fenêtres de **60 s exactement**, chauffe de 30 s, scène reconstruite entre les phases.
+
+</div>
+
+> **Ce chiffre a mis trois corrections de banc à devenir publiable.** Le banc d'images mesurait
+> `getFrameTimeNs()`, qui n'enveloppe que `gameRenderer.render(...)` — en solo, le même fil enchaîne
+> aussi le tick du serveur intégré et la présentation, soit les deux tiers du temps. La caméra, elle,
+> visait `Y≈127` pour une scène posée à `Y=64` : mille vaches chargées **hors du champ de vision**.
+> Et les deux phases duraient 31 s et 60 s.
+>
+> Le premier relevé propre annonçait ×3,69. À fenêtres égales, ×3,19. **C'est le second qui est
+> publié** — la correction a fait baisser le chiffre, donc le biais était réel.
 
 > **Pourquoi cette colonne existe.** Une charge de ce laboratoire portait la vitesse de tick aléatoire
 > à 256 pour faire pousser son blé — et ne la remettait jamais. Le monde étant conservé d'une épreuve

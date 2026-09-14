@@ -152,7 +152,7 @@ public final class Glass {
      * de grandeur retenu par le rapport de recherche pour une fenêtre de mesure. À un régime plus
      * confortable, la phase se termine simplement plus vite.
      */
-    private static final int MEASURE_TARGET_FRAMES = 3600;
+    private static final int MEASURE_TARGET_FRAMES = 16384;
 
     /**
      * Plafond de temps réel par phase de mesure, en nanosecondes.
@@ -193,10 +193,36 @@ public final class Glass {
      * à son relief.
      */
     private static final double POSE_X = 0.5d;
-    private static final double POSE_Y = 150.0d;
+
     private static final double POSE_Z = 40.0d;
+
     private static final float POSE_YAW = 180.0f;
-    private static final float POSE_PITCH = 30.0f;
+
+    /**
+     * Hauteur des yeux au-dessus du sol de la scène.
+     *
+     * <h2>La caméra regardait soixante blocs au-dessus du troupeau</h2>
+     *
+     * <p>Cette pose valait auparavant {@code Y = 150} et {@code pitch = 30°}, avec en commentaire
+     * « une inclinaison vers le bas suffisante pour cadrer le sol ». Le calcul dit le contraire :
+     * depuis cent cinquante blocs d'altitude, à quarante blocs de distance horizontale, une
+     * inclinaison de trente degrés vise {@code 150 − 40 × tan(30°) ≈ 127}. Le sol du banc est vers
+     * soixante-quatre. Il aurait fallu <b>soixante-cinq</b> degrés.
+     *
+     * <p>Le banc posait donc mille vaches devant une caméra qui regardait le ciel. Il ne mesurait
+     * pas un troupeau : il mesurait du vide, avec un troupeau chargé en mémoire juste en dessous du
+     * champ de vision. C'est le deuxième défaut de ce fichier à avoir la même forme que le premier —
+     * mesurer autre chose que ce qu'on croit mesurer — et le troisième du projet.
+     *
+     * <p>On se place désormais à hauteur d'yeux au-dessus du sol <b>réel</b>, celui que
+     * {@link Scene#groundLevel} demande au générateur de terrain, et on regarde à l'horizontale. La
+     * scène est bâtie autour de l'origine, à cette même altitude : elle est donc dans l'axe, quel
+     * que soit le relief de la graine.
+     */
+    private static final double EYE_HEIGHT = 2.0d;
+
+    /** Hauteur de pose, calculée à la construction de la scène. Voir {@link #EYE_HEIGHT}. */
+    private static volatile double poseY = 64.0d + EYE_HEIGHT;
 
     private enum Phase { IDLE, WAITING, WARM_ON, MEASURE_ON, WARM_OFF, MEASURE_OFF, DONE, REFUSED }
 
@@ -370,10 +396,31 @@ public final class Glass {
         }
         var level = server.overworld();
         server.execute(() -> {
-            int born = Scene.build(level, Scene.Kind.PEN, herdWanted(), 0);
-            Lanterne.LOG.info("[VITRE] scène posée devant la caméra : {} créature(s). Sans elle, le "
-                    + "banc pèse l.outil sans peser ce qu.il soulève.", born);
+            Scene.Kind kind = kindWanted();
+            int born = Scene.build(level, kind, herdWanted(), 0);
+            // La pose dépend du relief de la graine : on ne peut la connaître qu'ici, une fois le
+            // monde ouvert. Voir EYE_HEIGHT pour ce que cette ligne corrige.
+            poseY = Scene.groundLevel(level) + EYE_HEIGHT;
+            Lanterne.LOG.info("[VITRE] scène « {} » posée devant la caméra : {} créature(s), "
+                    + "œil à Y={}. Sans elle, le banc pèse l.outil sans peser ce qu.il soulève.",
+                    kind, born, String.format(Locale.ROOT, "%.1f", poseY));
         });
+    }
+
+    /**
+     * La charge à poser devant la caméra.
+     *
+     * <p>Par défaut la <b>grange</b> et non l'enclos : à ciel ouvert, aucun bloc ne cache rien, et
+     * un banc de rendu qui n'occulte rien ne peut mesurer que le coût des modules qui occultent,
+     * jamais leur gain. {@code LANTERNE_GLASS_SCENE=enclos} rétablit l'ancienne charge pour
+     * comparer les deux.
+     */
+    private static Scene.Kind kindWanted() {
+        String raw = System.getenv("LANTERNE_GLASS_SCENE");
+        if (raw == null || raw.isBlank()) {
+            return Scene.Kind.BARN;
+        }
+        return Scene.parse(raw.trim());
     }
 
     /** Rebâtit la scène à l.identique entre les deux phases. */
@@ -421,7 +468,8 @@ public final class Glass {
         }
         // Voir le Javadoc de classe : reposer à CHAQUE image, et non une seule fois, élimine toute
         // dérive résiduelle en plus de la chute — une garantie plus stricte que « en vol ».
-        player.snapTo(POSE_X, POSE_Y, POSE_Z, POSE_YAW, POSE_PITCH);
+        // Regard horizontal : la scène est bâtie au niveau du sol, à la même altitude que l'œil.
+        player.snapTo(POSE_X, poseY, POSE_Z, POSE_YAW, 0.0f);
         return true;
     }
 
@@ -468,7 +516,7 @@ public final class Glass {
             render[filled] = Minecraft.getInstance().getFrameTimeNs();
         }
         filled++;
-        if (filled >= MEASURE_TARGET_FRAMES || overdue()) {
+        if (overdue()) {
             int kept = Math.min(filled, MEASURE_TARGET_FRAMES);
             if (on) {
                 keptOn = kept;
@@ -497,8 +545,31 @@ public final class Glass {
         }
     }
 
+    /**
+     * La phase est-elle finie ?
+     *
+     * <h2>Une fenêtre de temps, et non un compte d'images</h2>
+     *
+     * <p>Ce banc s'arrêtait au premier des deux critères atteints : trois mille six cents images
+     * <b>ou</b> soixante secondes. Le premier relevé du voile en a montré la conséquence — la phase
+     * avec le module a duré <b>31,4 s</b> et celle sans, <b>60 s</b>. Le verdict portait donc sur
+     * deux fenêtres différentes.
+     *
+     * <p>Un débit est un taux, donc en principe insensible à la durée. Mais deux fenêtres inégales
+     * ne voient pas le même monde : les créatures se déplacent, le ramasse-miettes passe, la machine
+     * chauffe. Comparer une demi-minute à une minute entière, c'est réintroduire par la porte le
+     * biais que la chauffe avait chassé par la fenêtre — et ce projet a déjà retiré quatre bancs
+     * pour cette famille de défaut.
+     *
+     * <p>La fenêtre est désormais la <b>même durée</b> des deux côtés. Le compte d'images est ce
+     * qu'on mesure ; il n'a plus le droit d'être aussi ce qui arrête la mesure. Le plafond de seize
+     * mille relevés ne subsiste que comme garde-fou de mémoire : à deux cent soixante-dix images par
+     * seconde soutenues pendant une minute, il ne serait pas atteint.
+     */
     private static boolean overdue() {
-        return filled >= MEASURE_LEAST_FRAMES && System.nanoTime() - phaseOpened > MEASURE_BUDGET_NANOS;
+        return (filled >= MEASURE_LEAST_FRAMES
+                && System.nanoTime() - phaseOpened > MEASURE_BUDGET_NANOS)
+                || filled >= MEASURE_TARGET_FRAMES;
     }
 
     /**
@@ -533,10 +604,12 @@ public final class Glass {
                         + "(%d image(s) en %.1f s)",
                 medianOff / 1e6, slowOff / 1e6, keptOff, spanOff / 1e9d));
 
-        if (!coherent(medianOn, keptOn, spanOn, "AVEC")
-                || !coherent(medianOff, keptOff, spanOff, "SANS")) {
-            Lanterne.LOG.error("[VITRE] MESURE REFUSÉE : le banc se contredit lui-même. "
-                    + "Aucun chiffre n'est publié.");
+        double rateOn = keptOn / (spanOn / 1e9d);
+        double rateOff = keptOff / (spanOff / 1e9d);
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[VITRE] Débit : %.1f image(s)/s avec, %.1f sans.", rateOn, rateOff));
+
+        if (!coherent(rateOn, rateOff, medianOn, medianOff)) {
             Settings.setEnabled(true);
             phase = Phase.REFUSED;
             Minecraft.getInstance().stop();
@@ -563,11 +636,15 @@ public final class Glass {
                 renderOn / 1e6, renderOff / 1e6,
                 (medianOn - renderOn) / 1e6, (medianOff - renderOff) / 1e6));
 
-        if (medianOn > 0d && medianOff > 0d) {
-            double ratio = medianOff / medianOn;
+        // Le verdict porte sur le DÉBIT, pas sur la médiane. Le débit est exact — un compte divisé
+        // par une durée — et c'est lui que le joueur perçoit. La médiane, elle, décrit la
+        // régularité : deux relevés de même débit dont l'un a une médiane bien plus haute ont la
+        // même fluidité moyenne et pas du tout la même sensation.
+        if (rateOn > 0d && rateOff > 0d) {
+            double ratio = rateOn / rateOff;
             if (ratio > 1.05d) {
                 Lanterne.LOG.info(String.format(Locale.ROOT,
-                        "[VITRE] Gain : ×%.2f sur l'intervalle entre images.", ratio));
+                        "[VITRE] Gain : ×%.2f sur le débit d'images.", ratio));
             } else if (ratio < 0.95d) {
                 Lanterne.LOG.info(String.format(Locale.ROOT,
                         "[VITRE] PERTE : ×%.2f — le mod coûte plus qu'il ne rapporte ici.", ratio));
@@ -583,35 +660,60 @@ public final class Glass {
     }
 
     /**
-     * Le relevé est-il compatible avec lui-même ?
+     * Les deux signaux du relevé pointent-ils dans le même sens ?
      *
-     * <h2>Le contrôle que ce banc n'avait pas, et qui lui a coûté un chiffre publié</h2>
+     * <h2>Le contrôle qu'il fallait, après un premier qui se trompait de critère</h2>
      *
-     * <p>Une médiane d'intervalle et un compte d'images sur une durée connue mesurent la même chose
-     * par deux chemins. Ils doivent donc concorder : {@code images × médiane ≈ durée}. Le relevé qui
-     * a mis ce défaut au jour donnait 2019 images, une médiane de 11,82 ms et une fenêtre de 60 s —
-     * soit 23,9 s de temps expliqué sur 60. Les deux tiers manquants étaient précisément le tick
-     * serveur, et c'est là que vit tout le gain du mod.
+     * <p>Le relevé qui a motivé ce garde-fou donnait une médiane en hausse — donc une perte — et un
+     * compte d'images en hausse lui aussi — donc un gain. Un mod ne peut pas à la fois rendre chaque
+     * image plus lente et en afficher davantage dans la même minute : l'un des deux chiffres ne
+     * mesurait pas ce qu'on croyait, et c'était la médiane, calculée sur le seul temps de rendu.
      *
-     * <p>Ce contrôle ne corrige rien : il <b>refuse</b>, dans l'esprit de {@code Preflight}. Une
-     * divergence de plus d'un quart signifie que le banc ne mesure pas ce qu'il croit mesurer, et
-     * aucun verdict tiré d'un tel relevé ne mérite d'être écrit dans un tableau de gains.
+     * <h2>Le premier critère écrit ici était faux, et il faut le dire</h2>
+     *
+     * <p>Il vérifiait {@code images × médiane ≈ durée}. C'est une identité pour une distribution
+     * symétrique et pour elle seule. Le premier relevé de la grange l'a mis en défaut sans qu'il y
+     * ait rien d'incohérent : 2677 images, médiane 32,46 ms, fenêtre de 60 s — soit « 145 %
+     * expliqué », et un refus. Le calcul juste est {@code images × moyenne = durée}, une identité
+     * exacte pour des intervalles consécutifs — donc un contrôle qui ne peut rien détecter, puisque
+     * toujours vrai par construction.
+     *
+     * <p>La médiane valait ici bien plus que la moyenne, ce qui signale une distribution à traîne
+     * gauche : beaucoup d'images très rapides et un socle d'images lentes. C'est un renseignement
+     * sur la régularité, pas une incohérence.
+     *
+     * <p>Le vrai critère est celui-ci : <b>le débit et la médiane doivent aller dans le même
+     * sens</b>. Leurs amplitudes peuvent différer — le débit intègre tout, la médiane décrit le cas
+     * typique. Leurs signes, non.
      */
-    private static boolean coherent(double medianNanos, int frames, long spanNanos, String label) {
-        if (medianNanos <= 0d || frames <= 0 || spanNanos <= 0L) {
+    private static boolean coherent(double rateOn, double rateOff, double medianOn,
+            double medianOff) {
+        if (rateOn <= 0d || rateOff <= 0d || medianOn <= 0d || medianOff <= 0d) {
             return true;
         }
-        double explained = medianNanos * frames;
-        double share = explained / spanNanos;
-        if (share > 0.75d && share < 1.33d) {
-            return true;
+        double byRate = rateOn / rateOff;
+        double byMedian = medianOff / medianOn;
+        boolean rateSaysGain = byRate > 1.05d;
+        boolean rateSaysLoss = byRate < 0.95d;
+        boolean medianSaysGain = byMedian > 1.05d;
+        boolean medianSaysLoss = byMedian < 0.95d;
+
+        if ((rateSaysGain && medianSaysLoss) || (rateSaysLoss && medianSaysGain)) {
+            Lanterne.LOG.error(String.format(Locale.ROOT,
+                    "[VITRE] MESURE REFUSÉE : les deux signaux se contredisent. Le débit dit ×%.2f, "
+                            + "la médiane dit ×%.2f. Un mod ne peut pas rendre chaque image plus "
+                            + "lente ET en afficher davantage. Aucun chiffre n'est publié.",
+                    byRate, byMedian));
+            return false;
         }
-        Lanterne.LOG.error(String.format(Locale.ROOT,
-                "[VITRE] Phase %s incohérente : %d image(s) × %.2f ms = %.1f s, pour une fenêtre "
-                        + "réelle de %.1f s (%.0f %% expliqué). La mesure et le compte d'images ne "
-                        + "décrivent pas le même phénomène.",
-                label, frames, medianNanos / 1e6, explained / 1e9d, spanNanos / 1e9d, share * 100d));
-        return false;
+        if (Math.abs(byRate - byMedian) > 0.25d) {
+            Lanterne.LOG.info(String.format(Locale.ROOT,
+                    "[VITRE] Les deux signaux s'accordent sur le sens mais pas sur l'ampleur "
+                            + "(débit ×%.2f, médiane ×%.2f) : le gain est inégalement réparti entre "
+                            + "les images. Le verdict porte sur le débit.",
+                    byRate, byMedian));
+        }
+        return true;
     }
 
     /**

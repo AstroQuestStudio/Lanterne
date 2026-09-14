@@ -42,7 +42,20 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 
 | Module Lanterne | Repris de | Licence d'origine |
 |---|---|---|
-| *(aucun pour l'instant — l'absorption commence)* | | |
+| `core/Shroud.java` — le Voile | **Rien.** Écrit pour ce projet. | — |
+
+Le Voile mérite une précision, parce qu'il traite le même sujet qu'un mod connu.
+**EntityCulling** (tr7zw Protective License) a été lu, et deux de ses garde-fous
+ont inspiré les nôtres : ne pas voiler au-delà d'une distance, ne pas voiler une
+entité à très grosse boîte. Aucune de ses lignes n'a été reprise, et les choix de
+fond diffèrent — il lance ses rayons sur un fil séparé, nous les lançons sur le
+fil de rendu, amortis par un cache et plafonnés par image, parce que lire
+`ClientLevel` depuis un autre fil est une course de données. Le point d'accroche
+diffère aussi : il annule `extractEntity`, nous enveloppons l'appel à
+`shouldRender` qui le précède.
+
+Le parcours de grille employé est l'algorithme d'Amanatides et Woo, publié en
+1987 ; il n'appartient à aucun mod.
 
 ## Les modules d'origine
 

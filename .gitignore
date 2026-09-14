@@ -7,3 +7,6 @@ run/
 # chaque nom de méthode au lieu de le deviner. 6 596 fichiers qui n'appartiennent pas
 # à ce projet et se régénèrent en une commande — voir notes/feuille-de-route.md.
 .mcsrc/
+
+# Sources de la mine clonees pour lecture (tools/clone.py) - jamais versionnees
+/Lanterne-mine/

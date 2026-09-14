@@ -356,6 +356,14 @@ public final class Settings {
      */
     private static boolean spill = true;
     /**
+     * Le voile : les créatures qu'un mur cache ne sont pas préparées pour le rendu.
+     *
+     * <p>Voir {@link Shroud}. Premier module de ce projet qui agit sur le client et non sur le
+     * serveur — et le premier qu'il était impossible de retenir avant que le banc d'images cesse de
+     * se contredire, puisqu'aucun chiffre n'en aurait été décidable.
+     */
+    private static boolean shroud = true;
+    /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
      *
@@ -753,6 +761,10 @@ public final class Settings {
         return master && poi;
     }
 
+    public static boolean shroud() {
+        return master && shroud;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -877,6 +889,7 @@ public final class Settings {
         wire = wanted.contains("wire") || wanted.contains("compression") || wanted.contains("paquet");
         poi = wanted.contains("poi") || wanted.contains("interet");
         spill = wanted.contains("spill") || wanted.contains("effets") || wanted.contains("tableau");
+        shroud = wanted.contains("shroud") || wanted.contains("voile") || wanted.contains("occlusion");
         mining = !wanted.contains("nomining");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
@@ -917,6 +930,9 @@ public final class Settings {
         wire = Config.WIRE.get();
         poi = Config.POI.get();
         spill = Config.SPILL.get();
+        shroud = Config.SHROUD.get();
+        Shroud.tune(Config.SHROUD_DELAY.get(), Config.SHROUD_NEAR.get(),
+                Config.SHROUD_BUDGET.get(), Config.SHROUD_FAR.get(), Config.SHROUD_BULKY.get());
         mining = Config.MINING.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
@@ -979,6 +995,9 @@ public final class Settings {
         }
         if (spill) {
             text.append("effets ");
+        }
+        if (shroud) {
+            text.append("voile ");
         }
         if (rationing) {
             text.append("ration ");
