@@ -70,14 +70,18 @@ public final class Dials extends Screen {
                 "Affiche images/s, centile le plus lent et échelle en cours, dans un coin de l'écran.",
                 "F3 donne une moyenne arrondie ; la jauge donne les à-coups, qui sont ce qu'on ressent.",
                 "Effet immédiat. Fenêtre glissante de deux secondes."));
+        // La mise à l'échelle est désarmée : voir Lens.scale(). La ligne reste affichée, grisée,
+        // parce que la masquer ferait croire qu'elle n'a jamais existé — et le joueur qui l'a vue
+        // hier mérite de savoir pourquoi elle est partie.
         this.dials.add(Dial.cycle("Mise à l'échelle",
-                () -> lensLabel(Lens.preset()),
-                () -> Lens.preset() == Lens.Preset.NATIF ? DIM : AMBER,
-                step -> cycleLens(step),
-                "Rend le monde plus petit que l'écran, puis l'y étale. Le coût d'une image suit le "
-                        + "nombre de pixels : à 67 % de chaque dimension, c'est 45 % de pixels en moins.",
-                "Prix : l'interface perd en netteté. Effet immédiat.",
-                "FSR n'est pas réservé aux cartes AMD — il tourne sur n'importe quel GPU."));
+                () -> "en chantier",
+                () -> DIM,
+                step -> { },
+                "Rendre le monde plus petit que l'écran, puis l'y étaler : le coût d'une image suit "
+                        + "le nombre de pixels.",
+                "La première version dessinait le monde dans un coin sans l'agrandir : "
+                        + "blitToScreen n'étire pas, contrairement à ce qui avait été supposé.",
+                "Refaite sur une cible de scène séparée — l'interface restera nette."));
         this.dials.add(Dial.toggle("Le Voile — créatures",
                 Settings::shroud, ClientConfig.SHROUD,
                 "Une créature qu'un mur cache n'est pas préparée pour le rendu.",

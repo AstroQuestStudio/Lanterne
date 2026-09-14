@@ -113,17 +113,43 @@ public final class Lens {
         awake = true;
     }
 
-    /** Le facteur en vigueur, ou 1 si le module doit se taire. */
+    /**
+     * Le facteur en vigueur.
+     *
+     * <h2>Ce module est DESARME, et voici pourquoi</h2>
+     *
+     * <p>La première version faisait mentir {@code Window.getWidth()} pour que la cible de rendu
+     * rétrécisse d'elle-même, en pariant que {@code blitToScreen()} l'étirerait ensuite jusqu'à
+     * l'écran. <b>Ce pari était faux.</b> Le premier essai en jeu l'a montré sans appel : le monde
+     * était dessiné dans un coin de la fenêtre, à sa taille réduite, sans aucun agrandissement — et
+     * l'interface, dont les coordonnées étaient compensées en sens inverse, se dédoublait en
+     * diagonale.
+     *
+     * <p>La leçon est celle que ce projet répète depuis le début, appliquée cette fois à une API
+     * que ses sources ne permettaient pas de lire : {@code com.mojang.blaze3d} n'est pas décompilé
+     * dans ce dépôt, et j'ai supposé le comportement de {@code blitToScreen} au lieu de le vérifier.
+     * <b>Une supposition sur un pipeline graphique se paie à l'écran, pas au banc.</b>
+     *
+     * <p>La mise à l'échelle demande en réalité une <b>cible de scène séparée</b> : rendre le monde
+     * dedans à résolution réduite, puis une passe de post-traitement qui l'agrandit vers la cible
+     * principale — l'interface restant, elle, en résolution native. C'est ainsi que procède le mod
+     * qui traite déjà ce sujet en 26.1.2, et c'est le chantier à reprendre proprement.
+     *
+     * <p>En attendant, ce module ne touche à rien : {@link #active()} rend faux en toutes
+     * circonstances, et les préréglages restent définis pour que l'écran de réglages les affiche
+     * quand ils fonctionneront.
+     */
     public static double scale() {
-        if (!awake || !Settings.lens()) {
-            return 1.0d;
-        }
-        return 1.0d / preset.divisor();
+        return 1.0d;
     }
 
-    /** Le module modifie-t-il quoi que ce soit en ce moment ? */
+    /**
+     * Toujours faux tant que la mise à l'échelle n'est pas refaite sur une cible séparée.
+     *
+     * <p>Voir {@link #scale()} pour ce que le premier essai a produit à l'écran.
+     */
     public static boolean active() {
-        return awake && Settings.lens() && preset != Preset.NATIF;
+        return false;
     }
 
     /**
