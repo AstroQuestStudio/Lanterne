@@ -8,7 +8,7 @@
 
 <br>
 
-![Version](https://img.shields.io/badge/version-2.2.0-brightgreen?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.3.0-brightgreen?style=for-the-badge)
 ![NeoForge](https://img.shields.io/badge/NeoForge-26.1.2-orange?style=for-the-badge)
 ![Java](https://img.shields.io/badge/Java-21-blue?style=for-the-badge)
 ![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue?style=for-the-badge)
@@ -79,6 +79,8 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **1 200 coffres dans le champ** *(coffres statiques, seuls)* | 138,0 im/s | **200,3 im/s** | **×1,45** | ✅ |
 | **12 167 feuilles** *(masquage des faces, seul)* | 171,9 im/s | **244,8 im/s** | **×1,42** | ✅ |
 | **1 500 piles pleines au sol** *(exemplaires, seul)* | 27,5 im/s | **64,6 im/s** | **×2,35** | ✅ |
+| **1 200 coffres** *(le Voile sur les blocs-entités, seul)* | 71,2 im/s | **189,0 im/s** | **×2,65** | ✅ |
+| **Particules occultées** *(le Voile sur les particules)* | — | — | non mesuré | ⏳ |
 
 <div align="center">
 
@@ -111,6 +113,25 @@ scène reconstruite entre les phases, **un seul module allumé à la fois**.
 > La Vitre coupe maintenant la synchronisation elle-même, refuse un débit à la fois proche d'une
 > fréquence d'écran **et** anormalement régulier, et échantillonne par réservoir pour que la médiane
 > porte sur toute la fenêtre quelle que soit la vitesse de la phase.
+
+### Le Voile ne s'arrête pas aux créatures
+
+| Cible | Point d'accroche | Ce qui est économisé |
+|---|---|---|
+| Créatures | `EntityRenderDispatcher.shouldRender` | L'état de rendu complet |
+| **Objets au sol** | *les mêmes — un objet posé est une entité* | **couvert sans rien ajouter** |
+| Blocs-entités | `tryExtractRenderState` | L'état de rendu complet |
+| Particules | `ClientLevel.doAddParticle` | **La création, le tick *et* le rendu** |
+
+Les particules sont le meilleur des quatre, et pour une raison de fond : une créature voilée continue
+d'exister côté serveur — on n'économise que son état de rendu. Une particule refusée **n'existe
+nulle part**. Vanilla, lui, ne filtre que la distance (32 blocs) et n'écarte du *dessin* que ce qui
+sort du champ ; `ParticleEngine.tick` parcourt tous les groupes sans jamais regarder si l'on voit
+quoi que ce soit.
+
+Deux garde-fous : les particules marquées `overrideLimiter` — celles que le jeu tient à montrer —
+ne sont jamais refusées, et un bloc en cours de cassage n'est jamais voilé, sa fissure étant le
+retour visuel du minage.
 
 **Où va le temps.** Le Voile n'agit presque pas sur le dessin :
 

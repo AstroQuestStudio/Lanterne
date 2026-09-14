@@ -440,6 +440,10 @@ public final class Settings {
     private static ClientConfig.LeafCulling leafCulling = ClientConfig.LeafCulling.AUTO;
     /** Exemplaires dessines par pile d'objets au sol. Cote CLIENT. Voir {@code LooseItemMixin}. */
     private static int itemCopies = 1;
+    /** Le voile etendu aux particules. Voir {@code ParticleVeilMixin}. */
+    private static boolean veilParticles = true;
+    /** Le voile etendu aux entites de bloc. Voir {@code BlockEntityVeilMixin}. */
+    private static boolean veilBlockEntities = true;
     /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
@@ -863,6 +867,14 @@ public final class Settings {
         return master ? itemCopies : 4;
     }
 
+    public static boolean veilParticles() {
+        return master && veilParticles;
+    }
+
+    public static boolean veilBlockEntities() {
+        return master && veilBlockEntities;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -1001,6 +1013,11 @@ public final class Settings {
         // serveur. Le relevé le disait — « fusion-objets | rendu : objets-x1 » — mais il fallait
         // lire la ligne. Chaque module doit avoir un mot qui n'appartient qu'à lui.
         itemCopies = wanted.contains("exemplaires") || wanted.contains("piles") ? 1 : 4;
+        veilParticles = wanted.contains("particules");
+        // Surtout PAS « voile » : ce mot appartient au voile des creatures, et le partager
+        // allumait les deux modules a la fois. Le banc l'a dit — « voile voile-blocs » — parce
+        // qu'on lui avait appris a crier apres le meme defaut sur les objets au sol.
+        veilBlockEntities = wanted.contains("blocs");
         leafCulling = wanted.contains("masque") || wanted.contains("cull")
                 ? ClientConfig.LeafCulling.TOUJOURS
                 : ClientConfig.LeafCulling.JAMAIS;
@@ -1037,6 +1054,8 @@ public final class Settings {
         staticChests = ClientConfig.STATIC_CHESTS.get();
         leafCulling = ClientConfig.LEAF_CULLING.get();
         itemCopies = ClientConfig.ITEM_COPIES.get();
+        veilParticles = ClientConfig.VEIL_PARTICLES.get();
+        veilBlockEntities = ClientConfig.VEIL_BLOCK_ENTITIES.get();
         Shroud.tune(ClientConfig.SHROUD_DELAY.get(), ClientConfig.SHROUD_NEAR.get(),
                 ClientConfig.SHROUD_BUDGET.get(), ClientConfig.SHROUD_FAR.get(),
                 ClientConfig.SHROUD_BULKY.get());
@@ -1056,6 +1075,12 @@ public final class Settings {
         }
         if (itemCopies < 4) {
             text.append("objets-x").append(itemCopies).append(' ');
+        }
+        if (veilParticles) {
+            text.append("voile-particules ");
+        }
+        if (veilBlockEntities) {
+            text.append("voile-blocs ");
         }
         return text.isEmpty() ? "aucun" : text.toString().trim();
     }

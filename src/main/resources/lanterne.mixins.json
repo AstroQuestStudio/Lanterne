@@ -46,6 +46,8 @@
     "StaticChestRendererMixin",
     "StaticChestShapeMixin",
     "LeafCullMixin",
-    "LooseItemMixin"
+    "LooseItemMixin",
+    "ParticleVeilMixin",
+    "BlockEntityVeilMixin"
   ]
 }

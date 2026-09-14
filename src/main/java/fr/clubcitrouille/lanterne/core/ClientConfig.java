@@ -44,6 +44,8 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue STATIC_CHESTS;
     public static final ModConfigSpec.EnumValue<LeafCulling> LEAF_CULLING;
     public static final ModConfigSpec.IntValue ITEM_COPIES;
+    public static final ModConfigSpec.BooleanValue VEIL_PARTICLES;
+    public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
 
     public static final ModConfigSpec SPEC;
 
@@ -156,6 +158,33 @@ public final class ClientConfig {
                 "",
                 "Effet immediat, sans rechargement.")
                 .defineInRange("objets_exemplaires", 1, 1, 4);
+
+        VEIL_PARTICLES = BUILDER.comment(
+                "LE VOILE ETENDU AUX PARTICULES : celles qu'un mur cache ne naissent pas.",
+                "",
+                "Vanilla n'ecarte que ce qui est a plus de 32 blocs, plus une fraction selon",
+                "l'option 'particules'. Une particule nee DERRIERE UN MUR, a dix blocs, passe. Elle",
+                "est alors creee, tickee a chaque image tant qu'elle vit, puis ecartee du dessin si",
+                "elle sort du champ - trois couts, dont deux payes en entier pour rien.",
+                "",
+                "Refuser sa naissance supprime les trois d'un coup, et la supprime aussi de la",
+                "memoire : une ferme qui tourne sous une colline cesse d'en accumuler.",
+                "",
+                "Les particules que le jeu tient a montrer coute que coute (overrideLimiter) ne",
+                "sont jamais refusees. Demande le voile actif.")
+                .define("voile_particules", true);
+
+        VEIL_BLOCK_ENTITIES = BUILDER.comment(
+                "LE VOILE ETENDU AUX COFFRES, PANNEAUX ET AUTRES BLOCS-ENTITES.",
+                "",
+                "tryExtractRenderState ecarte deja ce qui sort du champ de vision, jamais ce qui est",
+                "dans le champ mais derriere de la pierre. Un entrepot de 300 coffres vu depuis",
+                "l'exterieur de son batiment les prepare tous les 300, a chaque image, pour n'en",
+                "montrer aucun.",
+                "",
+                "Un bloc en cours de cassage n'est jamais voile : sa fissure est le retour visuel du",
+                "minage. Demande le voile actif.")
+                .define("voile_blocs_entites", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

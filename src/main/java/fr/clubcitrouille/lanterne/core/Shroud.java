@@ -102,6 +102,16 @@ public final class Shroud {
     /** Les entités actuellement jugées cachées. */
     private static final IntOpenHashSet HIDDEN = new IntOpenHashSet();
 
+    /**
+     * Les points du monde déjà sondés, par position de bloc.
+     *
+     * <p>Le signe de la valeur porte la réponse — négative pour « caché », positive pour
+     * « visible » — et sa valeur absolue l'échéance. Une seule table, une seule recherche, aucun
+     * objet intermédiaire sur un chemin appelé des centaines de fois par seconde.
+     */
+    private static final it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap SPOTS =
+            new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+
     private static int spent;
     private static long seen;
     private static long veiled;
@@ -124,13 +134,76 @@ public final class Shroud {
             NEXT.clear();
             HIDDEN.clear();
         }
+        if (SPOTS.size() > 8192) {
+            SPOTS.clear();
+        }
     }
 
     /** Remet le voile à zéro — changement de monde, ou bascule de l'interrupteur. */
     public static void forget() {
         NEXT.clear();
         HIDDEN.clear();
+        SPOTS.clear();
         spent = 0;
+    }
+
+    /**
+     * Ce point du monde est-il caché par de la pierre, vu depuis l'œil ?
+     *
+     * <h2>Le voile appliqué à ce qui n'est pas une créature</h2>
+     *
+     * <p>Une particule née derrière un mur coûte trois fois : sa création, son tick à chaque image
+     * tant qu'elle vit, et son rendu. Vanilla n'en écarte aucune sur ce critère — il filtre par
+     * distance (trente-deux blocs) et écarte du <em>rendu</em> ce qui sort du champ de vision, mais
+     * une particule occultée est créée, tickée et conservée comme les autres.
+     *
+     * <p>Refuser sa naissance supprime les trois coûts d'un coup. C'est le même mécanisme que pour
+     * les créatures, appliqué là où il rapporte davantage : une bête voilée continue d'exister côté
+     * serveur, une particule refusée n'existe nulle part.
+     *
+     * <h2>Un cache par bloc, et non par particule</h2>
+     *
+     * <p>Une ferme qui tourne engendre des centaines de particules par seconde, et presque toujours
+     * <b>aux mêmes endroits</b> — au-dessus du même bloc, dans le même coin de pièce. Lancer un
+     * rayon par particule serait ruineux ; en lancer un par <em>bloc</em>, réutilisé pendant une
+     * fraction de seconde, ne l'est pas.
+     *
+     * <p>La réponse par défaut, ici encore, est <b>visible</b> : budget épuisé, cache absent, doute
+     * quelconque, la particule naît. Un mod d'optimisation qui fait disparaître des effets visuels
+     * se remarque bien plus qu'un mod lent.
+     */
+    public static boolean spotHidden(Level level, double x, double y, double z,
+            double camX, double camY, double camZ) {
+        double dx = x - camX;
+        double dy = y - camY;
+        double dz = z - camZ;
+        double square = dx * dx + dy * dy + dz * dz;
+        if (square < near * near || square > far * far) {
+            return false;
+        }
+
+        long key = net.minecraft.core.BlockPos.asLong(
+                Mth.floor(x), Mth.floor(y), Mth.floor(z));
+        long now = System.nanoTime();
+        long cached = SPOTS.get(key);
+        if (cached != 0L && now < Math.abs(cached)) {
+            return cached < 0L;
+        }
+        if (spent >= budget) {
+            return false;
+        }
+        spent++;
+
+        boolean blocked = !clear(level, camX, camY, camZ, x, y, z,
+                new BlockPos.MutableBlockPos());
+        // L'échéance porte la réponse dans son signe : négative pour « caché », positive pour
+        // « visible ». Une seule table, une seule recherche, pas d'objet intermédiaire.
+        long due = now + delayNanos;
+        SPOTS.put(key, blocked ? -due : due);
+        if (blocked) {
+            veiled++;
+        }
+        return blocked;
     }
 
     /**
