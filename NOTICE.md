@@ -43,6 +43,18 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | Module Lanterne | Repris de | Licence d'origine |
 |---|---|---|
 | `core/Shroud.java` — le Voile | **Rien.** Écrit pour ce projet. | — |
+| `mixin/StaticChestRendererMixin.java` | [Faster Block Entities](https://github.com/0x1bd/Faster-Block-Entities) (kvxd) | GPL-3.0-or-later |
+| `mixin/StaticChestShapeMixin.java` | *idem* | GPL-3.0-or-later |
+| `assets/minecraft/{blockstates,models,atlases}` *(coffres)* | [FastChest](https://github.com/FakeDomi/FastChest) (FakeDomi), via Faster Block Entities | MIT |
+
+Les ressources de shulker fournies par Faster Block Entities n'ont pas été
+reprises : leur couvercle qui s'ouvre est un retour d'information utile, et le
+module ne concerne donc que les coffres.
+
+L'atlas `assets/minecraft/atlases/blocks.json` **ajoute** une source sans
+effacer celles de vanilla — `SpriteSourceList.load` (ligne 85) parcourt
+`getResourceStack`, donc tous les paquets sont fusionnés. Vérifié dans le code
+décompilé, pas supposé.
 
 Le Voile mérite une précision, parce qu'il traite le même sujet qu'un mod connu.
 **EntityCulling** (tr7zw Protective License) a été lu, et deux de ses garde-fous
