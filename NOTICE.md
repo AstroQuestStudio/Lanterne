@@ -46,6 +46,8 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `mixin/StaticChestRendererMixin.java` | [Faster Block Entities](https://github.com/0x1bd/Faster-Block-Entities) (kvxd) | GPL-3.0-or-later |
 | `mixin/StaticChestShapeMixin.java` | *idem* | GPL-3.0-or-later |
 | `assets/minecraft/{blockstates,models,atlases}` *(coffres)* | [FastChest](https://github.com/FakeDomi/FastChest) (FakeDomi), via Faster Block Entities | MIT |
+| `client/Foliage.java` + `mixin/LeafCullMixin.java` | **Rien.** Idée commune à [CullLeaves](https://github.com/TeamMidnightDust/CullLeaves) (MIT) et consorts. | — |
+| `mixin/LeafDecayMixin.java` — chute rapide | **Rien.** Écrit pour ce projet. | — |
 
 Les ressources de shulker fournies par Faster Block Entities n'ont pas été
 reprises : leur couvercle qui s'ouvre est un retour d'information utile, et le
@@ -68,6 +70,14 @@ diffère aussi : il annule `extractEntity`, nous enveloppons l'appel à
 
 Le parcours de grille employé est l'algorithme d'Amanatides et Woo, publié en
 1987 ; il n'appartient à aucun mod.
+
+Le masquage des feuilles mérite la même précision. **CullLeaves** (MIT, donc
+copiable) a été lu. Son mixin *redéfinit* `skipRendering` en entier, ce qui
+revient à décider seul du sort de toutes les faces de feuilles ; celui-ci
+*injecte* un cas supplémentaire et laisse la méthode d'origine reprendre la main
+partout ailleurs — de sorte qu'éteint, il ne change rigoureusement rien. Le
+réglage à trois branches et l'accrochage à l'option `cutoutLeaves` de 26.1 n'ont
+pas d'équivalent en amont.
 
 ## Les modules d'origine
 

@@ -57,13 +57,8 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue WIRE;
     public static final ModConfigSpec.BooleanValue POI;
     public static final ModConfigSpec.BooleanValue SPILL;
-    public static final ModConfigSpec.BooleanValue SHROUD;
-    public static final ModConfigSpec.IntValue SHROUD_DELAY;
-    public static final ModConfigSpec.IntValue SHROUD_NEAR;
-    public static final ModConfigSpec.IntValue SHROUD_BUDGET;
-    public static final ModConfigSpec.IntValue SHROUD_FAR;
-    public static final ModConfigSpec.IntValue SHROUD_BULKY;
-    public static final ModConfigSpec.BooleanValue STATIC_CHESTS;
+    public static final ModConfigSpec.BooleanValue DECAY;
+    public static final ModConfigSpec.IntValue DECAY_DELAY;
     public static final ModConfigSpec.IntValue NEAR_RADIUS;
     public static final ModConfigSpec.BooleanValue MINING;
 
@@ -187,56 +182,26 @@ public final class Config {
                 "600 villageois : 2,4 millions de tableaux evites, 20 Mo sur 2900.",
                 "Modeste et gratuit - un serveur rapide est fait de la somme de ces gains-la.")
                 .define("effets_traverses", true);
-        SHROUD = BUILDER.comment(
-                "LE VOILE - cote CLIENT : une creature cachee par un mur n'est pas preparee.",
-                "Vanilla ecarte deja ce qui est hors du champ de vision. Il n'ecarte pas ce qui est",
-                "dans le champ mais derriere de la pierre : ferme sous une colline, enclos vu depuis",
-                "l'autre cote de sa grange, donjon. Chacune de ces betes paie extractEntity en entier",
-                "- pose, animations, equipement, eclairage, texture - pour finir derriere un bloc.",
+        DECAY = BUILDER.comment(
+                "CHUTE RAPIDE DES FEUILLES - cote SERVEUR : un arbre abattu ne laisse pas sa",
+                "couronne suspendue dans le vide pendant une minute.",
                 "",
-                "Sans effet sur le serveur : ce module ne touche qu'au rendu.")
-                .define("voile", true);
-        SHROUD_DELAY = BUILDER.comment(
-                "Delai avant de reexaminer une meme creature, en millisecondes.",
-                "100 (defaut) : une verification toutes les six images a 60 images par seconde.",
-                "Plus bas = reaction plus vive quand une bete sort de derriere un mur, plus de rayons.",
-                "Plus haut = moins de rayons, et jusqu'a ce delai de retard a l'apparition.")
-                .defineInRange("voile_delai_ms", 100, 0, 1000);
-        SHROUD_NEAR = BUILDER.comment(
-                "En deca de cette distance, aucune creature n'est jamais voilee.",
-                "Sous quelques blocs, l'erreur d'un rayon - un coin de mur, une marche - se verrait",
-                "immediatement, et le gain est nul : une bete proche est rarement cachee longtemps.")
-                .defineInRange("voile_zone_franche_blocs", 4, 0, 64);
-        SHROUD_BUDGET = BUILDER.comment(
-                "Rayons autorises par image. Au-dela, les creatures non encore examinees gardent",
-                "leur dernier etat - VISIBLE par defaut, jamais l'inverse : un plafond atteint ne",
-                "doit pas faire disparaitre une bete.")
-                .defineInRange("voile_rayons_par_image", 64, 1, 1024);
-        SHROUD_FAR = BUILDER.comment(
-                "Au-dela de cette distance, plus aucun rayon n'est lance.",
-                "Un rayon long coute cher pour une creature que la distance de rendu d'entites",
-                "ecarte souvent deja d'elle-meme.")
-                .defineInRange("voile_portee_blocs", 128, 16, 512);
-        SHROUD_BULKY = BUILDER.comment(
-                "Au-dela de cette taille de boite, une creature n'est jamais voilee.",
-                "Cinq points sondes decrivent mal un dragon ou une baleine de mod : une bete dont la",
-                "boite depasse largement le bloc depasse aussi du mur, et la faire disparaitre se",
-                "verrait de loin.")
-                .defineInRange("voile_taille_max_blocs", 4, 1, 64);
-        STATIC_CHESTS = BUILDER.comment(
-                "COFFRES STATIQUES - cote CLIENT : un coffre rendu comme un bloc ordinaire.",
-                "Un bloc ordinaire est maille UNE FOIS dans son chunk puis dessine avec lui. Un",
-                "coffre porte son propre dessinateur, reexecute A CHAQUE IMAGE pour animer un",
-                "couvercle - meme ferme, meme a quarante blocs, meme dans un entrepot de trois cents",
-                "coffres dont aucun ne s'ouvrira.",
+                "Vanilla attend un TICK ALEATOIRE pour chaque feuille detachee : trois positions",
+                "tirees par section et par tick sur 4096, soit une esperance d'environ 1360 ticks.",
+                "Ce module replanifie la chute au lieu d'attendre le hasard.",
                 "",
-                "PRIX A PAYER : le couvercle ne s'anime plus a l'ouverture.",
-                "Les boites de shulker ne sont PAS concernees : leur couvercle est un retour",
-                "d'information utile, pas une decoration.",
+                "NE TOUCHE PAS aux feuilles POSEES A LA MAIN : vanilla leur met persistent=true a",
+                "la pose, et elles n'ont jamais ete concernees par la decomposition. Un toit de",
+                "feuillage dans une construction ne risque rien.",
                 "",
-                "Un changement ne se voit qu'apres reconstruction des chunks - donc au prochain",
-                "chargement du monde.")
-                .define("coffres_statiques", true);
+                "Sans rapport avec le masquage des feuilles, qui est un reglage CLIENT.")
+                .define("chute_feuilles", true);
+        DECAY_DELAY = BUILDER.comment(
+                "Ticks entre le detachement d'une feuille et sa chute.",
+                "5 (defaut) : un quart de seconde. La cascade reste progressive - les feuilles",
+                "proches du tronc se detachent avant les autres - mais se compte en secondes.",
+                "1 : chute quasi instantanee. 40 : deux secondes, plus contemplatif.")
+                .defineInRange("chute_feuilles_delai_ticks", 5, 1, 200);
         NEAR_RADIUS = BUILDER.comment(
                 "Rayon de la zone franche, en blocs : rien n'y est degrade, ni par la distance ni",
                 "par la foule. C'est le seul reglage qui arbitre un COMPROMIS et non un gain.",

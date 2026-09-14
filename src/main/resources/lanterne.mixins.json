@@ -38,11 +38,13 @@
     "MiningMixin",
     "SectionStorageAccessor",
     "PoiStreamMixin",
-    "InsideEffectsMixin"
+    "InsideEffectsMixin",
+    "LeafDecayMixin"
   ],
   "client": [
     "EntityCullMixin",
     "StaticChestRendererMixin",
-    "StaticChestShapeMixin"
+    "StaticChestShapeMixin",
+    "LeafCullMixin"
   ]
 }

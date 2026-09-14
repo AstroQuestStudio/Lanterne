@@ -111,6 +111,16 @@ public final class Scene {
          * ne couvrait — toutes portaient sur des créatures ou des objets au sol.
          */
         DEPOT,
+        /**
+         * La futaie : un massif de feuilles, pour peser le masquage des faces mitoyennes.
+         *
+         * <p>Un cube plein est la pire configuration possible pour vanilla et la meilleure pour le
+         * module — presque toutes les faces y sont mitoyennes. C'est assumé : la question posée à
+         * ce banc n'est pas « combien gagne-t-on dans une forêt moyenne » mais « le mécanisme
+         * fonctionne-t-il, et combien vaut-il là où il s'applique ». Un chêne réel est une boule
+         * pleine à son cœur et ajourée à sa surface : il se situe entre cette charge et rien.
+         */
+        FOLIAGE,
         /** Le sol jonché : des milliers d'objets posés, immobiles, qui tickent quand même. */
         ITEMS,
         /** Les deux à la fois, ce qui est la situation d'un serveur habité. */
@@ -313,6 +323,7 @@ public final class Scene {
             case "pen", "enclos", "elevage", "élevage" -> Kind.PEN;
             case "barn", "grange", "couvert" -> Kind.BARN;
             case "depot", "entrepot", "entrepôt", "coffres" -> Kind.DEPOT;
+            case "foliage", "feuilles", "futaie", "arbres" -> Kind.FOLIAGE;
             case "items", "objets", "sol" -> Kind.ITEMS;
             case "mixed", "mixte", "tout" -> Kind.MIXED;
             case "tnt", "dynamite", "boom" -> Kind.TNT;
@@ -1241,6 +1252,7 @@ public final class Scene {
             case PEN -> pen(level, count);
             case BARN -> barn(level, count);
             case DEPOT -> depot(level, count);
+            case FOLIAGE -> foliage(level, count);
             case ITEMS -> items(level, count);
             case MIXED -> {
                 int born = pen(level, count / 2);
@@ -1517,6 +1529,54 @@ public final class Scene {
         }
         Lanterne.LOG.info("[SCÈNE] entrepôt : {} coffre(s) sur {} étage(s), grille de {} de côté. "
                 + "Chacun porte son dessinateur, réexécuté à chaque image.", placed, layer, side);
+        return placed;
+    }
+
+    /**
+     * Un massif de feuilles devant la caméra.
+     *
+     * <h2>Les feuilles sont posées PERSISTANTES, et il fallait y penser</h2>
+     *
+     * <p>Une feuille dont la distance au tronc vaut sept et qui n'est pas persistante est
+     * <b>condamnée</b> : vanilla la fait tomber au premier tick aléatoire, et le module de chute
+     * rapide de ce mod la fait tomber en un quart de seconde. Un massif posé sans précaution
+     * s'évaporerait donc pendant la mesure — et, pire, il s'évaporerait <em>plus vite</em> dans la
+     * phase où la chute rapide est active, si bien que les deux phases ne verraient pas la même
+     * scène.
+     *
+     * <p>C'est le même défaut que le troupeau qui se disperse, sous un autre visage, et c'est la
+     * cinquième fois qu'il se présente dans ce laboratoire. {@code PERSISTENT = true} — l'état
+     * qu'une feuille reçoit quand un joueur la pose à la main — l'écarte définitivement.
+     */
+    private static int foliage(ServerLevel level, int count) {
+        int ground = ground(level);
+        net.minecraft.world.level.block.state.BlockState leaves =
+                net.minecraft.world.level.block.Blocks.OAK_LEAVES.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, true);
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+
+        // La hauteur ne doit JAMAIS dépasser ce que clearDecor sait effacer.
+        //
+        // Le premier relevé de cette charge a posé un cube de trente blocs de haut alors que le
+        // nettoyage s'arrête à CEILING, soit vingt-quatre. Les six étages du dessus survivaient donc
+        // à la reconstruction, et la seconde phase n'a posé que 23 064 feuilles là où la première en
+        // avait posé 28 830 — un écart que seul le journal a trahi, la scène ayant l'air identique.
+        int tall = Math.min(CEILING - 1, Math.max(3, (int) Math.round(Math.cbrt(count))));
+        int side = Math.max(3, (int) Math.ceil(Math.sqrt(count / (double) tall)));
+        int half = side / 2;
+        int placed = 0;
+        for (int x = -half; x <= half; x++) {
+            for (int z = -half; z <= half; z++) {
+                for (int y = ground + 1; y <= ground + tall; y++) {
+                    cursor.set(x, y, z);
+                    if (level.setBlock(cursor, leaves, 2)) {
+                        placed++;
+                    }
+                }
+            }
+        }
+        Lanterne.LOG.info("[SCÈNE] futaie : {} feuille(s) persistantes, {}x{}x{}. "
+                + "Presque toutes leurs faces sont mitoyennes.", placed, side, tall, side);
         return placed;
     }
 

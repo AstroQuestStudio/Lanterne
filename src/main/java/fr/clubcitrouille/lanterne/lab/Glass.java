@@ -625,7 +625,12 @@ public final class Glass {
             if (on) {
                 keptOn = kept;
                 spanOn = now - phaseOpened;
-                modulesDuringOn = Settings.describe();
+                // describe() ne couvre que le socle serveur. Un banc de RENDU qui ne
+                // journalise que celui-là annonce « aucun module » au moment précis où
+                // le module mesuré travaille — ce qui s'est produit, et rendait le
+                // relevé inexploitable sans qu'on sache pourquoi.
+                modulesDuringOn = Settings.describe() + " | rendu : "
+                        + Settings.describeClient();
                 Settings.setEnabled(false);
                 invalidateTerrain();
                 // La scène est rebâtie entre les phases, et c'est indispensable ici : mille vaches

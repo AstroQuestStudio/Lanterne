@@ -371,6 +371,12 @@ public final class Settings {
      * a change de licence.
      */
     private static boolean staticChests = true;
+    /** La chute rapide des feuilles detachees. Cote SERVEUR. Voir {@code LeafDecayMixin}. */
+    private static boolean decay = true;
+    /** Ticks entre le detachement d'une feuille et sa chute. */
+    private static int decayDelay = 5;
+    /** Quand masquer les faces de feuilles qui se touchent. Cote CLIENT. */
+    private static ClientConfig.LeafCulling leafCulling = ClientConfig.LeafCulling.AUTO;
     /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
@@ -777,6 +783,18 @@ public final class Settings {
         return master && staticChests;
     }
 
+    public static boolean decay() {
+        return master && decay;
+    }
+
+    public static int decayDelay() {
+        return decayDelay;
+    }
+
+    public static ClientConfig.LeafCulling leafCulling() {
+        return master ? leafCulling : ClientConfig.LeafCulling.JAMAIS;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -903,6 +921,16 @@ public final class Settings {
         spill = wanted.contains("spill") || wanted.contains("effets") || wanted.contains("tableau");
         shroud = wanted.contains("shroud") || wanted.contains("voile") || wanted.contains("occlusion");
         staticChests = wanted.contains("chests") || wanted.contains("coffres");
+        decay = wanted.contains("decay") || wanted.contains("chute");
+        // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
+        // branche AUTO dépend d'une option vidéo VRAIE par défaut en vanilla. Un banc qui se
+        // contenterait d'allumer le module mesurerait donc zéro, sans rien signaler. On force ici la
+        // branche qui agit, et l'on garde le nom explicite plutôt que « feuilles » — ce mot désigne
+        // déjà la chute côté serveur, et les confondre reviendrait à mesurer l'un en croyant
+        // mesurer l'autre.
+        leafCulling = wanted.contains("masque") || wanted.contains("cull")
+                ? ClientConfig.LeafCulling.TOUJOURS
+                : ClientConfig.LeafCulling.JAMAIS;
         mining = !wanted.contains("nomining");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
@@ -923,6 +951,38 @@ public final class Settings {
     }
 
     /** Applique le fichier de configuration. Voir Config, et la priorité donnée à l.environnement. */
+    /**
+     * Applique le fichier CLIENT : uniquement ce qui ne regarde que l'ecran du joueur.
+     *
+     * <p>Separe de {@link #applyFromConfig} parce que les deux fichiers ont des cycles de vie
+     * differents - l'un suit la partie, l'autre suit le joueur - et parce qu'un serveur dedie ne
+     * charge jamais le second. Appeler l'un depuis l'autre reintroduirait exactement le defaut que
+     * la separation corrige.
+     */
+    public static void applyFromClientConfig() {
+        shroud = ClientConfig.SHROUD.get();
+        staticChests = ClientConfig.STATIC_CHESTS.get();
+        leafCulling = ClientConfig.LEAF_CULLING.get();
+        Shroud.tune(ClientConfig.SHROUD_DELAY.get(), ClientConfig.SHROUD_NEAR.get(),
+                ClientConfig.SHROUD_BUDGET.get(), ClientConfig.SHROUD_FAR.get(),
+                ClientConfig.SHROUD_BULKY.get());
+    }
+
+    /** Ce qui est actif cote rendu, pour le journal et les bancs. */
+    public static String describeClient() {
+        StringBuilder text = new StringBuilder();
+        if (shroud) {
+            text.append("voile ");
+        }
+        if (staticChests) {
+            text.append("coffres ");
+        }
+        if (leafCulling != ClientConfig.LeafCulling.JAMAIS) {
+            text.append("feuilles-").append(leafCulling.name().toLowerCase(Locale.ROOT)).append(' ');
+        }
+        return text.isEmpty() ? "aucun" : text.toString().trim();
+    }
+
     public static void applyFromConfig() {
         lod = Config.LOD.get();
         network = Config.NETWORK.get();
@@ -943,10 +1003,8 @@ public final class Settings {
         wire = Config.WIRE.get();
         poi = Config.POI.get();
         spill = Config.SPILL.get();
-        shroud = Config.SHROUD.get();
-        staticChests = Config.STATIC_CHESTS.get();
-        Shroud.tune(Config.SHROUD_DELAY.get(), Config.SHROUD_NEAR.get(),
-                Config.SHROUD_BUDGET.get(), Config.SHROUD_FAR.get(), Config.SHROUD_BULKY.get());
+        decay = Config.DECAY.get();
+        decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
@@ -1010,11 +1068,8 @@ public final class Settings {
         if (spill) {
             text.append("effets ");
         }
-        if (shroud) {
-            text.append("voile ");
-        }
-        if (staticChests) {
-            text.append("coffres ");
+        if (decay) {
+            text.append("chute-feuilles ");
         }
         if (rationing) {
             text.append("ration ");

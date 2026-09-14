@@ -70,6 +70,13 @@ public final class Lanterne {
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
                 fr.clubcitrouille.lanterne.core.Config.SPEC);
         modBus.addListener(fr.clubcitrouille.lanterne.core.Config::apply);
+        // Le fichier CLIENT est enregistré des deux côtés : un serveur dédié le charge sans jamais
+        // le lire, ce qui ne coûte rien, et le garder inconditionnel évite une garde de distribution
+        // de plus. Ce qui compte est que les réglages de rendu ne soient plus dans le fichier du
+        // SERVEUR, d'où un joueur en multijoueur n'aurait pas pu les changer.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
+                fr.clubcitrouille.lanterne.core.ClientConfig.SPEC);
+        modBus.addListener(fr.clubcitrouille.lanterne.core.ClientConfig::apply);
         // Les réglages d'abord : le filtre de journal les consulte, et la première version
         // l'installait avant de les avoir lus — si bien qu'aucun réglage ne pouvait l'en empêcher.
         Settings.configureFromEnvironment();
