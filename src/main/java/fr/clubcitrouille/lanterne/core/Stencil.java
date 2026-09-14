@@ -73,6 +73,29 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  * {@code StructureStart}</b> — ce qui l'empêcherait de se poser dans les <em>autres</em> chunks
  * qu'elle devait encore traverser. Le mod d'origine porte ici un commentaire en majuscules ; il a
  * manifestement payé pour l'apprendre.
+ *
+ * <h2>Ce que ça vaut, mesuré</h2>
+ *
+ * <p>Épreuve du maçon ({@code LANTERNE_MASON=1}), sur {@code plains_big_house_1} — sept sur onze sur
+ * onze, huit cent quarante-sept positions — posée à cheval sur une fenêtre de chunk, de sorte que
+ * <b>68,8 % des blocs tombent dehors</b>. Médianes de quatre cents poses par côté, alternées, trois
+ * exécutions :
+ *
+ * <pre>
+ * gabarit nu                                        ×1,17  ×1,10  ×1,18
+ * avec les deux processeurs de toute pièce à jigsaw ×1,54  ×1,32  ×1,30
+ * </pre>
+ *
+ * <p>Le second régime est le seul qui décrive quelque chose de réel : {@code SinglePoolElement.place}
+ * ajoute {@code BlockIgnoreProcessor.STRUCTURE_BLOCK} et {@code JigsawReplacementProcessor.INSTANCE}
+ * à <em>chaque</em> pièce de village, d'avant-poste, de bastion ou de cité ancienne — et la liste du
+ * <em>template pool</em> vient encore par-dessus. Le premier est une borne basse qui n'existe nulle
+ * part dans le jeu.
+ *
+ * <p><b>Et ce gain ne va pas au temps de tick.</b> Ce laboratoire a déjà établi que la génération de
+ * terrain s'exécute sur le pool de travail et ne coûte rien au fil du serveur : ce qu'on gagne ici
+ * est de la <em>latence d'exploration</em>, c'est-à-dire le temps qu'un joueur qui avance attend son
+ * chunk. C'est réel, c'est ressenti, et ce n'est pas des TPS. Le README ne doit pas les confondre.
  */
 public final class Stencil {
     /**

@@ -515,3 +515,346 @@ Trois points d'attention, que je signale plutôt que de les taire :
   un fichier qui grossit sans fin, et il faudrait décider de sa rotation.
 - **Aucune migration depuis un autre mod d'économie.** Aucun n'a de format de sauvegarde stable en
   26.1 à ce jour.
+
+---
+---
+
+# Deuxième passe — les puits, et l'inflation par accumulation
+
+> Cette section s'ajoute à ce qui précède ; **rien de ce qui est écrit plus haut n'est devenu faux**.
+> L'audit d'arbitrage, la dérive, l'invariant de la caisse, le catalogue engendré : tout tient, et les
+> ajouts de cette passe ne peuvent structurellement pas les casser — voir « Ce que les puits ne
+> peuvent pas casser », plus bas.
+>
+> **Aucun nouveau point d'accroche n'est nécessaire.** Les six lignes de `Lanterne.java` de la
+> section 1 suffisent toujours. Rien n'a été écrit hors de `content/shop/`, `client/shop/`,
+> `NOTES-SHOP.md` et `tools/`.
+
+## 9. Le vrai problème n'était pas l'arbitrage
+
+L'audit de `Assay` démontre qu'on ne peut pas **fabriquer** de l'argent par une boucle d'artisanat.
+C'est nécessaire, c'est fait, et cela ne dit **rien** du défaut qui tue réellement les économies de
+serveur, parce que ce défaut n'est pas une triche : **l'accumulation**.
+
+Une ferme à fer automatique ne viole aucune inégalité. Elle verse, heure après heure, une somme qu'un
+joueur ordinaire ne peut pas approcher. Et la dérive, qui devait amortir le choc, est **bornée par
+construction** : `tanh` sature. Passé le plancher de −50 %, le débit d'une ferme n'est plus amorti du
+tout. La dérive protège les **prix relatifs** ; elle ne protège pas de l'accumulation, et il ne faut
+pas lui demander ce qu'elle ne peut pas donner.
+
+Restait à le mesurer plutôt qu'à l'affirmer.
+
+## 10. La simulation — `tools/Bourse.java`
+
+Un programme autonome, sans dépendance, hors du jeu, sur le modèle des vérifications de la
+section 6 :
+
+```
+cd tools
+javac -encoding UTF-8 Bourse.java
+java Bourse             # AVANT / APRÈS sur 37 jours, et la comparaison
+java Bourse --long      # le même sur 90 jours
+java Bourse --balayage  # le balayage des réglages, 120 lignes
+```
+
+**Reproduit exactement** : l'arithmétique entière en centimes de `Coin`, la formule de dérive de
+`Drift` avec ses bornes, la détente et le bornage des volumes de `Ledger`, la retenue de `Toll`, et
+l'ordre des opérations de `Till` — le prix est arrêté avant la transaction et vaut pour tout le lot.
+
+**Approché** : les joueurs. Vingt comptes, quatre profils, un pas de cinq minutes (la période de
+détente réelle), trente-sept jours. Les débits sont ceux de fermes réelles et documentées, pris dans
+le **haut** de la fourchette : un réglage qui tient contre un joueur plus productif que le pire
+joueur réel tiendra contre le vrai.
+
+| Profil | Combien | Jeu | Ce qu'il fait |
+|---|---|---|---|
+| occasionnel | 8 | 1 h/jour | un peu de tout, achète des blocs de décor |
+| mineur | 6 | 3 h/jour | du minerai, en quantité honnête |
+| **exploitant de fermes** | 3 | 4 h/jour | fer, or, mobs, canne, bambou, pastèque — dix articles |
+| bâtisseur | 3 | 3 h/jour | achète massivement, revend ses gravats |
+
+Un **vingt-et-unième** joueur se connecte au trentième jour, au solde de départ, compteurs vierges.
+C'est le test le plus parlant d'une économie multijoueur, et le plus souvent oublié — on règle
+toujours son économie en regardant ceux qui sont déjà là.
+
+### Les chiffres, avant
+
+Avec la dérive pour seul amortisseur, c'est-à-dire le mod tel qu'il était :
+
+| | à 37 jours | à 90 jours |
+|---|---|---|
+| masse monétaire | **3 790 970 ¤** | 9 220 432 ¤ |
+| le plus riche | **1 225 989 ¤** | 2 976 575 ¤ |
+| le médian | 766 ¤ | 1 661 ¤ |
+| écart riche / médian | **× 1 599** | × 1 792 |
+| Gini | 0,799 | 0,799 |
+| l'exploitant, par heure de jeu | **× 59,8** l'occasionnel | × 60,0 |
+
+Le serveur n'a plus d'économie : il a un homme riche et vingt figurants. Un diamant coûte 240 ¤ ; le
+plus riche peut en acheter cinq mille.
+
+### Les chiffres, après
+
+| | à 37 jours | à 90 jours |
+|---|---|---|
+| masse monétaire | **1 027 091 ¤** (27 %) | 2 400 034 ¤ (26 %) |
+| le plus riche | **150 494 ¤** (12 %) | 333 900 ¤ (11 %) |
+| le médian | 766 ¤ — **inchangé** | 1 661 ¤ — **inchangé** |
+| écart riche / médian | **× 196** | × 201 |
+| Gini | 0,620 | 0,610 |
+| l'exploitant, par heure de jeu | **× 9,0** l'occasionnel | × 8,3 |
+
+Et le détail qui compte le plus — **qui paie** :
+
+| Profil | recette horaire avant | après | retenu sur le mois |
+|---|---|---|---|
+| occasionnel | 122 ¤/h | **122 ¤/h** | **0 ¤** |
+| mineur | 935 ¤/h | **935 ¤/h** | **0 ¤** |
+| bâtisseur | 171 ¤/h | **171 ¤/h** | **0 ¤** |
+| exploitant de fermes | 7 327 ¤/h | 1 102 ¤/h | 921 292 ¤ |
+
+**Trois profils sur quatre ne perdent pas un centime.** C'est le résultat qu'on cherchait, et il ne
+doit rien à la chance : il vient de la franchise, décrite plus bas.
+
+### Le nouvel arrivant
+
+| | avant | après |
+|---|---|---|
+| une heure de récolte ordinaire, au jour 1 | 156 ¤ | 156 ¤ |
+| la même, au jour 37 | 131 ¤ (84 %) | **131 ¤ (84 %)** |
+| son panier d'équipement, au jour 1 | 954 ¤ | 954 ¤ |
+| le même, au jour 37 | 961 ¤ (101 %) | **961 ¤ (101 %)** |
+| heures de jeu pour le payer | 6,1 h → 7,3 h | 6,1 h → **7,3 h** |
+| arrivé au jour 30, après une semaine | 208 ¤ | **208 ¤** |
+
+**Les puits sont rigoureusement invisibles pour lui**, au centime près, dans les deux colonnes. Et
+son pouvoir d'achat ne bouge que de vingt pour cent en un mois.
+
+**Pourquoi si peu ?** Parce que la boutique **ancre** les prix. C'est la propriété décisive de ce
+dispositif, et elle mérite d'être écrite en clair : sur un serveur où les prix sont faits par les
+joueurs — hôtel des ventes, dépôt-vente —, une masse monétaire qui triple triple les prix, et le
+nouveau venu est ruiné avant d'avoir commencé. Ici, un diamant coûte 240 ¤ le premier jour et,
+quoi qu'il arrive, entre 120 et 360 ¤ pour toujours. **L'inflation des prix n'existe pas dans ce
+modèle.** Ce qui existe, et qu'il fallait traiter, c'est la concentration des fortunes et la
+trivialisation du jeu pour celui qui possède les machines.
+
+Les vingt pour cent qu'il perd quand même viennent de la dérive : les fermiers ont fait tomber le fer
+et la canne à sucre vers leur plancher, donc sa récolte se vend un peu moins. C'est voulu, c'est
+borné, et cela joue aussi dans son sens — ce qui est bradé à la vente est bradé à l'achat.
+
+## 11. Les puits retenus, et pourquoi ceux-là
+
+`content/shop/Toll.java` — **le péage**. Chaque joueur porte deux compteurs de **recettes récentes**,
+en centimes, qui montent à chaque vente et redescendent tout seuls. Tant qu'un compteur reste sous sa
+**franchise**, la boutique paie le plein tarif, sans exception. Au-delà :
+
+```
+    retenue = R · tanh( max(0, compteur − franchise) / franchise )
+```
+
+### 1. Le quota — par article. **Allumé.**
+
+C'est la réponse directe aux fermes, et c'est le puits principal. Franchise 4 000 ¤ du même article,
+retenue maximale 90 % : très au-delà, la boutique paie un dixième du cours. Le message au joueur est
+« va vendre autre chose », et il lui reste mille trois cents articles au plein tarif pour le faire.
+
+### 2. Le débit — tous articles confondus. **Allumé.**
+
+Il existe parce que **le quota seul se contourne en diversifiant**, et la mesure le dit sans appel :
+
+| réglage | masse à 37 j | le plus riche | exploitant / occasionnel |
+|---|---|---|---|
+| quota seul | 1 415 358 ¤ | 307 520 ¤ | **× 16,1** |
+| débit seul | 2 111 902 ¤ | 544 481 ¤ | × 28,9 |
+| **les deux** | **1 027 091 ¤** | **150 494 ¤** | **× 9,0** |
+
+Dix fermes, c'est dix fois la franchise au plein tarif. Le débit ferme cette porte. Franchise
+20 000 ¤ de recettes récentes, retenue maximale 60 %. **Le mineur régulier reste sous cette
+franchise et ne subit aucune retenue** — c'est ce qui a décidé la valeur.
+
+Ils ne font pas double emploi : le premier dit « diversifie », le second dit « il y a une limite à ce
+qu'un marché absorbe ».
+
+### 3. Les frais de virement. **Éteint par défaut.**
+
+Il ferme la seule porte de sortie des deux autres : un exploitant peut payer trois amis pour vendre à
+sa place, et multiplier sa franchise par quatre. Il est éteint quand même, et c'est un choix : sur un
+serveur de vingt personnes qui se connaissent, l'entraide est ce qui fait tenir le groupe, et la
+taxer pour fermer une porte que presque personne n'emprunte coûte plus qu'elle ne rapporte. À allumer
+le jour où le contournement se voit, pas avant.
+
+### Ce qui a été écarté
+
+- **Un prélèvement sur les soldes.** C'est la seule chose qui **bornerait** la masse monétaire au
+  lieu d'en diviser la pente. Écarté : les joueurs détestent voir leur épargne fondre, et surtout
+  **ce n'est pas nécessaire ici**, puisque la boutique ancre les prix et qu'une masse qui grossit
+  n'érode le pouvoir d'achat de personne. Les puits divisent la pente par quatre ; ils ne
+  l'annulent pas, et c'est assumé.
+- **Une taxe progressive sur la fortune.** Se contourne en garant son argent sur un compte ami, et
+  punit le vétéran plutôt que la machine. Les compteurs de recettes, eux, portent sur ce qu'on
+  **vend**, pas sur ce qu'on possède : les déplacer d'un compte à l'autre ne les efface pas.
+- **Des services payants** (téléportation, protection). Cohérents, mais ils demandent des décisions
+  de serveur — quelles zones, quels prix, quels droits — qui ne m'appartiennent pas, et un point
+  d'accroche hors de `content/shop/`.
+
+### Les deux décisions qui ont tout changé
+
+**La franchise.** La première rédaction s'en passait, et elle était fausse. Une `tanh` nue a une
+pente de 1 à l'origine : elle mord dès la première unité vendue. Le balayage l'a montré — le nouveau
+venu, qui vend six cents blocs de pierre dans sa semaine, perdait **un cinquième** de sa recette
+(161 ¤ au lieu de 208 ¤), alors que le dispositif tout entier n'existe que pour toucher les fermes.
+Avec la franchise, il touche 208 ¤, exactement comme si les puits étaient éteints.
+
+**La franchise est une valeur, pas un nombre d'objets.** « Cinq cents lingots par jour » se lit
+mieux, et c'est faux dès qu'on regarde le catalogue : il contient le diamant à 240 ¤ et le pavé à
+0,12 ¤. La première version, en unités, laissait passer une ferme à diamants et **étranglait le
+bâtisseur qui revend ses gravats** — il tombait à × 0,2 de sa recette. En centimes, un seul nombre
+vaut pour les mille trois cents articles, et le bâtisseur est à × 1,0.
+
+**Le compteur suit le brut, jamais le net.** Sans cela : plus la retenue est forte, moins le compteur
+monte, donc moins la retenue est forte — une boucle de retour qui ramollit précisément là où elle
+devrait serrer.
+
+### Le troisième réglage, celui qu'on ne voit pas
+
+`puits.detente_pour_mille` fixe la **période** sur laquelle une franchise compte, et c'est le plus
+décisif des trois :
+
+- **20 ‰** → demi-vie de 3 heures. Le compteur est remis à neuf entre deux soirées : la franchise
+  devient « par session », et le dispositif est **invisible pour qui joue tous les jours**,
+  c'est-à-dire pour celui qu'il vise.
+- **2 ‰** → demi-vie de 29 heures. La franchise devient « par jour » et s'accumule sur celui qui vend
+  tous les jours. C'est le défaut.
+
+À zéro, les compteurs ne redescendent jamais et la première ferme condamne son propriétaire à vie ;
+`Tariff.warnIfLeaky()` l'écrit dans le journal.
+
+### Ce que les puits ne peuvent pas casser
+
+La retenue est un facteur entre 0 et 1 appliqué au **seul prix de rachat**. Elle ne peut donc que le
+faire **baisser**. L'inégalité de sûreté — `rachat × facteur × (1+A)/(1−A) < 1`, mesurée à 0,944 sur
+les 1 446 recettes — reste vraie *a fortiori*. **Il n'y a rien à revérifier**, et c'est structurel,
+pas un test qu'il faudrait refaire. Aucun des chiffres de la section 6 n'a bougé.
+
+## 12. Les nouveautés visibles
+
+### Réglages — `config/lanterne-boutique.toml`, section `[puits]`
+
+| Clé | Défaut | |
+|---|---|---|
+| `quota_actif` | `true` | le quota par article |
+| `quota_franchise` | `4000` | en **pièces**, par joueur et par article |
+| `quota_retenue_max` | `90` | en pourcent |
+| `debit_actif` | `true` | le débit, tous articles confondus |
+| `debit_franchise` | `20000` | en **pièces**, par joueur |
+| `debit_retenue_max` | `60` | en pourcent |
+| `detente_pour_mille` | `2` | voir ci-dessus — le réglage décisif |
+| `virement_frais_pourcent` | `0` | **éteint** |
+
+Tout éteindre rend exactement le comportement de la première passe : `quota_actif = false` et
+`debit_actif = false`, et rien d'autre ne change.
+
+### Commandes
+
+| Commande | Qui | Ce qu'elle fait |
+|---|---|---|
+| `/boutique quota` | tous | où j'en suis de mes franchises, et pourquoi mon fer se vend moins cher |
+| `/boutique quota <joueur>` | GM | la même chose pour un autre |
+| `/boutique quota remettre <joueur>` | GM | remet ses compteurs à neuf |
+
+`/banque masse` dit en plus **ce que les puits n'ont jamais versé** depuis le premier jour. Les deux
+nombres se lisent ensemble : une retenue restée à zéro après un mois signifie qu'il n'y a pas de
+fermes — ou que les franchises sont trop larges.
+
+### Sauvegarde
+
+Les compteurs vivent dans le **même enregistrement** que les soldes et les volumes (`Ledger`). Même
+raisonnement que pour les volumes, poussé d'un cran : si les soldes survivaient à une panne mais pas
+les compteurs, il suffirait de demander un redémarrage pour annuler le dispositif entier. Les champs
+sont `optionalFieldOf` : une sauvegarde de la première passe se charge sans rien perdre.
+
+## 13. L'interface — ce qui a été corrigé
+
+L'écran a été relu ligne à ligne contre `client/Dials.java`. Neuf défauts, dont six trouvés par une
+vérification neuve.
+
+### Les six débordements aux petites résolutions
+
+La vérification de la première passe rejouait 968 275 combinaisons, mais elle contrôlait la
+**position des blocs** — jamais la **largeur du texte**. Elle ne pouvait donc pas voir qu'une phrase
+sort de sa colonne. `tools/mesure_police.py` lit `ascii.png` dans le jar du jeu et rend la largeur
+exacte de chaque chaîne ; `tools/vitrine.py` rejoue `layout()` sur 42 252 combinaisons de 320×240 à
+3840×2160 et contrôle **chaque chaîne écrite**. Ce qu'elle a trouvé, à 340 points de large où la
+colonne de détail n'offre que 74 points :
+
+| Ce qui débordait | Réclamait | Corrigé par |
+|---|---|---|
+| le bouton **« tout »** | 20 pts dans une boîte de 17 | gouttière rendue, puis « max » (18 pts) |
+| « ▲ +30,5 % **sur l'ancre** » | 107 pts — 21 hors du panneau | « ▲ +30,5 % » |
+| « **de la place pour** 1234 » | 112 pts — 26 hors du panneau | « place : 1234 » |
+| « Rachat **à l'unité** » | 77 pts | « Rachat » |
+| **« Total »** et le montant | 85 pts à eux deux, superposés | l'étiquette cède, le nombre reste |
+| « ACHETER 2304 » | tronqué en « ACHETER 230 » | « ACHETER » seul, la quantité est au-dessus |
+
+Deux lignes secondaires — le cours du marché et « repris X » — ne sont **plus écrites du tout** sous
+116 points : couper un montant est pire que ne pas l'écrire, parce que « 1 234,5 » se lit comme un
+nombre et c'en est un autre. Le résultat est **zéro violation** sur les 42 252 combinaisons.
+
+### Les cinq autres
+
+1. **Aucun retour visuel quand une transaction passe.** Deux achats identiques écrivaient deux fois
+   le même message, au même endroit, de la même couleur : le second était rigoureusement invisible,
+   et le joueur recliquait en croyant que rien n'était parti. Le solde et le liseré du bouton virent
+   au vert (ou au rouge) pendant 600 ms. Aucune vérification de géométrie ne pouvait trouver
+   celui-là — il ne se voit qu'en s'en servant.
+2. **La flèche de cote était peinte à l'envers dans l'onglet Vendre.** Toute hausse en rouge, toute
+   baisse en vert : juste quand on achète, exactement faux quand on vend. L'écran disait
+   « attention » au moment précis où il aurait dû dire « c'est le moment ».
+3. **« Choisis une quantité » quand on venait de cliquer sur « tout ».** Un « tout » qui vaut zéro
+   n'est pas un oubli, c'est un refus déguisé. L'écran dit maintenant lequel : « il te manque
+   12,50 ¤ pour en acheter un seul », « ton sac est plein », « tu n'as rien à vendre ».
+4. **La molette au-dessus de la colonne de droite** faisait tourner les pages de la grille d'à côté.
+   Elle règle maintenant la quantité — le geste attendu au-dessus d'un réglage est de le régler.
+   Combiné avec Entrée, une pile s'achète en **un clic et deux gestes**, contre trois clics avant.
+5. **Le nombre qu'on possède déjà** (`×N`) n'était montré que dans l'onglet Vendre. Savoir qu'on a
+   déjà trois cents pavés est au moins aussi utile au moment d'en acheter.
+
+Et, en dessous : **le dessin et le clic calculaient les mêmes rectangles chacun de son côté**, à
+partir de constantes recopiées. La rangée des quantités était écrite `actionTop - 16 - 22` d'un côté
+et `actionTop - 38` de l'autre — vrai aujourd'hui, faux au premier changement. Neuf méthodes de
+géométrie partagée suppriment la classe entière de bogues : une zone cliquable qui ne recouvre pas ce
+qu'on voit ne se voit pas — le bouton est là, il ne répond simplement pas.
+
+### Ce que les puits ajoutent à l'écran, sans l'encombrer
+
+Un joueur qui n'a jamais dépassé une franchise **ne verra jamais rien de tout cela**.
+
+- Le prix de rachat affiché est **celui qu'il touchera**, retenues comprises. Pas de surprise à la
+  validation.
+- Quand une franchise est entamée, ce prix passe en **orangé** — ni le vert d'un bon prix, ni le
+  rouge d'un refus. Une couleur suffit dans une case de 26 points de haut.
+- La colonne de détail ajoute alors **deux lignes courtes** : le cours du marché, et « ta part :
+  34 % ». La zone de message, qui est libre puisque rien ne bloque, explique en une phrase.
+- `/boutique quota` donne le détail complet, chiffres à l'appui.
+
+## 14. Ce qui n'a pas pu être vérifié
+
+Les cinq points de la section 7 restent vrais — **rien n'a été exécuté en jeu**. S'y ajoutent :
+
+1. **Le rendu de l'orangé et du clignotement.** La géométrie et la largeur du texte sont vérifiées ;
+   les couleurs à l'œil ne le sont pas. Les 600 ms du clignotement sont un jugement, pas une mesure.
+2. **La persistance des nouveaux compteurs** à travers un redémarrage, et la relecture d'une
+   sauvegarde écrite par la première passe. Les champs sont optionnels et la logique est celle des
+   volumes, qui marche ; le chemin exact n'a pas tourné.
+3. **Le coût réel de `Bazaar.sync`** avec des compteurs non vides. Le chemin rapide sort immédiatement
+   quand le joueur n'a rien vendu — le cas courant — mais un exploitant de fermes fait mille trois
+   cents appels à `Toll.keep` par ouverture d'écran. C'est de l'ordre du dixième de milliseconde en
+   raisonnement ; ce n'est pas une mesure.
+4. **Les réglages sont ceux d'un modèle, pas d'un serveur.** Le modèle est volontairement pessimiste,
+   mais le premier mois de vrai jeu vaudra tous les balayages. Les deux nombres à regarder sont
+   `/banque masse` — la retenue doit être non nulle, sinon les franchises sont trop larges — et le
+   classement, dont l'écart doit rester de l'ordre de la centaine, pas du millier.
+5. **Le contournement par comptes multiples ou par amis complaisants** n'est pas modélisé. Il existe.
+   `virement_frais_pourcent` est là pour le second, éteint, et le premier relève de la modération.
+6. **Le `README` n'a pas été mis à jour** — il est hors du périmètre qu'on m'a donné. La section
+   « boutique » y gagnerait les huit clés de `[puits]` et la commande `/boutique quota`.

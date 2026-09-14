@@ -18,7 +18,7 @@ CHARS = (
     "\u00c0\u00c1\u00c2\u00c8\u00ca\u00cb\u00cd\u00d3\u00d4\u00d5\u00da\u00df\u00e3\u00f5\u011f\u0130"
     "\u0131\u0152\u0153\u015e\u015f\u0174\u0175\u017e\u0207       "
     " !\"#$%&'()*+,-./0123456789:;<=>?"
-    "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_"
+    "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
     "`abcdefghijklmnopqrstuvwxyz{|}~ "
 )
 
