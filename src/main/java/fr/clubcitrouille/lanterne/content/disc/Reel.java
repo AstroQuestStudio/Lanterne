@@ -202,14 +202,14 @@ public final class Reel implements PackResources {
                         "sounds/" + SOUND_DIR + "/" + wax.slug() + ".ogg");
                 output.accept(id, () -> Files.newInputStream(wax.file()));
             }
+            // TOUS les sillons, occupes ou non, et avec un fournisseur paresseux : c'est cette
+            // liste que le gestionnaire de sons retient, et ce qu'il retient ici vaut pour toute la
+            // session. Un sillon omis maintenant serait muet meme apres avoir ete grave.
             for (int slot = 0; slot < Studio.discSlots(); slot++) {
-                String name = Slots.name(slot);
-                IoSupplier<InputStream> stream = burntStream(name);
-                if (stream == null) {
-                    continue;
-                }
+                final int number = slot;
                 output.accept(Identifier.fromNamespaceAndPath(Lanterne.ID,
-                        "sounds/" + BURNT_DIR + "/" + name + ".ogg"), stream);
+                        "sounds/" + BURNT_DIR + "/" + Slots.name(slot) + ".ogg"),
+                        () -> open(number));
             }
         } else if (type == PackType.SERVER_DATA && startsWith(directory, "jukebox_song")) {
             for (Wax wax : discs) {
@@ -249,6 +249,34 @@ public final class Reel implements PackResources {
      * <p>{@link Slots} répond des deux côtés du fil : le serveur le remplit en gravant, le client
      * en recevant le catalogue. Cette classe n'a donc pas à savoir de quel côté elle tourne.
      *
+     * <h2>Le piège qui a rendu le premier graveur muet</h2>
+     *
+     * <p>La première version décidait <b>ici et tout de suite</b> quel fichier servir : le vrai
+     * morceau si le sillon était occupé, un silence sinon. C'était faux, et d'une façon très
+     * instructive.
+     *
+     * <p>Ce que le gestionnaire de ressources retient, c'est le {@link IoSupplier} — pas les octets.
+     * Il l'appelle à chaque lecture, ce qui est exactement ce qu'on voulait. Mais il le retient
+     * <b>tel qu'il était au chargement</b>, et au chargement tous les sillons sont vides : chacun
+     * s'est donc vu attribuer, une fois pour toutes, le fournisseur qui rend le silence. Graver
+     * remplissait bien le sillon, et le jukebox jouait consciencieusement un quart de seconde de
+     * rien.
+     *
+     * <p>La correction tient en un déplacement : c'est <b>le corps du fournisseur</b> qui interroge
+     * {@link Slots}, et non le code qui le construit. Le sillon est donc relu à chaque lecture, et un
+     * morceau gravé s'entend immédiatement — sans rechargement de ressources, ce qui était tout
+     * l'intérêt du mécanisme.
+     *
+     * <h2>Pourquoi cela suffit, et pourquoi aucun mixin n'est nécessaire</h2>
+     *
+     * <p>Le moteur sonore met bien en cache les sons <em>courts</em> :
+     * {@code SoundBufferLibrary.getCompleteBuffer} garde une table de tampons décodés. Mais il ne
+     * prend ce chemin que pour les sons non diffusés en flux. Les nôtres déclarent
+     * {@code "stream": true}, et {@code SoundEngine} les envoie alors vers
+     * {@code SoundBufferLibrary.getStream}, qui <b>n'a aucun cache</b> : il rouvre la ressource à
+     * chaque lecture. Vérifié dans {@code SoundEngine} (ligne 433, le test {@code if (!isStreaming)})
+     * et dans {@code SoundBufferLibrary}, où seul {@code getCompleteBuffer} porte une table.
+     *
      * <h2>Un sillon vide rend du silence, et il le FAUT</h2>
      *
      * <p>La première version rendait {@code null} pour un sillon libre, en se disant qu'aucun objet
@@ -266,20 +294,35 @@ public final class Reel implements PackResources {
      * rend le vrai morceau — parce qu'il est résolu à la lecture et non au chargement.
      */
     private static @Nullable IoSupplier<InputStream> burntStream(String name) {
-        for (int slot = 0; slot < Studio.discSlots(); slot++) {
-            if (!Slots.name(slot).equals(name)) {
-                continue;
+        int slot = slotOf(name);
+        return slot < 0 ? null : () -> open(slot);
+    }
+
+    /**
+     * Ouvre le fichier du sillon, tel qu'il est <b>en cet instant</b>.
+     *
+     * <p>Chaque ligne de cette méthode s'exécute au moment où le jukebox commence à jouer, et pas
+     * une seconde avant. C'est la différence entre un disque audible et un disque muet.
+     */
+    private static InputStream open(int slot) throws IOException {
+        String hash = Slots.hashAt(slot);
+        if (!hash.isEmpty()) {
+            Path file = Groove.cachedFile(hash);
+            if (Files.isRegularFile(file)) {
+                return Files.newInputStream(file);
             }
-            String hash = Slots.hashAt(slot);
-            if (!hash.isEmpty()) {
-                Path file = Groove.cachedFile(hash);
-                if (Files.isRegularFile(file)) {
-                    return () -> Files.newInputStream(file);
-                }
-            }
-            return Reel::silence;
         }
-        return null;
+        return silence();
+    }
+
+    /** Le numéro d'un sillon d'après son nom, ou moins un si ce n'en est pas un. */
+    private static int slotOf(String name) {
+        for (int slot = 0; slot < Studio.discSlots(); slot++) {
+            if (Slots.name(slot).equals(name)) {
+                return slot;
+            }
+        }
+        return -1;
     }
 
     /**

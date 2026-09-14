@@ -53,6 +53,15 @@ public final class Tariff {
     public static final ModConfigSpec.IntValue RELAX_TICKS;
     public static final ModConfigSpec.IntValue RELAX_PERMILLE;
 
+    public static final ModConfigSpec.BooleanValue QUOTA;
+    public static final ModConfigSpec.IntValue QUOTA_ALLOWANCE;
+    public static final ModConfigSpec.IntValue QUOTA_MOST;
+    public static final ModConfigSpec.BooleanValue DEBIT;
+    public static final ModConfigSpec.IntValue DEBIT_ALLOWANCE;
+    public static final ModConfigSpec.IntValue DEBIT_MOST;
+    public static final ModConfigSpec.IntValue TOLL_RELAX_PERMILLE;
+    public static final ModConfigSpec.IntValue PAY_FEE;
+
     public static final ModConfigSpec SPEC;
 
     private static boolean active = true;
@@ -72,6 +81,15 @@ public final class Tariff {
     private static int elasticity = 2048;
     private static int relaxTicks = 6000;
     private static int relaxPermille = 60;
+
+    private static boolean quota = true;
+    private static long quotaAllowance = 4_000L * Coin.UNIT;
+    private static int quotaMost = 90;
+    private static boolean debit = true;
+    private static long debitAllowance = 20_000L * Coin.UNIT;
+    private static int debitMost = 60;
+    private static int tollRelaxPermille = 2;
+    private static int payFee;
 
     static {
         BUILDER.comment(
@@ -245,6 +263,113 @@ public final class Tariff {
                 .defineInRange("detente_pour_mille", 60, 0, 1000);
         BUILDER.pop();
 
+        BUILDER.comment(
+                "LES PUITS : les endroits ou l'argent CESSE D'EXISTER.",
+                "",
+                "La derive protege les PRIX. Elle ne protege pas de l'ACCUMULATION, et c'est une",
+                "chose que l'on decouvre toujours trop tard. Une ferme a fer automatique ne triche",
+                "pas : elle verse, heure apres heure, une somme qu'un joueur ordinaire ne peut pas",
+                "approcher. La derive amortit le choc jusqu'a moins cinquante pour cent, puis plus",
+                "rien : tanh sature, c'est une borne, pas une pente.",
+                "",
+                "MESURE hors du jeu (tools/Bourse.java : 20 joueurs, 37 jours, les debits de fermes",
+                "reelles). Avec la derive seule :",
+                "    masse monetaire            3 790 970 ¤",
+                "    le plus riche              1 225 989 ¤   soit 1 599 fois la mediane",
+                "    l'exploitant de fermes     60 fois la recette horaire d'un joueur occasionnel",
+                "Avec les puits ci-dessous :",
+                "    masse monetaire            1 027 091 ¤   (27 %)",
+                "    le plus riche                150 494 ¤   soit 196 fois la mediane",
+                "    l'exploitant de fermes     9 fois la recette horaire d'un joueur occasionnel",
+                "    le nouveau venu            EXACTEMENT LA MEME CHOSE qu'avant : 208 ¤ dans sa",
+                "                               premiere semaine, au centime pres.",
+                "",
+                "LE PRINCIPE. Chaque joueur porte deux compteurs de RECETTES RECENTES, en centimes,",
+                "qui montent a chaque vente et redescendent tout seuls. Tant qu'un compteur reste",
+                "sous sa FRANCHISE, la boutique paie le plein tarif, sans exception. Au-dela, elle",
+                "paie de moins en moins :",
+                "",
+                "    retenue = retenue_max * tanh( (compteur - franchise) / franchise )",
+                "",
+                "LA FRANCHISE EST UNE VALEUR, PAS UN NOMBRE D'OBJETS. Le catalogue contient le",
+                "diamant a 240 ¤ et le pave a 0,12 ¤ : un quota en unites laisserait passer une ferme",
+                "a diamants et etranglerait un batisseur qui revend ses gravats. Un seul nombre vaut",
+                "donc pour les mille trois cents articles.",
+                "",
+                "CES REGLAGES NE PEUVENT PAS OUVRIR DE BOUCLE D'ARBITRAGE. Une retenue ne fait que",
+                "BAISSER un prix de rachat, donc l'inegalite de surete du bloc [generation] en est",
+                "d'autant plus respectee. Il n'y a rien a reverifier apres les avoir changes.").push("puits");
+
+        QUOTA = BUILDER.comment(
+                "LE QUOTA : ce que la boutique reprend a un joueur d'un MEME article.",
+                "C'est la reponse directe aux fermes automatiques, et c'est le puits principal.")
+                .define("quota_actif", true);
+        QUOTA_ALLOWANCE = BUILDER.comment(
+                "La franchise du quota, en PIECES, par joueur et par article.",
+                "4000 ¤ representent environ 1 100 lingots de fer, 16 diamants ou 33 000 paves.",
+                "Une journee de ferme les depasse ; une semaine de jeu ordinaire, jamais.",
+                "Le compteur redescend tout seul : voir detente_pour_mille ci-dessous.")
+                .defineInRange("quota_franchise", 4000, 1, 10_000_000);
+        QUOTA_MOST = BUILDER.comment(
+                "La retenue maximale du quota, en POURCENT.",
+                "90 signifie : tres au-dela de la franchise, la boutique paie un dixieme du cours.",
+                "Le message au joueur est << va vendre autre chose >>, et il lui reste mille trois",
+                "cents articles a plein tarif pour le faire.")
+                .defineInRange("quota_retenue_max", 90, 0, 100);
+
+        DEBIT = BUILDER.comment(
+                "LE DEBIT : ce que la boutique reprend a un joueur EN TOUT, articles confondus.",
+                "",
+                "Il existe parce que le quota seul se contourne en diversifiant : dix fermes",
+                "differentes, c'est dix fois la franchise au plein tarif. La mesure le dit -",
+                "avec le quota seul, l'exploitant ressort encore a SEIZE fois le joueur",
+                "occasionnel ; avec les deux, a NEUF.")
+                .define("debit_actif", true);
+        DEBIT_ALLOWANCE = BUILDER.comment(
+                "La franchise du debit, en PIECES, par joueur, tous articles confondus.",
+                "20000 ¤ de recettes recentes correspondent a environ 11 500 ¤ gagnes par jour.",
+                "Dans la simulation, le mineur regulier - trois heures par jour, du minerai - reste",
+                "SOUS cette franchise et ne subit AUCUNE retenue. Baisse-la si tes joueurs vendent",
+                "davantage que les miens.")
+                .defineInRange("debit_franchise", 20_000, 1, 100_000_000);
+        DEBIT_MOST = BUILDER.comment(
+                "La retenue maximale du debit, en POURCENT.")
+                .defineInRange("debit_retenue_max", 60, 0, 100);
+
+        TOLL_RELAX_PERMILLE = BUILDER.comment(
+                "Part des compteurs de puits effacee a chaque detente, en POUR MILLE.",
+                "",
+                "C'EST LE REGLAGE LE MOINS VISIBLE ET LE PLUS DECISIF : il fixe la PERIODE sur",
+                "laquelle une franchise compte.",
+                "    20 pour mille -> demi-vie de 3 heures. Le compteur est remis a neuf entre deux",
+                "                     soirees : la franchise devient << par session >>, et le",
+                "                     dispositif est invisible pour qui joue tous les jours,",
+                "                     c'est-a-dire pour celui qu'il vise.",
+                "     2 pour mille -> demi-vie de 29 heures. La franchise devient << par jour >> et",
+                "                     s'accumule sur celui qui vend tous les jours. C'est ce regime",
+                "                     qui repond aux fermes, et c'est le defaut.",
+                "A zero, les compteurs ne s'effacent jamais : la premiere ferme condamne son",
+                "proprietaire a vie. Ne mets pas zero.",
+                "La periode est celle de derive.detente_ticks - les deux detentes ont lieu au meme",
+                "instant, a des rythmes differents.")
+                .defineInRange("detente_pour_mille", 2, 0, 1000);
+
+        PAY_FEE = BUILDER.comment(
+                "FRAIS DE VIREMENT entre joueurs, en POURCENT du montant. ETEINT PAR DEFAUT.",
+                "",
+                "Il ferme la seule porte de sortie des deux puits ci-dessus : un exploitant peut",
+                "payer trois amis pour vendre a sa place, et multiplier sa franchise par quatre.",
+                "",
+                "Il est eteint quand meme, et c'est un choix, pas un oubli. Sur un serveur de vingt",
+                "personnes qui se connaissent, l'entraide est ce qui fait tenir le groupe, et la",
+                "taxer pour fermer une porte que presque personne n'emprunte coute plus qu'elle ne",
+                "rapporte. Allume-le le jour ou tu verras le contournement, pas avant.",
+                "",
+                "Les frais sont pris sur ce qui ARRIVE : celui qui tape 100 voit bien 100 quitter",
+                "son compte, et le destinataire recoit 100 moins les frais.")
+                .defineInRange("virement_frais_pourcent", 0, 0, 50);
+        BUILDER.pop();
+
         SPEC = BUILDER.build();
     }
 
@@ -281,7 +406,42 @@ public final class Tariff {
         elasticity = ELASTICITY.get();
         relaxTicks = RELAX_TICKS.get();
         relaxPermille = RELAX_PERMILLE.get();
+        quota = QUOTA.get();
+        quotaAllowance = (long) QUOTA_ALLOWANCE.get() * Coin.UNIT;
+        quotaMost = QUOTA_MOST.get();
+        debit = DEBIT.get();
+        debitAllowance = (long) DEBIT_ALLOWANCE.get() * Coin.UNIT;
+        debitMost = DEBIT_MOST.get();
+        tollRelaxPermille = TOLL_RELAX_PERMILLE.get();
+        payFee = PAY_FEE.get();
         warnIfUnsafe();
+        warnIfLeaky();
+    }
+
+    /**
+     * Prévient si les puits sont allumés mais ne peuvent rien retenir.
+     *
+     * <p>Deux réglages se contredisent silencieusement, et c'est le genre de chose qu'on ne voit
+     * jamais : une détente à zéro condamne le premier joueur qui vend beaucoup à une retenue
+     * perpétuelle, et une retenue maximale à zéro allume un dispositif qui ne fait rien. Aucun des
+     * deux n'est une erreur de syntaxe ; les deux sont des erreurs de sens.
+     */
+    private static void warnIfLeaky() {
+        if (!quota && !debit) {
+            return;
+        }
+        if (tollRelaxPermille <= 0) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.warn(
+                    "[BOUTIQUE] puits.detente_pour_mille vaut zéro : les compteurs de quota ne"
+                            + " redescendront JAMAIS. Le premier joueur qui vend beaucoup gardera sa"
+                            + " retenue pour toujours. Mets 2.");
+        }
+        if (quota && quotaMost <= 0 && debit && debitMost <= 0) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.warn(
+                    "[BOUTIQUE] les puits sont allumés mais leurs deux retenues maximales valent"
+                            + " zéro : ils ne retiennent rien. Éteins-les, ou donne-leur une"
+                            + " retenue.");
+        }
     }
 
     /**
@@ -390,5 +550,47 @@ public final class Tariff {
 
     public static int relaxPermille() {
         return relaxPermille;
+    }
+
+    // --- Les puits ---------------------------------------------------------
+
+    public static boolean quotaOn() {
+        return quota && quotaMost > 0;
+    }
+
+    /** La franchise du quota, en centimes, par joueur et par article. */
+    public static long quotaAllowance() {
+        return quotaAllowance;
+    }
+
+    public static int quotaMost() {
+        return quotaMost;
+    }
+
+    public static boolean debitOn() {
+        return debit && debitMost > 0;
+    }
+
+    /** La franchise du débit, en centimes, par joueur, tous articles confondus. */
+    public static long debitAllowance() {
+        return debitAllowance;
+    }
+
+    public static int debitMost() {
+        return debitMost;
+    }
+
+    /** Vrai si l'un des deux puits peut retenir quelque chose. */
+    public static boolean tollOn() {
+        return quotaOn() || debitOn();
+    }
+
+    public static int tollRelaxPermille() {
+        return tollRelaxPermille;
+    }
+
+    /** Les frais de virement, en pourcent. Zéro par défaut. */
+    public static int payFee() {
+        return payFee;
     }
 }

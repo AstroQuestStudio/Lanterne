@@ -123,7 +123,18 @@ public final class Bazaar {
      */
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
-        if (!Tariff.active() || !Tariff.drift() || Tariff.relaxPermille() <= 0) {
+        // La garde couvre DEUX détentes, à deux rythmes : celle des volumes, qui ramène les prix
+        // vers leur ancre, et celle des compteurs de puits, qui reconstitue les franchises. La
+        // première version ne testait que la dérive ; sur un serveur qui l'aurait coupée en gardant
+        // les puits, aucun compteur ne serait jamais redescendu et la première grosse vente aurait
+        // valu une retenue perpétuelle. Le défaut était silencieux, et c'est ce qui le rendait
+        // grave.
+        if (!Tariff.active()) {
+            return;
+        }
+        boolean volumes = Tariff.drift() && Tariff.relaxPermille() > 0;
+        boolean counters = Tariff.tollOn() && Tariff.tollRelaxPermille() > 0;
+        if (!volumes && !counters) {
             return;
         }
         if (++sinceRelax < Tariff.relaxTicks()) {
@@ -135,7 +146,16 @@ public final class Bazaar {
 
     // --- Réseau ------------------------------------------------------------
 
-    /** Envoie à ce joueur le catalogue coté et son solde. */
+    /**
+     * Envoie à ce joueur le catalogue coté et son solde.
+     *
+     * <p><b>Le catalogue est coté pour lui, pas pour le serveur.</b> Depuis les puits, deux joueurs
+     * devant le même article ne touchent plus la même somme, et ce paquet est déjà construit par
+     * destinataire — la personnalisation ne coûte donc rien de plus qu'un appel par article. Cet
+     * appel, {@link Toll#keep}, ressort immédiatement pour un joueur dont les compteurs sont vides,
+     * ce qui est le cas courant : mille trois cents consultations de table de hachage, et pas une
+     * tangente hyperbolique.
+     */
     public static void sync(ServerPlayer player, boolean open) {
         MinecraftServer server = player.level().getServer();
         if (server == null) {
@@ -152,7 +172,8 @@ public final class Bazaar {
                         Stall.size(), StallSync.CEILING);
                 break;
             }
-            quotes.add(Quote.of(offer, ledger.volume(offer.item())));
+            quotes.add(Quote.of(offer, ledger.volume(offer.item()),
+                    Toll.keep(ledger, player.getUUID(), offer.item())));
         }
         PacketDistributor.sendToPlayer(player, new StallSync(open, Tariff.symbol(),
                 ledger.balance(player.getUUID()), Tariff.batch(), quotes));
@@ -204,9 +225,13 @@ public final class Bazaar {
         long volume = ledger.volume(id);
         long buy = offer == null ? 0L : Drift.buy(offer, volume);
         long sell = offer == null ? 0L : Drift.sell(offer, volume);
+        // La part est relue APRÈS la transaction : le joueur veut savoir ce qu'il touchera à la
+        // vente suivante, pas ce qu'il vient de toucher — ce dernier chiffre est déjà sur son
+        // ticket.
+        int keep = offer == null ? Toll.FULL : Toll.keep(ledger, player.getUUID(), id);
         PacketDistributor.sendToPlayer(player, new TradeEcho(receipt.outcome(), receipt.detail(),
                 receipt.count(), receipt.total(), ledger.balance(player.getUUID()), id, buy, sell,
-                Drift.trend(volume)));
+                Drift.trend(volume), keep));
     }
 
     // --- Commandes ---------------------------------------------------------
@@ -314,7 +339,86 @@ public final class Bazaar {
                         .executes(context -> reset(context.getSource(), null))
                         .then(Commands.argument("objet", ItemArgument.item(event.getBuildContext()))
                                 .executes(context -> reset(context.getSource(),
-                                        idOf(context, "objet"))))));
+                                        idOf(context, "objet")))))
+                .then(Commands.literal("quota")
+                        .executes(context -> quota(context.getSource(),
+                                context.getSource().getPlayerOrException()))
+                        .then(Commands.argument("joueur", EntityArgument.player())
+                                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                                .executes(context -> quota(context.getSource(),
+                                        EntityArgument.getPlayer(context, "joueur"))))
+                        .then(Commands.literal("remettre")
+                                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                                .then(Commands.argument("joueur", EntityArgument.player())
+                                        .executes(context -> pardon(context.getSource(),
+                                                EntityArgument.getPlayer(context, "joueur")))))));
+    }
+
+    /**
+     * Où en est un joueur de ses franchises.
+     *
+     * <p>Ouverte à tous pour soi-même, réservée aux administrateurs pour autrui. C'est le pendant en
+     * texte de ce que l'écran montre : l'écran dit « ta part est de 34 % » sur l'article regardé,
+     * cette commande dit <em>pourquoi</em>, et sur quels articles. Un joueur qui ne comprend pas
+     * pourquoi son fer se vend moins cher qu'hier doit pouvoir obtenir la réponse sans demander à un
+     * administrateur.
+     */
+    private static int quota(CommandSourceStack source, ServerPlayer who) {
+        if (offline(source)) {
+            return 0;
+        }
+        if (!Tariff.tollOn()) {
+            tell(source, "Aucune limite de vente sur ce serveur : la boutique paie le cours plein,"
+                    + " quoi que tu vendes et quelle qu'en soit la quantité.");
+            return 1;
+        }
+        Ledger ledger = Ledger.of(source.getServer());
+        String name = who.getGameProfile().name();
+        long total = ledger.takings(who.getUUID());
+        if (total <= 0L) {
+            tell(source, name + " : aucune vente récente. La boutique paie le cours plein sur tout"
+                    + " le catalogue.");
+            return 1;
+        }
+        if (Tariff.debitOn()) {
+            int held = Toll.withhold(total, Tariff.debitAllowance(), Tariff.debitMost());
+            tell(source, name + " — ventes récentes, tous articles : " + Coin.say(total)
+                    + " sur une franchise de " + Coin.say(Tariff.debitAllowance()) + ". "
+                    + (held == 0 ? "Rien n'est retenu." : "Retenue de " + held / 10 + " %."));
+        }
+        if (Tariff.quotaOn()) {
+            var worst = ledger.biggestTakings(who.getUUID(), 5);
+            if (worst.isEmpty()) {
+                tell(source, "Aucun article au-dessus de sa franchise.");
+            } else {
+                tell(source, "Par article (franchise " + Coin.say(Tariff.quotaAllowance()) + ") :");
+                for (var entry : worst) {
+                    int held = Toll.withhold(entry.getValue(), Tariff.quotaAllowance(),
+                            Tariff.quotaMost());
+                    tell(source, "  " + entry.getKey() + "   " + Coin.say(entry.getValue())
+                            + (held == 0 ? "   (sous la franchise)" : "   retenue " + held / 10
+                            + " %"));
+                }
+            }
+        }
+        tell(source, "Ces compteurs redescendent tout seuls : environ la moitié par jour de serveur"
+                + " allumé. Vendre autre chose, en attendant, rapporte le plein tarif.");
+        return 1;
+    }
+
+    private static int pardon(CommandSourceStack source, ServerPlayer who) {
+        if (offline(source)) {
+            return 0;
+        }
+        String name = who.getGameProfile().name();
+        if (!Ledger.of(source.getServer()).pardon(who.getUUID())) {
+            tell(source, name + " n'avait aucun compteur à remettre.");
+            return 0;
+        }
+        tell(source, name + " : compteurs de vente remis à neuf. Il touche de nouveau le cours"
+                + " plein partout.");
+        sync(who, false);
+        return 1;
     }
 
     private enum Move { GIVE, TAKE, SET }
@@ -366,6 +470,13 @@ public final class Bazaar {
         return best.size();
     }
 
+    /**
+     * L'état de la masse monétaire, et de ce qui la freine.
+     *
+     * <p>Les deux nombres se lisent ensemble : la masse dit où en est le serveur, la retenue dit ce
+     * que les puits ont empêché depuis le premier jour. Un serveur où la retenue reste à zéro après
+     * un mois n'a pas de fermes — ou a des franchises trop larges.
+     */
     private static int mass(CommandSourceStack source) {
         if (offline(source)) {
             return 0;
@@ -373,6 +484,13 @@ public final class Bazaar {
         Ledger ledger = Ledger.of(source.getServer());
         tell(source, ledger.accountCount() + " compte(s), " + Coin.say(ledger.mass())
                 + " en circulation, " + ledger.driftedCount() + " article(s) hors de leur ancre.");
+        if (Tariff.tollOn() || ledger.withheld() > 0L) {
+            tell(source, "Puits : " + Coin.say(ledger.withheld()) + " jamais versés depuis le"
+                    + " premier jour. Quota " + (Tariff.quotaOn()
+                    ? Coin.amount(Tariff.quotaAllowance()) + " par article" : "éteint")
+                    + ", débit " + (Tariff.debitOn()
+                    ? Coin.amount(Tariff.debitAllowance()) + " en tout" : "éteint") + ".");
+        }
         return 1;
     }
 
@@ -392,16 +510,18 @@ public final class Bazaar {
             return 0;
         }
         Ledger ledger = Ledger.of(source.getServer());
+        long fee = Toll.fee(amount);
         String refusal = ledger.transfer(from.getUUID(), from.getGameProfile().name(),
-                target.getUUID(), target.getGameProfile().name(), amount);
+                target.getUUID(), target.getGameProfile().name(), amount, fee);
         if (refusal != null) {
             tell(source, refusal);
             return 0;
         }
-        tell(source, "Viré " + Coin.say(amount) + " à " + target.getGameProfile().name()
-                + ". Il te reste " + Coin.say(ledger.balance(from.getUUID())) + ".");
+        String cost = fee > 0L ? " (" + Coin.say(fee) + " de frais)" : "";
+        tell(source, "Viré " + Coin.say(amount - fee) + " à " + target.getGameProfile().name()
+                + cost + ". Il te reste " + Coin.say(ledger.balance(from.getUUID())) + ".");
         target.sendSystemMessage(Component.literal(from.getGameProfile().name() + " t'a viré "
-                + Coin.say(amount) + ".").withStyle(ChatFormatting.GREEN));
+                + Coin.say(amount - fee) + ".").withStyle(ChatFormatting.GREEN));
         sync(from, false);
         sync(target, false);
         return 1;

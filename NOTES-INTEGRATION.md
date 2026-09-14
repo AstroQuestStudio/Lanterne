@@ -177,6 +177,70 @@ sillons réservés d'avance, à durées réparties géométriquement.
 | Graveur | 6 lingots de cuivre, 1 lingot de fer, 1 bloc de note |
 | Pinceau ×4 | 1 laine blanche sur 2 bâtons |
 
+## 1 quinquies. Le disque muet — trois défauts, aucun mixin
+
+Essai en jeu : gravure réussie, conversion réussie, durée exacte, mais **silence** dans le jukebox.
+Et `sillons.properties` vide au redémarrage. Trois causes distinctes, toutes dans mon code.
+
+### Défaut 1 — le flux était résolu trop tôt (c'est lui qui rendait muet)
+
+Le mixin m'avait été autorisé. **Je ne m'en suis pas servi, parce qu'il aurait corrigé le mauvais
+problème.** La lecture du code l'établit :
+
+| Ce que j'ai vérifié | Où | Conclusion |
+|---|---|---|
+| `SoundManager` garde un `Map<Identifier, Resource>` figé au chargement | `SoundManager:62` | mais un `Resource` ne porte **pas** d'octets |
+| `Resource.open()` rappelle son `IoSupplier` | `Resource:43` | à **chaque** appel, sans cache |
+| Le cache de tampons décodés | `SoundBufferLibrary` | n'existe **que** dans `getCompleteBuffer` |
+| Quel chemin prend un son en flux | `SoundEngine:433` `if (!isStreaming)` | `getStream`, qui n'a **aucun** cache |
+| Ce que fait la validation au chargement | `SoundManager:134` | teste la **présence de la clé**, n'ouvre jamais le flux |
+
+Le moteur relit donc bien le fichier à chaque lecture. Ce qui était figé, c'était **mon
+fournisseur** : `burntStream` choisissait la branche — vrai morceau ou silence — *au moment de le
+construire*, et au chargement tous les sillons sont vides. Chaque sillon a donc reçu, pour toute la
+session, le fournisseur qui rend le silence.
+
+Le correctif est un déplacement de trois lignes : c'est désormais le **corps** du fournisseur
+(`Reel.open(int slot)`) qui interroge `Slots`. Un mixin sur `SoundManager` aurait ajouté une
+invalidation de cache là où il n'y a pas de cache.
+
+### Défaut 2 — les gravures perdues à l'extinction
+
+`Slots` n'avait qu'une table statique. En partie solo, client et serveur partagent la machine
+virtuelle : `Wheel.forget()` (déconnexion du client) la vidait, puis `ServerStopping` l'écrivait
+par-dessus. Les deux horodatages du journal coïncident à la seconde.
+
+Deux corrections, indépendantes :
+
+- **deux tables** — `TAKEN` (serveur, persistée) et `SEEN` (miroir client, jamais écrite). Elles ne
+  se recouvrent jamais ; aucune ne peut plus effacer l'autre ;
+- **plus d'écriture à l'extinction** — chaque gravure et chaque `/disque liberer` persistent déjà
+  sur-le-champ. Une écriture de plus ne pouvait qu'ajouter du risque, et c'est le risque qui s'est
+  réalisé.
+
+### Défaut 3 — deux sillons pour le même morceau
+
+Un conteneur Ogg porte un **numéro de série de flux tiré au hasard** à chaque encodage : deux
+conversions du même MP3 donnent des fichiers de taille identique et d'octets différents — d'où deux
+empreintes, deux sillons, et une retransmission complète. Le journal le montre exactement
+(4 504 492 octets les deux fois, sillons 45 puis 46).
+
+Corrigé à deux endroits :
+
+- `Wheel` tient un index `conversions.properties` : *empreinte de la source → empreinte du morceau*.
+  Le même fichier choisi deux fois rend le même OGG au bit près, et la conversion `ffmpeg` est
+  économisée ;
+- `Groove.engrave` **réutilise** un sillon qui porte déjà cette empreinte au lieu d'en prendre un
+  nouveau.
+
+Réécrire le numéro de série à une valeur fixe aurait été l'autre voie : il aurait fallu recalculer la
+somme de contrôle de chaque page, pour un résultat plus fragile.
+
+> **Note d'architecture.** `.cache/` et `sillons.properties` sont **globaux**, pas par monde — comme
+> le cache des images. Un disque gravé dans un monde reste jouable dans un autre. C'est cohérent avec
+> le reste du paquet, mais c'est un choix : si tu le veux par monde, c'est `Groove.cacheFolder()`
+> qu'il faut faire dépendre du chemin de sauvegarde.
+
 ## 2. Ce qui reste à décider — et qui n'a pas été fait de mon chef
 
 ### Un onglet créatif partagé

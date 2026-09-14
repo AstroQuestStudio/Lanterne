@@ -410,6 +410,15 @@ public final class Groove {
      * temps se disputeraient des réservations plutôt que des sillons libres.
      */
     public static int engrave(Slots.Cut cut) {
+        // Deja grave : on rend le meme sillon. Deux disques du meme morceau jouent alors le meme
+        // sillon, ce qui est exact et ne consomme rien. Le titre du premier est conserve — c'est
+        // celui du registre ; chaque objet porte le sien dans son composant de nom.
+        int already = Slots.holding(cut.hash());
+        if (already >= 0) {
+            Lanterne.LOG.info("[ATELIER] « {} » reprend le sillon {} — meme morceau.",
+                    cut.title(), already);
+            return already;
+        }
         int slot = Slots.vacant(cut.seconds());
         if (slot < 0) {
             Lanterne.LOG.warn("[ATELIER] plus de sillon libre assez long pour {} s.", cut.seconds());
@@ -430,9 +439,16 @@ public final class Groove {
         forget();
     }
 
+    /**
+     * À l'extinction, on ne réécrit rien.
+     *
+     * <p>Chaque gravure et chaque libération écrivent déjà le registre sur-le-champ : il est à jour
+     * en permanence, et une écriture de plus ne peut qu'introduire un risque. C'est exactement ce
+     * risque qui s'est réalisé — la table avait été vidée par la déconnexion du client avant que
+     * l'extinction n'écrive par-dessus. Voir {@link Slots} pour le récit.
+     */
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
-        Slots.inscribe();
         CONVOYS.clear();
         LIFTS.clear();
     }

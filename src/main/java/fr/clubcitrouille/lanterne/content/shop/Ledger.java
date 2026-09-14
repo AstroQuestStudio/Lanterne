@@ -56,6 +56,12 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * dans le <em>même</em> enregistrement, donc sauvegardés ensemble ou pas du tout. Une sauvegarde où
  * les soldes seraient d'après la panne et les volumes d'avant serait une économie incohérente, et
  * personne ne s'en apercevrait avant des semaines.
+ *
+ * <p>Et, depuis les puits, les <b>recettes récentes</b> de chaque joueur — voir {@link Toll}. Même
+ * raisonnement, poussé d'un cran : si les soldes survivaient à une panne mais pas les compteurs de
+ * quota, un exploitant de ferme retrouverait sa franchise intacte à chaque redémarrage du serveur, et
+ * il suffirait de demander un redémarrage pour annuler le dispositif entier. Les trois choses sont
+ * dans le même enregistrement, donc écrites ensemble ou pas du tout.
  */
 public class Ledger extends SavedData {
     private static final String KEY = "lanterne_ledger";
@@ -75,11 +81,39 @@ public class Ledger extends SavedData {
         ).apply(spec, Account::new));
     }
 
+    /**
+     * Les recettes récentes d'un joueur : en tout, et article par article.
+     *
+     * <p>Ce sont les compteurs que {@link Toll} consulte. Ils sont en <b>centimes</b>, ils suivent le
+     * cours du marché et non ce qui a été versé — voir {@link Toll} pour la raison —, et ils
+     * redescendent d'eux-mêmes à chaque détente.
+     *
+     * <p>Un joueur dont tous les compteurs sont revenus à zéro est <b>effacé de la carte</b> plutôt
+     * que gardé à zéro : sur un serveur qui vit deux ans, garder une ligne par joueur et par article
+     * jamais nettoyée ferait grossir la sauvegarde sans fin, pour décrire un état qui est exactement
+     * celui du joueur qui n'a jamais rien vendu.
+     *
+     * @param who     le joueur
+     * @param total   ses recettes récentes, tous articles confondus, en centimes
+     * @param perItem ses recettes récentes article par article, en centimes
+     */
+    public record Takings(UUID who, long total, Map<Identifier, Long> perItem) {
+        public static final Codec<Takings> CODEC = RecordCodecBuilder.create(spec -> spec.group(
+                UUIDUtil.STRING_CODEC.fieldOf("id").forGetter(Takings::who),
+                Codec.LONG.optionalFieldOf("total", 0L).forGetter(Takings::total),
+                Codec.unboundedMap(Identifier.CODEC, Codec.LONG)
+                        .optionalFieldOf("articles", Map.of()).forGetter(Takings::perItem)
+        ).apply(spec, Takings::new));
+    }
+
     public static final Codec<Ledger> CODEC = RecordCodecBuilder.create(spec -> spec.group(
             Account.CODEC.listOf().optionalFieldOf("comptes", List.of())
                     .forGetter(ledger -> new ArrayList<>(ledger.accounts.values())),
             Codec.unboundedMap(Identifier.CODEC, Codec.LONG).optionalFieldOf("volumes", Map.of())
-                    .forGetter(ledger -> ledger.volumes)
+                    .forGetter(ledger -> ledger.volumes),
+            Takings.CODEC.listOf().optionalFieldOf("recettes", List.of())
+                    .forGetter(Ledger::takingsList),
+            Codec.LONG.optionalFieldOf("retenu", 0L).forGetter(ledger -> ledger.withheld)
     ).apply(spec, Ledger::new));
 
     public static final SavedDataType<Ledger> TYPE = new SavedDataType<>(
@@ -88,14 +122,40 @@ public class Ledger extends SavedData {
     private final Map<UUID, Account> accounts = new HashMap<>();
     private final Map<Identifier, Long> volumes = new HashMap<>();
 
+    /** Les recettes récentes, par joueur. Absent de la carte = n'a rien vendu récemment. */
+    private final Map<UUID, Map<Identifier, Long>> takings = new HashMap<>();
+    private final Map<UUID, Long> totals = new HashMap<>();
+
+    /** Le cumul de ce que les puits n'ont jamais versé. Une statistique, jamais un solde. */
+    private long withheld;
+
     public Ledger() {
     }
 
-    private Ledger(List<Account> loaded, Map<Identifier, Long> traded) {
+    private Ledger(List<Account> loaded, Map<Identifier, Long> traded, List<Takings> recent,
+            long neverPaid) {
         for (Account account : loaded) {
             this.accounts.put(account.id(), account);
         }
         this.volumes.putAll(traded);
+        for (Takings takings : recent) {
+            if (takings.total() > 0L) {
+                this.totals.put(takings.who(), takings.total());
+            }
+            if (!takings.perItem().isEmpty()) {
+                this.takings.put(takings.who(), new HashMap<>(takings.perItem()));
+            }
+        }
+        this.withheld = Math.max(0L, neverPaid);
+    }
+
+    private List<Takings> takingsList() {
+        List<Takings> out = new ArrayList<>(this.totals.size());
+        for (Map.Entry<UUID, Long> entry : this.totals.entrySet()) {
+            out.add(new Takings(entry.getKey(), entry.getValue(),
+                    this.takings.getOrDefault(entry.getKey(), Map.of())));
+        }
+        return out;
     }
 
     /** Le livre du serveur. Toujours celui de l'Overworld — voir l'en-tête. */
@@ -193,9 +253,16 @@ public class Ledger extends SavedData {
      * que le destinataire puisse la recevoir sans toucher le plafond. Faute de quoi un virement vers
      * un compte presque plein détruirait la différence, et l'argent disparu ne se retrouve jamais.
      *
+     * <p>Les <b>frais</b> sont prélevés sur ce qui arrive, non sur ce qui part : l'émetteur est
+     * débité exactement du montant qu'il a tapé, et le destinataire reçoit ce montant moins les
+     * frais. C'est le seul ordre qui ne surprenne personne — celui qui écrit « 100 » veut voir 100
+     * quitter son compte. Les frais sont nuls par défaut ; voir {@link Toll#fee}.
+     *
+     * @param fee ce que le virement coûte, en centimes ; jamais supérieur au montant
      * @return {@code null} si tout va bien, ou la raison du refus
      */
-    public String transfer(UUID from, String fromName, UUID to, String toName, long amount) {
+    public String transfer(UUID from, String fromName, UUID to, String toName, long amount,
+            long fee) {
         if (amount <= 0L) {
             return "Un virement doit être strictement positif.";
         }
@@ -208,8 +275,10 @@ public class Ledger extends SavedData {
         if (balance(to) > Coin.CEILING - amount) {
             return "Le destinataire ne peut pas recevoir autant : son compte est presque plein.";
         }
+        long kept = Math.max(0L, Math.min(amount, fee));
         set(from, fromName, balance(from) - amount);
-        set(to, toName, balance(to) + amount);
+        set(to, toName, balance(to) + amount - kept);
+        withhold(kept);
         return null;
     }
 
@@ -287,31 +356,154 @@ public class Ledger extends SavedData {
         return this.volumes.size();
     }
 
+    // --- Les recettes récentes, qui commandent les puits -------------------
+
+    /** Les recettes récentes de ce joueur, tous articles confondus, en centimes. */
+    public long takings(UUID who) {
+        Long known = this.totals.get(who);
+        return known == null ? 0L : known;
+    }
+
+    /** Les recettes récentes de ce joueur sur cet article, en centimes. */
+    public long takings(UUID who, Identifier item) {
+        Map<Identifier, Long> mine = this.takings.get(who);
+        if (mine == null) {
+            return 0L;
+        }
+        Long known = mine.get(item);
+        return known == null ? 0L : known;
+    }
+
     /**
-     * La détente : chaque volume se rapproche de zéro.
+     * Enregistre une recette.
+     *
+     * <p>Le montant passé est le <b>brut</b> — le cours du marché multiplié par les unités vendues —,
+     * jamais le net. La raison est dans {@link Toll} : faire suivre le net créerait une boucle de
+     * retour qui ramollit la retenue au moment précis où elle devrait serrer.
+     *
+     * <p>Les compteurs sont bornés à cent fois la plus grande des deux franchises. Au-delà,
+     * {@code tanh} rend déjà sa limite, et laisser le nombre croître ne ferait qu'allonger le temps
+     * que met la détente à le ramener sous la franchise — un mois de ferme deviendrait une peine à
+     * perpétuité, ce qui n'est pas le contrat.
+     */
+    public void earn(UUID who, Identifier item, long gross) {
+        if (gross <= 0L || who == null) {
+            return;
+        }
+        long cap = 100L * Math.max(1L, Math.max(Tariff.quotaAllowance(), Tariff.debitAllowance()));
+        this.totals.merge(who, gross, (before, add) -> Math.min(cap, before + add));
+        this.takings.computeIfAbsent(who, key -> new HashMap<>())
+                .merge(item, gross, (before, add) -> Math.min(cap, before + add));
+        setDirty();
+    }
+
+    /** Remet à neuf les compteurs de puits d'un joueur. Réservé à l'administration. */
+    public boolean pardon(UUID who) {
+        boolean something = this.totals.remove(who) != null;
+        something |= this.takings.remove(who) != null;
+        if (something) {
+            setDirty();
+        }
+        return something;
+    }
+
+    /** Le cumul de ce que les puits n'ont jamais versé, en centimes. */
+    public long withheld() {
+        return this.withheld;
+    }
+
+    /** Ajoute au cumul des retenues. C'est une statistique : aucun compte n'est mouvementé. */
+    public void withhold(long cents) {
+        if (cents <= 0L) {
+            return;
+        }
+        this.withheld = Math.min(Coin.CEILING, this.withheld + cents);
+        setDirty();
+    }
+
+    /** Les articles sur lesquels ce joueur a entamé sa franchise, du plus entamé au moins. */
+    public List<Map.Entry<Identifier, Long>> biggestTakings(UUID who, int howMany) {
+        Map<Identifier, Long> mine = this.takings.get(who);
+        if (mine == null || mine.isEmpty()) {
+            return List.of();
+        }
+        List<Map.Entry<Identifier, Long>> all = new ArrayList<>(mine.entrySet());
+        all.sort(Map.Entry.<Identifier, Long>comparingByValue().reversed());
+        return all.subList(0, Math.min(howMany, all.size()));
+    }
+
+    // --- La détente --------------------------------------------------------
+
+    /**
+     * La détente : chaque volume, et chaque compteur de puits, se rapproche de zéro.
      *
      * <p>Le dernier pas retire <b>au moins une unité</b>. Sans ce détail, une division entière par un
      * facteur légèrement inférieur à un s'arrête sur les petits nombres : un volume de 8 avec six pour
      * cent de détente perdrait zéro unité à chaque fois, et l'article resterait décalé de quelques
      * millièmes pour l'éternité. Avec, tout volume finit à zéro exactement.
+     *
+     * <p><b>Deux rythmes, et c'est voulu.</b> Les volumes s'effacent à soixante pour mille toutes les
+     * cinq minutes — une demi-vie d'une heure —, parce qu'un prix doit revenir vite vers son ancre.
+     * Les compteurs de puits s'effacent à deux pour mille — une demi-vie de vingt-neuf heures —,
+     * parce qu'une franchise qui se reconstitue entre deux soirées n'est pas une franchise : le
+     * balayage montre qu'à vingt pour mille le dispositif entier devient invisible pour qui joue tous
+     * les jours, c'est-à-dire pour celui qu'il vise.
      */
     public void relax() {
-        int permille = Tariff.relaxPermille();
-        if (permille <= 0 || this.volumes.isEmpty()) {
-            return;
+        boolean touched = fade(this.volumes, Tariff.relaxPermille());
+        int slow = Tariff.tollRelaxPermille();
+        if (slow > 0) {
+            var walk = this.takings.entrySet().iterator();
+            while (walk.hasNext()) {
+                var entry = walk.next();
+                touched |= fade(entry.getValue(), slow);
+                if (entry.getValue().isEmpty()) {
+                    walk.remove();
+                    touched = true;
+                }
+            }
+            var totalsWalk = this.totals.entrySet().iterator();
+            while (totalsWalk.hasNext()) {
+                var entry = totalsWalk.next();
+                long next = wane(entry.getValue(), slow);
+                if (next == 0L) {
+                    totalsWalk.remove();
+                } else {
+                    entry.setValue(next);
+                }
+                touched = true;
+            }
         }
-        var walk = this.volumes.entrySet().iterator();
+        if (touched) {
+            setDirty();
+        }
+    }
+
+    /** Rapproche de zéro toutes les valeurs d'une carte, et retire celles qui l'atteignent. */
+    private static <K> boolean fade(Map<K, Long> map, int permille) {
+        if (permille <= 0 || map.isEmpty()) {
+            return false;
+        }
+        var walk = map.entrySet().iterator();
         while (walk.hasNext()) {
             var entry = walk.next();
-            long value = entry.getValue();
-            long shed = Math.max(1L, Math.abs(value) * permille / 1000L);
-            long next = value > 0L ? value - shed : value + shed;
-            if (value > 0L && next < 0L || value < 0L && next > 0L || next == 0L) {
+            long next = wane(entry.getValue(), permille);
+            if (next == 0L) {
                 walk.remove();
             } else {
                 entry.setValue(next);
             }
         }
-        setDirty();
+        return true;
+    }
+
+    /** Un pas de détente sur un nombre signé. Zéro est atteint, jamais dépassé. */
+    private static long wane(long value, int permille) {
+        if (value == 0L) {
+            return 0L;
+        }
+        long shed = Math.max(1L, Math.abs(value) * permille / 1000L);
+        long next = value > 0L ? value - shed : value + shed;
+        return value > 0L && next < 0L || value < 0L && next > 0L ? 0L : next;
     }
 }

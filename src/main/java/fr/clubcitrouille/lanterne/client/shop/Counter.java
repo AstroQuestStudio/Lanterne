@@ -93,6 +93,15 @@ public final class Counter extends Screen {
     private static final int CELL = 0x12FFFFFF;
     private static final int GOOD = 0xFF6BCB77;
     private static final int BAD = 0xFFE06C75;
+    /**
+     * L'orangé des prix amputés par une franchise.
+     *
+     * <p>Ni le vert d'un bon prix, ni le rouge d'un refus : un prix retenu n'est pas une erreur, et
+     * le peindre en rouge ferait croire à une panne. Il n'est pas non plus le plein tarif, et le
+     * peindre en vert serait mentir par omission. L'orangé est la troisième chose, et il tient dans
+     * la palette des cadrans parce qu'il est un ambre assombri.
+     */
+    private static final int WORN = 0xFFE0964A;
 
     // --- Les bornes de la disposition --------------------------------------
 
@@ -213,6 +222,116 @@ public final class Counter extends Screen {
         return Math.max(1, this.columns * this.lines);
     }
 
+    // --- La géométrie partagée ---------------------------------------------
+    //
+    // Ces six méthodes existent parce que le dessin et le clic calculaient les MÊMES rectangles,
+    // chacun de son côté, à partir de constantes recopiées. Trois d'entre eux ne se ressemblaient
+    // déjà plus tout à fait — la rangée des quantités était écrite « actionTop - 16 - 22 » ici et
+    // « actionTop - 38 » là, ce qui est vrai aujourd'hui et faux au premier changement. Une zone
+    // cliquable qui ne recouvre pas ce qu'on voit est le pire défaut d'une interface dessinée à la
+    // main, parce qu'il ne se voit pas : le bouton est là, il ne répond simplement pas.
+
+    private int detailX() {
+        return this.panelX + this.panelW - this.detail + 10;
+    }
+
+    private int detailW() {
+        return this.detail - 22;
+    }
+
+    /** Le bas de la zone utile de la colonne de détail. */
+    private int detailBottom() {
+        return this.panelY + this.panelH - FOOTER;
+    }
+
+    private int actionTop() {
+        return detailBottom() - 26;
+    }
+
+    private int lotTop() {
+        return actionTop() - 38;
+    }
+
+    /**
+     * La colonne de détail est-elle trop étroite pour les libellés complets ?
+     *
+     * <p>Le seuil vient d'une mesure, pas d'un jugement : {@code tools/mesure_police.py} lit la
+     * police du jeu dans le jar et rend la largeur exacte de chaque chaîne. La plus longue de la
+     * colonne, « de la place pour 1234 », fait 112 points. En dessous de 116, il faut les versions
+     * courtes.
+     *
+     * <p>C'est ce que l'ancienne vérification de disposition — 968 275 combinaisons — ne pouvait pas
+     * voir : elle contrôlait la <em>position</em> des blocs, jamais la <em>largeur du texte</em>. À
+     * 340 points de large, « ▲ +30,5 % sur l'ancre » réclame 107 points dans une colonne qui en
+     * offre 74, et débordait donc de vingt et un points hors du panneau, sur le voile noir.
+     */
+    private boolean tight() {
+        return detailW() < 116;
+    }
+
+    /** Une chaîne coupée à la largeur disponible. Le filet de sécurité de toute la colonne. */
+    private String fit(String text, int width) {
+        return this.font.plainSubstrByWidth(text, Math.max(8, width));
+    }
+
+    /**
+     * La gouttière entre deux boutons de quantité.
+     *
+     * <p>Mesurée : « tout » fait vingt points dans la police du jeu. À la colonne la plus étroite —
+     * 96 points, soit 74 utiles —, un créneau en fait dix-huit, et trois points de gouttière
+     * volaient les deux dernières lettres. On rend donc la gouttière quand la place manque, puis on
+     * change de mot : « max » fait dix-huit points et tient exactement. Un bouton collé à son voisin
+     * se voit ; un mot tronqué ne se comprend pas.
+     */
+    private int lotGutter() {
+        int slot = detailW() / 4;
+        return slot >= this.font.width("tout") + 6 ? 3 : slot >= this.font.width("tout") + 1 ? 1 : 0;
+    }
+
+    /** Le rectangle d'un bouton de quantité : {@code {gauche, droite}}. */
+    private int[] lotBox(int index) {
+        int slot = detailW() / 4;
+        int left = detailX() + index * slot;
+        return new int[] {left, left + slot - lotGutter()};
+    }
+
+    /** Les étiquettes des quantités, dans la version qui tient dans la place disponible. */
+    private String[] lotLabels() {
+        int slot = detailW() / 4;
+        if (slot >= this.font.width("tout") + 6) {
+            return new String[] {"×1", "×8", "×64", "tout"};
+        }
+        return slot - lotGutter() >= this.font.width("tout")
+                ? new String[] {"1", "8", "64", "tout"}
+                : new String[] {"1", "8", "64", "max"};
+    }
+
+    private int pagerLine() {
+        return this.panelY + this.panelH - FOOTER - 13;
+    }
+
+    private int searchTop() {
+        return this.panelY + HEADER + 6;
+    }
+
+    /** Le haut de la première ligne de rayon. */
+    private int aisleTop() {
+        return this.panelY + HEADER + 4 + 2 * TAB + 18;
+    }
+
+    /** Combien de rayons tiennent dans la colonne de gauche. */
+    private int aisleRoom() {
+        return Math.max(1, (this.panelY + this.panelH - FOOTER - 4 - aisleTop()) / AISLE);
+    }
+
+    /** Les rayons affichés, « Tout » compris — {@code null} est « Tout ». */
+    private List<String> aisleList() {
+        List<String> list = new ArrayList<>(this.aisles.size() + 1);
+        list.add(null);
+        list.addAll(this.aisles);
+        return list;
+    }
+
     // --- Le filtrage -------------------------------------------------------
 
     /**
@@ -326,14 +445,52 @@ public final class Counter extends Screen {
         return (int) Math.max(0L, Math.min(Math.min(afford, room(this.picked)), ceiling));
     }
 
+    /**
+     * Le prix d'une unité, tel qu'il sera vraiment appliqué à <em>ce</em> joueur.
+     *
+     * <p>À la vente, ce n'est pas {@code quote.sell()} — le cours du marché — mais
+     * {@code quote.mine()}, le cours diminué de ce que les franchises de ce joueur retiennent. Les
+     * deux nombres voyagent ensemble dans le paquet précisément pour que l'écran puisse montrer le
+     * second sans cesser de connaître le premier : le joueur doit pouvoir distinguer « le marché a
+     * baissé » de « j'ai trop vendu », parce que les deux appellent des conduites opposées.
+     */
     private long unitPrice(Quote quote) {
-        return this.selling ? quote.sell() : quote.buy();
+        return this.selling ? quote.mine() : quote.buy();
+    }
+
+    /**
+     * La couleur d'une cote, selon ce qu'elle veut dire <b>pour le joueur, dans l'onglet courant</b>.
+     *
+     * <p>La première version peignait toute hausse en rouge et toute baisse en vert, sur les deux
+     * onglets. C'est juste quand on achète et exactement faux quand on vend : un cours qui monte est
+     * une bonne nouvelle pour celui qui apporte sa marchandise. L'écran disait donc « attention » au
+     * moment précis où il aurait dû dire « c'est le moment ».
+     */
+    private int trendColour(int trend) {
+        if (trend == 0) {
+            return FAINT;
+        }
+        return (this.selling ? trend > 0 : trend < 0) ? GOOD : BAD;
     }
 
     /** {@code null} si l'opération est possible, sinon la raison — celle qui s'affiche. */
     private String blocked(Quote quote, int count) {
         if (count <= 0) {
-            return "Choisis une quantité.";
+            // « Tout » qui vaut zéro n'est pas un oubli de l'utilisateur : c'est un refus déguisé.
+            // Répondre « choisis une quantité » à quelqu'un qui vient de cliquer sur « tout » est
+            // la réponse la plus agaçante qu'une interface puisse faire.
+            if (!this.lotAll) {
+                return "Choisis une quantité.";
+            }
+            if (this.selling) {
+                return "Tu n'as rien de cet article à vendre — ou rien d'assez intact.";
+            }
+            long unit = quote.buy();
+            if (unit > Slate.balance()) {
+                return "Il te manque " + Slate.money(unit - Slate.balance())
+                        + " pour en acheter un seul.";
+            }
+            return "Ton sac est plein : pas la place d'une seule unité.";
         }
         if (this.selling) {
             if (!quote.bought()) {
@@ -389,20 +546,50 @@ public final class Counter extends Screen {
         drawSearch(graphics, y, mouseX, mouseY);
         drawGrid(graphics, mouseX, mouseY);
         drawPager(graphics, bottom, mouseX, mouseY);
-        drawDetail(graphics, right - this.detail + 10, y + HEADER + 8, this.detail - 22,
-                bottom - FOOTER, mouseX, mouseY);
+        drawDetail(graphics, detailX(), y + HEADER + 8, detailW(), mouseX, mouseY);
 
-        String hint = this.panelW >= 520
-                ? "clic pour choisir  ·  molette pour changer de page  ·  Entrée pour valider  ·  Échap pour fermer"
-                : "clic  ·  molette  ·  Entrée  ·  Échap";
-        graphics.text(this.font, hint, x + this.sidebar + 12, bottom - FOOTER + 7, FAINT, false);
+        // L'aide dit ce qui ne se devine pas : que Tab change d'onglet, et que la molette ne fait
+        // pas la même chose selon la colonne qu'elle survole. Le reste — cliquer, valider — se
+        // devine, et l'écrire volerait la place de ce qui ne se devine pas.
+        String hint = this.panelW >= 600
+                ? "Tab : acheter / vendre   ·   molette : page, ou quantité à droite"
+                        + "   ·   Entrée : valider   ·   Échap : fermer"
+                : this.panelW >= 460
+                ? "Tab : onglet   ·   molette : page ou quantité   ·   Entrée   ·   Échap"
+                : "Tab  ·  molette  ·  Entrée  ·  Échap";
+        graphics.text(this.font,
+                this.font.plainSubstrByWidth(hint, right - (x + this.sidebar) - 18),
+                x + this.sidebar + 12, bottom - FOOTER + 7, FAINT, false);
+    }
+
+    /**
+     * L'éclat qui suit une transaction : {@code +1} réussie, {@code -1} refusée, {@code 0} rien.
+     *
+     * <p>Sans lui, deux achats identiques à la suite écrivent deux fois le même message, au même
+     * endroit, de la même couleur — et le second est <b>rigoureusement invisible</b>. Le joueur
+     * reclique en croyant que rien n'est parti, et achète deux fois. C'est le défaut le plus courant
+     * des écrans de boutique, il ne coûte qu'un horodatage, et il ne se voit qu'en s'en servant :
+     * aucune vérification de disposition ne l'aurait trouvé.
+     *
+     * <p>Six cents millisecondes : assez pour être vu, assez court pour ne pas rester dans l'œil
+     * quand on enchaîne les achats.
+     */
+    private int flash() {
+        TradeEcho echo = Slate.ticket();
+        if (echo == null || Slate.ticketAge() > 600L) {
+            return 0;
+        }
+        return echo.outcome() == Till.Outcome.DONE ? 1 : -1;
     }
 
     private void drawHeader(GuiGraphicsExtractor graphics, int x, int y, int right) {
         graphics.text(this.font, "LANTERNE", x + 12, y + 13, AMBER, false);
+        // Le solde est le premier endroit où l'œil va vérifier qu'il s'est passé quelque chose.
+        int beat = flash();
         String money = Slate.money(Slate.balance());
         int moneyWidth = this.font.width(money);
-        graphics.text(this.font, money, right - 12 - moneyWidth, y + 13, AMBER, false);
+        graphics.text(this.font, money, right - 12 - moneyWidth, y + 13,
+                beat > 0 ? GOOD : beat < 0 ? BAD : AMBER, false);
         String label = "solde";
         graphics.text(this.font, label, right - 18 - moneyWidth - this.font.width(label), y + 13,
                 FAINT, false);
@@ -427,15 +614,12 @@ public final class Counter extends Screen {
 
     private void drawAisles(GuiGraphicsExtractor graphics, int x, int y, int bottom, int mouseX,
             int mouseY) {
-        int top = y + HEADER + 4 + 2 * TAB + 6;
-        graphics.fill(x + 4, top - 4, x + this.sidebar - 5, top - 3, EDGE);
-        graphics.text(this.font, "RAYONS", x + 8, top, FAINT, false);
-        top += 12;
+        int top = aisleTop();
+        graphics.fill(x + 4, top - 16, x + this.sidebar - 5, top - 15, EDGE);
+        graphics.text(this.font, "RAYONS", x + 8, top - 12, FAINT, false);
 
-        int room = Math.max(1, (bottom - FOOTER - 4 - top) / AISLE);
-        List<String> list = new ArrayList<>(this.aisles.size() + 1);
-        list.add(null);
-        list.addAll(this.aisles);
+        int room = aisleRoom();
+        List<String> list = aisleList();
         this.aisleScroll = clamp(this.aisleScroll, 0, Math.max(0, list.size() - room));
 
         for (int seat = 0; seat < room && seat + this.aisleScroll < list.size(); seat++) {
@@ -472,7 +656,10 @@ public final class Counter extends Screen {
         int countWidth = this.font.width(count);
         graphics.text(this.font, count, right - 6 - countWidth, top + 4, FAINT, false);
 
-        int room = right - left - 20 - countWidth;
+        // Le plancher n'est pas décoratif : sur une grille très étroite, cette soustraction devient
+        // négative, et « plainSubstrByWidth » d'une largeur négative rend la chaîne vide — le champ
+        // de recherche paraissait alors ne rien enregistrer.
+        int room = Math.max(8, right - left - 20 - countWidth);
         if (this.search.isEmpty()) {
             graphics.text(this.font, this.typing ? "tape pour chercher…" : "rechercher…",
                     left + 8, top + 4, over || this.typing ? DIM : FAINT, false);
@@ -526,6 +713,7 @@ public final class Counter extends Screen {
         graphics.item(icon(id), cx + 5, cy + 3);
 
         long unit = unitPrice(quote);
+        boolean worn = this.selling && quote.withheld();
         String price = unit > 0L ? Slate.money(unit) : "non repris";
         int priceWidth = this.font.width(price);
         int textLeft = cx + 26;
@@ -533,8 +721,11 @@ public final class Counter extends Screen {
 
         graphics.text(this.font, this.font.plainSubstrByWidth(nameOf(id), room), textLeft, cy + 3,
                 on ? AMBER : TEXT, false);
+        // Un prix en orangé n'est pas le plein tarif : la franchise de ce joueur est entamée sur
+        // cet article. Une couleur suffit à le signaler dans une case de vingt-six points de haut ;
+        // le pourcentage exact est dans la colonne de détail, où il y a la place de l'expliquer.
         graphics.text(this.font, price, textLeft, cy + 13,
-                unit > 0L ? (this.selling ? GOOD : TEXT) : FAINT, false);
+                unit <= 0L ? FAINT : worn ? WORN : this.selling ? GOOD : TEXT, false);
 
         // La flèche de cote, calée à droite : elle dit d'un coup d'oeil ce que le marché a fait de
         // cet article depuis son prix d'ancrage.
@@ -542,15 +733,16 @@ public final class Counter extends Screen {
         if (trend != 0 && cw > priceWidth + 60) {
             String mark = (trend > 0 ? "▲ " : "▼ ") + Math.abs(trend) / 10 + "%";
             graphics.text(this.font, mark, cx + cw - 4 - this.font.width(mark), cy + 13,
-                    trend > 0 ? BAD : GOOD, false);
+                    trendColour(trend), false);
         }
-        if (this.selling) {
-            int have = held(id);
-            if (have > 0 && cw > 70) {
-                String count = "×" + have;
-                graphics.text(this.font, count, cx + cw - 4 - this.font.width(count), cy + 3,
-                        DIM, false);
-            }
+        // Ce qu'on possède déjà, sur LES DEUX onglets. La première version ne le montrait qu'à la
+        // vente ; savoir qu'on a déjà trois cents pavés dans son sac est au moins aussi utile au
+        // moment d'en acheter.
+        int have = held(id);
+        if (have > 0 && cw > 70) {
+            String count = "×" + have;
+            graphics.text(this.font, count, cx + cw - 4 - this.font.width(count), cy + 3,
+                    DIM, false);
         }
     }
 
@@ -580,11 +772,11 @@ public final class Counter extends Screen {
      * est toujours au même endroit par rapport au bas du panneau, et c'est l'information qui se fait
      * couper si la place manque, jamais l'inverse.
      */
-    private void drawDetail(GuiGraphicsExtractor graphics, int x, int y, int width, int bottom,
+    private void drawDetail(GuiGraphicsExtractor graphics, int x, int y, int width,
             int mouseX, int mouseY) {
-        int actionTop = bottom - 26;
+        int actionTop = actionTop();
         int totalTop = actionTop - 16;
-        int lotTop = totalTop - 22;
+        int lotTop = lotTop();
         int messageTop = lotTop - 34;
         // Tout ce qui est écrit depuis le haut s'arrête ici. La zone de message et les actions sont
         // ancrées au bas et ne cèdent jamais : mieux vaut perdre une ligne de commentaire qu'un
@@ -627,35 +819,59 @@ public final class Counter extends Screen {
 
         int line = y + 38;
         long unit = unitPrice(quote);
+        boolean worn = this.selling && quote.withheld();
+        boolean tight = tight();
         if (line + 10 <= limit) {
-            graphics.text(this.font, this.selling ? "Rachat à l'unité" : "Prix à l'unité", x, line,
-                    DIM, false);
+            String label = this.selling ? tight ? "Rachat" : "Rachat à l'unité"
+                    : tight ? "Prix" : "Prix à l'unité";
+            graphics.text(this.font, fit(label, width), x, line, DIM, false);
             line += 11;
         }
         if (line + 10 <= limit) {
-            graphics.text(this.font, unit > 0L ? Slate.money(unit) : "non repris", x, line,
-                    unit > 0L ? TEXT : FAINT, false);
+            graphics.text(this.font, fit(unit > 0L ? Slate.money(unit) : "non repris", width),
+                    x, line, unit <= 0L ? FAINT : worn ? WORN : TEXT, false);
             line += 15;
+        }
+
+        // La franchise, et seulement quand elle est entamée. C'est la règle de cet écran : on
+        // n'écrit pas une ligne pour dire qu'il ne se passe rien. Un joueur ordinaire ne verra
+        // jamais ces deux lignes de sa vie, et c'est exactement le but du dispositif.
+        // Le cours du marché n'est écrit que si la colonne est assez large pour le porter en
+        // entier. Couper un montant est pire que ne pas l'écrire : « 1 234,5 » se lit comme un
+        // nombre, et c'en est un autre. À l'étroit, il reste « ta part », qui est l'information
+        // sur laquelle on agit, et « /boutique quota » pour le détail complet.
+        if (worn && !tight && line + 10 <= limit) {
+            graphics.text(this.font, fit("cours " + Slate.money(quote.sell()), width), x, line,
+                    FAINT, false);
+            line += 11;
+        }
+        if (worn && line + 10 <= limit) {
+            graphics.text(this.font,
+                    fit("ta part : " + (100 - quote.withheldPercent()) + " %", width),
+                    x, line, WORN, false);
+            line += 13;
         }
 
         int trend = quote.trend();
         if (line + 10 <= limit) {
-            String cote = trend == 0 ? "au prix d'ancrage"
-                    : (trend > 0 ? "▲ +" : "▼ -") + Math.abs(trend) / 10 + ","
-                            + Math.abs(trend) % 10 + " % sur l'ancre";
-            graphics.text(this.font, cote, x, line, trend == 0 ? FAINT : trend > 0 ? BAD : GOOD,
-                    false);
+            String arrow = (trend > 0 ? "▲ +" : "▼ -") + Math.abs(trend) / 10 + ","
+                    + Math.abs(trend) % 10 + " %";
+            String cote = trend == 0 ? tight ? "à l'ancre" : "au prix d'ancrage"
+                    : tight ? arrow : arrow + " sur l'ancre";
+            graphics.text(this.font, fit(cote, width), x, line, trendColour(trend), false);
             line += 13;
         }
         if (line + 10 <= limit) {
             String stock = this.selling
                     ? "tu en as " + held(this.picked)
-                    : "de la place pour " + room(this.picked);
-            graphics.text(this.font, stock, x, line, DIM, false);
+                    : (tight ? "place : " : "de la place pour ") + room(this.picked);
+            graphics.text(this.font, fit(stock, width), x, line, DIM, false);
             line += 13;
         }
-        if (line + 10 <= limit && !this.selling && quote.bought()) {
-            graphics.text(this.font, "repris " + Slate.money(quote.sell()), x, line, FAINT, false);
+        // Même raison que pour le cours : un montant tronqué ment.
+        if (line + 10 <= limit && !tight && !this.selling && quote.bought()) {
+            graphics.text(this.font, fit("repris " + Slate.money(quote.mine()), width), x, line,
+                    FAINT, false);
         }
 
         drawTicket(graphics, x, messageTop, width);
@@ -664,33 +880,38 @@ public final class Counter extends Screen {
         int count = lot();
         long total = unit * (long) count;
         String refusal = blocked(quote, count);
-        graphics.text(this.font, "Total", x, totalTop, DIM, false);
+        // Le montant est calé à droite, l'étiquette à gauche. Sur une colonne de 74 points, « Total »
+        // et « 1 234 567 ¤ » réclament 85 points à eux deux : ils se chevauchaient. C'est
+        // l'étiquette qui cède, parce que c'est le nombre qu'on est venu lire.
         String amount = Slate.money(Math.max(0L, total));
-        graphics.text(this.font, amount, x + width - this.font.width(amount), totalTop,
-                refusal == null ? AMBER : BAD, false);
+        int amountWidth = this.font.width(amount);
+        if (this.font.width("Total") + 6 + amountWidth <= width) {
+            graphics.text(this.font, "Total", x, totalTop, DIM, false);
+        }
+        graphics.text(this.font, fit(amount, width), x + width - Math.min(amountWidth, width),
+                totalTop, refusal == null ? AMBER : BAD, false);
 
         drawAction(graphics, x, actionTop, width, count, refusal, mouseX, mouseY);
     }
 
     private void drawLots(GuiGraphicsExtractor graphics, int x, int top, int width, int mouseX,
             int mouseY) {
-        String[] labels = {"×1", "×8", "×64", "tout"};
-        int slot = width / 4;
+        String[] labels = lotLabels();
         for (int i = 0; i < 4; i++) {
-            int left = x + i * slot;
-            int right = left + slot - 3;
+            int[] box = lotBox(i);
             boolean on = i == 3 ? this.lotAll : !this.lotAll && this.lot == lotOf(i);
-            boolean over = inside(mouseX, mouseY, left, top, right, top + 14);
-            graphics.fill(left, top, right, top + 14, on ? PICKED : over ? HOVER : RAIL);
+            boolean over = inside(mouseX, mouseY, box[0], top, box[1], top + 14);
+            graphics.fill(box[0], top, box[1], top + 14, on ? PICKED : over ? HOVER : RAIL);
             if (on) {
-                graphics.fill(left, top, right, top + 1, AMBER);
+                graphics.fill(box[0], top, box[1], top + 1, AMBER);
             }
             int textWidth = this.font.width(labels[i]);
-            graphics.text(this.font, labels[i], left + (slot - 3 - textWidth) / 2, top + 3,
+            graphics.text(this.font, labels[i], box[0] + (box[1] - box[0] - textWidth) / 2, top + 3,
                     on ? AMBER : over ? TEXT : DIM, false);
         }
         String count = "quantité : " + lot();
-        graphics.text(this.font, count, x, top - 12, DIM, false);
+        graphics.text(this.font, this.font.plainSubstrByWidth(count, width), x, top - 12, DIM,
+                false);
     }
 
     private static int lotOf(int index) {
@@ -701,17 +922,45 @@ public final class Counter extends Screen {
         };
     }
 
+    /**
+     * Fait tourner la quantité d'un cran. Sert à la molette au-dessus de la colonne de droite.
+     *
+     * <p>La molette y faisait tourner les <em>pages</em> de la grille, ce qui est déroutant : on
+     * survole le bloc des quantités, on tourne la molette, et c'est la liste d'à côté qui bouge. Le
+     * geste naturel au-dessus d'un réglage est de régler ce réglage.
+     */
+    private void cycleLot(int step) {
+        int at = this.lotAll ? 3 : this.lot >= 64 ? 2 : this.lot >= 8 ? 1 : 0;
+        int next = Math.max(0, Math.min(3, at + step));
+        this.lotAll = next == 3;
+        if (!this.lotAll) {
+            this.lot = lotOf(next);
+        }
+        Slate.clearTicket();
+    }
+
     private void drawAction(GuiGraphicsExtractor graphics, int x, int top, int width, int count,
             String refusal, int mouseX, int mouseY) {
         boolean can = refusal == null && count > 0;
         boolean over = inside(mouseX, mouseY, x, top, x + width, top + 18);
-        graphics.fill(x, top, x + width, top + 18, can ? over ? PICKED : RAIL : PANEL);
-        graphics.fill(x, top, x + width, top + 1, can ? AMBER : EDGE);
-        graphics.fill(x, top + 17, x + width, top + 18, can ? AMBER : EDGE);
-        String label = this.selling ? "VENDRE " + count : "ACHETER " + count;
-        int textWidth = this.font.width(label);
-        graphics.text(this.font, label, x + (width - textWidth) / 2, top + 5,
-                can ? AMBER : FAINT, false);
+        // L'éclat de confirmation. Le liseré du bouton vire au vert ou au rouge pendant six cents
+        // millisecondes : c'est là que le regard vient de cliquer, donc là qu'il est encore.
+        int beat = flash();
+        int edge = beat > 0 ? GOOD : beat < 0 ? BAD : can ? AMBER : EDGE;
+        graphics.fill(x, top, x + width, top + 18,
+                beat > 0 ? PICKED : can ? over ? PICKED : RAIL : PANEL);
+        graphics.fill(x, top, x + width, top + 1, edge);
+        graphics.fill(x, top + 17, x + width, top + 18, edge);
+        // Le verbe seul quand la place manque : la quantité est déjà écrite juste au-dessus, sur la
+        // ligne « quantité : N ». Mieux vaut un mot entier qu'un « ACHETER 230 » amputé de son
+        // dernier chiffre, qui ne dit pas seulement moins — il dit faux.
+        String full = (this.selling ? "VENDRE " : "ACHETER ") + count;
+        String label = this.font.width(full) + 6 <= width ? full
+                : this.selling ? "VENDRE" : "ACHETER";
+        String clipped = fit(label, width - 6);
+        int textWidth = this.font.width(clipped);
+        graphics.text(this.font, clipped, x + (width - textWidth) / 2, top + 5,
+                beat > 0 ? GOOD : can ? AMBER : FAINT, false);
     }
 
     /**
@@ -746,7 +995,16 @@ public final class Counter extends Screen {
         }
         String refusal = blocked(quote, lot());
         if (refusal == null) {
-            return;
+            // Rien ne bloque : la place est libre pour expliquer la seule chose que le joueur ne
+            // peut pas deviner — pourquoi son prix est en orangé. Les trois longueurs sont mesurées
+            // pour tenir en deux lignes dans leur colonne ; une troisième chevaucherait la rangée
+            // des quantités sur une petite fenêtre.
+            if (!this.selling || !quote.withheld()) {
+                return;
+            }
+            refusal = width >= 150 ? "Tu en as trop vendu récemment. Ta part remonte d'elle-même."
+                    : width >= 110 ? "Trop vendu. Ta part remonte seule."
+                    : "Vends autre chose.";
         }
         int line = top;
         for (String part : wrap(refusal, width)) {
@@ -827,11 +1085,9 @@ public final class Counter extends Screen {
         }
 
         // Rayons
-        int aisleTop = y + HEADER + 4 + 2 * TAB + 18;
-        int room = Math.max(1, (bottom - FOOTER - 4 - aisleTop) / AISLE);
-        List<String> list = new ArrayList<>(this.aisles.size() + 1);
-        list.add(null);
-        list.addAll(this.aisles);
+        int aisleTop = aisleTop();
+        int room = aisleRoom();
+        List<String> list = aisleList();
         for (int seat = 0; seat < room && seat + this.aisleScroll < list.size(); seat++) {
             int line = aisleTop + seat * AISLE;
             if (inside(mouseX, mouseY, x + 4, line, x + this.sidebar - 5, line + AISLE - 2)) {
@@ -843,7 +1099,7 @@ public final class Counter extends Screen {
         }
 
         // Champ de recherche
-        int searchTop = y + HEADER + 6;
+        int searchTop = searchTop();
         if (inside(mouseX, mouseY, this.gridLeft, searchTop, this.gridRight,
                 searchTop + SEARCH - 8)) {
             this.typing = true;
@@ -852,7 +1108,7 @@ public final class Counter extends Screen {
 
         // Pagination
         int pages = Math.max(1, (this.shown.size() + perPage() - 1) / perPage());
-        int pagerLine = bottom - FOOTER - 13;
+        int pagerLine = pagerLine();
         int mid = (this.gridLeft + this.gridRight) / 2;
         int width = this.font.width((this.page + 1) + " / " + pages);
         if (inside(mouseX, mouseY, mid - width / 2 - 20, pagerLine - 2, mid - width / 2 - 6,
@@ -883,14 +1139,10 @@ public final class Counter extends Screen {
 
         // Colonne de détail
         if (this.picked != null) {
-            int detailX = right - this.detail + 10;
-            int detailWidth = this.detail - 22;
-            int actionTop = bottom - FOOTER - 26;
-            int lotTop = actionTop - 38;
-            int slot = detailWidth / 4;
+            int lotTop = lotTop();
             for (int i = 0; i < 4; i++) {
-                int left = detailX + i * slot;
-                if (inside(mouseX, mouseY, left, lotTop, left + slot - 3, lotTop + 14)) {
+                int[] box = lotBox(i);
+                if (inside(mouseX, mouseY, box[0], lotTop, box[1], lotTop + 14)) {
                     this.lotAll = i == 3;
                     if (!this.lotAll) {
                         this.lot = lotOf(i);
@@ -899,7 +1151,9 @@ public final class Counter extends Screen {
                     return true;
                 }
             }
-            if (inside(mouseX, mouseY, detailX, actionTop, detailX + detailWidth, actionTop + 18)) {
+            int actionTop = actionTop();
+            if (inside(mouseX, mouseY, detailX(), actionTop, detailX() + detailW(),
+                    actionTop + 18)) {
                 commit();
                 return true;
             }
@@ -915,6 +1169,13 @@ public final class Counter extends Screen {
         }
         if (mouseX < this.panelX + this.sidebar) {
             this.aisleScroll = Math.max(0, this.aisleScroll + step);
+            return true;
+        }
+        // Au-dessus de la colonne de droite, la molette règle la QUANTITÉ. C'est le geste attendu :
+        // on survole un réglage, on le règle. La première version y faisait tourner les pages de la
+        // grille d'à côté, ce qui donne l'impression d'avoir raté sa cible.
+        if (this.picked != null && mouseX > this.panelX + this.panelW - this.detail) {
+            cycleLot(-step);
             return true;
         }
         // Le catalogue engendré compte plus de mille articles, soit une quarantaine de pages. Une

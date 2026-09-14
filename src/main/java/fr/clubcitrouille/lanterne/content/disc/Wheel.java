@@ -15,6 +15,8 @@ import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
 
+import org.jspecify.annotations.Nullable;
+
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.content.painting.Mill;
 import fr.clubcitrouille.lanterne.content.painting.Studio;
@@ -78,16 +80,21 @@ public final class Wheel {
      */
     public static void prepare(byte[] raw, Consumer<Post.Vinyl> ready, Consumer<String> failed) {
         LATHE.submit(() -> {
-            Press.Cut cut;
-            try {
-                cut = Press.grind(raw, Studio.discMaxBytes(), Studio.discMaxSeconds());
-            } catch (IOException refusal) {
-                failed.accept("Refusé : " + refusal.getMessage());
-                return;
-            } catch (RuntimeException broken) {
-                Lanterne.LOG.warn("[ATELIER] préparation audio ratée", broken);
-                failed.accept("Fichier audio illisible.");
-                return;
+            // L'empreinte de la SOURCE, avant toute conversion : c'est la seule qui soit stable pour
+            // un même fichier. Voir « remember » pour ce qu'elle permet d'éviter.
+            String source = Mill.fingerprint(raw);
+            Press.Cut cut = recall(source);
+            if (cut == null) {
+                try {
+                    cut = Press.grind(raw, Studio.discMaxBytes(), Studio.discMaxSeconds());
+                } catch (IOException refusal) {
+                    failed.accept("Refusé : " + refusal.getMessage());
+                    return;
+                } catch (RuntimeException broken) {
+                    Lanterne.LOG.warn("[ATELIER] préparation audio ratée", broken);
+                    failed.accept("Fichier audio illisible.");
+                    return;
+                }
             }
             String hash = Mill.fingerprint(cut.ogg());
             try {
@@ -96,6 +103,7 @@ public final class Wheel {
                 if (!Files.isRegularFile(target)) {
                     Files.write(target, cut.ogg());
                 }
+                remember(source, hash);
             } catch (IOException problem) {
                 Lanterne.LOG.warn("[ATELIER] morceau non mis en cache : {}", problem.getMessage());
             }
@@ -103,6 +111,78 @@ public final class Wheel {
             OFFERS.put(hash, cut.ogg());
             ready.accept(new Post.Vinyl(-1, hash, "", cut.seconds()));
         });
+    }
+
+    /**
+     * Le morceau déjà converti à partir de cette source, s'il est encore là.
+     *
+     * <h2>Pourquoi convertir deux fois le même fichier donnait deux disques différents</h2>
+     *
+     * <p>Un conteneur Ogg porte, dans l'entête de <b>chaque</b> page, un « numéro de série de flux »
+     * que {@code ffmpeg} tire au hasard à chaque encodage. Deux conversions du même MP3 produisent
+     * donc deux fichiers de taille identique et d'octets différents — donc deux empreintes
+     * différentes, donc deux sillons consommés pour le même morceau, et une retransmission complète
+     * à tout le serveur. Le journal du commanditaire montre exactement cela : {@code 4 504 492}
+     * octets les deux fois, deux empreintes, les sillons 45 puis 46.
+     *
+     * <p>On pourrait réécrire le numéro de série à une valeur fixe. Il faudrait alors recalculer la
+     * somme de contrôle de chaque page — trente lignes d'un algorithme à polynôme particulier, pour
+     * un résultat fragile si le format évolue.
+     *
+     * <p>Il est plus simple et plus sûr de <b>se souvenir</b> : une table
+     * {@code empreinte-source → empreinte-morceau}, écrite à côté du cache. Le même fichier choisi
+     * deux fois rend alors le même morceau au bit près, et la conversion elle-même — plusieurs
+     * secondes de {@code ffmpeg} — est économisée par la même occasion.
+     */
+    private static Press.@Nullable Cut recall(String source) {
+        java.util.Properties index = index();
+        String known = index.getProperty(source);
+        if (known == null) {
+            return null;
+        }
+        Path file = Groove.cachedFile(known);
+        if (!Files.isRegularFile(file)) {
+            return null;
+        }
+        try {
+            byte[] ogg = Files.readAllBytes(file);
+            Press.Reading reading = Press.read(file);
+            Lanterne.LOG.info("[ATELIER] morceau déjà converti — conversion évitée.");
+            return new Press.Cut(ogg, reading.seconds());
+        } catch (IOException stale) {
+            return null;
+        }
+    }
+
+    private static void remember(String source, String hash) {
+        java.util.Properties index = index();
+        if (hash.equals(index.getProperty(source))) {
+            return;
+        }
+        index.setProperty(source, hash);
+        try (java.io.OutputStream out = Files.newOutputStream(indexFile())) {
+            index.store(out, "Lanterne - conversions deja faites : <empreinte source> = <empreinte ogg>."
+                    + " Supprimer ce fichier ne fait que refaire des conversions.");
+        } catch (IOException problem) {
+            Lanterne.LOG.warn("[ATELIER] index des conversions non écrit : {}", problem.getMessage());
+        }
+    }
+
+    private static Path indexFile() {
+        return Groove.cacheFolder().resolve("conversions.properties");
+    }
+
+    private static java.util.Properties index() {
+        java.util.Properties properties = new java.util.Properties();
+        Path file = indexFile();
+        if (Files.isRegularFile(file)) {
+            try (java.io.InputStream in = Files.newInputStream(file)) {
+                properties.load(in);
+            } catch (IOException ignored) {
+                // Un index illisible n'est pas une panne : on reconvertit, une fois.
+            }
+        }
+        return properties;
     }
 
     /**
@@ -160,9 +240,11 @@ public final class Wheel {
      * le fichier n'est ouvert qu'à la lecture, et le chemin est recalculé à ce moment-là.
      */
     public static void accept(Post.Roll roll) {
-        Slots.clear();
+        // On remplit le MIROIR, jamais la table du serveur : en partie solo elles vivent dans la
+        // même machine virtuelle, et écraser celle du serveur effaçait les gravures. Voir Slots.
+        Slots.forgetMirror();
         for (Post.Vinyl cut : roll.cuts()) {
-            Slots.occupy(cut.slot(), new Slots.Cut(cut.hash(), cut.title(), cut.seconds(), ""));
+            Slots.mirror(cut.slot(), new Slots.Cut(cut.hash(), cut.title(), cut.seconds(), ""));
         }
         int missing = 0;
         for (Post.Vinyl cut : roll.cuts()) {
@@ -241,7 +323,7 @@ public final class Wheel {
         giving = null;
         givingData = null;
         givingOffset = 0;
-        Slots.clear();
+        Slots.forgetMirror();
     }
 
     /** Les morceaux encore attendus, pour l'écran d'état. */

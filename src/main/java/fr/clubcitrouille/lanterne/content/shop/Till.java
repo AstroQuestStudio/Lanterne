@@ -171,6 +171,21 @@ public final class Till {
      * <p>La place dans le compte est vérifiée <b>avant</b> de retirer quoi que ce soit : sans cela, un
      * joueur au plafond verrait ses objets disparaître contre un crédit écrêté. Le refus est explicite,
      * et il vaut mieux qu'un demi-paiement.
+     *
+     * <h2>Les deux prix, et lequel compte</h2>
+     *
+     * <p>Depuis les puits ({@link Toll}), il y a un <b>cours du marché</b>, le même pour tout le
+     * monde, et un <b>prix personnel</b> — le cours moins ce que les franchises de ce joueur
+     * retiennent. C'est le prix personnel qui est payé, et c'est le <b>cours</b> qui alimente les
+     * compteurs. Ne pas confondre les deux est tout l'équilibrage : faire monter les compteurs avec
+     * le net créerait une boucle de retour qui ramollit la retenue au moment précis où elle devrait
+     * serrer.
+     *
+     * <p>La part est arrêtée <b>une fois</b>, avant la transaction, comme le prix. Un lot de mille
+     * unités est donc payé au tarif du premier, et non à un tarif qui se dégraderait en cours de
+     * route — ce qui rendrait le total affiché par l'écran impossible à tenir. La conséquence est
+     * assumée : on peut franchir sa franchise d'un coup, au bon tarif. Le lot maximal du serveur
+     * borne l'affaire, et le compteur, lui, enregistre bien la totalité.
      */
     public static Receipt sell(ServerPlayer player, Identifier id, int wanted) {
         if (!Tariff.active()) {
@@ -196,7 +211,12 @@ public final class Till {
         }
 
         Ledger ledger = Ledger.of(server);
-        long unit = Drift.sell(offer, ledger.volume(id));
+        long market = Drift.sell(offer, ledger.volume(id));
+        if (market <= 0L) {
+            return Receipt.no(Outcome.NOT_BOUGHT, 0L);
+        }
+        int keep = Toll.keep(ledger, player.getUUID(), id);
+        long unit = Toll.net(market, keep);
         if (unit <= 0L) {
             return Receipt.no(Outcome.NOT_BOUGHT, 0L);
         }
@@ -220,6 +240,10 @@ public final class Till {
         long total = unit * (long) taken;
         ledger.credit(player.getUUID(), player.getGameProfile().name(), total);
         ledger.trade(id, -taken);
+        // Les compteurs suivent le BRUT — voir l'en-tête de cette méthode. Et la différence est
+        // comptée à part : elle n'est versée à personne, et /banque masse doit pouvoir le dire.
+        ledger.earn(player.getUUID(), id, market * (long) taken);
+        ledger.withhold((market - unit) * (long) taken);
         player.inventoryMenu.broadcastChanges();
         return new Receipt(Outcome.DONE, 0L, taken, total);
     }

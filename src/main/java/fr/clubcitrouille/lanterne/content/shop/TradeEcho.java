@@ -22,8 +22,16 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *
  * <p>Parce que la transaction vient précisément de le faire bouger. Sans cela, le client afficherait
  * l'ancien prix jusqu'à la prochaine ouverture de l'écran, et le joueur verrait son total changer sous
- * ses yeux au deuxième achat sans comprendre pourquoi. Renvoyer les trois nombres de l'article touché
+ * ses yeux au deuxième achat sans comprendre pourquoi. Renvoyer les quatre nombres de l'article touché
  * coûte vingt octets et supprime la question.
+ *
+ * <h2>Et pourquoi la part repart aussi</h2>
+ *
+ * <p>{@code keep} est recalculé <b>après</b> la transaction, pas repris du ticket de caisse. C'est
+ * délibéré : la vente vient d'alimenter le compteur de quota, et ce que le joueur veut savoir n'est
+ * pas le tarif qu'il vient d'obtenir — il est écrit sur la ligne du dessus — mais celui qu'il
+ * obtiendra à la vente suivante. L'avertissement arrive donc à l'instant où il sert, et non une
+ * transaction trop tard.
  *
  * @param outcome ce qui s'est passé
  * @param detail  un nombre dont le sens dépend de {@code outcome} — voir {@link Till.Outcome}
@@ -34,9 +42,10 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * @param buy     son prix d'achat, après l'opération
  * @param sell    son prix de rachat, après l'opération
  * @param trend   son écart à l'ancre, en pour mille, après l'opération
+ * @param keep    la part du cours que ce joueur touchera maintenant, en pour mille — voir {@link Toll}
  */
 public record TradeEcho(Till.Outcome outcome, long detail, int count, long total, long balance,
-                        Identifier item, long buy, long sell, int trend)
+                        Identifier item, long buy, long sell, int trend, int keep)
         implements CustomPacketPayload {
 
     private static final Till.Outcome[] OUTCOMES = Till.Outcome.values();
@@ -56,7 +65,13 @@ public record TradeEcho(Till.Outcome outcome, long detail, int count, long total
                     ByteBufCodecs.VAR_LONG, TradeEcho::buy,
                     ByteBufCodecs.VAR_LONG, TradeEcho::sell,
                     ByteBufCodecs.VAR_INT, TradeEcho::trend,
+                    ByteBufCodecs.VAR_INT, TradeEcho::keep,
                     TradeEcho::new);
+
+    /** Ce que la boutique paierait maintenant à ce joueur pour une unité, en centimes. */
+    public long mine() {
+        return Toll.net(this.sell, this.keep);
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

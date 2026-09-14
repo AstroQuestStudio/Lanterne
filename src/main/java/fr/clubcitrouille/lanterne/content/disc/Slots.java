@@ -8,6 +8,8 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.jspecify.annotations.Nullable;
 import java.util.Map;
 
 import fr.clubcitrouille.lanterne.Lanterne;
@@ -65,8 +67,30 @@ public final class Slots {
     /** Ce qu'un sillon contient, ou rien. */
     public record Cut(String hash, String title, float seconds, String author) {}
 
-    /** Sillon vers contenu. Concurrente : lue par le fil réseau, écrite par le fil du serveur. */
+    /**
+     * Ce que le SERVEUR a gravé. C'est la seule table qui fasse foi, et la seule qu'on écrive.
+     *
+     * <p>Concurrente : lue par le fil réseau, écrite par le fil du serveur.
+     */
     private static final Map<Integer, Cut> TAKEN = new ConcurrentHashMap<>();
+
+    /**
+     * Ce que le CLIENT sait des sillons, d'après le catalogue reçu.
+     *
+     * <h2>Pourquoi deux tables, et ce qu'une seule a coûté</h2>
+     *
+     * <p>En partie solo, le client et le serveur vivent dans la même machine virtuelle : ils
+     * partagent donc les champs statiques. La première version n'avait qu'une table, et le client la
+     * vidait en se déconnectant — juste avant que le serveur ne l'écrive sur le disque à l'extinction.
+     * Résultat : {@code sillons.properties} réécrit <b>vide</b>, et toutes les gravures perdues au
+     * redémarrage. Le journal du commanditaire porte les deux horodatages à la seconde près.
+     *
+     * <p>Les deux tables ne se recouvrent jamais : sur un serveur dédié, {@link #SEEN} reste vide ;
+     * sur un client en multijoueur, {@link #TAKEN} reste vide ; en solo les deux disent la même
+     * chose. Aucune ne peut plus effacer l'autre, et c'est le genre de bogue qu'on ne corrige pas
+     * deux fois.
+     */
+    private static final Map<Integer, Cut> SEEN = new ConcurrentHashMap<>();
 
     private Slots() {}
 
@@ -105,14 +129,41 @@ public final class Slots {
         return -1;
     }
 
-    public static Cut at(int slot) {
-        return TAKEN.get(slot);
+    /**
+     * Ce que porte ce sillon, vu d'où l'on est.
+     *
+     * <p>La table du serveur d'abord : elle fait foi quand elle existe. Celle du client ensuite,
+     * qui est la seule à être remplie sur une machine qui n'héberge rien.
+     */
+    public static @Nullable Cut at(int slot) {
+        Cut cut = TAKEN.get(slot);
+        return cut != null ? cut : SEEN.get(slot);
     }
 
     /** L'empreinte du morceau qui occupe ce sillon, ou une chaîne vide. */
     public static String hashAt(int slot) {
-        Cut cut = TAKEN.get(slot);
+        Cut cut = at(slot);
         return cut == null ? "" : cut.hash();
+    }
+
+    /** Le sillon qui porte déjà cette empreinte, ou moins un. Voir {@code Groove.engrave}. */
+    public static int holding(String hash) {
+        for (Map.Entry<Integer, Cut> entry : TAKEN.entrySet()) {
+            if (entry.getValue().hash().equals(hash)) {
+                return entry.getKey();
+            }
+        }
+        return -1;
+    }
+
+    /** Le client note ce que le serveur lui annonce. N'écrit jamais sur le disque. */
+    public static void mirror(int slot, Cut cut) {
+        SEEN.put(slot, cut);
+    }
+
+    /** Le client oublie ce qu'il savait — déconnexion. La table du serveur n'est pas touchée. */
+    public static void forgetMirror() {
+        SEEN.clear();
     }
 
     public static void occupy(int slot, Cut cut) {
@@ -128,12 +179,9 @@ public final class Slots {
         return TAKEN.size();
     }
 
+    /** Ce que le serveur a gravé. Pour le catalogue, les commandes et l'onglet créatif. */
     public static Map<Integer, Cut> all() {
         return TAKEN;
-    }
-
-    public static void clear() {
-        TAKEN.clear();
     }
 
     // --- Persistance -------------------------------------------------------

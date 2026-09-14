@@ -1,10 +1,9 @@
 package fr.clubcitrouille.lanterne.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.Overwrite;
 
+import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 
@@ -50,14 +49,49 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * double le nombre de ticks par seconde. Celui-ci ne casse rien en soi, mais il modifie une
  * mécanique dont certains joueurs dépendent finement. Ce choix leur appartient, et il est écrit en
  * clair dans le fichier de réglages.
+ *
+ * <h2>Le module était juste, et son point d'accroche coûtait un quart de milliseconde par tick</h2>
+ *
+ * <p>Ce module n'avait jamais été mesuré. Il l'a été sur la nappe de redstone — trente-deux sur
+ * trente-deux, mille vingt-quatre brins connectés, trente-deux sources qui battent tous les quatre
+ * ticks — et le banc a rendu deux fois la même réponse, à un centième près :
+ *
+ * <pre>
+ * sans : 1,75 ms · avec : 2,00 ms   →  ×0,88   ·  mémoire allouée 616,9 Mo contre 103,9 Mo
+ * sans : 1,96 ms · avec : 2,21 ms   →  ×0,89   ·  mémoire allouée 463,2 Mo contre 115,6 Mo
+ * </pre>
+ *
+ * <p>Deux exécutions, <b>exactement le même écart absolu</b> : vingt-cinq centièmes de milliseconde.
+ * Pas un rapport, une <em>constante</em> — la signature d'un surcoût payé à chaque appel, et non
+ * d'un algorithme plus lent. D'autant que le profil disait l'inverse sur le fond :
+ * {@code ExperimentalRedstoneWireEvaluator.updatePowerStrength} pesait <b>17,1 %</b> du travail
+ * relevé, là où {@code DefaultRedstoneWireEvaluator.updatePowerStrength} en pesait <b>57,9 %</b>, et
+ * le serveur dormait 61 % du temps au lieu de 21 %.
+ *
+ * <p>La cause est celle que ce projet a déjà payée quatre fois — la bordure du monde, le repos posé,
+ * le tirage aléatoire, les positions d'explosion : <b>sur un chemin très chaud, l'interception est le
+ * coût</b>. {@code useExperimentalEvaluator} est appelée deux fois par mise à jour de brin, une fois
+ * dans {@code neighborChanged} et une fois dans {@code updatePowerStrength} — des milliers de fois
+ * par tick sur cette nappe. Un {@code @Inject} annulable y fabrique un {@code CallbackInfoReturnable}
+ * à <em>chaque</em> appel, et retire au compilateur à la volée l'incorporation d'une méthode qui tient
+ * en un test de masque de bits.
+ *
+ * <p>D'où le remplacement pur et simple du corps. Le coût redevient celui de vanilla — deux lectures
+ * de champ statique et le même test de drapeau — et la méthode reste assez courte pour être
+ * incorporée. C'est la première fois dans ce projet qu'un {@code @Overwrite} est préféré à un
+ * {@code @Inject} <em>pour la vitesse</em>, et la raison est mesurée, pas supposée.
  */
 @Mixin(RedStoneWireBlock.class)
 public abstract class RedstoneEvaluatorMixin {
-    @Inject(method = "useExperimentalEvaluator", at = @At("HEAD"), cancellable = true)
-    private static void lanterne$preferTheGoodOne(Level level,
-            CallbackInfoReturnable<Boolean> callback) {
-        if (Settings.redstone()) {
-            callback.setReturnValue(true);
-        }
+    /**
+     * @author Lanterne
+     * @reason Le corps tient en une ligne et se trouve sur un chemin parcouru des milliers de fois
+     *         par tick ; un {@code @Inject} annulable y allouait un objet de rappel par appel, pour
+     *         un quart de milliseconde de tick mesuré deux fois. Voir la javadoc de la classe.
+     */
+    @Overwrite
+    private static boolean useExperimentalEvaluator(Level level) {
+        return Settings.redstone()
+                || level.enabledFeatures().contains(FeatureFlags.REDSTONE_EXPERIMENTS);
     }
 }

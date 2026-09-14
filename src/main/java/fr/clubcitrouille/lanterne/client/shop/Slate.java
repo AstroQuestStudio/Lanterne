@@ -77,10 +77,25 @@ public final class Slate {
         Quote known = BOARD.get(echo.item());
         if (known != null && echo.buy() > 0L) {
             BOARD.put(echo.item(), new Quote(echo.item(), echo.buy(), echo.sell(), echo.trend(),
-                    known.category()));
+                    known.category(), echo.keep()));
         }
         ticket = echo;
         ticketAt = System.currentTimeMillis();
+    }
+
+    /**
+     * Depuis combien de millisecondes le dernier ticket est arrivé.
+     *
+     * <p>Sert au clignotement de confirmation de l'écran. Sans lui, deux achats identiques à la
+     * suite produisent deux fois le même message, au même endroit, de la même couleur — et le
+     * second est rigoureusement invisible. Le joueur reclique, croyant que rien n'est parti. C'est
+     * le défaut d'interface le plus courant des écrans de boutique, et il ne coûte qu'un
+     * horodatage.
+     *
+     * @return l'âge en millisecondes, ou {@link Long#MAX_VALUE} s'il n'y a pas de ticket
+     */
+    public static long ticketAge() {
+        return ticket == null ? Long.MAX_VALUE : System.currentTimeMillis() - ticketAt;
     }
 
     public static List<Quote> all() {

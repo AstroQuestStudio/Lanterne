@@ -27,6 +27,18 @@ jouant.*
 
 ---
 
+## 🧭 Par où commencer
+
+```
+/lanterne help
+```
+
+Le sommaire de toutes les commandes du mod, groupé par thème, **cliquable** : un clic écrit la
+commande dans la zone de saisie sans l'exécuter. Les commandes d'administration ne s'affichent que
+pour qui y a droit.
+
+---
+
 ## ⚡ Les gains, charge par charge
 
 Serveur dédié NeoForge 26.1.2, Ryzen 7 5800H, monde pré-généré, distance de simulation 10.
@@ -851,6 +863,48 @@ il suffit que les ingrédients soient au plancher pendant que le produit est au 
 Neuf recettes sur dix devenaient une machine à fabriquer de l'argent. La condition est désormais
 vérifiée au chargement, et écrite dans le journal si elle est enfreinte.
 
+### L'écran
+
+Dessiné à la main, dans la langue visuelle des cadrans de rendu — même noir bleuté, même ambre,
+mêmes trois colonnes. **Aucun composant de vanilla** : ni bouton, ni cadre, ni champ de saisie. Deux
+écrans du même mod qui ne se ressemblent pas donnent l'impression de deux mods.
+
+| | |
+|---|---|
+| **Deux onglets** | Acheter et Vendre. L'onglet Vendre ne montre que ce qui est repris, et affiche ce que tu possèdes déjà |
+| **Recherche** | au clavier, sur le nom, l'identifiant ou le rayon. Échap efface la recherche avant de fermer |
+| **17 rayons** | colonne de gauche ; molette pour les faire défiler |
+| **Quantités** | ×1, ×8, ×64 et **tout** — recalculé à chaque image d'après ton solde, ta place et le prix |
+| **Total avant validation** | en ambre s'il passe, en rouge sinon, **avec la raison et le chiffre exact** |
+| **Cote** | ▲ / ▼ et l'écart à l'ancre, sur chaque case |
+
+Tout est **dérivé de la taille de la fenêtre** : aucune dimension n'est en dur, le nombre de colonnes
+et de lignes se recalcule, et la mise en page suit pendant qu'on tire le coin. Vérifié sur 968 275
+combinaisons de largeur et de hauteur, de 320×240 à 3840×2160 — zéro chevauchement, zéro débordement.
+
+Il s'ouvre à la touche **K**, ou par `/boutique`. La touche n'ouvre rien toute seule : elle demande
+au serveur, qui répond avec le catalogue coté. **Les prix affichés sont donc ceux de l'instant, par
+construction** — on ne peut pas cliquer sur un prix périmé.
+
+### Jamais d'argent sans objet, jamais d'objet sans argent
+
+C'est l'invariant que toute la caisse existe pour tenir. Un duplicateur ne fait pas « un bogue de
+plus » sur un serveur : il rend l'économie sans objet, et une économie ne se répare pas.
+
+- **À la vente**, l'argent versé est calculé sur ce qui a été **réellement retiré** du sac, jamais sur
+  ce qui a été demandé. Il n'existe aucun chemin qui crédite avant de retirer.
+- **À l'achat**, la place est vérifiée avant le débit — et si l'insertion laissait malgré tout un
+  reste, la différence est **recréditée au centime**. Les deux protections font double emploi, et
+  c'est voulu.
+- Une transaction s'exécute **d'un seul tenant sur le fil du serveur**, sans point de suspension :
+  aucun verrou n'est nécessaire, et c'est structurel — pas une synchronisation qu'on pourrait
+  oublier de poser quelque part.
+
+**La boutique ne rachète aucun objet enchanté, renommé ou abîmé.** Le catalogue donne un prix à une
+pioche en diamant ; il ne dit rien d'une pioche Fortune III à trois points de durabilité. Les
+racheter au même prix, ce serait soit dépouiller un joueur, soit — bien pire — lui offrir une machine
+à faire de l'argent : acheter neuf, user, revendre au prix du neuf.
+
 ### Les prix bougent
 
 Un objet massivement vendu au serveur perd de la valeur, un objet massivement acheté en gagne —
@@ -858,12 +912,71 @@ dans une bande de ±50 % autour de l'ancre, avec une détente qui ramène doucem
 d'ancrage. La dérive applique **le même facteur aux deux prix**, donc le rapport achat/rachat ne
 bouge jamais : la marge reste garantie quoi qu'il arrive au marché.
 
+### Les puits — ce que la dérive ne peut pas faire
+
+Aucune recette du jeu ne permet de **fabriquer** de l'argent : c'est démontré, et c'est acquis. Mais
+cette démonstration ne dit rien du défaut qui tue réellement les économies de serveur, et qui n'est
+pas une triche : **l'accumulation**. Une ferme à fer automatique ne viole aucune inégalité. Elle
+verse simplement, heure après heure, une somme qu'un joueur ordinaire ne peut pas approcher.
+
+La simulation — vingt joueurs, trente-sept jours, les débits de fermes réelles — donne le chiffre :
+avec la dérive pour seul amortisseur, **l'exploitant de fermes gagne soixante fois ce que gagne un
+joueur occasionnel** à l'heure de jeu, et la plus grosse fortune atteint seize cents fois la médiane.
+Le serveur n'a plus d'économie : il a un homme riche et vingt figurants.
+
+La dérive fait ce qu'elle peut, mais elle est **bornée par construction** : passé le plancher de
+− 50 %, le débit d'une ferme n'est plus amorti du tout. Elle protège les *prix relatifs* ; elle ne
+protège pas de l'accumulation, et il ne faut pas lui demander ce qu'elle ne peut pas donner.
+
+Chaque joueur porte donc deux compteurs de recettes récentes, qui montent à chaque vente et
+redescendent tout seuls — un **quota** par article, et un **débit** global :
+
+```
+    retenue = R · tanh( max(0, compteur − franchise) / franchise )
+```
+
+**La franchise est la décision qui fait tout.** Une `tanh` nue a une pente de 1 à l'origine : elle
+mord dès la première unité vendue. La première rédaction s'en passait, et un nouveau venu qui vendait
+six cents blocs de pierre perdait déjà un cinquième de sa recette — alors que le dispositif n'existe
+que pour toucher les fermes. Avec la franchise, tout ce qui reste sous le seuil est payé **plein
+tarif, sans exception**.
+
+| | Sans les puits | Avec |
+|---|---|---|
+| Occasionnel, mineur, bâtisseur | — | **zéro centime de retenue** |
+| Nouveau venu, première semaine | 208 ¤ | **208 ¤**, au centime près |
+| Exploitant / occasionnel | ×60 | **×9** |
+| Masse monétaire à 37 jours | 3 790 970 ¤ | **1 027 091 ¤** |
+
+Deux détails qui ont coûté une mesure chacun. La franchise est en **centimes, pas en unités** : le
+catalogue contient le diamant à 240 ¤ et le pavé à 0,12 ¤, et une franchise en unités laisserait
+passer une ferme à diamants en étranglant le bâtisseur qui revend ses gravats. Et le compteur suit
+le **brut, jamais le net** — sinon plus la retenue est forte, moins le compteur monte, donc moins la
+retenue est forte : une boucle de retour qui ramollit précisément là où elle devrait serrer.
+
+La retenue ne s'applique qu'au **prix de rachat**, et ne peut que le faire baisser. L'inégalité de
+sûreté reste donc vraie *a fortiori* : **aucune boucle d'arbitrage ne peut naître de ce dispositif**.
+
+> Ce qui reste ouvert, et qui est écrit dans le code : les **comptes multiples** (les compteurs sont
+> par joueur), et le fermier qui **paie des amis** pour vendre à sa place. `virement_frais_pourcent`
+> existe pour cela, mais il est **éteint par défaut** — sur un serveur d'amis, taxer l'entraide est un
+> remède pire que le mal.
+
+### Les commandes
+
 | | |
 |---|---|
-| `/boutique` | ouvre l'écran |
+| **K** · `/boutique` | ouvre l'écran |
 | `/boutique cours [objet]` | le cours du moment, l'ancre, le volume net |
-| `/banque` · `/banque payer` | ton solde, un virement |
-| `/boutique poser` · `recharger` · `generer` | administration |
+| `/banque` · `/banque payer` · `/banque classement` | ton solde, un virement, les plus fortunés |
+| `/boutique poser` · `retirer` · `recharger` · `ecrire` | administration du catalogue |
+| `/boutique generer` | refait tout depuis les recettes — **écrase le fichier** |
+| `/boutique verifier` | **cherche les boucles d'arbitrage** et les nomme |
+| `/banque donner` · `retirer` · `fixer` · `masse` | administration des comptes |
+
+À lancer après toute retouche d'un prix à la main : `/boutique verifier` rejoue l'audit complet sur
+le catalogue réel, **aux deux extrêmes de la dérive**, et dit en clair si l'on vient d'ouvrir une
+boucle. C'est gratuit.
 
 La monnaie est **un nombre, jamais un objet** : une pièce se perdrait à la mort, se dupliquerait au
 moindre exploit ailleurs dans le modpack, et ne se compterait pas.
@@ -877,6 +990,8 @@ moindre exploit ailleurs dans le modpack, et ne se compterait pas.
 | `config/lanterne-server.toml` | les modules d'optimisation | l'administrateur, pour tout le monde |
 | `config/lanterne-client.toml` | le rendu — Voile, coffres, feuilles, jauge | **toi**, même en multijoueur |
 | `config/lanterne-atelier.toml` | les tableaux et les disques | les deux : le serveur fait respecter les limites, le client prépare les fichiers |
+| `config/lanterne-boutique.toml` | les **règles** du marché — solde de départ, dérive, puits, marge minimale, génération | l'administrateur |
+| `config/lanterne/boutique.txt` | les **prix** — une ligne par article, rechargeable à chaud | l'administrateur |
 
 `config/lanterne-server.toml` — **une ligne par module, et chaque commentaire dit ce que le module a
 rendu à la mesure.**
@@ -950,6 +1065,9 @@ a son épreuve, et **deux d'entre elles ont rattrapé un module qui cassait le j
 | **Fluides** | L'eau s'écoule-t-elle pareil ? | ✅ 113 blocs, à l'unité près |
 | **Objets au sol** | Disparition au tick exact | ✅ 120 ticks |
 | **Cuisson** | Les fours produisent-ils autant ? | ✅ Exact au tick près |
+| **Esprit** | Les créatures à cerveau pensent-elles encore ? | ✅ **102 %** du déplacement, **97 %** après extinction et rallumage |
+| **Moisson** | Les villageois moissonnent-ils et se reproduisent-ils ? | ✅ **89 %**, et la reproduction se déclenche |
+| **Marée** | Descend-elle **et** remonte-t-elle ? | ✅ 10 → 5 sous charge, 5 → 10 une fois soulagée |
 
 ### L'épreuve qui a sauvé le mod
 
@@ -1275,7 +1393,7 @@ chiffre qui tranchera, et le module n'est pas écrit avant.
 
 ---
 
-## 🧾 Les deux règles d'instrument, et ce qu'elles ont coûté à apprendre
+## 🧾 Les trois règles d'instrument, et ce qu'elles ont coûté à apprendre
 
 Ce laboratoire a deux profileurs. **Les deux mentent sur les extrêmes, et pour des raisons
 symétriques.**
@@ -1291,6 +1409,19 @@ recherches économisées.
 
 > **Le correctif est le même dans les deux cas : multiplier le compte par la taille avant d'écrire
 > une ligne de code.** 2,4 M de tableaux × 16 octets = 39 Mo, pas 2 700.
+
+### La troisième, apprise en septembre 2026
+
+Le profileur d'allocations désignait un poste à **10,5 %**, soit 1,88 Go — la boîte vide que le
+cerveau fabrique à chaque test de condition. Le module écrit pour la partager a rendu **vingt
+mégaoctets** par fenêtre de mesure, et ×1,04 : sous la dérive du banc.
+
+L'écart n'était pas une erreur de mesure mais une erreur de lecture. Le profileur classe par **volume
+cumulé depuis l'ouverture de l'enregistrement** — chargement du serveur, décantation et les *deux*
+phases entrelacées comprises. Ses 17,99 Go de total ne sont pas le travail d'un tick.
+
+> **Un pourcentage n'a de sens que rapporté à ce qui a été totalisé.** « Dix pour cent des
+> allocations » désignait un poste réel, et ce poste pèse quatre pour cent d'une fenêtre de mesure.
 
 ---
 

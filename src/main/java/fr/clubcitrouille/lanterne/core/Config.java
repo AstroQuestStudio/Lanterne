@@ -61,6 +61,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SPILL;
     public static final ModConfigSpec.BooleanValue SENSES;
     public static final ModConfigSpec.BooleanValue RECALL;
+    public static final ModConfigSpec.BooleanValue STENCIL;
     public static final ModConfigSpec.BooleanValue REDSTONE;
     public static final ModConfigSpec.BooleanValue MOULDS;
     public static final ModConfigSpec.BooleanValue DECAY;
@@ -250,6 +251,26 @@ public final class Config {
                 "",
                 "Garde parce qu'il ne coute rien et va dans le bon sens. Sans chiffre de gain.")
                 .define("memoire_conditions", true);
+        STENCIL = BUILDER.comment(
+                "POCHOIR : les blocs d'une structure hors de la fenetre du chunk ne sont pas",
+                "prepares.",
+                "",
+                "Une structure ne se pose pas d'un coup : elle se pose CHUNK PAR CHUNK, au fur et a",
+                "mesure que la generation les atteint. Or placeInWorld prepare le gabarit ENTIER a",
+                "chaque passage - position transformee, objet neuf, copie de la balise NBT, toute la",
+                "chaine des processeurs - et ne trie qu'APRES, a la ligne suivante.",
+                "",
+                "Une maison de village qui chevauche quatre chunks est donc preparee quatre fois en",
+                "entier pour n'en ecrire qu'un quart a chaque fois.",
+                "",
+                "Le tri porte sur X et Z SEULEMENT : GravityProcessor deplace les blocs en hauteur,",
+                "et un tri sur Y pourrait donc faire disparaitre un bloc qu'il allait remonter dans",
+                "la fenetre. Le module renonce aussi devant un processeur venu d'un mod, et devant",
+                "tout processeur qui redefinit finalizeProcessing.",
+                "",
+                "N'agit QUE pendant la generation de terrain. Un monde deja explore n'y passe plus.",
+                "Repris de StructureLayoutOptimizer (MIT).")
+                .define("pochoir_structures", true);
         REDSTONE = BUILDER.comment(
                 "MOTEUR DE REDSTONE : celui que Mojang a ecrit, puis laisse eteint.",
                 "",

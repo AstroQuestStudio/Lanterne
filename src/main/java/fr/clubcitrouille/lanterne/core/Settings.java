@@ -387,6 +387,11 @@ public final class Settings {
     /** Le capteur de joueurs sans flux. Voir {@code PlayerSensorMixin}. */
     private static boolean senses = true;
     private static boolean recall = true;
+    /**
+     * Le pochoir : les blocs d'un gabarit de structure hors de la fenêtre du chunk ne sont pas
+     * préparés. Voir {@link Stencil}.
+     */
+    private static boolean stencil = true;
     private static boolean redstone;
     private static boolean moulds = true;
     private static boolean decay = true;
@@ -950,6 +955,22 @@ public final class Settings {
         return master && senses;
     }
 
+    /**
+     * Le pochoir suit l'interrupteur général, mais il est le premier module lu depuis un AUTRE FIL.
+     *
+     * <p>La génération de terrain tourne sur le pool de travail ; le banc, lui, bascule le maître
+     * depuis le fil du serveur. Une pièce de structure en cours de pose peut donc voir le drapeau
+     * changer d'avis au milieu de sa propre boucle.
+     *
+     * <p>C'est sans conséquence sur le monde bâti, et il faut dire pourquoi : les blocs que le tri
+     * écarte sont exactement ceux que {@code placeInWorld} allait jeter à la ligne suivante. Une
+     * lecture déchirée ne peut donc pas produire une structure différente, seulement une mesure un
+     * peu floue — et c'est le banc apparié, chunk par chunk, qui s'en charge.
+     */
+    public static boolean stencil() {
+        return master && stencil;
+    }
+
     public static int decayDelay() {
         return decayDelay;
     }
@@ -1119,6 +1140,10 @@ public final class Settings {
         redstone = wanted.contains("redstone");
         recall = wanted.contains("memoire") || wanted.contains("conditions");
         senses = wanted.contains("capteur") || wanted.contains("sens");
+        // « pochoir » et rien d'autre : « structure » aurait été tentant, mais ce mot apparaît déjà
+        // dans les notes du projet pour désigner tout autre chose, et un mot-clé qui ressemble à un
+        // autre est exactement ce qui a fait mesurer deux modules pour un, trois fois.
+        stencil = wanted.contains("pochoir") || wanted.contains("stencil");
         // Quatre modules manquaient à cet appel, et c'est le troisième défaut du même genre.
         //
         // Un drapeau absent d'ici ne vaut pas « éteint » : il garde sa valeur par défaut, qui est
@@ -1264,6 +1289,7 @@ public final class Settings {
         redstone = Config.REDSTONE.get();
         recall = Config.RECALL.get();
         senses = Config.SENSES.get();
+        stencil = Config.STENCIL.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
@@ -1340,6 +1366,9 @@ public final class Settings {
         }
         if (senses) {
             text.append("capteurs ");
+        }
+        if (stencil) {
+            text.append("pochoir ");
         }
         if (decay) {
             text.append("chute-feuilles ");

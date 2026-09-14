@@ -48,7 +48,8 @@
     "RedstoneEvaluatorMixin",
     "MemoryPulseMixin",
     "BehaviorMemoryMixin",
-    "PlayerSensorMixin"
+    "PlayerSensorMixin",
+    "TemplateStencilMixin"
   ],
   "client": [
     "EntityCullMixin",

@@ -43,6 +43,12 @@ public final class LanterneCommand {
                     report(context.getSource());
                     return 1;
                 })
+                // Le sommaire, en tete parce que c'est par la qu'on arrive quand on ne sait pas
+                // par ou commencer. Voir Guide.
+                .then(Commands.literal("help")
+                        .executes(context -> Guide.show(context.getSource())))
+                .then(Commands.literal("aide")
+                        .executes(context -> Guide.show(context.getSource())))
                 .then(Commands.literal("demo")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .then(Commands.argument("charge",
