@@ -43,6 +43,31 @@ public final class LanterneCommand {
                     report(context.getSource());
                     return 1;
                 })
+                .then(Commands.literal("demo")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .then(Commands.argument("charge",
+                                com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .suggests((context, builder) -> {
+                                    for (String choice : new String[] {"grange", "entrepot",
+                                            "butin", "feuilles", "enclos"}) {
+                                        builder.suggest(choice);
+                                    }
+                                    return builder.buildFuture();
+                                })
+                                .then(Commands.argument("combien",
+                                        IntegerArgumentType.integer(1, 20000))
+                                        .executes(context -> {
+                                            String kind = com.mojang.brigadier.arguments
+                                                    .StringArgumentType.getString(context, "charge");
+                                            int count = IntegerArgumentType.getInteger(
+                                                    context, "combien");
+                                            return demo(context.getSource(), kind, count);
+                                        }))
+                                .executes(context -> {
+                                    String kind = com.mojang.brigadier.arguments
+                                            .StringArgumentType.getString(context, "charge");
+                                    return demo(context.getSource(), kind, 800);
+                                })))
                 .then(Commands.literal("pregen")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .then(Commands.argument("rayon", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 20000))
@@ -354,5 +379,38 @@ public final class LanterneCommand {
         source.sendSuccess(() -> Component.literal(name + " : ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal(value).withStyle(ChatFormatting.WHITE)), false);
+    }
+
+    /**
+     * Bâtit devant le joueur une des charges du laboratoire.
+     *
+     * <h2>Pourquoi cette commande existe</h2>
+     *
+     * <p>Un joueur qui regarde une plaine à cent soixante-dix images par seconde ne peut rien juger
+     * de ce mod, et c'est <b>normal</b> : dans une plaine, il n'y a ni mur pour voiler quoi que ce
+     * soit, ni coffre, ni pile au sol. Les modules économisent du travail qui, là, n'existe pas.
+     *
+     * <p>Les chiffres du laboratoire viennent de charges précises — mille vaches sous un toit, douze
+     * cents coffres, quinze cents piles pleines. Cette commande pose ces mêmes charges <b>devant le
+     * joueur</b>, pour qu'il bascule les réglages et voie l'effet de ses propres yeux plutôt que de
+     * croire un tableau.
+     *
+     * <p>C'est la seule façon honnête de répondre à « je ne vois pas la différence » : montrer la
+     * situation où la différence existe.
+     */
+    private static int demo(CommandSourceStack source, String kind, int count) {
+        ServerLevel level = source.getLevel();
+        fr.clubcitrouille.lanterne.lab.Scene.Kind chosen =
+                fr.clubcitrouille.lanterne.lab.Scene.parse(kind);
+        int born = fr.clubcitrouille.lanterne.lab.Scene.build(level, chosen, count, 0);
+        source.sendSuccess(() -> Component.literal(
+                "Charge « " + chosen + " » posée à l'origine du monde : " + born + " élément(s).")
+                .withStyle(ChatFormatting.GOLD), true);
+        source.sendSuccess(() -> Component.literal(
+                "Rends-toi à 0 / 0 et regarde-la. Ouvre ensuite Options > Graphismes > Lanterne, "
+                + "active la jauge, et bascule les réglages : la différence se voit là, pas dans "
+                + "une plaine vide.")
+                .withStyle(ChatFormatting.GRAY), false);
+        return born;
     }
 }
