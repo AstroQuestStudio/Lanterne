@@ -373,6 +373,10 @@ public final class Settings {
     private static boolean staticChests = true;
     /** La chute rapide des feuilles detachees. Cote SERVEUR. Voir {@code LeafDecayMixin}. */
     /** Les formes de collision partagees entre etats. Voir {@link Moulds}. */
+    /** Le calculateur de redstone de Mojang, celui qui traite le reseau entier. */
+    /** Les conditions d'entree des comportements, mises en cache. Voir {@code BehaviorMemoryMixin}. */
+    private static boolean recall = true;
+    private static boolean redstone;
     private static boolean moulds = true;
     private static boolean decay = true;
     /** Ticks entre le detachement d'une feuille et sa chute. */
@@ -873,6 +877,14 @@ public final class Settings {
         return moulds;
     }
 
+    public static boolean redstone() {
+        return master && redstone;
+    }
+
+    public static boolean recall() {
+        return master && recall;
+    }
+
     public static int decayDelay() {
         return decayDelay;
     }
@@ -1039,6 +1051,8 @@ public final class Settings {
         staticChests = wanted.contains("chests") || wanted.contains("coffres");
         decay = wanted.contains("decay") || wanted.contains("chute");
         moulds = wanted.contains("moules");
+        redstone = wanted.contains("redstone");
+        recall = wanted.contains("memoire") || wanted.contains("conditions");
         // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
         // branche AUTO dépend d'une option vidéo VRAIE par défaut en vanilla. Un banc qui se
         // contenterait d'allumer le module mesurerait donc zéro, sans rien signaler. On force ici la
@@ -1158,6 +1172,8 @@ public final class Settings {
         poi = Config.POI.get();
         spill = Config.SPILL.get();
         moulds = Config.MOULDS.get();
+        redstone = Config.REDSTONE.get();
+        recall = Config.RECALL.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
@@ -1225,6 +1241,12 @@ public final class Settings {
         }
         if (moulds) {
             text.append("moules ");
+        }
+        if (redstone) {
+            text.append("redstone ");
+        }
+        if (recall) {
+            text.append("memoire ");
         }
         if (decay) {
             text.append("chute-feuilles ");

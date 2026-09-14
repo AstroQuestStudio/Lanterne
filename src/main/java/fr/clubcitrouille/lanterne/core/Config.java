@@ -57,6 +57,8 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue WIRE;
     public static final ModConfigSpec.BooleanValue POI;
     public static final ModConfigSpec.BooleanValue SPILL;
+    public static final ModConfigSpec.BooleanValue RECALL;
+    public static final ModConfigSpec.BooleanValue REDSTONE;
     public static final ModConfigSpec.BooleanValue MOULDS;
     public static final ModConfigSpec.BooleanValue DECAY;
     public static final ModConfigSpec.IntValue DECAY_DELAY;
@@ -183,6 +185,57 @@ public final class Config {
                 "600 villageois : 2,4 millions de tableaux evites, 20 Mo sur 2900.",
                 "Modeste et gratuit - un serveur rapide est fait de la somme de ces gains-la.")
                 .define("effets_traverses", true);
+        RECALL = BUILDER.comment(
+                "MEMOIRE DES CONDITIONS : ne pas retester ce qui n'a pas change.",
+                "",
+                "Behavior.tryStart commence par verifier les conditions d'entree du comportement :",
+                "deux a cinq memoires interrogees, pour chacun des quinze comportements d'un",
+                "villageois. Cinquante interrogations par creature et par tick ; sur 600",
+                "villageois, trente mille par tick.",
+                "",
+                "Et la plupart du temps RIEN N'A CHANGE depuis le tick precedent : la reponse est la",
+                "meme, recalculee pour rien.",
+                "",
+                "Un compteur sur le cerveau s'incremente a toute ecriture, tout effacement et a",
+                "chaque passage du ramasseur de memoires expirees. Tant qu'il ne bouge pas, la",
+                "reponse precedente vaut toujours.",
+                "",
+                "Aucun effet sur le comportement : la reponse rendue est identique, seul le moment",
+                "ou elle est calculee change.",
+                "",
+                "MESURE HONNETE : x1,01 sur 600 villageois - 33,91 ms contre 33,53. Sous le plancher",
+                "de ce banc, donc NON PROUVE. C'est la TROISIEME tentative sur le cerveau des",
+                "villageois, apres le cache de la liste plate (x1,01) et le brassage des positions",
+                "(x0,91), et la troisieme a ne rien rendre.",
+                "",
+                "La conclusion qu'il faut en tirer : startEachNonRunningBehavior porte 28,9 % de la",
+                "pile, mais ce temps est dans le TRAVAIL des comportements, pas dans les",
+                "verifications qui les precedent. Il n'y a rien a y gratter par mise en cache.",
+                "",
+                "Garde parce qu'il ne coute rien et va dans le bon sens. Sans chiffre de gain.")
+                .define("memoire_conditions", true);
+        REDSTONE = BUILDER.comment(
+                "MOTEUR DE REDSTONE : celui que Mojang a ecrit, puis laisse eteint.",
+                "",
+                "26.1 contient DEUX calculateurs de puissance pour la poussiere :",
+                "  Default      (42 lignes)  chaque brin recalcule SEUL, sans savoir ce que font",
+                "                            ses voisins. Dans un reseau, un brin change de valeur",
+                "                            une demi-douzaine de fois avant de se fixer - et chaque",
+                "                            changement emet 42 mises a jour de bloc.",
+                "  Experimental (221 lignes) traite le reseau ENTIER avec des files, et n'emet que",
+                "                            les mises a jour finales.",
+                "",
+                "Le second est exactement l'algorithme du mod de reference sur ce sujet. Mojang l'a",
+                "ecrit, puis place derriere un drapeau qu'il faut cocher a la creation du monde et",
+                "que presque personne ne coche. Par defaut, c'est le PREMIER qui tourne.",
+                "",
+                "ETEINT PAR DEFAUT, et ce n'est pas de la prudence excessive : ce reglage CHANGE LE",
+                "COMPORTEMENT DU JEU, pas seulement sa vitesse. L'ordre des mises a jour cesse de",
+                "dependre des coordonnees pour devenir previsible - ce qui corrige MC-11193, mais",
+                "peut faire se comporter differemment un circuit bati sur l'ordre d'origine.",
+                "",
+                "Un mod d'optimisation qui casse une ferme a echoue, meme s'il double les ticks.")
+                .define("moteur_redstone", false);
         MOULDS = BUILDER.comment(
                 "MOULES : les formes de collision partagees entre etats de blocs identiques.",
                 "",

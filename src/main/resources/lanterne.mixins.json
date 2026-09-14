@@ -40,7 +40,10 @@
     "PoiStreamMixin",
     "InsideEffectsMixin",
     "LeafDecayMixin",
-    "StateCacheDedupMixin"
+    "StateCacheDedupMixin",
+    "RedstoneEvaluatorMixin",
+    "MemoryPulseMixin",
+    "BehaviorMemoryMixin"
   ],
   "client": [
     "EntityCullMixin",

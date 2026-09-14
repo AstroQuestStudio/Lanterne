@@ -261,7 +261,23 @@ public final class Scene {
          */
         VILLAGERS,
         /**
-         * Des lignes de redstone alimentées par une horloge, jamais éprouvées.
+         * Une nappe de poussière de redstone alimentée par une horloge.
+         *
+         * <h2>Des lignes isolées ne coûtaient rien</h2>
+         *
+         * <p>La première version posait des lignes séparées de vingt-quatre blocs. Le banc a rendu
+         * <b>1,34 ms par tick</b> — sur les cinquante que dure un tick — et le profileur a signalé
+         * que le serveur dormait cinquante-neuf pour cent du temps. Aucun module de redstone
+         * n'aurait pu y démontrer quoi que ce soit.
+         *
+         * <p>La raison est dans la mécanique même de vanilla : un brin isolé se fixe presque tout
+         * de suite. Ce qui coûte, c'est un <b>réseau connecté</b>, où chaque brin recalcule sa
+         * puissance sans savoir ce que font ses voisins — et change donc de valeur une demi-douzaine
+         * de fois avant de se stabiliser, en émettant quarante-deux mises à jour de bloc à chaque
+         * changement.
+         *
+         * <p>La charge est donc une nappe pleine, alimentée par une seule source à un coin, pour
+         * que le signal ait à traverser tout le réseau.
          *
          * <p>La propagation d.un signal de redstone est réputée coûteuse, et vanilla en porte deux
          * versions : l.historique, et un {@code ExperimentalRedstoneWireEvaluator} qui ne s.active
@@ -864,26 +880,42 @@ public final class Scene {
      * enchevêtrement.
      */
     private static int wiring(ServerLevel level, int count) {
-        int lines = Math.max(4, count / 32);
-        wireLength = 24;
+        int side = Math.max(8, (int) Math.ceil(Math.sqrt(count)));
+        wireLength = side;
         int top = ground(level);
         var wire = net.minecraft.world.level.block.Blocks.REDSTONE_WIRE.defaultBlockState();
         var stone = net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         SOURCES.clear();
         pulses = 0L;
-        for (int line = 0; line < lines; line++) {
-            int z = line * 3;
-            for (int x = 0; x < wireLength; x++) {
+
+        int laid = 0;
+        for (int x = 0; x < side; x++) {
+            for (int z = 0; z < side; z++) {
                 cursor.set(x, top, z);
                 level.setBlock(cursor, stone, 2);
                 cursor.set(x, top + 1, z);
-                level.setBlock(cursor, wire, 2);
+                if (level.setBlock(cursor, wire, 2)) {
+                    laid++;
+                }
             }
+        }
+        // UNE SOURCE PAR RANGEE, sur tout un bord.
+        //
+        // La première version de cette nappe n'en posait qu'une, au coin — en se disant que le
+        // signal aurait ainsi à traverser tout le réseau. Le banc a rendu 1,36 ms par tick, comme
+        // avec les lignes isolées d'avant : autrement dit, rien.
+        //
+        // La raison est bête et elle était sous les yeux : les lignes précédentes portaient
+        // soixante-deux sources, une par ligne. En passant à la nappe, j'en ai gardé UNE. Le
+        // nombre d'impulsions par tick avait donc été divisé par soixante-deux, et la charge
+        // s'était allégée d'autant — exactement au moment où je croyais l'alourdir.
+        for (int z = 0; z < side; z++) {
             SOURCES.add(new BlockPos(-1, top + 1, z));
         }
-        Lanterne.LOG.info("[SCÈNE] redstone : {} ligne(s) de {} blocs, une source par ligne.",
-                lines, wireLength);
+
+        Lanterne.LOG.info("[SCÈNE] redstone : nappe de {}x{}, {} bloc(s) de poussière CONNECTÉS, "
+                + "{} source(s) sur un bord.", side, side, laid, side);
         return 0;
     }
 
@@ -1262,6 +1294,21 @@ public final class Scene {
 
     public static int build(ServerLevel level, Kind kind, int count, int radius) {
         clearDecor(level);
+        // L'APPARITION NATURELLE EST COUPEE ICI, POUR TOUTES LES CHARGES.
+        //
+        // clearDecor remet SPAWN_MOBS a vrai, et c'est juste : il retablit l'etat de vanilla apres
+        // avoir efface le decor. Mais entre la construction d'une charge et le debut de la mesure,
+        // le monde decante pendant plusieurs secondes — et pendant ce temps, les creatures
+        // apparaissent.
+        //
+        // Le controle prealable l'a vu avant nous : « 63 entites residuelles, l'epreuve sera
+        // faussee par la densite », sur une charge de redstone qui n'en cree aucune. Soixante-deux
+        // betes nees toutes seules dans le dos du banc.
+        //
+        // Chaque charge cree explicitement ce dont elle a besoin. Aucune n'attend quoi que ce soit
+        // de l'apparition naturelle — sauf le serveur realiste, qui la retablit lui-meme quelques
+        // lignes plus bas.
+        level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
         builtKind = kind;
         builtCount = count;
         builtRadius = radius;
