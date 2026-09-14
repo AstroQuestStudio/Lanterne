@@ -57,6 +57,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue WIRE;
     public static final ModConfigSpec.BooleanValue POI;
     public static final ModConfigSpec.BooleanValue SPILL;
+    public static final ModConfigSpec.BooleanValue MOULDS;
     public static final ModConfigSpec.BooleanValue DECAY;
     public static final ModConfigSpec.IntValue DECAY_DELAY;
     public static final ModConfigSpec.IntValue NEAR_RADIUS;
@@ -182,6 +183,27 @@ public final class Config {
                 "600 villageois : 2,4 millions de tableaux evites, 20 Mo sur 2900.",
                 "Modeste et gratuit - un serveur rapide est fait de la somme de ces gains-la.")
                 .define("effets_traverses", true);
+        MOULDS = BUILDER.comment(
+                "MOULES : les formes de collision partagees entre etats de blocs identiques.",
+                "",
+                "Chaque etat de bloc garde SA copie de sa forme de collision et de son tableau de",
+                "faces porteuses. Un bloc a six proprietes booleennes a 64 etats ; une cloture, un",
+                "mur ou un tuyau de mod en ont plusieurs centaines - et presque tous decrivent",
+                "EXACTEMENT le meme volume. Vanilla n'en sait rien et les duplique.",
+                "",
+                "Tout le travail est fait au CHARGEMENT, une fois par etat. En pleine partie ce",
+                "module n'execute plus une seule instruction.",
+                "",
+                "MESURE HONNETE. En vanilla, 11 413 formes et 30 674 motifs de faces sont",
+                "effectivement partages - pour seulement 317 + 57 distincts retenus. Le partage est",
+                "donc bien reel et massif. Mais 317 formes distinctes pesent trop peu pour que la",
+                "balance se voie : l'ecart mesure (9,2 Mo) est du meme ordre que le bruit du banc",
+                "lui-meme (3,6 Mo entre deux phases IDENTIQUES).",
+                "",
+                "Ce module est donc garde pour ce qu'il fait - le compteur le prouve - et SANS",
+                "chiffre de gain. Sur un modpack ou le compte de blocs est dix fois superieur, il",
+                "devrait compter ; ici, il ne se mesure pas.")
+                .define("moules", true);
         DECAY = BUILDER.comment(
                 "CHUTE RAPIDE DES FEUILLES - cote SERVEUR : un arbre abattu ne laisse pas sa",
                 "couronne suspendue dans le vide pendant une minute.",

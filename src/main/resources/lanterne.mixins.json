@@ -39,7 +39,8 @@
     "SectionStorageAccessor",
     "PoiStreamMixin",
     "InsideEffectsMixin",
-    "LeafDecayMixin"
+    "LeafDecayMixin",
+    "StateCacheDedupMixin"
   ],
   "client": [
     "EntityCullMixin",
@@ -48,6 +49,7 @@
     "LeafCullMixin",
     "LooseItemMixin",
     "ParticleVeilMixin",
-    "BlockEntityVeilMixin"
+    "BlockEntityVeilMixin",
+    "SoundLimitMixin"
   ]
 }

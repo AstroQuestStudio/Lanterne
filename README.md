@@ -8,7 +8,7 @@
 
 <br>
 
-![Version](https://img.shields.io/badge/version-2.3.0-brightgreen?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.4.0-brightgreen?style=for-the-badge)
 ![NeoForge](https://img.shields.io/badge/NeoForge-26.1.2-orange?style=for-the-badge)
 ![Java](https://img.shields.io/badge/Java-21-blue?style=for-the-badge)
 ![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue?style=for-the-badge)
@@ -81,6 +81,7 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **1 500 piles pleines au sol** *(exemplaires, seul)* | 27,5 im/s | **64,6 im/s** | **×2,35** | ✅ |
 | **1 200 coffres** *(le Voile sur les blocs-entités, seul)* | 71,2 im/s | **189,0 im/s** | **×2,65** | ✅ |
 | **Particules occultées** *(le Voile sur les particules)* | — | — | non mesuré | ⏳ |
+| **Formes de blocs partagées** *(les Moules)* | — | — | non mesurable | ⏳ |
 
 <div align="center">
 

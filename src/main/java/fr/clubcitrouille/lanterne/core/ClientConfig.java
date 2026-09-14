@@ -46,6 +46,10 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue ITEM_COPIES;
     public static final ModConfigSpec.BooleanValue VEIL_PARTICLES;
     public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
+    public static final ModConfigSpec.BooleanValue DIN;
+    public static final ModConfigSpec.IntValue DIN_REGION;
+    public static final ModConfigSpec.IntValue DIN_ALLOWANCE;
+    public static final ModConfigSpec.IntValue DIN_WINDOW;
 
     public static final ModConfigSpec SPEC;
 
@@ -185,6 +189,33 @@ public final class ClientConfig {
                 "Un bloc en cours de cassage n'est jamais voile : sa fissure est le retour visuel du",
                 "minage. Demande le voile actif.")
                 .define("voile_blocs_entites", true);
+
+        DIN = BUILDER.comment(
+                "VACARME : au-dela d'un certain nombre, un meme son au meme endroit n'apporte rien.",
+                "",
+                "SoundEngine n'a AUCUNE limite sur les sons identiques. Le seul plafond est le",
+                "nombre de canaux audio, et quand il est atteint les sons suivants sont perdus sans",
+                "choix ni priorite. Une ferme qui tue trente creatures dans la meme seconde demande",
+                "trente sons de mort au meme endroit : le joueur en entend UN, le moteur les resout",
+                "tous les trente.",
+                "",
+                "CE MODULE NE PROMET PAS D'IMAGES PAR SECONDE. Le son vit sur son propre fil ;",
+                "l'economie est du temps processeur et des canaux, pas du temps de rendu. Ce qu'il",
+                "apporte est audible : dans une ferme, la bouillie redevient un son.",
+                "",
+                "Musique, interface et voix ne sont jamais concernees.")
+                .define("vacarme", true);
+        DIN_REGION = BUILDER.comment(
+                "Cote d'une region, en blocs. Deux sons dans le meme cube sont 'au meme endroit'.")
+                .defineInRange("vacarme_region_blocs", 8, 1, 64);
+        DIN_ALLOWANCE = BUILDER.comment(
+                "Sons identiques tolerés dans une region pendant la fenetre.",
+                "3 (defaut) : un son isole, ou deux, ou trois, passent toujours. Il faut une RAFALE",
+                "pour que ce module agisse.")
+                .defineInRange("vacarme_tolerance", 3, 1, 32);
+        DIN_WINDOW = BUILDER.comment(
+                "Duree de la fenetre glissante, en millisecondes.")
+                .defineInRange("vacarme_fenetre_ms", 250, 20, 5000);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

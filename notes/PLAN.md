@@ -54,6 +54,57 @@ est en revanche copiable et sera instruite — mais après avoir lu son code, pa
 avant : promettre DLSS sans avoir vu comment il obtient un contexte graphique
 depuis Java serait exactement le genre d'annonce que ce projet refuse de faire.
 
+## Bilan des vagues 1 et 2
+
+### Ce qui est entré, et ce que ça vaut
+
+| Module | Charge | Gain | Côté |
+|---|---|:---:|---|
+| Le Voile — créatures | 1 000 vaches sous un toit | **×7,98** | client |
+| Le Voile — blocs-entités | 1 200 coffres | **×2,65** | client |
+| Objets au sol | 1 500 piles pleines | **×2,35** | client |
+| Coffres statiques | 1 200 coffres | **×1,45** | client |
+| Masquage des feuilles | 12 167 feuilles | **×1,42** | client |
+| Le Voile — particules | — | non mesuré | client |
+| Les Moules | — | non mesurable | les deux |
+| Chute des feuilles | — | confort | serveur |
+| Le Vacarme | — | confort | client |
+
+### La découverte qui domine ces deux vagues
+
+**26.1 a déjà absorbé une grande partie de ce que les mods de la mine corrigeaient.**
+Vérifié dans le code décompilé, une cible après l'autre :
+
+| Cible | Ce que le mod corrige | État en 26.1 |
+|---|---|---|
+| **Ksyxis** | Les 441 chunks de spawn chargés au démarrage | `prepareLevels` ne les charge **plus** |
+| **FastSuite** | Pas de cache de recettes | `RecipeManager.CachedCheck` **existe** |
+| **particle-core** | Particules hors champ non filtrées | `extract` reçoit déjà un `Frustum` |
+| **particules** *(distance)* | Pas de filtre de distance | `doAddParticle` coupe à 32 blocs |
+| **Lithium** *(Brain)* | Streams dans `startEachNonRunningBehavior` | Ce sont des **boucles `for`** |
+
+Corollaire de méthode : **le code d'un mod reste copiable, son argumentaire non.** Les chiffres
+qu'il annonce datent d'une version où le défaut existait. Il faut remesurer, jamais croire.
+
+### Les trois modules retirés de ces vagues
+
+| Module | Ce qu'il visait | Verdict |
+|---|---|---|
+| Brassage des positions | 93 % de collisions sur `Vec3i.hashCode` | ×0,91 et ×0,93 — les tables chaudes sont indexées par `long` |
+| Conseil des comportements | 5,1 % du sommet de pile | ×1,03 puis ×1,01 — le temps vit dans ce que la boucle appelle |
+| *(la dérive du banc)* | — | Réparée : 15 % → 4 % |
+
+### Ce qui n'a pas pu être fait, et pourquoi
+
+**MoreCulling**, **ImmediatelyFast**, **RRLS**, **DynamicFPS** ciblent tous **26.2**, pas 26.1.2.
+Leur code ne s'applique pas tel quel, et le rétro-porter est un chantier par mod.
+
+**Exordium** demande un tampon d'image séparé et son propre auteur annonce « still work in
+progress, there will be issues ». Hors de question dans un mod qui se veut celui qu'on installe
+sans y penser.
+
+**ModernFix** cible 1.20.1 et pèse des milliers de lignes.
+
 ## Vague 2 — la mémoire et le démarrage
 
 FerriteCore (MIT), Redirected (?), ModernFix (LGPL-3.0), Ksyxis (MIT),

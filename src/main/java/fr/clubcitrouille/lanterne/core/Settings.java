@@ -372,6 +372,8 @@ public final class Settings {
      */
     private static boolean staticChests = true;
     /** La chute rapide des feuilles detachees. Cote SERVEUR. Voir {@code LeafDecayMixin}. */
+    /** Les formes de collision partagees entre etats. Voir {@link Moulds}. */
+    private static boolean moulds = true;
     private static boolean decay = true;
     /** Ticks entre le detachement d'une feuille et sa chute. */
     private static int decayDelay = 5;
@@ -444,6 +446,8 @@ public final class Settings {
     private static boolean veilParticles = true;
     /** Le voile etendu aux entites de bloc. Voir {@code BlockEntityVeilMixin}. */
     private static boolean veilBlockEntities = true;
+    /** Le vacarme : sons identiques limites. Voir {@link Din}. */
+    private static boolean din = true;
     /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
@@ -854,6 +858,17 @@ public final class Settings {
         return master && decay;
     }
 
+    /**
+     * Lu pendant le chargement des registres, avant que les reglages soient poses.
+     *
+     * <p>Sans le {@code master &&} des autres : l'interrupteur principal est bascule par les bancs
+     * APRES le chargement, et la deduplication, elle, a deja eu lieu. Le lier au maitre donnerait
+     * l'illusion qu'on peut la couper a chaud, ce qui est faux — il faut recharger.
+     */
+    public static boolean moulds() {
+        return moulds;
+    }
+
     public static int decayDelay() {
         return decayDelay;
     }
@@ -873,6 +888,10 @@ public final class Settings {
 
     public static boolean veilBlockEntities() {
         return master && veilBlockEntities;
+    }
+
+    public static boolean din() {
+        return master && din;
     }
 
     public static boolean spill() {
@@ -1002,6 +1021,7 @@ public final class Settings {
         shroud = wanted.contains("shroud") || wanted.contains("voile") || wanted.contains("occlusion");
         staticChests = wanted.contains("chests") || wanted.contains("coffres");
         decay = wanted.contains("decay") || wanted.contains("chute");
+        moulds = wanted.contains("moules");
         // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
         // branche AUTO dépend d'une option vidéo VRAIE par défaut en vanilla. Un banc qui se
         // contenterait d'allumer le module mesurerait donc zéro, sans rien signaler. On force ici la
@@ -1018,6 +1038,7 @@ public final class Settings {
         // allumait les deux modules a la fois. Le banc l'a dit — « voile voile-blocs » — parce
         // qu'on lui avait appris a crier apres le meme defaut sur les objets au sol.
         veilBlockEntities = wanted.contains("blocs");
+        din = wanted.contains("vacarme") || wanted.contains("sons");
         leafCulling = wanted.contains("masque") || wanted.contains("cull")
                 ? ClientConfig.LeafCulling.TOUJOURS
                 : ClientConfig.LeafCulling.JAMAIS;
@@ -1056,6 +1077,9 @@ public final class Settings {
         itemCopies = ClientConfig.ITEM_COPIES.get();
         veilParticles = ClientConfig.VEIL_PARTICLES.get();
         veilBlockEntities = ClientConfig.VEIL_BLOCK_ENTITIES.get();
+        din = ClientConfig.DIN.get();
+        Din.tune(ClientConfig.DIN_REGION.get(), ClientConfig.DIN_ALLOWANCE.get(),
+                ClientConfig.DIN_WINDOW.get());
         Shroud.tune(ClientConfig.SHROUD_DELAY.get(), ClientConfig.SHROUD_NEAR.get(),
                 ClientConfig.SHROUD_BUDGET.get(), ClientConfig.SHROUD_FAR.get(),
                 ClientConfig.SHROUD_BULKY.get());
@@ -1082,6 +1106,9 @@ public final class Settings {
         if (veilBlockEntities) {
             text.append("voile-blocs ");
         }
+        if (din) {
+            text.append("vacarme ");
+        }
         return text.isEmpty() ? "aucun" : text.toString().trim();
     }
 
@@ -1105,6 +1132,7 @@ public final class Settings {
         wire = Config.WIRE.get();
         poi = Config.POI.get();
         spill = Config.SPILL.get();
+        moulds = Config.MOULDS.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
@@ -1169,6 +1197,9 @@ public final class Settings {
         }
         if (spill) {
             text.append("effets ");
+        }
+        if (moulds) {
+            text.append("moules ");
         }
         if (decay) {
             text.append("chute-feuilles ");

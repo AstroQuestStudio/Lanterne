@@ -165,6 +165,10 @@ public final class Lanterne {
      */
     @SubscribeEvent
     public void onServerStarted(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
+        // Tous les blocs sont enregistres : les tables de reconnaissance des formes n'ont plus
+        // rien a reconnaitre. Les garder reviendrait a retenir de la memoire pour rien — c'est
+        // exactement ce que la premiere version de ce module faisait, et le banc l'avait vu.
+        fr.clubcitrouille.lanterne.core.Moulds.seal();
         fr.clubcitrouille.lanterne.core.Ballast.appraise();
         fr.clubcitrouille.lanterne.core.Herald.welcome(
                 (System.nanoTime() - AWOKEN) / 1_000_000L,
