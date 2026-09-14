@@ -65,6 +65,11 @@ public final class Dials extends Screen {
     @Override
     protected void init() {
         this.dials.clear();
+        this.dials.add(Dial.toggle("Jauge de performance",
+                Settings::gauge, ClientConfig.GAUGE,
+                "Affiche images/s, centile le plus lent et échelle en cours, dans un coin de l'écran.",
+                "F3 donne une moyenne arrondie ; la jauge donne les à-coups, qui sont ce qu'on ressent.",
+                "Effet immédiat. Fenêtre glissante de deux secondes."));
         this.dials.add(Dial.cycle("Mise à l'échelle",
                 () -> lensLabel(Lens.preset()),
                 () -> Lens.preset() == Lens.Preset.NATIF ? DIM : AMBER,

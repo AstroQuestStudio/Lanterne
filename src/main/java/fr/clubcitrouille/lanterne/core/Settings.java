@@ -448,6 +448,8 @@ public final class Settings {
     private static boolean veilBlockEntities = true;
     /** Le vacarme : sons identiques limites. Voir {@link Din}. */
     /** La lentille : mise a l'echelle de resolution. Voir {@link Lens}. */
+    /** La jauge de performance sur le HUD. Voir {@code client.Gauge}. */
+    private static boolean gauge;
     private static boolean lens;
     private static boolean din = true;
     /**
@@ -905,6 +907,10 @@ public final class Settings {
         return lens;
     }
 
+    public static boolean gauge() {
+        return gauge;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -1051,6 +1057,7 @@ public final class Settings {
         veilBlockEntities = wanted.contains("blocs");
         din = wanted.contains("vacarme") || wanted.contains("sons");
         lens = wanted.contains("lentille");
+        gauge = wanted.contains("jauge");
         leafCulling = wanted.contains("masque") || wanted.contains("cull")
                 ? ClientConfig.LeafCulling.TOUJOURS
                 : ClientConfig.LeafCulling.JAMAIS;
@@ -1090,6 +1097,7 @@ public final class Settings {
         veilParticles = ClientConfig.VEIL_PARTICLES.get();
         veilBlockEntities = ClientConfig.VEIL_BLOCK_ENTITIES.get();
         din = ClientConfig.DIN.get();
+        gauge = ClientConfig.GAUGE.get();
         lens = ClientConfig.LENS.get();
         Lens.tune(ClientConfig.LENS_PRESET.get());
         Din.tune(ClientConfig.DIN_REGION.get(), ClientConfig.DIN_ALLOWANCE.get(),

@@ -88,6 +88,7 @@ public final class Lanterne {
         // la garde suffit — une classe n'est chargée qu'au moment où l'on s'en sert.
         if (net.neoforged.fml.loading.FMLEnvironment.getDist().isClient()) {
             fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
+            fr.clubcitrouille.lanterne.client.Gauge.register(modBus);
         }
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,

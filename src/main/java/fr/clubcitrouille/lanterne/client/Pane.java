@@ -49,6 +49,9 @@ public final class Pane {
         // La fenêtre est construite, le contexte graphique aussi : la lentille peut désormais
         // répondre. Avant la première image, elle se tait — voir Lens.awaken.
         fr.clubcitrouille.lanterne.core.Lens.awaken();
+        // Relevé même quand la jauge est masquée : l'affichage doit être prêt dès
+        // qu'on l'ouvre, pas deux secondes plus tard.
+        Gauge.note();
         Foliage.refresh(net.minecraft.client.Minecraft.getInstance());
 
         if (!Glass.armed()) {

@@ -46,6 +46,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue ITEM_COPIES;
     public static final ModConfigSpec.BooleanValue VEIL_PARTICLES;
     public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
+    public static final ModConfigSpec.BooleanValue GAUGE;
     public static final ModConfigSpec.BooleanValue LENS;
     public static final ModConfigSpec.EnumValue<Lens.Preset> LENS_PRESET;
     public static final ModConfigSpec.BooleanValue DIN;
@@ -192,6 +193,17 @@ public final class ClientConfig {
                 "minage. Demande le voile actif.")
                 .define("voile_blocs_entites", true);
 
+        GAUGE = BUILDER.comment(
+                "LA JAUGE : ce que le mod fait, lisible pendant qu'on joue.",
+                "",
+                "F3 donne une moyenne d'images par seconde, arrondie, recalculee une fois par",
+                "seconde. C'est assez pour savoir si le jeu tourne bien ; pas pour COMPARER deux",
+                "prereglages, dont la difference se lit dans les a-coups autant que dans la moyenne.",
+                "",
+                "La jauge ajoute le CENTILE LE PLUS LENT - ce que le joueur ressent comme une",
+                "saccade - le prereglage d'echelle en cours, et le nombre de creatures que le Voile",
+                "vient d'ecarter. Releve sur une fenetre glissante de deux secondes.")
+                .define("jauge", false);
         LENS = BUILDER.comment(
                 "LA LENTILLE : rendre le monde plus petit que l'ecran, puis l'y etaler.",
                 "",
