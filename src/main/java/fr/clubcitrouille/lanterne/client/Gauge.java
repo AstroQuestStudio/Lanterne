@@ -102,8 +102,9 @@ public final class Gauge {
         String line3 = Lens.active()
                 ? "échelle  " + Lens.preset().pixelPercent() + " %"
                 : "échelle  native";
-        long veiled = Shroud.veiled();
-        String line4 = veiled > 0 ? "voilé  " + veiled : null;
+        // Par IMAGE, jamais cumulé : voir Shroud.veiledThisFrame pour ce que le cumul donnait.
+        int veiled = Shroud.veiledPerFrame();
+        String line4 = veiled > 0 ? "voilé  " + veiled + "  /image" : null;
 
         int width = 4 + Math.max(client.font.width(line1),
                 Math.max(client.font.width(line2), client.font.width(line3))) + 8;

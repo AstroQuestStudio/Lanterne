@@ -117,6 +117,21 @@ public final class Shroud {
     private static long veiled;
     private static long rays;
 
+    /**
+     * Créatures et points voilés pendant l'image en cours.
+     *
+     * <h2>Un compteur cumulé ne dit rien à personne</h2>
+     *
+     * <p>La jauge affichait d'abord {@link #veiled}, qui court depuis le lancement du jeu. Après
+     * quelques minutes, elle annonçait « voilé 541 439 » — un nombre exact, impossible à
+     * interpréter, et qui grossissait même en regardant un mur. Ce qui intéresse le joueur est
+     * <b>combien le module écarte en ce moment</b>, parce que c'est cela qui varie selon l'endroit
+     * où il se tient.
+     */
+    private static int veiledThisFrame;
+
+    private static int veiledLastFrame;
+
     private Shroud() {}
 
     /**
@@ -127,6 +142,8 @@ public final class Shroud {
      */
     public static void openFrame() {
         spent = 0;
+        veiledLastFrame = veiledThisFrame;
+        veiledThisFrame = 0;
         // Les identifiants d'entités mortes ne sont jamais retirés un à un : les suivre coûterait
         // plus que de laisser la table enfler puis la vider d'un coup. Le seuil est large devant le
         // nombre d'entités qu'un client affiche, et la purge ne fait que provoquer un réexamen.
@@ -225,6 +242,7 @@ public final class Shroud {
             boolean cached = HIDDEN.contains(id);
             if (cached) {
                 veiled++;
+                veiledThisFrame++;
             }
             return cached;
         }
@@ -235,6 +253,7 @@ public final class Shroud {
             boolean cached = HIDDEN.contains(id);
             if (cached) {
                 veiled++;
+                veiledThisFrame++;
             }
             return cached;
         }
@@ -245,6 +264,7 @@ public final class Shroud {
         if (blocked) {
             HIDDEN.add(id);
             veiled++;
+            veiledThisFrame++;
         } else {
             HIDDEN.remove(id);
         }
@@ -453,9 +473,14 @@ public final class Shroud {
         return seen;
     }
 
-    /** Entités effectivement voilées — le travail de rendu qui n'a pas eu lieu. */
+    /** Entités effectivement voilées depuis le dernier rapport — pour les bancs. */
     public static long veiled() {
         return veiled;
+    }
+
+    /** Voilées pendant la dernière image complète — pour la jauge. Voir {@link #veiledThisFrame}. */
+    public static int veiledPerFrame() {
+        return veiledLastFrame;
     }
 
     /** Blocs traversés par les lancers — le prix payé pour cette économie. */

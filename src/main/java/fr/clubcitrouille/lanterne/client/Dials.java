@@ -3,59 +3,73 @@ package fr.clubcitrouille.lanterne.client;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import fr.clubcitrouille.lanterne.core.ClientConfig;
-import fr.clubcitrouille.lanterne.core.Lens;
 import fr.clubcitrouille.lanterne.core.Settings;
 
 /**
- * Les cadrans : l'écran de réglages du rendu.
+ * Les cadrans : l'écran de réglages du rendu, en trois colonnes.
  *
- * <h2>Pourquoi un écran dessiné à la main plutôt que la liste d'options du jeu</h2>
+ * <h2>Pourquoi trois colonnes et non une liste</h2>
  *
- * <p>{@code OptionsSubScreen} donne des boutons gris empilés et une infobulle qui s'efface dès qu'on
- * bouge la souris. Cela convient à un réglage dont on connaît déjà l'effet — le volume, la distance
- * de vue — pas à des modules dont tout l'intérêt tient au chiffre qu'ils ont rendu au banc.
+ * <p>La première version empilait huit réglages dans un panneau unique, avec une zone d'explication
+ * au bas. Deux défauts sautaient aux yeux dès qu'on s'en servait : on ne savait pas ce qui
+ * appartenait à quoi, et l'explication changeait sous la souris au moindre mouvement.
  *
- * <p>Ici chaque ligne porte son état <b>en permanence</b> à droite, et la zone du bas explique celle
- * qu'on survole : ce qu'elle fait, ce qu'elle coûte, et si elle agit tout de suite ou au prochain
- * chargement. C'est la seule façon de rendre un arbitrage possible sans aller lire un fichier.
+ * <p>La disposition retenue est celle qui a fait ses preuves sur l'autre mod de ce projet : une
+ * <b>barre de familles</b> à gauche, la <b>liste des réglages</b> de la famille choisie au centre,
+ * et un <b>panneau de détail</b> à droite. Chaque zone répond à une question différente — où
+ * suis-je, que puis-je régler, qu'est-ce que cela fait — et aucune ne bouge quand ce n'est pas la
+ * sienne.
  *
  * <h2>Le compromis est toujours écrit</h2>
  *
  * <p>Aucun de ces réglages n'est gratuit. Les coffres perdent leur couvercle animé, les piles au sol
- * perdent leur indice de quantité, la Lentille perd de la netteté. Un écran qui vanterait les gains
- * sans nommer les pertes pousserait à tout activer, puis à se demander pourquoi le jeu a changé.
- * Chaque description dit donc les deux.
+ * perdent leur indice de quantité. Le panneau de détail dit donc trois choses dans cet ordre : ce
+ * que le module fait, <b>ce qu'il coûte</b>, et quand l'effet est visible. Un écran qui ne vanterait
+ * que les gains pousserait à tout activer, puis à se demander pourquoi le jeu a changé.
  */
 public final class Dials extends Screen {
-    private static final int SCRIM = 0xC0000000;
-    private static final int PANEL = 0xF0141418;
+    private static final int SCRIM = 0xC8000000;
+    private static final int PANEL = 0xF2141418;
+    private static final int SIDE = 0xFF101014;
     private static final int EDGE = 0xFF2A2A32;
     private static final int RAIL = 0xFF1C1C22;
     private static final int AMBER = 0xFFFFC857;
     private static final int TEXT = 0xFFE8E8E8;
     private static final int DIM = 0xFF8A8A92;
-    private static final int HOVER = 0x24FFC857;
+    private static final int FAINT = 0xFF5A5A62;
+    private static final int HOVER = 0x20FFC857;
+    private static final int PICKED = 0x2EFFC857;
     private static final int ON = 0xFF6BCB77;
-    private static final int OFF = 0xFF4A4A54;
+    private static final int OFF = 0xFF44444E;
 
-    private static final int WIDTH = 430;
-    private static final int HEADER = 40;
-    private static final int ROW = 26;
-    private static final int FOOTER = 48;
+    private static final int WIDTH = 560;
+    private static final int HEIGHT = 292;
+    private static final int HEADER = 34;
+    private static final int FOOTER = 24;
+    private static final int SIDEBAR = 132;
+    private static final int DETAIL = 184;
+    private static final int ROW = 24;
+    private static final int TAB = 30;
 
     private final Screen parent;
-    private final List<Dial> dials = new ArrayList<>();
+    private final List<Family> families = new ArrayList<>();
+    private int picked;
     private int hovered = -1;
+
+    private int panelX;
+    private int panelY;
 
     public Dials(Screen parent) {
         super(Component.literal("Lanterne"));
@@ -64,72 +78,68 @@ public final class Dials extends Screen {
 
     @Override
     protected void init() {
-        this.dials.clear();
-        this.dials.add(Dial.toggle("Jauge de performance",
-                Settings::gauge, ClientConfig.GAUGE,
-                "Affiche images/s, centile le plus lent et échelle en cours, dans un coin de l'écran.",
-                "F3 donne une moyenne arrondie ; la jauge donne les à-coups, qui sont ce qu'on ressent.",
-                "Effet immédiat. Fenêtre glissante de deux secondes."));
-        // La mise à l'échelle est désarmée : voir Lens.scale(). La ligne reste affichée, grisée,
-        // parce que la masquer ferait croire qu'elle n'a jamais existé — et le joueur qui l'a vue
-        // hier mérite de savoir pourquoi elle est partie.
-        this.dials.add(Dial.cycle("Mise à l'échelle",
-                () -> "en chantier",
-                () -> DIM,
-                step -> { },
-                "Rendre le monde plus petit que l'écran, puis l'y étaler : le coût d'une image suit "
-                        + "le nombre de pixels.",
-                "La première version dessinait le monde dans un coin sans l'agrandir : "
-                        + "blitToScreen n'étire pas, contrairement à ce qui avait été supposé.",
-                "Refaite sur une cible de scène séparée — l'interface restera nette."));
-        this.dials.add(Dial.toggle("Le Voile — créatures",
-                Settings::shroud, ClientConfig.SHROUD,
+        this.panelX = (this.width - WIDTH) / 2;
+        this.panelY = Math.max(10, (this.height - HEIGHT) / 2);
+        if (!this.families.isEmpty()) {
+            return;
+        }
+
+        Family veil = new Family("Le Voile", "ce qu'un mur cache n'est pas dessiné");
+        veil.add(Dial.toggle("Créatures", Settings::shroud, ClientConfig.SHROUD,
                 "Une créature qu'un mur cache n'est pas préparée pour le rendu.",
-                "1 000 vaches sous un toit : 29,9 → 238,8 images/s, soit ×7,98. Effet immédiat.", ""));
-        this.dials.add(Dial.toggle("Le Voile — blocs",
-                Settings::veilBlockEntities, ClientConfig.VEIL_BLOCK_ENTITIES,
-                "Coffres, panneaux et fourneaux cachés derrière un mur ne sont pas préparés.",
-                "1 200 coffres : 71,2 → 189,0 images/s, soit ×2,65. Effet immédiat.", ""));
-        this.dials.add(Dial.toggle("Le Voile — particules",
-                Settings::veilParticles, ClientConfig.VEIL_PARTICLES,
-                "Une particule née derrière un mur ne naît pas du tout : ni création, ni tick, ni rendu.",
-                "Vanilla ne filtre que la distance, et ne cull que le dessin. Effet immédiat.", ""));
-        this.dials.add(Dial.toggle("Coffres statiques",
-                Settings::staticChests, ClientConfig.STATIC_CHESTS,
-                "Un coffre rendu comme un bloc ordinaire, maillé une fois dans son chunk.",
-                "1 200 coffres : ×1,45. Prix : le couvercle ne s'anime plus à l'ouverture.",
-                "Visible au prochain chargement du monde."));
-        this.dials.add(Dial.cycle("Feuilles masquées",
-                () -> leafLabel(Settings.leafCulling()),
-                () -> Settings.leafCulling() == ClientConfig.LeafCulling.JAMAIS ? DIM : AMBER,
-                step -> cycleLeaves(step),
-                "Masque les faces que deux feuilles collées se cachent l'une l'autre.",
-                "12 167 feuilles : ×1,42. AUTO suit ton option « Feuilles ajourées » et ne peut "
-                        + "produire aucun artefact.",
-                "Visible au prochain chargement du monde."));
-        this.dials.add(Dial.cycle("Objets au sol",
-                () -> Settings.itemCopies() + (Settings.itemCopies() > 1 ? " exemplaires" : " exemplaire"),
-                () -> Settings.itemCopies() < 4 ? AMBER : DIM,
-                step -> cycleItems(step),
-                "Vanilla dessine une pile au sol jusqu'à CINQ fois, légèrement décalée.",
-                "1 500 piles pleines : ×2,35. Prix : une pile de 64 ressemble à un objet seul.",
+                "1 000 vaches sous un toit : 29,9 → 238,8 im/s, soit ×7,98.",
                 "Effet immédiat."));
-        this.dials.add(Dial.toggle("Sons superposés",
-                Settings::din, ClientConfig.DIN,
+        veil.add(Dial.toggle("Blocs-entités", Settings::veilBlockEntities,
+                ClientConfig.VEIL_BLOCK_ENTITIES,
+                "Coffres, panneaux et fourneaux derrière un mur ne sont pas préparés.",
+                "1 200 coffres : 71,2 → 189,0 im/s, soit ×2,65.",
+                "Effet immédiat."));
+        veil.add(Dial.toggle("Particules", Settings::veilParticles, ClientConfig.VEIL_PARTICLES,
+                "Une particule née derrière un mur ne naît pas : ni création, ni tick, ni rendu.",
+                "Vanilla ne filtre que la distance, et n'écarte que le dessin.",
+                "Effet immédiat."));
+        this.families.add(veil);
+
+        Family world = new Family("Le monde", "coffres, feuilles, objets au sol");
+        world.add(Dial.toggle("Coffres statiques", Settings::staticChests,
+                ClientConfig.STATIC_CHESTS,
+                "Un coffre rendu comme un bloc ordinaire, maillé une fois dans son chunk.",
+                "1 200 coffres : ×1,45. Prix : le couvercle ne s'anime plus.",
+                "Visible au prochain chargement."));
+        world.add(Dial.cycle("Feuilles masquées", () -> leafLabel(Settings.leafCulling()),
+                () -> Settings.leafCulling() == ClientConfig.LeafCulling.JAMAIS ? DIM : AMBER,
+                Dials::cycleLeaves,
+                "Masque les faces que deux feuilles collées se cachent l'une l'autre.",
+                "12 167 feuilles : ×1,42. AUTO suit ton option « Feuilles ajourées ».",
+                "Visible au prochain chargement."));
+        world.add(Dial.cycle("Objets au sol", () -> Settings.itemCopies() + " exempl.",
+                () -> Settings.itemCopies() < 4 ? AMBER : DIM,
+                Dials::cycleItems,
+                "Vanilla dessine une pile au sol jusqu'à CINQ fois, légèrement décalée.",
+                "1 500 piles pleines : ×2,35. Prix : une pile de 64 paraît seule.",
+                "Effet immédiat."));
+        this.families.add(world);
+
+        Family image = new Family("L'image", "échelle de rendu et mesure");
+        image.add(Dial.cycle("Mise à l'échelle", () -> "en chantier", () -> FAINT, step -> { },
+                "Rendre le monde plus petit que l'écran, puis l'y étaler.",
+                "La première version le dessinait dans un coin : blitToScreen n'étire pas.",
+                "Repris sur une cible de scène séparée — l'interface restera nette."));
+        image.add(Dial.toggle("Jauge de performance", Settings::gauge, ClientConfig.GAUGE,
+                "Images/s, centile le plus lent et créatures voilées, dans un coin de l'écran.",
+                "F3 donne une moyenne arrondie ; la jauge donne les à-coups.",
+                "Effet immédiat. Fenêtre glissante de deux secondes."));
+        this.families.add(image);
+
+        Family sound = new Family("Les sons", "ce que l'oreille ne distingue pas");
+        sound.add(Dial.toggle("Sons superposés", Settings::din, ClientConfig.DIN,
                 "Au-delà de trois fois, un même son au même endroit n'apporte plus rien.",
                 "Confort, pas performance : le son vit sur son propre fil.",
                 "Dans une ferme, la bouillie redevient un son."));
+        this.families.add(sound);
     }
 
     // --- Les actions -------------------------------------------------------
-
-    private static void cycleLens(int step) {
-        Lens.Preset[] all = Lens.Preset.values();
-        Lens.Preset next = all[Math.floorMod(Lens.preset().ordinal() + step, all.length)];
-        ClientConfig.LENS.set(next != Lens.Preset.NATIF);
-        ClientConfig.LENS_PRESET.set(next);
-        Settings.applyFromClientConfig();
-    }
 
     private static void cycleLeaves(int step) {
         ClientConfig.LeafCulling[] all = ClientConfig.LeafCulling.values();
@@ -149,18 +159,6 @@ public final class Dials extends Screen {
         Settings.applyFromClientConfig();
     }
 
-    private static String lensLabel(Lens.Preset preset) {
-        String name = switch (preset) {
-            case NATIF -> "Natif";
-            case ULTRA_QUALITE -> "Ultra qualité";
-            case QUALITE -> "Qualité";
-            case EQUILIBRE -> "Équilibré";
-            case PERFORMANCE -> "Performance";
-            case ULTRA_PERFORMANCE -> "Ultra perf.";
-        };
-        return preset == Lens.Preset.NATIF ? name : name + "  ·  " + preset.pixelPercent() + " %";
-    }
-
     private static String leafLabel(ClientConfig.LeafCulling mode) {
         return switch (mode) {
             case AUTO -> "Auto";
@@ -171,90 +169,142 @@ public final class Dials extends Screen {
 
     // --- Le dessin ---------------------------------------------------------
 
-    private int panelHeight() {
-        return HEADER + this.dials.size() * ROW + FOOTER;
-    }
-
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY,
             float partial) {
         super.extractRenderState(graphics, mouseX, mouseY, partial);
 
-        // Un voile sombre sur tout l'écran : le panneau doit se détacher du monde, pas s'y fondre.
+        final int x = this.panelX;
+        final int y = this.panelY;
+        final int right = x + WIDTH;
+        final int bottom = y + HEIGHT;
+
         graphics.fill(0, 0, this.width, this.height, SCRIM);
+        graphics.fill(x - 1, y - 1, right + 1, bottom + 1, EDGE);
+        graphics.fill(x, y, right, bottom, PANEL);
+        graphics.fill(x, y, x + SIDEBAR, bottom, SIDE);
+        graphics.fill(x, y, right, y + 2, AMBER);
 
-        final int left = (this.width - WIDTH) / 2;
-        final int top = Math.max(16, (this.height - panelHeight()) / 2);
-        final int right = left + WIDTH;
-        final int bottom = top + panelHeight();
+        graphics.text(this.font, "LANTERNE", x + 12, y + 13, AMBER, false);
+        String tag = "rendu";
+        graphics.text(this.font, tag, right - 12 - this.font.width(tag), y + 13, FAINT, false);
 
-        graphics.fill(left - 1, top - 1, right + 1, bottom + 1, EDGE);
-        graphics.fill(left, top, right, bottom, PANEL);
-        // L'accent ambre en haut : la signature de la citrouille, et le seul aplat de couleur vive.
-        graphics.fill(left, top, right, top + 2, AMBER);
+        graphics.fill(x + SIDEBAR, y + 2, x + SIDEBAR + 1, bottom, EDGE);
+        graphics.fill(right - DETAIL - 1, y + HEADER, right - DETAIL, bottom - FOOTER, EDGE);
+        graphics.fill(x + SIDEBAR, y + HEADER - 1, right, y + HEADER, EDGE);
+        graphics.fill(x + SIDEBAR, bottom - FOOTER, right, bottom - FOOTER + 1, EDGE);
 
-        graphics.text(this.font, "LANTERNE", left + 14, top + 14, AMBER, false);
-        graphics.text(this.font, "rendu", left + 78, top + 14, DIM, false);
-        String hint = "clic gauche / droit pour changer  ·  Échap pour fermer";
-        graphics.text(this.font, hint, right - 14 - this.font.width(hint), top + 14, DIM, false);
-        graphics.fill(left + 12, top + HEADER - 8, right - 12, top + HEADER - 7, EDGE);
+        drawFamilies(graphics, x, y, mouseX, mouseY);
+        drawRows(graphics, x, y, right, mouseX, mouseY);
+        drawDetail(graphics, right - DETAIL + 10, y + HEADER + 10, DETAIL - 22);
 
-        this.hovered = -1;
-        for (int i = 0; i < this.dials.size(); i++) {
-            int rowTop = top + HEADER + i * ROW;
-            boolean over = mouseX >= left + 8 && mouseX <= right - 8
-                    && mouseY >= rowTop && mouseY < rowTop + ROW - 2;
-            if (over) {
-                this.hovered = i;
-                graphics.fill(left + 8, rowTop, right - 8, rowTop + ROW - 2, HOVER);
-                graphics.fill(left + 8, rowTop, left + 10, rowTop + ROW - 2, AMBER);
+        String hint = "clic gauche / droit pour changer   ·   Échap pour fermer";
+        graphics.text(this.font, hint, x + SIDEBAR + 12, bottom - FOOTER + 8, FAINT, false);
+    }
+
+    private void drawFamilies(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY) {
+        for (int i = 0; i < this.families.size(); i++) {
+            int top = y + HEADER + 4 + i * TAB;
+            boolean over = inside(mouseX, mouseY, x + 4, top, x + SIDEBAR - 5, top + TAB - 4);
+            if (i == this.picked) {
+                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + TAB - 4, PICKED);
+                graphics.fill(x + 4, top, x + 6, top + TAB - 4, AMBER);
+            } else if (over) {
+                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + TAB - 4, HOVER);
             }
-            this.dials.get(i).draw(graphics, this.font, left + 18, rowTop + 8, right - 18);
+            Family family = this.families.get(i);
+            graphics.text(this.font, family.name, x + 14, top + 4,
+                    i == this.picked ? AMBER : TEXT, false);
+            graphics.text(this.font, family.dials.size() + " réglages", x + 14, top + 15,
+                    FAINT, false);
         }
+    }
 
-        // La zone du bas : ce que fait l'option survolée, et ce qu'elle coûte.
-        int noteTop = bottom - FOOTER + 6;
-        graphics.fill(left + 12, noteTop - 6, right - 12, noteTop - 5, EDGE);
-        String[] lines = this.hovered >= 0
-                ? this.dials.get(this.hovered).notes()
-                : new String[] {
-                        "Survole un réglage pour savoir ce qu'il fait — et ce qu'il coûte.",
-                        "Chaque chiffre affiché ici sort d'un banc automatique, aucun n'est saisi à la main.",
-                        ""};
-        for (int i = 0; i < lines.length && i < 3; i++) {
-            if (lines[i].isEmpty()) {
+    private void drawRows(GuiGraphicsExtractor graphics, int x, int y, int right,
+            int mouseX, int mouseY) {
+        List<Dial> rows = this.families.get(this.picked).dials;
+        int listLeft = x + SIDEBAR + 10;
+        int listRight = right - DETAIL - 12;
+        this.hovered = -1;
+        for (int i = 0; i < rows.size(); i++) {
+            int top = y + HEADER + 8 + i * ROW;
+            if (inside(mouseX, mouseY, listLeft, top, listRight, top + ROW - 2)) {
+                this.hovered = i;
+                graphics.fill(listLeft, top, listRight, top + ROW - 2, HOVER);
+            }
+            rows.get(i).draw(graphics, this.font, listLeft + 8, top + 7, listRight - 8);
+        }
+    }
+
+    private void drawDetail(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        List<Dial> rows = this.families.get(this.picked).dials;
+        if (this.hovered < 0) {
+            Family family = this.families.get(this.picked);
+            graphics.text(this.font, family.name, x, y, AMBER, false);
+            int line = y + 14;
+            for (String part : wrap(family.subtitle, width)) {
+                graphics.text(this.font, part, x, line, DIM, false);
+                line += 10;
+            }
+            graphics.text(this.font, "Survole un réglage.", x, line + 8, FAINT, false);
+            return;
+        }
+        Dial dial = rows.get(this.hovered);
+        graphics.text(this.font, dial.name, x, y, AMBER, false);
+        int line = y + 16;
+        int[] colours = {TEXT, DIM, FAINT};
+        for (int i = 0; i < dial.notes.length; i++) {
+            if (dial.notes[i].isEmpty()) {
                 continue;
             }
-            graphics.text(this.font, trim(lines[i], WIDTH - 36), left + 18, noteTop + i * 11,
-                    i == 0 ? TEXT : DIM, false);
+            for (String part : wrap(dial.notes[i], width)) {
+                graphics.text(this.font, part, x, line, colours[Math.min(i, 2)], false);
+                line += 10;
+            }
+            line += 4;
         }
     }
 
-    /** Coupe une ligne trop longue plutôt que de la laisser déborder du panneau. */
-    private String trim(String line, int maxWidth) {
-        if (this.font.width(line) <= maxWidth) {
-            return line;
+    /** Coupe un paragraphe en lignes qui tiennent dans la colonne de détail. */
+    private List<String> wrap(String text, int width) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String word : text.split(" ")) {
+            String candidate = current.isEmpty() ? word : current + " " + word;
+            if (this.font.width(candidate) > width && current.length() > 0) {
+                lines.add(current.toString());
+                current = new StringBuilder(word);
+            } else {
+                current = new StringBuilder(candidate);
+            }
         }
-        String cut = line;
-        while (cut.length() > 4 && this.font.width(cut + "…") > maxWidth) {
-            cut = cut.substring(0, cut.length() - 1);
+        if (current.length() > 0) {
+            lines.add(current.toString());
         }
-        return cut + "…";
+        return lines;
     }
 
-    /**
-     * Clic gauche pour avancer, clic droit pour reculer.
-     *
-     * <p>26.1 passe un {@code MouseButtonEvent} plutôt que trois nombres — la position y est déjà
-     * jointe au bouton. La rangée visée est celle que le dessin a marquée comme survolée : la
-     * détection n'est donc écrite qu'une fois, et ce qui s'éclaire sous la souris est exactement ce
-     * qui répondra au clic.
-     */
+    private static boolean inside(int px, int py, int left, int top, int right, int bottom) {
+        return px >= left && px <= right && py >= top && py <= bottom;
+    }
+
     @Override
-    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubled) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubled) {
         int button = event.button();
+        int mouseX = (int) event.x();
+        int mouseY = (int) event.y();
+
+        for (int i = 0; i < this.families.size(); i++) {
+            int top = this.panelY + HEADER + 4 + i * TAB;
+            if (inside(mouseX, mouseY, this.panelX + 4, top,
+                    this.panelX + SIDEBAR - 5, top + TAB - 4)) {
+                this.picked = i;
+                this.hovered = -1;
+                return true;
+            }
+        }
         if (this.hovered >= 0 && (button == 0 || button == 1)) {
-            this.dials.get(this.hovered).click(button == 0 ? 1 : -1);
+            this.families.get(this.picked).dials.get(this.hovered).click(button == 0 ? 1 : -1);
             return true;
         }
         return super.mouseClicked(event, doubled);
@@ -270,8 +320,7 @@ public final class Dials extends Screen {
      *
      * <p>Les coffres et les feuilles décident de la <em>manière de mailler</em> un chunk ; leur
      * changement ne se voit qu'après reconstruction. Sans cet appel, un joueur basculerait l'option,
-     * ne verrait rien, et conclurait qu'elle est cassée — c'est le défaut le plus courant des écrans
-     * de réglages graphiques, et il se corrige en une ligne.
+     * ne verrait rien, et conclurait qu'elle est cassée.
      */
     @Override
     public void onClose() {
@@ -284,12 +333,27 @@ public final class Dials extends Screen {
         }
     }
 
+    /** Une famille de réglages — une entrée de la barre de gauche. */
+    private static final class Family {
+        private final String name;
+        private final String subtitle;
+        private final List<Dial> dials = new ArrayList<>();
+
+        Family(String name, String subtitle) {
+            this.name = name;
+            this.subtitle = subtitle;
+        }
+
+        void add(Dial dial) {
+            this.dials.add(dial);
+        }
+    }
+
     /**
      * Une ligne de réglage.
      *
      * <p>Deux formes seulement : un interrupteur, dont l'état se lit d'un coup d'œil à la pastille,
-     * et un sélecteur, dont la valeur s'écrit en toutes lettres. Pas de curseur — sur huit réglages,
-     * il n'apporterait qu'une troisième façon de cliquer.
+     * et un sélecteur, dont la valeur s'écrit en toutes lettres.
      */
     private static final class Dial {
         private final String name;
@@ -298,12 +362,12 @@ public final class Dials extends Screen {
         private final ModConfigSpec.BooleanValue backing;
         private final Supplier<String> value;
         private final IntSupplier colour;
-        private final java.util.function.IntConsumer step;
+        private final IntConsumer step;
         private final String[] notes;
 
         private Dial(String name, boolean binary, BooleanSupplier state,
                 ModConfigSpec.BooleanValue backing, Supplier<String> value, IntSupplier colour,
-                java.util.function.IntConsumer step, String[] notes) {
+                IntConsumer step, String[] notes) {
             this.name = name;
             this.binary = binary;
             this.state = state;
@@ -315,19 +379,15 @@ public final class Dials extends Screen {
         }
 
         static Dial toggle(String name, BooleanSupplier state, ModConfigSpec.BooleanValue backing,
-                String what, String cost, String extra) {
+                String what, String cost, String when) {
             return new Dial(name, true, state, backing, () -> "", () -> AMBER, null,
-                    new String[] {what, cost, extra});
+                    new String[] {what, cost, when});
         }
 
-        static Dial cycle(String name, Supplier<String> value, IntSupplier colour,
-                java.util.function.IntConsumer step, String what, String cost, String extra) {
+        static Dial cycle(String name, Supplier<String> value, IntSupplier colour, IntConsumer step,
+                String what, String cost, String when) {
             return new Dial(name, false, () -> false, null, value, colour, step,
-                    new String[] {what, cost, extra});
-        }
-
-        String[] notes() {
-            return this.notes;
+                    new String[] {what, cost, when});
         }
 
         void click(int direction) {
@@ -342,13 +402,11 @@ public final class Dials extends Screen {
         void draw(GuiGraphicsExtractor graphics, Font font, int x, int y, int right) {
             graphics.text(font, this.name, x, y, TEXT, false);
             if (this.binary) {
-                // Une piste et une pastille plutôt qu'un mot : l'état d'une colonne entière se lit
-                // alors sans rien déchiffrer.
                 boolean on = this.state.getAsBoolean();
-                int trackLeft = right - 26;
-                graphics.fill(trackLeft, y - 2, trackLeft + 26, y + 9, RAIL);
-                graphics.fill(on ? trackLeft + 14 : trackLeft + 2, y,
-                        on ? trackLeft + 24 : trackLeft + 12, y + 7, on ? ON : OFF);
+                int track = right - 24;
+                graphics.fill(track, y - 2, track + 24, y + 9, RAIL);
+                graphics.fill(on ? track + 13 : track + 2, y,
+                        on ? track + 22 : track + 11, y + 7, on ? ON : OFF);
             } else {
                 String text = this.value.get();
                 graphics.text(font, text, right - font.width(text), y, this.colour.getAsInt(), false);
