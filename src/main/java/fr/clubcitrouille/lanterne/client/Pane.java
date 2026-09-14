@@ -46,6 +46,9 @@ public final class Pane {
         // joueur peut changer à tout moment, et le changement exige une reconstruction. Le vérifier
         // ici coûte deux lectures de champ par image, et évite qu'un réglage reste sans effet
         // visible jusqu'au prochain chargement du monde.
+        // La fenêtre est construite, le contexte graphique aussi : la lentille peut désormais
+        // répondre. Avant la première image, elle se tait — voir Lens.awaken.
+        fr.clubcitrouille.lanterne.core.Lens.awaken();
         Foliage.refresh(net.minecraft.client.Minecraft.getInstance());
 
         if (!Glass.armed()) {

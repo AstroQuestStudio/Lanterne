@@ -50,6 +50,8 @@
     "LooseItemMixin",
     "ParticleVeilMixin",
     "BlockEntityVeilMixin",
-    "SoundLimitMixin"
+    "SoundLimitMixin",
+    "LensWindowMixin",
+    "VideoOptionsMixin"
   ]
 }

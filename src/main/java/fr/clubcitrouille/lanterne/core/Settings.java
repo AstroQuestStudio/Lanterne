@@ -447,6 +447,8 @@ public final class Settings {
     /** Le voile etendu aux entites de bloc. Voir {@code BlockEntityVeilMixin}. */
     private static boolean veilBlockEntities = true;
     /** Le vacarme : sons identiques limites. Voir {@link Din}. */
+    /** La lentille : mise a l'echelle de resolution. Voir {@link Lens}. */
+    private static boolean lens;
     private static boolean din = true;
     /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
@@ -894,6 +896,15 @@ public final class Settings {
         return master && din;
     }
 
+    /**
+     * Sans le {@code master &&} : la lentille est consultee par Window.getWidth(), donc pendant la
+     * construction du client, bien avant qu'un banc puisse basculer quoi que ce soit. La couper a
+     * chaud changerait la taille de la cible de rendu en pleine image.
+     */
+    public static boolean lens() {
+        return lens;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -1039,6 +1050,7 @@ public final class Settings {
         // qu'on lui avait appris a crier apres le meme defaut sur les objets au sol.
         veilBlockEntities = wanted.contains("blocs");
         din = wanted.contains("vacarme") || wanted.contains("sons");
+        lens = wanted.contains("lentille");
         leafCulling = wanted.contains("masque") || wanted.contains("cull")
                 ? ClientConfig.LeafCulling.TOUJOURS
                 : ClientConfig.LeafCulling.JAMAIS;
@@ -1078,6 +1090,8 @@ public final class Settings {
         veilParticles = ClientConfig.VEIL_PARTICLES.get();
         veilBlockEntities = ClientConfig.VEIL_BLOCK_ENTITIES.get();
         din = ClientConfig.DIN.get();
+        lens = ClientConfig.LENS.get();
+        Lens.tune(ClientConfig.LENS_PRESET.get());
         Din.tune(ClientConfig.DIN_REGION.get(), ClientConfig.DIN_ALLOWANCE.get(),
                 ClientConfig.DIN_WINDOW.get());
         Shroud.tune(ClientConfig.SHROUD_DELAY.get(), ClientConfig.SHROUD_NEAR.get(),
@@ -1108,6 +1122,9 @@ public final class Settings {
         }
         if (din) {
             text.append("vacarme ");
+        }
+        if (Lens.active()) {
+            text.append("lentille-").append(Lens.preset().name().toLowerCase(Locale.ROOT)).append(' ');
         }
         return text.isEmpty() ? "aucun" : text.toString().trim();
     }

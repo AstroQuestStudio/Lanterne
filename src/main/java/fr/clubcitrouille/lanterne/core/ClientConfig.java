@@ -46,6 +46,8 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue ITEM_COPIES;
     public static final ModConfigSpec.BooleanValue VEIL_PARTICLES;
     public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
+    public static final ModConfigSpec.BooleanValue LENS;
+    public static final ModConfigSpec.EnumValue<Lens.Preset> LENS_PRESET;
     public static final ModConfigSpec.BooleanValue DIN;
     public static final ModConfigSpec.IntValue DIN_REGION;
     public static final ModConfigSpec.IntValue DIN_ALLOWANCE;
@@ -190,6 +192,38 @@ public final class ClientConfig {
                 "minage. Demande le voile actif.")
                 .define("voile_blocs_entites", true);
 
+        LENS = BUILDER.comment(
+                "LA LENTILLE : rendre le monde plus petit que l'ecran, puis l'y etaler.",
+                "",
+                "Le cout d'une image est proportionnel au nombre de pixels. Rendre a deux tiers de",
+                "chaque dimension, ce n'est pas deux tiers du travail : c'est 45 % de pixels EN",
+                "MOINS. A la moitie de chaque dimension, on en supprime les trois quarts.",
+                "",
+                "C'est le principe de DLSS (NVIDIA), FSR (AMD) et XeSS (Intel). Ils ne different que",
+                "par la FACON de remonter l'image, pas par l'origine du gain.",
+                "",
+                "FSR N'EST PAS RESERVE AUX CARTES AMD : c'est un shader ordinaire, qui tourne sur",
+                "n'importe quel processeur graphique. DLSS, lui, exige une NVIDIA RTX, la",
+                "bibliotheque du constructeur - non redistribuable - et un contexte Vulkan que",
+                "Minecraft n'a pas.",
+                "",
+                "PRIX A PAYER : l'interface est peinte dans le meme cadre que le monde. Sa TAILLE est",
+                "corrigee automatiquement, mais sa NETTETE baisse avec le facteur choisi.",
+                "",
+                "DESACTIVE PAR DEFAUT : ce module echange de la qualite contre de la vitesse, et cet",
+                "arbitrage appartient au joueur.")
+                .define("lentille", false);
+        LENS_PRESET = BUILDER.comment(
+                "Le prereglage, aux noms employes par DLSS comme par FSR.",
+                "Le facteur divise CHAQUE DIMENSION ; la part de pixels rendus est son carre inverse.",
+                "",
+                "NATIF             : 100 % - le jeu tel quel.",
+                "ULTRA_QUALITE     :  77 % par dimension, 59 % des pixels. A peine visible.",
+                "QUALITE           :  67 %, 44 % des pixels. Le reglage recommande par AMD.",
+                "EQUILIBRE         :  59 %, 35 % des pixels.",
+                "PERFORMANCE       :  50 %, 25 % des pixels. Un quart du travail de rendu.",
+                "ULTRA_PERFORMANCE :  33 %, 11 % des pixels. Pour depanner une machine a bout.")
+                .defineEnum("lentille_prereglage", Lens.Preset.QUALITE);
         DIN = BUILDER.comment(
                 "VACARME : au-dela d'un certain nombre, un meme son au meme endroit n'apporte rien.",
                 "",
