@@ -210,8 +210,56 @@ public final class Glass {
     private static int keptOn;
     private static int keptOff;
 
+    /**
+     * Intervalle réel entre deux images — la mesure sur laquelle porte le verdict.
+     *
+     * <h2>Le banc mesurait un tiers du problème, et se contredisait tout seul</h2>
+     *
+     * <p>Une exécution a rendu ceci : médiane <b>11,82 ms</b> avec le mod contre <b>8,77</b> sans —
+     * donc une perte — mais <b>2019 images</b> avec contre <b>1797</b> sans, sur la même fenêtre de
+     * soixante secondes — donc un gain. Les deux chiffres du même relevé disaient l'inverse l'un de
+     * l'autre, et le verdict publié en a choisi un sans voir l'autre.
+     *
+     * <p>Le calcul tranche : 2019 images en 60 s font <b>29,7 ms</b> par image, pas 11,82. Le second
+     * chiffre ne pouvait donc pas être le temps d'une image. Et de fait, il ne l'est pas.
+     * {@code Minecraft.getFrameTimeNs()} est calculé {@code Util.getNanos() - renderStartTimer}
+     * autour du seul appel {@code gameRenderer.render(...)} : il mesure le <em>rendu</em>. En solo, le
+     * même fil enchaîne aussi le tick du serveur intégré, celui du client, et la présentation à
+     * l'écran. Tout cela vit entre deux images et n'entre dans aucun de ces deux points.
+     *
+     * <p>Les deux mesures étaient donc justes toutes les deux, et portaient sur deux choses
+     * différentes : le mod <b>gagne</b> environ sept millisecondes sur ce qui n'est pas du rendu —
+     * c'est son métier, il allège le tick serveur — et en <b>perd</b> trois sur le rendu lui-même,
+     * parce qu'en ralentissant le troupeau il le garde groupé dans le champ de la caméra plus
+     * longtemps. Le solde est positif, et c'est le compte d'images qui le disait.
+     *
+     * <p>On relève désormais l'écart entre deux passages consécutifs de ce point d'accroche. Il
+     * contient tout ce qui sépare deux images affichées, il est homogène au compte d'images, et il
+     * est ce qu'un joueur ressent. {@link #RENDER_ON} garde l'ancien signal à côté, non plus comme
+     * verdict mais comme diagnostic : savoir <em>où</em> va le temps reste utile.
+     */
     private static final long[] SAMPLES_ON = new long[MEASURE_TARGET_FRAMES];
+
     private static final long[] SAMPLES_OFF = new long[MEASURE_TARGET_FRAMES];
+
+    /** Coût du rendu seul, conservé comme diagnostic — voir {@link #SAMPLES_ON}. */
+    private static final long[] RENDER_ON = new long[MEASURE_TARGET_FRAMES];
+
+    private static final long[] RENDER_OFF = new long[MEASURE_TARGET_FRAMES];
+
+    /**
+     * Horodatage de l'image précédente, ou zéro au début d'une phase.
+     *
+     * <p>Remis à zéro à chaque ouverture de phase : le premier intervalle d'une phase enjamberait la
+     * bascule et la reconstruction de la scène, et vaudrait des centaines de millisecondes qui
+     * n'appartiennent à aucune des deux mesures.
+     */
+    private static long lastFrameAt;
+
+    /** Durée réelle de chaque phase de mesure — sert au contrôle de cohérence du verdict. */
+    private static long spanOn;
+
+    private static long spanOff;
 
     private Glass() {}
 
@@ -379,6 +427,7 @@ public final class Glass {
 
     private static void beginMeasure(boolean on) {
         filled = 0;
+        lastFrameAt = 0L;
         phaseOpened = System.nanoTime();
         phase = on ? Phase.MEASURE_ON : Phase.MEASURE_OFF;
         Lanterne.LOG.info("[VITRE] Chauffe terminée ({} s) — mesure {} en cours.",
@@ -402,15 +451,28 @@ public final class Glass {
      * sans mixin.
      */
     private static void collect(boolean on) {
+        long now = System.nanoTime();
+        // Le premier passage d'une phase n'a pas d'image précédente à laquelle se comparer : il
+        // amorce l'horloge et ne compte pas. Voir le champ lastFrameAt.
+        if (lastFrameAt == 0L) {
+            lastFrameAt = now;
+            return;
+        }
+        long gap = now - lastFrameAt;
+        lastFrameAt = now;
+
         long[] target = on ? SAMPLES_ON : SAMPLES_OFF;
+        long[] render = on ? RENDER_ON : RENDER_OFF;
         if (filled < target.length) {
-            target[filled] = Minecraft.getInstance().getFrameTimeNs();
+            target[filled] = gap;
+            render[filled] = Minecraft.getInstance().getFrameTimeNs();
         }
         filled++;
         if (filled >= MEASURE_TARGET_FRAMES || overdue()) {
             int kept = Math.min(filled, MEASURE_TARGET_FRAMES);
             if (on) {
                 keptOn = kept;
+                spanOn = now - phaseOpened;
                 modulesDuringOn = Settings.describe();
                 Settings.setEnabled(false);
                 // La scène est rebâtie entre les phases, et c'est indispensable ici : mille vaches
@@ -429,6 +491,7 @@ public final class Glass {
                         + "mod désactivé, nouvelle chauffe.", kept);
             } else {
                 keptOff = kept;
+                spanOff = now - phaseOpened;
                 conclude();
             }
         }
@@ -457,14 +520,28 @@ public final class Glass {
         double medianOff = median(SAMPLES_OFF, keptOff);
         double slowOn = slowestPercent(SAMPLES_ON, keptOn, 0.01d);
         double slowOff = slowestPercent(SAMPLES_OFF, keptOff, 0.01d);
+        double renderOn = median(RENDER_ON, keptOn);
+        double renderOff = median(RENDER_OFF, keptOff);
 
-        Lanterne.LOG.info("[VITRE] ── Résultat (temps par image) ──");
+        Lanterne.LOG.info("[VITRE] ── Résultat (intervalle réel entre deux images) ──");
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[VITRE] Avec Lanterne : médiane %.2f ms · 1%% le plus lent %.2f ms (%d image(s))",
-                medianOn / 1e6, slowOn / 1e6, keptOn));
+                "[VITRE] Avec Lanterne : médiane %.2f ms · 1%% le plus lent %.2f ms "
+                        + "(%d image(s) en %.1f s)",
+                medianOn / 1e6, slowOn / 1e6, keptOn, spanOn / 1e9d));
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[VITRE] Sans Lanterne : médiane %.2f ms · 1%% le plus lent %.2f ms (%d image(s))",
-                medianOff / 1e6, slowOff / 1e6, keptOff));
+                "[VITRE] Sans Lanterne : médiane %.2f ms · 1%% le plus lent %.2f ms "
+                        + "(%d image(s) en %.1f s)",
+                medianOff / 1e6, slowOff / 1e6, keptOff, spanOff / 1e9d));
+
+        if (!coherent(medianOn, keptOn, spanOn, "AVEC")
+                || !coherent(medianOff, keptOff, spanOff, "SANS")) {
+            Lanterne.LOG.error("[VITRE] MESURE REFUSÉE : le banc se contredit lui-même. "
+                    + "Aucun chiffre n'est publié.");
+            Settings.setEnabled(true);
+            phase = Phase.REFUSED;
+            Minecraft.getInstance().stop();
+            return;
+        }
 
         if (keptOn < MEASURE_TARGET_FRAMES || keptOff < MEASURE_TARGET_FRAMES) {
             Lanterne.LOG.info("[VITRE] Une phase au moins s'est arrêtée à l'échéance de {} s : la "
@@ -478,18 +555,24 @@ public final class Glass {
         // sa répartition de cadences — il annonçait « tout éteint » pour la phase où tout était allumé.
         Lanterne.LOG.info("[VITRE] Modules actifs pendant la phase AVEC : {}", modulesDuringOn);
 
+        // Le second signal, en diagnostic et jamais en verdict : où va le temps gagné ou perdu.
+        // Voir le commentaire de SAMPLES_ON pour ce que cette distinction a coûté à comprendre.
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[VITRE] Détail — rendu seul : %.2f ms avec, %.2f ms sans. Hors rendu (tick serveur, "
+                        + "tick client, présentation) : %.2f ms avec, %.2f ms sans.",
+                renderOn / 1e6, renderOff / 1e6,
+                (medianOn - renderOn) / 1e6, (medianOff - renderOff) / 1e6));
+
         if (medianOn > 0d && medianOff > 0d) {
             double ratio = medianOff / medianOn;
             if (ratio > 1.05d) {
                 Lanterne.LOG.info(String.format(Locale.ROOT,
-                        "[VITRE] Gain : ×%.2f sur la médiane de temps d'image.", ratio));
+                        "[VITRE] Gain : ×%.2f sur l'intervalle entre images.", ratio));
             } else if (ratio < 0.95d) {
                 Lanterne.LOG.info(String.format(Locale.ROOT,
-                        "[VITRE] PERTE : ×%.2f — le mod coûte plus qu'il ne rapporte au rendu ici.",
-                        ratio));
+                        "[VITRE] PERTE : ×%.2f — le mod coûte plus qu'il ne rapporte ici.", ratio));
             } else {
-                Lanterne.LOG.info("[VITRE] Aucun effet mesurable sur le rendu (écart sous le bruit "
-                        + "de fond) — attendu, ce mod n'agit pas directement sur le moteur de rendu.");
+                Lanterne.LOG.info("[VITRE] Aucun effet mesurable (écart sous le bruit de fond).");
             }
         }
 
@@ -497,6 +580,38 @@ public final class Glass {
         Lanterne.LOG.info("[VITRE] Mesure terminée — arrêt du client.");
         phase = Phase.DONE;
         Minecraft.getInstance().stop();
+    }
+
+    /**
+     * Le relevé est-il compatible avec lui-même ?
+     *
+     * <h2>Le contrôle que ce banc n'avait pas, et qui lui a coûté un chiffre publié</h2>
+     *
+     * <p>Une médiane d'intervalle et un compte d'images sur une durée connue mesurent la même chose
+     * par deux chemins. Ils doivent donc concorder : {@code images × médiane ≈ durée}. Le relevé qui
+     * a mis ce défaut au jour donnait 2019 images, une médiane de 11,82 ms et une fenêtre de 60 s —
+     * soit 23,9 s de temps expliqué sur 60. Les deux tiers manquants étaient précisément le tick
+     * serveur, et c'est là que vit tout le gain du mod.
+     *
+     * <p>Ce contrôle ne corrige rien : il <b>refuse</b>, dans l'esprit de {@code Preflight}. Une
+     * divergence de plus d'un quart signifie que le banc ne mesure pas ce qu'il croit mesurer, et
+     * aucun verdict tiré d'un tel relevé ne mérite d'être écrit dans un tableau de gains.
+     */
+    private static boolean coherent(double medianNanos, int frames, long spanNanos, String label) {
+        if (medianNanos <= 0d || frames <= 0 || spanNanos <= 0L) {
+            return true;
+        }
+        double explained = medianNanos * frames;
+        double share = explained / spanNanos;
+        if (share > 0.75d && share < 1.33d) {
+            return true;
+        }
+        Lanterne.LOG.error(String.format(Locale.ROOT,
+                "[VITRE] Phase %s incohérente : %d image(s) × %.2f ms = %.1f s, pour une fenêtre "
+                        + "réelle de %.1f s (%.0f %% expliqué). La mesure et le compte d'images ne "
+                        + "décrivent pas le même phénomène.",
+                label, frames, medianNanos / 1e6, explained / 1e9d, spanNanos / 1e9d, share * 100d));
+        return false;
     }
 
     /**

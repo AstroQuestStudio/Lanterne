@@ -1,0 +1,52 @@
+# Origines et attributions
+
+Lanterne est publié sous **GPL-3.0-only** (voir `LICENSE`).
+
+Ce choix n'est pas idéologique, il est mécanique. Le projet absorbe du travail
+existant, et le copyleft remonte : pour incorporer du code LGPL-3.0 (Sodium,
+Lithium, Krypton, ModernFix…) ou GPL-3.0 (MoreCulling, Exordium, RailOptimization…),
+Lanterne doit être au moins aussi ouvert. Une licence permissive comme MIT ne
+l'autoriserait pas — c'est un contresens fréquent : la licence « la plus ouverte »
+est celle qui laisse *sortir* le code, pas celle qui laisse le plus *entrer*.
+
+GPL-3.0-only laisse entrer MIT, Apache-2.0, CC0, Unlicense, MPL-2.0, LGPL-3.0,
+LGPL-2.1-or-later et GPL-3.0. Cela couvre **50 des 59 cibles** retenues dans
+`notes/MINE.md`.
+
+## Ce qui n'est pas absorbable, et n'est donc pas absorbé
+
+Neuf cibles sont sous licence fermée, non commerciale, sans dérivée, ou maison.
+Leur code n'entre pas dans Lanterne, quelle que soit la licence de Lanterne :
+
+| Projet | Licence | Ce qu'on en retient |
+|---|---|---|
+| EntityCulling | tr7zw Protective | L'idée : un raycast asynchrone vers chaque entité. Réécrit. |
+| Sodium | PolyForm Shield 1.0.0 | Rien n'est copié. Lanterne cohabite avec lui. |
+| TT20 | PolyForm Shield 1.0.0 | L'idée : dégrader le tick quand le TPS chute. Réécrit. |
+| ai-improvements | All Rights Reserved | L'idée seule. |
+| mobtimizations | All Rights Reserved | L'idée seule. |
+| JEIOptimizer | All Rights Reserved | L'idée seule. |
+| MemoryLeakFix | LGPL-2.1-only | Incompatible avec GPL-3. L'idée seule. |
+| DSBG | CC-BY-ND-4.0 | Sans dérivée : l'idée seule. |
+| server_heater | The Lambda License | L'idée seule. |
+
+Une licence protège l'**expression**, pas l'idée. Lire ces sources pour
+comprendre un mécanisme est licite et a été fait ; en recopier les lignes ne
+l'est pas et ne l'a pas été.
+
+## Ce qui est repris, et d'où
+
+Cette table est tenue à jour module par module au fur et à mesure de
+l'absorption. Chaque entrée nomme le fichier de Lanterne, le projet d'origine et
+sa licence. Tant qu'un module n'y figure pas, il est d'origine.
+
+| Module Lanterne | Repris de | Licence d'origine |
+|---|---|---|
+| *(aucun pour l'instant — l'absorption commence)* | | |
+
+## Les modules d'origine
+
+Tout ce qui est listé dans `README.md` à la date du passage en GPL-3.0 a été
+écrit pour ce projet et mesuré sur ses propres bancs : les entonnoirs par lots,
+la fusion au sol, l'enclos, la Vigie, le Balai, la compression réseau, le minage
+à l'horloge réelle, les cadences d'entités, le Carnet et la Boussole d'Ancre.

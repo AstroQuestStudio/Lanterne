@@ -1,0 +1,2984 @@
+{
+ "krypton": {
+  "titre": "Krypton",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/astei/krypton",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric"
+  ],
+  "dl": 41320742,
+  "resume": "A mod to optimize the Minecraft networking stack"
+ },
+ "memoryleakfix": {
+  "titre": "Memory Leak Fix",
+  "licence": "LGPL-2.1-only",
+  "famille": "copyleft",
+  "source": "https://github.com/fxmorin/memoryLeakFix",
+  "max_mc": "1.20.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "quilt"
+  ],
+  "dl": 37265024,
+  "resume": "A mod that fixes random memory leaks for both the client and server"
+ },
+ "moreculling": {
+  "titre": "More Culling",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/fxmorin/moreculling",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 65116850,
+  "resume": "A mod that changes how multiple types of culling are handled in order to improve performance"
+ },
+ "modernfix": {
+  "titre": "ModernFix",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/embeddedt/ModernFix",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 77171954,
+  "resume": "All-in-one mod that improves performance, reduces memory usage, and fixes many bugs. Compatible with all your "
+ },
+ "immediatelyfast": {
+  "titre": "ImmediatelyFast",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/RaphiMC/ImmediatelyFast",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 122820573,
+  "resume": "Speed up immediate mode rendering in Minecraft"
+ },
+ "ferrite-core": {
+  "titre": "FerriteCore",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/malte0811/FerriteCore",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 150147113,
+  "resume": "Memory usage optimizations"
+ },
+ "entityculling": {
+  "titre": "Entity Culling",
+  "licence": "LicenseRef-tr7zw-Protective-License",
+  "famille": "inconnue",
+  "source": "https://github.com/tr7zw/EntityCulling",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "babric",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 165761963,
+  "resume": "Using async path-tracing to hide Block-/Entities that are not visible"
+ },
+ "iris": {
+  "titre": "Iris Shaders",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/IrisShaders/Iris",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 175123606,
+  "resume": "A modern shader pack loader for Minecraft intended to be compatible with existing OptiFine shader packs"
+ },
+ "sodium": {
+  "titre": "Sodium",
+  "licence": "LicenseRef-Polyform-Shield-1.0.0",
+  "famille": "inconnue",
+  "source": "https://github.com/CaffeineMC/sodium",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 225331122,
+  "resume": "A high-performance rendering engine replacement for Minecraft, which greatly improves frame rates and reduces "
+ },
+ "lithium": {
+  "titre": "Lithium",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/caffeinemc/lithium-fabric",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 127067409,
+  "resume": "No-compromises game logic optimization mod, useful for both single-player games and multi-player servers."
+ },
+ "sodium-extra": {
+  "titre": "Sodium Extra",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/FlashyReese/sodium-extra-fabric",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 95580307,
+  "resume": "A Sodium addon that adds features that shouldn't be in Sodium."
+ },
+ "dynamic-fps": {
+  "titre": "Dynamic FPS",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/juliand665/Dynamic-FPS",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 65028235,
+  "resume": "Reduce resource usage while Minecraft is in the background, idle, or on battery."
+ },
+ "badoptimizations": {
+  "titre": "BadOptimizations",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/ItsThosea/BadOpitmizations",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 42171476,
+  "resume": "Optimization mod that focuses on things other than rendering"
+ },
+ "embeddium": {
+  "titre": "Embeddium",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/FiniteReality/embeddium",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 34722475,
+  "resume": "A powerful, mod-friendly, FOSS client performance mod for NeoForge"
+ },
+ "distanthorizons": {
+  "titre": "Distant Horizons",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://gitlab.com/distant-horizons-team/distant-horizons",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 33974792,
+  "resume": "Massively increase render distance without harming performance."
+ },
+ "rrls": {
+  "titre": "Remove Reloading Screen",
+  "licence": "OSL-3.0",
+  "famille": "copyleft",
+  "source": "https://github.com/dima-dencep/rrls",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 25663265,
+  "resume": "Makes resource packs load in the background, allowing you to do other things while waiting!"
+ },
+ "lmd": {
+  "titre": "Let Me Despawn",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/frikinjay/let-me-despawn",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "bukkit",
+   "fabric",
+   "forge",
+   "neoforge",
+   "paper",
+   "purpur",
+   "quilt"
+  ],
+  "dl": 23170417,
+  "resume": "Improves performance by tweaking mob despawn rules. Say bye to pesky unintentional persistent mobs."
+ },
+ "fast-ip-ping": {
+  "titre": "Fast IP Ping",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Fallen-Breath/fast-ip-ping",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 22820114,
+  "resume": "Yeet the laggy reversed DNS lookup for literal IP server addresses"
+ },
+ "modern-ui": {
+  "titre": "Modern UI",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/BloCamLimb/ModernUI-MC",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 21647361,
+  "resume": "Modern desktop graphics application framework and low-level 3D graphics engine"
+ },
+ "chunky": {
+  "titre": "Chunky",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/pop4959/Chunky",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "bukkit",
+   "fabric",
+   "folia",
+   "forge",
+   "neoforge",
+   "paper",
+   "spigot",
+   "sponge"
+  ],
+  "dl": 17830737,
+  "resume": "Pre-generates chunks, quickly and efficiently"
+ },
+ "servercore": {
+  "titre": "ServerCore",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Wesley1808/ServerCore",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 16392760,
+  "resume": "A mod that aims to optimize the minecraft server."
+ },
+ "particle-core": {
+  "titre": "Particle Core",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/fzzyhmstrs/pc",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 15898410,
+  "resume": "Particle optimizations: Culling, rendering optimizations, configurable particle-type-specific spawn reduction,"
+ },
+ "starlight-forge": {
+  "titre": "Starlight (Forge)",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/PaperMC/Starlight",
+  "max_mc": "1.20.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 14524445,
+  "resume": "Rewrites the light engine to fix lighting performance and lighting errors"
+ },
+ "fastload": {
+  "titre": "Fastload",
+  "licence": "LGPL-2.1-only",
+  "famille": "copyleft",
+  "source": "https://github.com/BumbleSoftware/Fastload",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "quilt"
+  ],
+  "dl": 14058379,
+  "resume": "Modifies how worlds are loaded to speed up loading times."
+ },
+ "scalablelux": {
+  "titre": "ScalableLux",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/RelativityMC/ScalableLux",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 13558285,
+  "resume": "A Fabric mod based on Starlight that improves the performance of light updates in Minecraft."
+ },
+ "ai-improvements": {
+  "titre": "AI Improvements: Performance Tuning",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/BuiltBrokenModding/AI-Improvements",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 13310220,
+  "resume": "Performance improvements for vanilla AI, with  the ability to turn off certain AI behaviors"
+ },
+ "leaves-be-gone": {
+  "titre": "Leaves Be Gone",
+  "licence": "MPL-2.0",
+  "famille": "copyleft",
+  "source": "https://github.com/Fuzss/leavesbegone",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 12549820,
+  "resume": "Quick leaf decay from cutting down trees. Built for fast performance and mod compat!"
+ },
+ "sodium-extras": {
+  "titre": "Sodium Extras",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/txnimc/SodiumExtras",
+  "max_mc": "1.21.5",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 12178097,
+  "resume": "An add-on mod for Sodium that adds new features and customization."
+ },
+ "alternate-current": {
+  "titre": "Alternate Current",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/SpaceWalkerRS/alternate-current",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "ornithe",
+   "quilt"
+  ],
+  "dl": 11094070,
+  "resume": "An efficient and non-locational redstone dust implementation"
+ },
+ "ixeris": {
+  "titre": "Ixeris",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/decce6/Ixeris",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 10337373,
+  "resume": "Buffered raw input and threaded event polling"
+ },
+ "cull-leaves": {
+  "titre": "Cull Leaves",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/TeamMidnightDust/CullLeaves",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 9828607,
+  "resume": "Adds culling to leaf blocks, providing a huge performance boost over vanilla."
+ },
+ "fast-paintings": {
+  "titre": "Fast Paintings",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 9388822,
+  "resume": "Fixes painting rendering, increasing their performance and allowing them to have custom models"
+ },
+ "better-beds": {
+  "titre": "Better Beds",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/TeamMidnightDust/BetterBeds",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 9272541,
+  "resume": "Changes the renderer of the bed to use json models instead of a block entity renderer! "
+ },
+ "better-block-entities": {
+  "titre": "Better Block Entities",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/ceeden/betterblockentities",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 8721265,
+  "resume": "A Minecraft optimization mod for Fabric-Sodium that improves framerates by improving block entity rendering vi"
+ },
+ "rubidium-extra": {
+  "titre": "Embeddium (Rubidium) Extra",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/dima-dencep/rubidium-extra",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 8190268,
+  "resume": "Port of Sodium Extra to work with Embeddium/Rubidium on (Neo)Forge"
+ },
+ "notenoughrecipebook": {
+  "titre": "Not Enough Recipe Book [NERB]",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/SSKirillSS/nerb",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 7872151,
+  "resume": "Completely removes recipe book from the game, optimizing player data."
+ },
+ "ksyxis": {
+  "titre": "Ksyxis",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/VidTu/Ksyxis",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "legacy-fabric",
+   "neoforge",
+   "ornithe",
+   "quilt"
+  ],
+  "dl": 7831587,
+  "resume": "Speed up your world loading by removing unneeded chunks."
+ },
+ "structure-layout-optimizer": {
+  "titre": "Structure Layout Optimizer",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/TelepathicGrunt/StructureLayoutOptimizer",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 7316032,
+  "resume": "Attempts to optimize the generation of Jigsaw Structures and NBT pieces"
+ },
+ "asyncparticles": {
+  "titre": "AsyncParticles",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Harveykang/AsyncParticles",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 7120738,
+  "resume": "Async particle tick, GPU accelerated particle rendering."
+ },
+ "faster-random": {
+  "titre": "Faster Random",
+  "licence": "Apache-2.0",
+  "famille": "permissive",
+  "source": "https://github.com/AnOpenSauceDev/FastRandom",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 6696696,
+  "resume": "[NOTE: This mod is now only intended for use with pre-existing Faster Random worlds]"
+ },
+ "zfastnoise": {
+  "titre": "Fast Noise",
+  "licence": "MPL-2.0",
+  "famille": "copyleft",
+  "source": "https://codeberg.org/ZenXArch/FastNoise",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 6613107,
+  "resume": "Vanilla Worldgen optimization mod"
+ },
+ "you-shall-not-spawn": {
+  "titre": "You Shall Not Spawn!",
+  "licence": "LicenseRef-AGNYA-License",
+  "famille": "inconnue",
+  "source": "https://github.com/nvb-uy/ysns",
+  "max_mc": "1.21.3",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 6524316,
+  "resume": "A modpack utility mod that allows to disable spawning of any entity."
+ },
+ "sodiumleafculling": {
+  "titre": "Sodium Leaf Culling",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/txnimc/SodiumLeafCulling",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 6449645,
+  "resume": "Smart leaf culling algorithm for Sodium on 1.21+"
+ },
+ "radium": {
+  "titre": "Radium",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Reforged-Hub/radium-upstream",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 6447528,
+  "resume": "Radium is an Unofficial Fork of CaffeineMC's \"Lithium\", made to work with Forge Mod Loader."
+ },
+ "async-locator": {
+  "titre": "Async Locator",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/thebrightspark/AsyncLocator",
+  "max_mc": "1.20.2",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge"
+  ],
+  "dl": 6432065,
+  "resume": "Changes the searching of features to be asynchronous to mitigate associated lag"
+ },
+ "gputape": {
+  "titre": "GPUBooster",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/ITsMrToad/GpuTape",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 6137952,
+  "resume": "Provides DSA & fastest math formulas to game render system for best perfomance!\n\nCompatible with Sodium/Embedd"
+ },
+ "exordium": {
+  "titre": "Exordium",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/tr7zw/Exordium",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 5839678,
+  "resume": "Render the GUI and screens at a lower framerate to speed up what's really important: the worldrendering."
+ },
+ "sodium-options-mod-compat": {
+  "titre": "Sodium Options Mod Compat",
+  "licence": "LicenseRef-Tonis-MMC-License",
+  "famille": "inconnue",
+  "source": "https://github.com/txnimc/SodiumOptionsModCompat/",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 6168345,
+  "resume": "Adds compatibility for various mods through Sodium Options API"
+ },
+ "krypton-fnp": {
+  "titre": "Krypton Reno",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/404Setup/KryptonReno",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 5655891,
+  "resume": "Provides powerful network optimization capabilities for all mainstream systems."
+ },
+ "saturn": {
+  "titre": "Saturn",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 5434507,
+  "resume": "A performance mod designed to optimize Minecraft's memory usage."
+ },
+ "better-clouds": {
+  "titre": "Better Clouds",
+  "licence": "MPL-2.0",
+  "famille": "copyleft",
+  "source": "https://github.com/Qendolin/better-clouds",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 5216216,
+  "resume": "Beautiful clouds in touch with the vanilla style"
+ },
+ "redirected": {
+  "titre": "Redirected",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/txnimc/Redirected",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 5130879,
+  "resume": "Memory optimization mod that prevents duplication of Enum values."
+ },
+ "rubidium": {
+  "titre": "Rubidium",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Asek3/Rubidium",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 4906780,
+  "resume": "Unofficial Fork of CaffeineMC's \"Sodium\", made to work with FML"
+ },
+ "feytweaks": {
+  "titre": "FeyTweaks",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/feytox/FeyTweaks",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge"
+  ],
+  "dl": 4717775,
+  "resume": "Mod for optimizing signs and beacons."
+ },
+ "canary": {
+  "titre": "Canary",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "",
+  "max_mc": "1.20.4",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 4660634,
+  "resume": "A performance mod designed to optimize Minecraft's general performance and unofficial fork of Lithium mod for "
+ },
+ "clean-f3": {
+  "titre": "Clean F3",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/tyrannus00/CleanF3",
+  "max_mc": "1.21.8",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 4627059,
+  "resume": "Removes useless information from the debug screen."
+ },
+ "huge-structure-blocks": {
+  "titre": "Huge Structure Blocks",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/SamB440/huge-structure-blocks",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 4387166,
+  "resume": "Structure blocks. But bigger (and optimised). Up to 512 blocks!"
+ },
+ "iris-flw-compat": {
+  "titre": "Iris & Oculus Flywheel Compat",
+  "licence": "CC0-1.0",
+  "famille": "permissive",
+  "source": "https://github.com/leon-o/iris-flw-compat",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 4274304,
+  "resume": "Enable Flywheel's optimizations when using shaderpacks."
+ },
+ "icterine": {
+  "titre": "Icterine",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/Mephodio/Icterine",
+  "max_mc": "1.20.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 3921694,
+  "resume": "Advancements optimization (specifically, InventoryChangeTrigger)"
+ },
+ "smooth-boot-reloaded": {
+  "titre": "Smooth Boot (Reloaded)",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 3899093,
+  "resume": "Tweaks for Minecraft CPU scheduling and unofficial fork of Smooth Boot mod for Minecraft Forge 1.18.2+"
+ },
+ "toadlib": {
+  "titre": "ToadLib",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/ITsMrToad/ToadLib-mod/tree/1.19.4",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 3865390,
+  "resume": "Library - mod. Needed for my mods.\nContains a set of utilities, custom config, abstractions and more."
+ },
+ "item-obliterator": {
+  "titre": "Item Obliterator",
+  "licence": "LicenseRef-AGNYA-License",
+  "famille": "inconnue",
+  "source": "https://github.com/nvb-uy/item_obliterator",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 3850552,
+  "resume": "Modpack utility mod that allows to disable items and/or its interactions. Also removes them from creative tabs"
+ },
+ "gnetum": {
+  "titre": "Gnetum",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/decce6/Gnetum",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 3790949,
+  "resume": "Distribute HUD updates over multiple frames to improve performance"
+ },
+ "distraction-free-recipes": {
+  "titre": "Distraction Free Recipes (EMI / REI / JEI)",
+  "licence": "LicenseRef-Tonis-MMC-License",
+  "famille": "inconnue",
+  "source": "https://github.com/txnimc/DistractionFreeRecipes",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 3777484,
+  "resume": "Automatically hides the recipe viewer when not searching."
+ },
+ "autochefs-delight": {
+  "titre": "Autochef's Delight",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/Snownee/AutochefsDelight",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 3664697,
+  "resume": "Support stacked cooking & optimize recipe-matching in Farmer's Delight"
+ },
+ "cull-less-leaves-reforged": {
+  "titre": "Cull Less Leaves Reforged",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/CCr4ft3r/CullLessLeavesReforged",
+  "max_mc": "1.20.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 3556529,
+  "resume": "Gives you a 9% fps improvement for leaves rendering"
+ },
+ "despawn-tweaks": {
+  "titre": "Despawn Tweaks",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/txnimc/DespawnTweaks",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 3409269,
+  "resume": "Optimization mod that fixes cases where mobs will be prevented from despawning."
+ },
+ "fast-item-frames": {
+  "titre": "Fast Item Frames",
+  "licence": "MPL-2.0",
+  "famille": "copyleft",
+  "source": "https://github.com/Fuzss/fastitemframes",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 3304917,
+  "resume": "Supercharged item frames! Less lag, better performance, and now they can change color and vanish!"
+ },
+ "cerulean-advancements": {
+  "titre": "Cerulean",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/txnimc/Cerulean",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 2836539,
+  "resume": "Advancements optimization mod, updated fork of Icterine with added features"
+ },
+ "lightspeed": {
+  "titre": "Lightspeed",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "",
+  "max_mc": "1.19.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 2761087,
+  "resume": "Reduces your waiting time by loading modpacks significantly faster (currently 48% - 71%)"
+ },
+ "bbrb": {
+  "titre": "Better Biome Reblend",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/UntitledModGroup/better-biome-blend-reblend",
+  "max_mc": "1.21.11",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 2721348,
+  "resume": "Updated version of Better Biome Blend, a mod that improves Biome Blending"
+ },
+ "wither-spawn-fix": {
+  "titre": "Wither Spawn Fix",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "1.21",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 2659382,
+  "resume": "Fixes the issue where grass and other small blocks obstruct Wither spawning!"
+ },
+ "c2me-neoforge": {
+  "titre": "Concurrent Chunk Management Engine (NeoForge)",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/RelativityMC/C2ME-neoforge",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "neoforge"
+  ],
+  "dl": 2659234,
+  "resume": "A mod designed to improve the chunk performance of Minecraft."
+ },
+ "crashexploitfixer": {
+  "titre": "CrashExploitFixer",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/DrexHD/CrashExploitFixer",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 2545992,
+  "resume": "This mod fixes a bunch of crash exploits discovered in Minecraft."
+ },
+ "createbetterfps": {
+  "titre": "CreateBetterFps",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/MoePus/CreateBetterFPS",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 2396098,
+  "resume": "Improve your Create FPS when shaderpack is on, up to 50%"
+ },
+ "noisiumforked": {
+  "titre": "NoisiumForked",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/coredex-source/noisium",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 2360293,
+  "resume": "Optimises worldgen performance for a better gameplay experience."
+ },
+ "xxl-packets": {
+  "titre": "XXL Packets",
+  "licence": "CC0-1.0",
+  "famille": "permissive",
+  "source": "https://github.com/lazul1ne/XXLPackets",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "quilt"
+  ],
+  "dl": 2184552,
+  "resume": "XXL Packets is a fork of XL Packets which raises the packet size limit from 2MB to the Java Integer limit (2.1"
+ },
+ "does-it-tick": {
+  "titre": "Does It Tick?",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/txnimc/DoesItTickSC",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 2108527,
+  "resume": "Ticking Entity Optimizations"
+ },
+ "immersive-optimization": {
+  "titre": "Immersive Optimization",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/Luke100000/ImmersiveOptimization",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 2107445,
+  "resume": "A lightweight entity-tick-scheduler for doubling your TPS."
+ },
+ "shut-up-gl-error": {
+  "titre": "Shut Up GL Error",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/JamCoreModding/shut-up-gl-error",
+  "max_mc": "1.21.11",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1932945,
+  "resume": "Fixes invalid keycodes logging obnoxious and constant messages"
+ },
+ "xenon-forge": {
+  "titre": "Xenon",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/anthxnymc/xenon",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1815093,
+  "resume": "A Forge port of the Sodium performance mod."
+ },
+ "mobtimizations": {
+  "titre": "Mobtimizations - Entity Performance Fixes",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/Corosauce/mobtimizations/",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1802549,
+  "resume": "Optimizes a lot of tasks that Entity AI wastefully performs, minimal effect on gameplay."
+ },
+ "get-it-together-drops": {
+  "titre": "Get It Together, Drops!",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/bl4ckscor3/GetItTogetherDrops",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1785918,
+  "resume": "Adds tags and configuration options for defining how dropped items should combine."
+ },
+ "better-biome-blend": {
+  "titre": "Better Biome Blend",
+  "licence": "Unlicense",
+  "famille": "permissive",
+  "source": "https://github.com/FionaTheMortal/better-biome-blend",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1690651,
+  "resume": "Improves biome colors"
+ },
+ "observable": {
+  "titre": "Observable",
+  "licence": "MPL-2.0",
+  "famille": "copyleft",
+  "source": "https://github.com/tasgon/observable",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1687254,
+  "resume": "See what's lagging your server."
+ },
+ "quick-pack": {
+  "titre": "quick pack",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/DrexHD/quick-pack",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1574137,
+  "resume": "Optimize datapack / resourcepack zip file loading times"
+ },
+ "cleancut": {
+  "titre": "CleanCut",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Exoneration/CleanCut",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1564687,
+  "resume": "Fight enemies back through grass and other similar obstructions!"
+ },
+ "asynclogger": {
+  "titre": "Async Logger",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/decce6/AsyncLogger",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "ornithe",
+   "quilt"
+  ],
+  "dl": 1467193,
+  "resume": "Asynchronous logging and efficient filtering - performance improvements and utility for keeping your logs clea"
+ },
+ "entity-collision-fps-fix": {
+  "erreur": "<urlopen error [WinError 10054] Une connexion existante a dû"
+ },
+ "fastevent": {
+  "titre": "FastEvent",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/ZZZank/FastEvent",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1297190,
+  "resume": "speeding up the Event system in Forge/NeoForge"
+ },
+ "foamfix": {
+  "titre": "FoamFix",
+  "licence": "LicenseRef-Custom",
+  "famille": "inconnue",
+  "source": "https://github.com/asiekierka/FoamFix",
+  "max_mc": "1.14",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge"
+  ],
+  "dl": 1291949,
+  "resume": "FoamFix is a mod designed to improve modded Minecraft memory usage using simple, targeted optimizations."
+ },
+ "obe": {
+  "titre": "Optimized Block Entities [OBE]",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/maDU59/OptimisedBlockEntities",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1205234,
+  "resume": "A client-side optimization mod to make block entities render faster"
+ },
+ "patcher": {
+  "titre": "PolyPatcher",
+  "licence": "CC-BY-NC-SA-4.0",
+  "famille": "inconnue",
+  "source": "https://github.com/Polyfrost/PolyPatcher",
+  "max_mc": "1.12.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 1197944,
+  "resume": "A Forge mod full of Vanilla bug fixes, Quality of Life improvements, and performance enhancements."
+ },
+ "achievements-optimizer": {
+  "titre": "Achievements Optimizer",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1165508,
+  "resume": "Improved achievement performance"
+ },
+ "lightspeedre": {
+  "titre": "LightSpeedRe",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/kltyton/LightSpeedRe",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1151558,
+  "resume": "Reduces your waiting time by loading modpacks significantly faster (currently 48% - 71%)"
+ },
+ "skeleton-ai-fix": {
+  "titre": "Skeleton AI Fix",
+  "licence": "MPL-2.0",
+  "famille": "copyleft",
+  "source": "https://github.com/Fuzss/skeletonaifix",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1120714,
+  "resume": "Eliminates awkward strafing – Skeletons now stay focused and shoot faster the closer you get."
+ },
+ "accelerated-decay": {
+  "titre": "Accelerated Decay",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/ErrorMikey/AcceleratedDecay",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 1105047,
+  "resume": "Speeds up the leaf decaying process"
+ },
+ "resourcepackcached": {
+  "titre": "ResourcePackCached",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Furq07/ResourcePackCached",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1050242,
+  "resume": "Keeps server resource packs loaded, so they don't need to be reloaded when you rejoin."
+ },
+ "vanillaicecreamfix": {
+  "titre": "VanillaIcecreamFix",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/repletsin5/VanillaIcecreamFix",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1010518,
+  "resume": "An updated version of Runemoro's VanillaFix and also ported to the latest version"
+ },
+ "workstation-recipe-exporter": {
+  "titre": "Workstation Recipe Exporter",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/Xiaoyu-2009/visual_recipe_editor",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 1013780,
+  "resume": "Provides mod authors with more convenient visual recipe editing"
+ },
+ "mpalladium": {
+  "titre": "Palladium",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/ITsMrToad/PalladiumMod",
+  "max_mc": "1.21.8",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 949348,
+  "resume": "Another optimizing mod, provides deduplication, improved memory control, shader/chunk/nbt optimizations and en"
+ },
+ "fastquit-forge": {
+  "titre": "FastQuit-Forge",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/frcvdt45g6by7hnj8ukm-nh8b7g6vtf5r4de3/FastQuit-Forge",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 905998,
+  "resume": "This mod allows you to instantly return to the title screen after clicking \"Save and Quit to Title.\""
+ },
+ "sweeper-maid": {
+  "titre": "Sweeper Maid",
+  "licence": "AGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Viola-Siemens/Sweeper-Maid",
+  "max_mc": "1.20.6",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 884208,
+  "resume": "A lightweight mod that collects all dropped items and unnecessary entities for optimization."
+ },
+ "pluto": {
+  "titre": "Pluto",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "",
+  "max_mc": "1.19.3",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 880682,
+  "resume": "Networking stack optimization mod and unofficial fork of Krypton mod for Minecraft Forge"
+ },
+ "create-threaded-trains": {
+  "titre": "Create: Threaded Trains",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/MisterJulsen/Create-Threaded-Trains",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 877023,
+  "resume": "A mod that runs all calculations of the railway network on a separate thread parallel to the server tick, whic"
+ },
+ "tmrv": {
+  "titre": "TooManyRecipeViewers",
+  "licence": "LicenseRef-OSL-3.0",
+  "famille": "copyleft",
+  "source": "https://github.com/Nolij/TooManyRecipeViewers",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 875065,
+  "resume": "A compatibility layer for running JEI plugins with EMI written by Nolij"
+ },
+ "norollback": {
+  "titre": "NoRollback",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 857261,
+  "resume": "Remove (annoying) rollbacks"
+ },
+ "voxy-worldgen": {
+  "titre": "Voxy WorldGen",
+  "licence": "LicenseRef-iSeeEthan-Custom-License",
+  "famille": "inconnue",
+  "source": "https://github.com/iSeeEthan/voxy_worldgen_v2",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 857848,
+  "resume": "This is a passive chunk generator mod, with server-side support for Voxy!"
+ },
+ "quickquit": {
+  "titre": "QuickQuit",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://codeberg.org/MicrocontrollersDev/QuickQuit",
+  "max_mc": "1.8.9",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 841306,
+  "resume": "Allows closing Minecraft during the Forge resource loading screen when starting the game."
+ },
+ "threatengl": {
+  "titre": "ThreatenGL",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Richy-Z/ThreatenGL",
+  "max_mc": "1.21.11",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 832540,
+  "resume": "Threatens Minecraft to use modern versions of OpenGL"
+ },
+ "ly-clumps": {
+  "titre": "Clumps",
+  "licence": "AGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/lullaby6/data-packs/tree/main/Clumps",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 780392,
+  "resume": "Merge experience orbs and instant pickup experience orbs to reduce lag!"
+ },
+ "superresolution": {
+  "titre": "Super Resolution",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/187J3X1-114514/superresolution",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 770556,
+  "resume": "This mod integrates several super-resolution algorithms in Minecraft to enhance performance or visual quality."
+ },
+ "terrablenderfix": {
+  "titre": "TerraBlenderFix",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/racoonman2/TerraBlenderFix",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 745659,
+  "resume": "Fixes a performance issue related to TerraBlender's surface rule api"
+ },
+ "idletweaks": {
+  "titre": "Idle Tweaks",
+  "licence": "CC-BY-NC-ND-4.0",
+  "famille": "inconnue",
+  "source": "https://github.com/Armandukx/IdleFPS",
+  "max_mc": "1.21.11",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "quilt"
+  ],
+  "dl": 709950,
+  "resume": "Reduces Minecraft's resource usage while it runs in the background."
+ },
+ "noisium-(unofficial-forge-port": {
+  "erreur": "HTTP 404"
+ },
+ "0pack2reload": {
+  "titre": "0Pack2Reload",
+  "licence": "LicenseRef-Nova-Relay-License-1.0",
+  "famille": "inconnue",
+  "source": "https://github.com/Nova-Committee/0Pack2Reload",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 702668,
+  "resume": "Prevent Minecraft from reloading the resource packs if the player doesn't really change the selected packs. Al"
+ },
+ "kerria-opt": {
+  "titre": "Kerria",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/decce6/Kerria",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 691200,
+  "resume": "Faster texture animation"
+ },
+ "graphene": {
+  "titre": "Graphene",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/CarbonMC-CN/Graphene",
+  "max_mc": "1.21.9",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 684282,
+  "resume": "A powerful and freely open-source optimization mod for Minecraft 1.12.2+, which fixes some issues in Minecraft"
+ },
+ "async": {
+  "titre": "Async",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/AxalotLDev/Async",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 670209,
+  "resume": "Async improves entity performance by processing entities in parallel across multiple CPU cores and threads."
+ },
+ "sodium-extra-information": {
+  "titre": "Sodium Extra Information",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/anviaan/SodiumExtraInformation",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 668115,
+  "resume": "A Sodium Extra addon that adds more in-game information."
+ },
+ "harium": {
+  "titre": "HU: Harium",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/JustHari01/Harium",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 670289,
+  "resume": "A general-purpose optimization mod that rewrites inefficient vanilla code for AI, redstone, entities, hoppers,"
+ },
+ "smooth-boot": {
+  "titre": "Smooth Boot",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.1",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 618220,
+  "resume": "This mod enhances CPU scheduling in Minecraft. As an unofficial fork of the Smooth Boot (Reloaded) mod, it add"
+ },
+ "veloxcaelo": {
+  "titre": "Velox Caelo",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/nea89o/veloxcaelo/",
+  "max_mc": "1.8.9",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 600799,
+  "resume": "OptiFine CIT performance optimizer for 1.8.9"
+ },
+ "dsbg": {
+  "titre": "Detected setBlock Be Gone",
+  "licence": "CC-BY-ND-4.0",
+  "famille": "inconnue",
+  "source": "https://github.com/CapezOnMyBack/DSBG",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 582164,
+  "resume": "Suppresses the \"Detected setBlock in a far chunk\" message in the console thus reducing log file size."
+ },
+ "fism": {
+  "titre": "Faster Iris Shadow Mapper [FISM]",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/maDU59/FasterIrisShadowMapper",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 567335,
+  "resume": "Slightly improves the speed of Iris' shadow mapper. Built-in in Iris since Iris 1.11.2"
+ },
+ "particle-culling": {
+  "titre": "Particle Culling",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/bl4ckscor3/ParticleCulling",
+  "max_mc": "1.12.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 551330,
+  "resume": "Stops rendering particles that the player cannot see."
+ },
+ "tt20": {
+  "titre": "TT20 (TPS Fixer)",
+  "licence": "LicenseRef-PolyForm-Shield-1.0.0",
+  "famille": "inconnue",
+  "source": "https://github.com/snackbag/tt20",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 547203,
+  "resume": "TT20 helps reduce lag by optimizing how ticks work when the server's TPS is low."
+ },
+ "reflex-antilag": {
+  "titre": "Reflex AntiLag",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/Tythee/Minecraft-Reflex",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 539459,
+  "resume": "Implementing Nvidia reflex in Minecraft to reduce latency"
+ },
+ "staaaaaaaaaaaack": {
+  "titre": "Staaaaaaaaaaaack (Stxck)",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/frank89722/Staaaaaaaaaaaack",
+  "max_mc": "1.21.8",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 509885,
+  "resume": "A mod made to merge dropped items beyond the vanilla stack limit while considering mod compatibility."
+ },
+ "railoptimization": {
+  "titre": "RailOptimization",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/EasterGhost/RailOptimization",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 506985,
+  "resume": "A simple mod that makes powered/activator rails turn on/off up to 10x faster."
+ },
+ "krypton-foxified": {
+  "titre": "KryptonFoxified",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/ThinkingStudios/KryptonFoxified",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "neoforge"
+  ],
+  "dl": 446689,
+  "resume": "Krypton unofficial NeoForge port. A mod to optimize the Minecraft networking stack."
+ },
+ "languagereloadunofficial": {
+  "titre": "LanguageReloadUnofficial",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/HiedaCamellia/LanguageReload",
+  "max_mc": "1.21.3",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 445025,
+  "resume": "An unofficial fork of LanguageReload for (neo)forge"
+ },
+ "veil": {
+  "titre": "Veil",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/FoundryMC/Veil",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 444613,
+  "resume": "Upgrade your modding potential with cutting-edge rendering and game-engine features. Built for modders, by mod"
+ },
+ "radon": {
+  "titre": "Radon",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Reforged-Hub/Radon",
+  "max_mc": "1.19.4",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 443363,
+  "resume": "Unofficial Fork of CaffeineMC's \"Phosphor\", made to work with FML"
+ },
+ "born-in-a-barn": {
+  "titre": "Born in a Barn",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "1.12.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 422691,
+  "resume": "Fixed a Village ChunkLoading Issue"
+ },
+ "fastsuite": {
+  "titre": "FastSuite",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Shadows-of-Fire/FastSuite",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 422536,
+  "resume": "Optimizations for the entire recipe system!"
+ },
+ "zombies-reworked": {
+  "titre": "Zombies Reworked",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/TheASEStefan/ZombiesReworkedMod",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 419882,
+  "resume": "Minecraft mod that completely overhauls and upgrades the zombie branch."
+ },
+ "fast-items": {
+  "titre": "Fast Items",
+  "licence": "CC0-1.0",
+  "famille": "permissive",
+  "source": "https://github.com/Noryea/fast-items-fabric",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 412378,
+  "resume": "Optimize item rendering by transforming item entities to 2D"
+ },
+ "disconnect-packet-fix": {
+  "titre": "Disconnect Packet Fix",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/ascpixi/disconnect-packet-fix",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 405614,
+  "resume": "Works around the MC-271325 bug on Fabric and NeoForge servers (fixes \"error sending packet clientbound/minecra"
+ },
+ "collision-fix": {
+  "titre": "Collision Fix",
+  "licence": "CC0-1.0",
+  "famille": "permissive",
+  "source": "https://github.com/LopyMine/CollisionFix",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 387386,
+  "resume": "Client-side Mod which fixes client-side collisions checks to prevent you from pushing by other entities."
+ },
+ "ebe-forge": {
+  "titre": "EnlightenedBlockEntities",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/ITsMrToad/EBEReforged",
+  "max_mc": "1.20.4",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 386299,
+  "resume": "Unofficial fork of enhanced block entities(EBE).\n\nSince 0.5 Also fix AO like in Fabric-Indigo.\n\nCompatible wit"
+ },
+ "c2mef": {
+  "titre": "Concurrent Chunk Management Engine for Forge",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/sj-hub9796/c2meF",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 368304,
+  "resume": "Yet another unofficial forge port of C2ME. A designed to improve the chunk performance of Minecraft."
+ },
+ "smart-particles": {
+  "titre": "Smart Particles",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/chedidandrew/Smart_Particles",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 362687,
+  "resume": "A performance mod that greatly optimizes particle rendering and particle limits."
+ },
+ "connectored-c2me-(c2me-fork-for-connector": {
+  "erreur": "HTTP 404"
+ },
+ "phosphorlegacyforge": {
+  "titre": "Phosphor Legacy Forge",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/HowardZHY/Phosphor-Legacy-Forge",
+  "max_mc": "1.11.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 320478,
+  "resume": "Unofficial fork of Phosphor mod ported to Legacy Forge."
+ },
+ "limited-damage-indicator-particle": {
+  "titre": "Limited Damage Indicator Particle",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/FOOLSIX/ldip",
+  "max_mc": "1.21.4",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 318505,
+  "resume": "A lightweight mod that controls the number of damage indicator particles rendered."
+ },
+ "vmp-forge": {
+  "titre": "Very Many Players (Forge)",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/RelativityMC/VMP-forge",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 317118,
+  "resume": "A Forge mod designed to improve server performance at high playercounts."
+ },
+ "mixinbooster": {
+  "titre": "Mixin Booster 🦀 Sp🧽nge Mixin Ultimate ⚡ Exterminator ☠️ MK2",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/sinytra/mixintransmogrifier",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 308039,
+  "resume": "Makes mixin actually usable on Forge. Exterminates and eradicates any leftover traces of weak Mixin."
+ },
+ "unloaded-activity": {
+  "titre": "Unloaded Activity",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/KeMoonoDev/Unloaded-Activity",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 299739,
+  "resume": "Simulates blocks and entities to catch up after being unloaded for a period of time."
+ },
+ "mob-collision-off": {
+  "titre": "Mob Collision Off",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 297380,
+  "resume": "🗸 Disables collisions between entities, gives better TPS and may slightly increase FPS"
+ },
+ "curtain": {
+  "titre": "Curtain",
+  "licence": "LGPL-2.1-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Gu-ZT/Curtain",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 260344,
+  "resume": "A Forge mod like fabric-carpet"
+ },
+ "notsoessential": {
+  "titre": "Not So Essential",
+  "licence": "AGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Scherso/NotSoEssential",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge"
+  ],
+  "dl": 256917,
+  "resume": "Keeps only what's Essential "
+ },
+ "alfheim-lighting-engine": {
+  "titre": "Alfheim",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Red-Studio-Ragnarok/Alfheim",
+  "max_mc": "1.12.2",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 255405,
+  "resume": "Alfheim is a lighting engine replacement for Minecraft, optimized for performance and fixing many bugs"
+ },
+ "worldgenfeaturefix": {
+  "titre": "WorldgenFeatureFix",
+  "licence": "CC0-1.0",
+  "famille": "permissive",
+  "source": "https://github.com/SimonShiki/worldgen-feature-fix",
+  "max_mc": "1.21.11",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 254248,
+  "resume": "Fix custom world generation datapack crashes when using minecraft:lake feature ( MC-273228 and MC-272370)"
+ },
+ "c2me-ocl": {
+  "titre": "C2ME OpenCL Acceleration Module",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/RelativityMC/C2ME-fabric",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 234693,
+  "resume": "C2ME addon that provides hardware accelerated world generation through OpenCL"
+ },
+ "fastfurnace": {
+  "titre": "FastFurnace",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Shadows-of-Fire/FastFurnace",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 234404,
+  "resume": "Performance optimizations for the furnace"
+ },
+ "fix-attack-lag": {
+  "titre": "Fix Attack Lag",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 230654,
+  "resume": "Fix the lag caused by excessive single damage during player attacks."
+ },
+ "not-enough-bandwidth": {
+  "titre": "Not Enough Bandwidth",
+  "licence": "GPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/USS-Shenzhou/NotEnoughBandwidth",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "neoforge"
+  ],
+  "dl": 225240,
+  "resume": "NEB uses various methods to save network traffic during Minecraft gameplay."
+ },
+ "moonrise-opt": {
+  "titre": "Moonrise",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Tuinity/Moonrise",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 225089,
+  "resume": "Optimisation mod for the dedicated/integrated server."
+ },
+ "brute-force-rendering-culling": {
+  "titre": "Brute force Rendering Culling",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/RogoShum/BruteForceRenderingCulling",
+  "max_mc": "1.20.6",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge"
+  ],
+  "dl": 224589,
+  "resume": "Culling something can't seeing"
+ },
+ "efficient-hashing": {
+  "titre": "EfficientHashing",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/ZZZank/EfficientHashing",
+  "max_mc": "1.21.1",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 218426,
+  "resume": "better hashing algorithm for Vec3i & BlockPos"
+ },
+ "cull-particles-multiloader": {
+  "titre": "Cull Particles MultiLoader",
+  "licence": "CC0-1.0",
+  "famille": "permissive",
+  "source": "https://github.com/Commander07/CullParticles",
+  "max_mc": "1.21.5",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 212473,
+  "resume": "MultiLoader particle culling mod to improve performance"
+ },
+ "substrate": {
+  "titre": "Substrate",
+  "licence": "LGPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/vesmaybevesper/substrate",
+  "max_mc": "1.21.11",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 203094,
+  "resume": "Optimization of the bottom and/or top layer(s) of the world"
+ },
+ "too-many-entities": {
+  "titre": "Too Many Entities",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Discusser/TooManyEntities",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 201768,
+  "resume": "Hide extra entities in order to reduce lag, especially with mob farms. The mobs still exist in the world, they"
+ },
+ "voxy-server-side": {
+  "titre": "Voxy Server Side",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/VoX/lod-server-support",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "folia",
+   "neoforge",
+   "paper",
+   "purpur"
+  ],
+  "dl": 196164,
+  "resume": "Render distant Voxy LODs on servers"
+ },
+ "jauml": {
+  "titre": "Jauml",
+  "licence": "Apache-2.0",
+  "famille": "permissive",
+  "source": "https://github.com/MeherBenSalem/Jauml",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 161666,
+  "resume": "Jauml is a lightweight configuration library for Minecraft mods, designed to simplify JSON-based config manage"
+ },
+ "noisiumed": {
+  "titre": "Noisiumed",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/imbavirus/noisiumed",
+  "max_mc": "1.21.6",
+  "a_26": false,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 137604,
+  "resume": "A performance-focused fork of Noisium that accelerates Minecraft's terrain generation through targeted optimiz"
+ },
+ "lazyyyyy": {
+  "titre": "lazyyyyy",
+  "licence": "CC-BY-SA-4.0",
+  "famille": "inconnue",
+  "source": "https://github.com/SettingDust/lazyyyyy",
+  "max_mc": "1.20.1",
+  "a_26": false,
+  "loaders": [
+   "forge"
+  ],
+  "dl": 135003,
+  "resume": "Mainly optimize the game launching time for large pack"
+ },
+ "sound-culling": {
+  "titre": "Sound Culling",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Cukkoo12/SoundCulling",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 134647,
+  "resume": "Dynamically limits and dampens overlapping sounds to reduce audio clutter and improve performance in sound-hea"
+ },
+ "no-collision": {
+  "titre": "NoCollision",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 79838,
+  "resume": "Removes collision from a few passive mobs to increase FPS and TPS!"
+ },
+ "potatoptimize": {
+  "titre": "Potatoptimize",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Tater-Certified/Potatoptimize",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt",
+   "sponge"
+  ],
+  "dl": 45972,
+  "resume": "Let tater optimize your game!"
+ },
+ "sf+": {
+  "titre": "Signs Faster",
+  "licence": "CC-BY-4.0",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 45880,
+  "resume": "Optimizes the text of the signs"
+ },
+ "chunky-extension": {
+  "titre": "Chunky Extension",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 44778,
+  "resume": "Ce (Chunky-extend)\n\nA small extension for Chunky, auto start and stop Chunky if players are online or offline."
+ },
+ "entity-cleaner": {
+  "titre": "Entity Cleaner",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 27555,
+  "resume": "Automatically removes unwanted entities like items, arrows, XP orbs, and projectiles to improve performance."
+ },
+ "inputbooster": {
+  "titre": "inputbooster",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Ahaduzzamankhan/inputbooster",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 19893,
+  "resume": "InputBooster – Ultra-fast input polling for Minecraft PvP, capturing missed clicks, maintaining sprint, and im"
+ },
+ "uuid-hex": {
+  "titre": "UUID Hex",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/CJDevZ/UUID-Hex",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 17844,
+  "resume": "High-performance library for formatting UUIDs into hexadecimal strings."
+ },
+ "xp-stream": {
+  "titre": "XP Stream",
+  "licence": "CC-BY-NC-ND-4.0",
+  "famille": "inconnue",
+  "source": "https://github.com/Jed-Tech/XP_Stream",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 17602,
+  "resume": "Absorbs XP orbs faster without clumping, while preserving the magic feel and core mechanics of normal XP colle"
+ },
+ "resource-trimmer": {
+  "titre": "Resource Trimmer",
+  "licence": "LGPL-2.1-only",
+  "famille": "copyleft",
+  "source": "https://github.com/Darkhax-Minecraft/Resource-Trimmer",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 17426,
+  "resume": "Reduces unnecessary network overhead."
+ },
+ "jeioptimizer": {
+  "titre": "JEIOptimizer",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "https://github.com/bigenergy/JEIOptimizer",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 14996,
+  "resume": "15× faster JEI ingredient filter build — drastically reduces \"Joining world...\" wait time on big modded server"
+ },
+ "thirdperson": {
+  "titre": "Third Person (F5)",
+  "licence": "LicenseRef-ProjectMichi",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 13724,
+  "resume": "An extremely lightweight and simple third-person view mod"
+ },
+ "tct-clearlag": {
+  "titre": "TCT ClearLag",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "forge",
+   "neoforge"
+  ],
+  "dl": 11761,
+  "resume": "Add a Clearlag to your world or your server to improve your performance in large structures with many items"
+ },
+ "chunk_gen": {
+  "titre": "Generator",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/Lucasv-github/Pregenerator/",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 11324,
+  "resume": "A Minecraft chunk generation datapack"
+ },
+ "betterspawn": {
+  "titre": "Better Spawn",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 9784,
+  "resume": "simple client and server friendly mod to improve the spawn location and mechanics"
+ },
+ "bandwidthoptimizer": {
+  "titre": "BandwidthOptimizer",
+  "licence": "LGPL-2.1-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/duckgun13476/BandwidthOptimizer",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 53704,
+  "resume": "Save your MC bandwidth with big quantities."
+ },
+ "notick": {
+  "titre": "NoTick",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/Riqqqque/DoesItTickSC-main.git",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 4731,
+  "resume": "Server-side entity tick optimizer for large modded servers. Reduces wasted distant entity ticking with whiteli"
+ },
+ "dim-tracker+afk-display": {
+  "titre": "Dimension tracker + Afk display",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/rogalKraft/dim-tracker-afk-display",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 3308,
+  "resume": "Allows you to track in which dimension a player is tabbed, and find out if they are afk."
+ },
+ "craftingtweaks": {
+  "titre": "Crafting Tweaks",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 3831,
+  "resume": "Adds over 700 new, vanilla-friendly quality of life crafting recipes!"
+ },
+ "nora-rail-optimization": {
+  "titre": "Nora's Rail Optimization",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/noramibu/RailOptimization",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 2723,
+  "resume": "A simple Rail Optimization mod that makes powered/activator rails turn on/off up to 4x faster. Fork of RailOpt"
+ },
+ "afkfishing": {
+  "titre": "AFK Fishing",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 2571,
+  "resume": "Automatically reels in and recasts your fishing rod when a catch is detected, perfect for AFK fishing."
+ },
+ "cullify": {
+  "titre": "Cullify",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/FluxsyumStudios/Cullify",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 2503,
+  "resume": "Grass and foliage culling mod for performance"
+ },
+ "a-star-pathfinding": {
+  "titre": "A* Pathfinding",
+  "licence": "GPL-3.0-only",
+  "famille": "copyleft",
+  "source": "https://github.com/CJDevZ/A-Star-Pathfinding",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 2237,
+  "resume": "Minecraft Pathfinder for Entities"
+ },
+ "server_heater": {
+  "titre": "Server Heater",
+  "licence": "LicenseRef-The-Lambda-License",
+  "famille": "inconnue",
+  "source": "https://codeberg.org/NerjalNosk/server_heater",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 2202,
+  "resume": "Prevents pesky server freezes upon shutdown"
+ },
+ "bug-fixes": {
+  "titre": "Bug Fixes",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 1844,
+  "resume": "This mod fixes MC-244162, allowing mushrooms to spawn in caves as they did before 1.18, and MC-119599. It also"
+ },
+ "pathwright": {
+  "titre": "Pathwright",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 672,
+  "resume": "Optimises minecraft by changing how pathwrighting works. Reducing lag. Higher FPS. Higher MSPT."
+ },
+ "opti-world": {
+  "titre": "OptiWorld",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "datapack",
+   "fabric",
+   "forge",
+   "neoforge",
+   "quilt"
+  ],
+  "dl": 445,
+  "resume": "OptiWorld automatically cleans old dropped items and collects experience orbs every 60 minutes. Smart protecti"
+ },
+ "mapboost-mccmcaozr": {
+  "titre": "MapBoost",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 420,
+  "resume": "Map update frequency optimization mod — Fabric / NeoForge / Forge"
+ },
+ "sheep-efficiency": {
+  "titre": "Sheep Efficiency",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 393,
+  "resume": "Sheep Efficiency is a Minecraft mod that prevents woolly sheep from eating grass, only sheared adults are allo"
+ },
+ "craftboost-mccmcaozr": {
+  "titre": "CraftBoost",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 359,
+  "resume": "Crafting recipe matching cache optimization mod — Fabric / NeoForge / Forge"
+ },
+ "faster-block-entities": {
+  "titre": "Faster Block Entities",
+  "licence": "LGPL-3.0-or-later",
+  "famille": "copyleft",
+  "source": "https://github.com/0x1bd/Faster-Block-Entities",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 270,
+  "resume": "Renders some block entities as ordinary block models instead of per-frame block entity renderers. Port for 26."
+ },
+ "syncboost-mccmcaozr": {
+  "titre": "SyncBoost",
+  "licence": "LicenseRef-All-Rights-Reserved",
+  "famille": "inconnue",
+  "source": "",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "forge",
+   "neoforge"
+  ],
+  "dl": 252,
+  "resume": "Container delta synchronization & hopper idle polling optimization mod — Fabric / NeoForge / Forge"
+ },
+ "refined-fluid-substitution": {
+  "titre": "Refined Fluid Substitution",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/starforcraft/Refined-Fluid-Substitution",
+  "max_mc": "26.1.2",
+  "a_26": true,
+  "loaders": [
+   "fabric",
+   "neoforge"
+  ],
+  "dl": 222,
+  "resume": "Adds a fluid substitution pattern, allowing fluids to be used directly instead of buckets to Refined Storage"
+ },
+ "deltachunk": {
+  "titre": "DeltaChunk",
+  "licence": "MIT",
+  "famille": "permissive",
+  "source": "https://github.com/user19870/delta_chunk",
+  "max_mc": "26.2",
+  "a_26": true,
+  "loaders": [
+   "neoforge"
+  ],
+  "dl": 68,
+  "resume": "Save chunk as small as possible to reduce world size but try to use original mca region"
+ }
+}
