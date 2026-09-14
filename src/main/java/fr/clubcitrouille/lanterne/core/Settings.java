@@ -375,8 +375,12 @@ public final class Settings {
     private static boolean decay = true;
     /** Ticks entre le detachement d'une feuille et sa chute. */
     private static int decayDelay = 5;
+    /** Le brassage du nombre de renvoi des positions. Voir {@link Mix}. */
+    private static boolean mix = true;
     /** Quand masquer les faces de feuilles qui se touchent. Cote CLIENT. */
     private static ClientConfig.LeafCulling leafCulling = ClientConfig.LeafCulling.AUTO;
+    /** Exemplaires dessines par pile d'objets au sol. Cote CLIENT. Voir {@code LooseItemMixin}. */
+    private static int itemCopies = 1;
     /**
      * La bordure du monde retenue, retirée après mesure — seizième plan démoli, et la TROISIÈME
      * confirmation de la même règle.
@@ -791,8 +795,24 @@ public final class Settings {
         return decayDelay;
     }
 
+    /**
+     * Lu depuis {@code hashCode()}, donc des millions de fois par seconde.
+     *
+     * <p>Volontairement sans le {@code master &&} des autres accesseurs : deux lectures de champ au
+     * lieu d'une sur le chemin le plus chaud du jeu. L'interrupteur principal coupe le brassage en
+     * remettant ce champ, pas en s'ajoutant à la condition.
+     */
+    public static boolean mix() {
+        return mix;
+    }
+
     public static ClientConfig.LeafCulling leafCulling() {
         return master ? leafCulling : ClientConfig.LeafCulling.JAMAIS;
+    }
+
+    /** Quatre, soit le comportement de vanilla, des que le mod est coupe. */
+    public static int itemCopies() {
+        return master ? itemCopies : 4;
     }
 
     public static boolean spill() {
@@ -922,12 +942,18 @@ public final class Settings {
         shroud = wanted.contains("shroud") || wanted.contains("voile") || wanted.contains("occlusion");
         staticChests = wanted.contains("chests") || wanted.contains("coffres");
         decay = wanted.contains("decay") || wanted.contains("chute");
+        mix = wanted.contains("mix") || wanted.contains("brassage") || wanted.contains("hash");
         // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
         // branche AUTO dépend d'une option vidéo VRAIE par défaut en vanilla. Un banc qui se
         // contenterait d'allumer le module mesurerait donc zéro, sans rien signaler. On force ici la
         // branche qui agit, et l'on garde le nom explicite plutôt que « feuilles » — ce mot désigne
         // déjà la chute côté serveur, et les confondre reviendrait à mesurer l'un en croyant
         // mesurer l'autre.
+        // « objets » appartient déjà à la fusion au sol : le réemployer ici allumait DEUX modules
+        // d'un coup, et le banc attribuait au plafond d'exemplaires un gain qui venait du tick
+        // serveur. Le relevé le disait — « fusion-objets | rendu : objets-x1 » — mais il fallait
+        // lire la ligne. Chaque module doit avoir un mot qui n'appartient qu'à lui.
+        itemCopies = wanted.contains("exemplaires") || wanted.contains("piles") ? 1 : 4;
         leafCulling = wanted.contains("masque") || wanted.contains("cull")
                 ? ClientConfig.LeafCulling.TOUJOURS
                 : ClientConfig.LeafCulling.JAMAIS;
@@ -963,6 +989,7 @@ public final class Settings {
         shroud = ClientConfig.SHROUD.get();
         staticChests = ClientConfig.STATIC_CHESTS.get();
         leafCulling = ClientConfig.LEAF_CULLING.get();
+        itemCopies = ClientConfig.ITEM_COPIES.get();
         Shroud.tune(ClientConfig.SHROUD_DELAY.get(), ClientConfig.SHROUD_NEAR.get(),
                 ClientConfig.SHROUD_BUDGET.get(), ClientConfig.SHROUD_FAR.get(),
                 ClientConfig.SHROUD_BULKY.get());
@@ -979,6 +1006,9 @@ public final class Settings {
         }
         if (leafCulling != ClientConfig.LeafCulling.JAMAIS) {
             text.append("feuilles-").append(leafCulling.name().toLowerCase(Locale.ROOT)).append(' ');
+        }
+        if (itemCopies < 4) {
+            text.append("objets-x").append(itemCopies).append(' ');
         }
         return text.isEmpty() ? "aucun" : text.toString().trim();
     }
@@ -1005,6 +1035,7 @@ public final class Settings {
         spill = Config.SPILL.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
+        mix = Config.MIX.get();
         mining = Config.MINING.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
@@ -1070,6 +1101,9 @@ public final class Settings {
         }
         if (decay) {
             text.append("chute-feuilles ");
+        }
+        if (mix) {
+            text.append("brassage ");
         }
         if (rationing) {
             text.append("ration ");

@@ -43,6 +43,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue SHROUD_BULKY;
     public static final ModConfigSpec.BooleanValue STATIC_CHESTS;
     public static final ModConfigSpec.EnumValue<LeafCulling> LEAF_CULLING;
+    public static final ModConfigSpec.IntValue ITEM_COPIES;
 
     public static final ModConfigSpec SPEC;
 
@@ -141,6 +142,20 @@ public final class ClientConfig {
                 "Sans rapport avec la chute rapide des feuilles, qui est un reglage SERVEUR.",
                 "RECONSTRUCTION.")
                 .defineEnum("feuilles_masquees", LeafCulling.AUTO);
+
+        ITEM_COPIES = BUILDER.comment(
+                "OBJETS AU SOL : exemplaires dessines par pile.",
+                "",
+                "Vanilla en dessine jusqu'a QUATRE, legerement decales, pour montrer qu'il y en a",
+                "plusieurs. Chacun est un rendu complet du modele - meme texture, meme travail, a",
+                "quelques centimetres pres. Une ferme qui crache des piles pleines paie donc quatre",
+                "fois ce que le sol parait couter.",
+                "",
+                "1 (defaut) : un seul exemplaire. Une pile de 64 ressemble a un objet seul.",
+                "4          : le rendu de vanilla, a l'identique.",
+                "",
+                "Effet immediat, sans rechargement.")
+                .defineInRange("objets_exemplaires", 1, 1, 4);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

@@ -121,6 +121,28 @@ public final class Scene {
          * pleine à son cœur et ajourée à sa surface : il se situe entre cette charge et rien.
          */
         FOLIAGE,
+        /**
+         * Le butin : des piles pleines, de types variés, posées SOUS le nez de la caméra.
+         *
+         * <h2>Pourquoi {@link #ITEMS} ne pouvait pas servir</h2>
+         *
+         * <p>La charge du sol jonché est bâtie pour le banc <em>serveur</em> : elle étale ses objets
+         * sur un carré large, à seize par bloc, pour reproduire une trémie qui déborde. Vue depuis
+         * la pose de la caméra — quarante blocs de recul, regard horizontal — elle n'occupe qu'une
+         * mince bande au bas de l'écran. Un module qui n'agit que sur le rendu des objets y est donc
+         * mesuré sur quelques pour cent de l'image, et son effet se noie dans le bruit.
+         *
+         * <p>Celle-ci est bâtie pour l'œil : un tapis dense, proche, qui remplit le champ.
+         *
+         * <h2>Et pourquoi des types variés</h2>
+         *
+         * <p>{@code submitMultipleFromCount} a <b>deux branches</b>, choisies selon l'épaisseur du
+         * modèle : les objets en relief — blocs, outils — sont dispersés dans les trois dimensions,
+         * les objets plats — papier, bâton, poudre — sont empilés en profondeur. Une charge d'un
+         * seul type ne mesurerait qu'une de ces deux branches, et l'on conclurait sur l'autre sans
+         * l'avoir vue.
+         */
+        LOOT,
         /** Le sol jonché : des milliers d'objets posés, immobiles, qui tickent quand même. */
         ITEMS,
         /** Les deux à la fois, ce qui est la situation d'un serveur habité. */
@@ -324,6 +346,7 @@ public final class Scene {
             case "barn", "grange", "couvert" -> Kind.BARN;
             case "depot", "entrepot", "entrepôt", "coffres" -> Kind.DEPOT;
             case "foliage", "feuilles", "futaie", "arbres" -> Kind.FOLIAGE;
+            case "loot", "butin", "tapis" -> Kind.LOOT;
             case "items", "objets", "sol" -> Kind.ITEMS;
             case "mixed", "mixte", "tout" -> Kind.MIXED;
             case "tnt", "dynamite", "boom" -> Kind.TNT;
@@ -1253,6 +1276,7 @@ public final class Scene {
             case BARN -> barn(level, count);
             case DEPOT -> depot(level, count);
             case FOLIAGE -> foliage(level, count);
+            case LOOT -> loot(level, count);
             case ITEMS -> items(level, count);
             case MIXED -> {
                 int born = pen(level, count / 2);
@@ -1578,6 +1602,60 @@ public final class Scene {
         Lanterne.LOG.info("[SCÈNE] futaie : {} feuille(s) persistantes, {}x{}x{}. "
                 + "Presque toutes leurs faces sont mitoyennes.", placed, side, tall, side);
         return placed;
+    }
+
+    /**
+     * Les types d'objets du tapis de butin.
+     *
+     * <p>Six en relief et six plats, pour que les deux branches de {@code submitMultipleFromCount}
+     * soient parcourues dans la même proportion. Tous existent en vanilla et tous s'empilent par
+     * soixante-quatre — ce dernier point compte : {@code getRenderedAmount} rend <b>cinq</b>
+     * exemplaires pour une pile de plus de quarante-huit, et un seul pour une pile de un. Une charge
+     * bâtie avec des piles d'une unité mesurerait un module qui ne fait rien.
+     */
+    private static final net.minecraft.world.item.Item[] LOOT_KINDS = {
+        net.minecraft.world.item.Items.COBBLESTONE,
+        net.minecraft.world.item.Items.OAK_LOG,
+        net.minecraft.world.item.Items.IRON_BLOCK,
+        net.minecraft.world.item.Items.PUMPKIN,
+        net.minecraft.world.item.Items.BOOKSHELF,
+        net.minecraft.world.item.Items.SAND,
+        net.minecraft.world.item.Items.PAPER,
+        net.minecraft.world.item.Items.STICK,
+        net.minecraft.world.item.Items.WHEAT,
+        net.minecraft.world.item.Items.REDSTONE,
+        net.minecraft.world.item.Items.GUNPOWDER,
+        net.minecraft.world.item.Items.LEATHER,
+    };
+
+    /** Côté du tapis de butin, en blocs. Assez serré pour remplir le champ depuis la pose courte. */
+    private static final int LOOT_SIDE = 10;
+
+    /**
+     * Un tapis de piles pleines devant la caméra.
+     *
+     * <p>Les piles font soixante-quatre : c'est la seule taille pour laquelle vanilla dessine le
+     * maximum d'exemplaires, et donc la seule où le plafond d'exemplaires a quelque chose à retirer.
+     */
+    private static int loot(ServerLevel level, int count) {
+        Random dice = new Random(SEED);
+        int born = 0;
+        for (int i = 0; i < count; i++) {
+            double x = (dice.nextDouble() - 0.5d) * LOOT_SIDE;
+            double z = (dice.nextDouble() - 0.5d) * LOOT_SIDE;
+            int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    (int) Math.floor(x), (int) Math.floor(z));
+            var item = new net.minecraft.world.entity.item.ItemEntity(level, x, ground + 0.2d, z,
+                    new net.minecraft.world.item.ItemStack(LOOT_KINDS[i % LOOT_KINDS.length], 64));
+            item.setDeltaMovement(0d, 0d, 0d);
+            item.setUnlimitedLifetime();
+            if (level.addFreshEntity(item)) {
+                born++;
+            }
+        }
+        Lanterne.LOG.info("[SCÈNE] butin : {} pile(s) de 64 sur {} blocs de côté, {} types. "
+                + "Vanilla en dessine CINQ exemplaires chacune.", born, LOOT_SIDE, LOOT_KINDS.length);
+        return born;
     }
 
     /**

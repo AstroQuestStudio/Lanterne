@@ -223,6 +223,26 @@ public final class Glass {
 
     private static final double POSE_Z = 40.0d;
 
+    /**
+     * Recul employé pour les charges posées à même le sol.
+     *
+     * <h2>Une charge que la caméra regardait par-dessus</h2>
+     *
+     * <p>Quarante blocs de recul et un regard horizontal conviennent à ce qui est haut : une grange
+     * de six blocs, un massif de feuilles de vingt. Ils ne conviennent pas à ce qui est plat. Un
+     * tapis d'objets posés à {@code sol + 0,2} n'occupe alors qu'une bande étroite au bas de
+     * l'écran, et un module qui n'agit que sur ces objets se voit mesuré sur quelques pour cent de
+     * l'image — c'est-à-dire noyé.
+     *
+     * <p>Le relevé qui l'a montré a été <b>refusé</b> par le contrôle de cohérence : le débit
+     * annonçait ×1,59 et la médiane ×0,79. Le module ne pouvait pas à la fois rendre les images
+     * plus lentes et plus nombreuses ; ce qu'on mesurait n'était pas lui.
+     */
+    private static final double POSE_Z_CLOSE = 9.0d;
+
+    /** Inclinaison vers le bas pour les charges au sol, vues de près. */
+    private static final float POSE_PITCH_DOWN = 25.0f;
+
     private static final float POSE_YAW = 180.0f;
 
     /**
@@ -250,6 +270,12 @@ public final class Glass {
 
     /** Hauteur de pose, calculée à la construction de la scène. Voir {@link #EYE_HEIGHT}. */
     private static volatile double poseY = 64.0d + EYE_HEIGHT;
+
+    /** Recul de pose, choisi selon la charge. Voir {@link #POSE_Z_CLOSE}. */
+    private static volatile double poseZ = POSE_Z;
+
+    /** Inclinaison de pose, choisie selon la charge. */
+    private static volatile float posePitch;
 
     private enum Phase { IDLE, WAITING, WARM_ON, MEASURE_ON, WARM_OFF, MEASURE_OFF, DONE, REFUSED }
 
@@ -437,9 +463,15 @@ public final class Glass {
             // La pose dépend du relief de la graine : on ne peut la connaître qu'ici, une fois le
             // monde ouvert. Voir EYE_HEIGHT pour ce que cette ligne corrige.
             poseY = Scene.groundLevel(level) + EYE_HEIGHT;
-            Lanterne.LOG.info("[VITRE] scène « {} » posée devant la caméra : {} créature(s), "
-                    + "œil à Y={}. Sans elle, le banc pèse l.outil sans peser ce qu.il soulève.",
-                    kind, born, String.format(Locale.ROOT, "%.1f", poseY));
+            // Ce qui est haut se regarde de loin et à l'horizontale ; ce qui est plat, de près et
+            // vers le bas. Voir POSE_Z_CLOSE pour le relevé qui a imposé cette distinction.
+            boolean flat = kind == Scene.Kind.LOOT || kind == Scene.Kind.ITEMS;
+            poseZ = flat ? POSE_Z_CLOSE : POSE_Z;
+            posePitch = flat ? POSE_PITCH_DOWN : 0.0f;
+            Lanterne.LOG.info("[VITRE] scène « {} » : {} élément(s). Caméra à Z={}, Y={}, "
+                    + "inclinaison {}°.", kind, born, String.format(Locale.ROOT, "%.0f", poseZ),
+                    String.format(Locale.ROOT, "%.1f", poseY),
+                    String.format(Locale.ROOT, "%.0f", posePitch));
         });
     }
 
@@ -515,6 +547,38 @@ public final class Glass {
                 + "à {}. Sans cela, le banc mesure la fréquence de l'écran.", UNCAPPED);
     }
 
+    /**
+     * Avertit quand plusieurs modules travaillent alors qu'on croit en mesurer un.
+     *
+     * <h2>Un mot-clé partagé par deux modules</h2>
+     *
+     * <p>{@code LANTERNE_MODULES=objets} allumait le plafond d'exemplaires — celui qu'on voulait
+     * mesurer — <b>et</b> la fusion des objets au sol, parce que les deux reconnaissaient le mot
+     * « objets ». Le banc a rendu ×5,70, un chiffre qui venait presque entièrement du second : le
+     * temps hors rendu passait de 31,37 ms à 0,27, ce qui est du tick serveur, donc pas du rendu.
+     *
+     * <p>Le relevé le disait pourtant en toutes lettres — « fusion-objets | rendu : objets-x1 » —
+     * mais rien n'attirait l'œil dessus. Un renseignement qu'il faut penser à lire n'est pas un
+     * garde-fou ; c'en est un quand il crie.
+     *
+     * <p>On n'interdit rien : mesurer plusieurs modules ensemble est parfois ce qu'on veut. On
+     * refuse seulement de laisser croire qu'on en mesurait un seul.
+     */
+    private static void warnIfCrowded(String active) {
+        int count = 0;
+        for (String word : active.replace("|", " ").split("\s+")) {
+            if (!word.isBlank() && !word.equals("rendu") && !word.equals(":")
+                    && !word.equals("aucun") && !word.equals("module")) {
+                count++;
+            }
+        }
+        if (count > 1) {
+            Lanterne.LOG.warn("[VITRE] ATTENTION : {} modules sont actifs — « {} ». Si l'intention "
+                    + "était d'en mesurer UN, le chiffre sera attribué au mauvais. Vérifier que "
+                    + "chaque module a un mot-clé qui n'appartient qu'à lui.", count, active);
+        }
+    }
+
     private static void invalidateTerrain() {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.levelRenderer != null) {
@@ -567,7 +631,7 @@ public final class Glass {
         // Voir le Javadoc de classe : reposer à CHAQUE image, et non une seule fois, élimine toute
         // dérive résiduelle en plus de la chute — une garantie plus stricte que « en vol ».
         // Regard horizontal : la scène est bâtie au niveau du sol, à la même altitude que l'œil.
-        player.snapTo(POSE_X, poseY, POSE_Z, POSE_YAW, 0.0f);
+        player.snapTo(POSE_X, poseY, poseZ, POSE_YAW, posePitch);
         return true;
     }
 
@@ -631,6 +695,7 @@ public final class Glass {
                 // relevé inexploitable sans qu'on sache pourquoi.
                 modulesDuringOn = Settings.describe() + " | rendu : "
                         + Settings.describeClient();
+                warnIfCrowded(modulesDuringOn);
                 Settings.setEnabled(false);
                 invalidateTerrain();
                 // La scène est rebâtie entre les phases, et c'est indispensable ici : mille vaches

@@ -48,6 +48,8 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `assets/minecraft/{blockstates,models,atlases}` *(coffres)* | [FastChest](https://github.com/FakeDomi/FastChest) (FakeDomi), via Faster Block Entities | MIT |
 | `client/Foliage.java` + `mixin/LeafCullMixin.java` | **Rien.** Idée commune à [CullLeaves](https://github.com/TeamMidnightDust/CullLeaves) (MIT) et consorts. | — |
 | `mixin/LeafDecayMixin.java` — chute rapide | **Rien.** Écrit pour ce projet. | — |
+| `mixin/LooseItemMixin.java` — exemplaires au sol | **Rien.** Idée voisine de [fast-items](https://github.com/Noryea/fast-items-fabric) (CC0), mécanisme différent. | — |
+| `core/Mix.java` + `mixin/PositionHashMixin.java` | [EfficientHashing](https://github.com/ZZZank/EfficientHashing) (ZZZank) | LGPL-3.0-only |
 
 Les ressources de shulker fournies par Faster Block Entities n'ont pas été
 reprises : leur couvercle qui s'ouvre est un retour d'information utile, et le
@@ -70,6 +72,14 @@ diffère aussi : il annule `extractEntity`, nous enveloppons l'appel à
 
 Le parcours de grille employé est l'algorithme d'Amanatides et Woo, publié en
 1987 ; il n'appartient à aucun mod.
+
+Les objets au sol méritent une précision inverse des précédentes. **fast-items**
+(CC0, donc copiable sans réserve) remplace le modèle tridimensionnel par une
+image plate face à la caméra. Son code n'a pas été repris — non par scrupule,
+mais parce qu'il vise `BakedModel` et `ItemRenderer.render`, deux interfaces que
+26.1 a supprimées au profit de l'extraction d'états et de `SubmitNodeCollector`.
+Le mécanisme retenu ici est autre : plafonner le nombre d'exemplaires que vanilla
+dessine par pile, qui va jusqu'à **cinq** pour une pile de plus de quarante-huit.
 
 Le masquage des feuilles mérite la même précision. **CullLeaves** (MIT, donc
 copiable) a été lu. Son mixin *redéfinit* `skipRendering` en entier, ce qui

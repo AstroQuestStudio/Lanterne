@@ -59,6 +59,7 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **1 000 vaches sous un toit** *(le Voile, seul)* | 29,9 im/s | **238,8 im/s** | **×7,98** | ✅ |
 | **1 200 coffres dans le champ** *(coffres statiques, seuls)* | 138,0 im/s | **200,3 im/s** | **×1,45** | ✅ |
 | **12 167 feuilles** *(masquage des faces, seul)* | 171,9 im/s | **244,8 im/s** | **×1,42** | ✅ |
+| **1 500 piles pleines au sol** *(exemplaires, seul)* | 27,5 im/s | **64,6 im/s** | **×2,35** | ✅ |
 
 <div align="center">
 
