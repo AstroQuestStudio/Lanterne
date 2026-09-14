@@ -54,6 +54,48 @@ public final class Bench {
     private static final int SAMPLE = 500;
 
     /**
+     * Le plancher sous lequel ce banc ne conclut rien.
+     *
+     * <h2>Quinze pour cent d'écart entre deux phases identiques</h2>
+     *
+     * <p>Lancé avec {@code LANTERNE_MODULES=none} — donc avec <b>rien d'actif dans aucune des deux
+     * phases</b> — ce banc a rendu ceci, deux fois de suite :
+     *
+     * <pre>
+     * 37,75 ms « avec »  ·  42,67 ms « sans »   →  ×1,13
+     * 34,68 ms « avec »  ·  40,64 ms « sans »   →  ×1,17
+     * </pre>
+     *
+     * <p>Les deux phases mesuraient rigoureusement la même chose. L'écart est donc entièrement une
+     * dérive du protocole, en faveur de la <b>première</b>.
+     *
+     * <h2>Le même défaut, déjà rencontré, et qui a changé de signe</h2>
+     *
+     * <p>Voir {@link #WARMUP} : un banc à vide avait rendu quatorze millisecondes pour la première
+     * phase et onze pour la seconde — vingt-sept pour cent en faveur de la <em>seconde</em>, dus au
+     * compilateur à la volée qui optimisait encore pendant la première. La chauffe est passée de
+     * soixante à deux cents ticks, et cela a réglé cette cause-là.
+     *
+     * <p>Le biais actuel va dans l'autre sens, donc il a une autre cause : quelque chose de
+     * <b>cumulatif</b> dégrade la seconde phase. Deux phases longues et successives de vingt-cinq
+     * secondes chacune y sont exposées par construction — pression sur le tas (près de cinq
+     * gigaoctets alloués et vingt-six ramassages par exécution), échauffement du processeur, état du
+     * monde qui s'accumule.
+     *
+     * <h2>Ce qu'on en fait, et ce qu'on n'en fait pas</h2>
+     *
+     * <p>La correction propre serait d'<b>entrelacer</b> les phases — ABABAB plutôt que AABB — pour
+     * que la dérive frappe les deux séries également. C'est un chantier sur ce fichier, et il n'est
+     * pas fait ici.
+     *
+     * <p>Ce qui est fait, et qui suffit à ne pas mentir : ce banc <b>refuse de conclure</b> sous
+     * cette valeur. Un module qui rend ×1,10 sur cette charge n'a rien prouvé — le banc à vide en
+     * rend autant. Les gains bien au-dessus du plancher restent valables dans leur sens, et
+     * surestimés d'environ quinze pour cent dans leur ampleur.
+     */
+    private static final double DRIFT = 1.20d;
+
+    /**
      * Budget de temps réel par phase, en nanosecondes.
      *
      * <h2>Un banc qui n'aurait jamais rendu son verdict</h2>
@@ -625,17 +667,20 @@ public final class Bench {
             return;
         }
 
-        // Le verdict, formulé pour être vérifiable et non pour flatter. Un gain sous cinq pour cent
-        // n'est pas un gain : c'est du bruit, et le dire est la seule façon de rester crédible
-        // quand le chiffre est bon.
-        if (ratio > 1.05d) {
+        // Le verdict, formulé pour être vérifiable et non pour flatter. Voir DRIFT pour l'origine du
+        // plancher : il ne vaut pas cinq pour cent mais vingt, et ce n'est pas une précaution
+        // d'écriture, c'est un fait mesuré sur ce banc.
+        if (ratio > DRIFT) {
             say(String.format(Locale.ROOT, "Gain : ×%.2f (%.0f %% de temps en moins)",
                     ratio, (1d - with / without) * 100d));
-        } else if (ratio < 0.95d) {
+        } else if (ratio < 1d / DRIFT) {
             say(String.format(Locale.ROOT,
                     "PERTE : ×%.2f — le mod coûte plus qu'il ne rapporte ici.", ratio));
         } else {
-            say("Aucun effet mesurable dans cette situation (écart sous le bruit de fond).");
+            say(String.format(Locale.ROOT,
+                    "NON PROUVÉ : ×%.2f est dans la dérive de ce banc (×%.2f mesurée à vide). "
+                            + "Ce n'est ni un gain ni une perte, c'est un chiffre dont on ne peut "
+                            + "rien dire.", ratio, DRIFT));
         }
     }
 

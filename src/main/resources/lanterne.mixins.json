@@ -39,8 +39,7 @@
     "SectionStorageAccessor",
     "PoiStreamMixin",
     "InsideEffectsMixin",
-    "LeafDecayMixin",
-    "PositionHashMixin"
+    "LeafDecayMixin"
   ],
   "client": [
     "EntityCullMixin",

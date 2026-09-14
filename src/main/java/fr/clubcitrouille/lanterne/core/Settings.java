@@ -375,8 +375,40 @@ public final class Settings {
     private static boolean decay = true;
     /** Ticks entre le detachement d'une feuille et sa chute. */
     private static int decayDelay = 5;
-    /** Le brassage du nombre de renvoi des positions. Voir {@link Mix}. */
-    private static boolean mix = true;
+    /**
+     * Le brassage du nombre de renvoi des positions, retire apres mesure — DIX-HUITIEME plan
+     * demoli, et le premier venu d'un mod existant.
+     *
+     * <h2>Le poste etait reel, et enorme</h2>
+     *
+     * <p>{@code Vec3i.hashCode()} vaut en vanilla {@code (y + z*31)*31 + x}. Sur les 2 800 000
+     * positions d'une zone de jeu ordinaire, cette formule ne produit que <b>194 571</b> valeurs
+     * differentes : <b>93 % de collisions</b>. Le brassage de Fibonacci en produit 2 868 471, soit
+     * <b>zero collision</b>. Les chiffres sont exacts et verifiables.
+     *
+     * <h2>Et le solde est negatif, sur deux charges</h2>
+     *
+     * <pre>
+     * 600 villageois : 38,85 ms sans  ·  42,77 ms avec   →  ×0,91
+     * Serveur reel   : 10,86 ms sans  ·  11,69 ms avec   →  ×0,93
+     * </pre>
+     *
+     * <p>La cause est structurelle. Minecraft range ses positions <b>en entiers longs</b> le plus
+     * souvent — {@code BlockPos.asLong()} — dans des tables {@code Long2ObjectOpenHashMap} de
+     * fastutil, lesquelles n'appellent <b>jamais</b> {@code hashCode()} : elles ont leur propre
+     * brassage integre. Quarante fichiers du jeu procedent ainsi, contre trente et un qui emploient
+     * un {@code BlockPos} comme cle d'objet.
+     *
+     * <p>Le surcout — deux decalages et deux XOR de plus par appel — se paie donc <em>partout</em>
+     * ou {@code hashCode()} est appele, tandis que le benefice ne se recolte que sur la moitie des
+     * tables. Et la moitie qui en beneficie n'est pas la moitie chaude.
+     *
+     * <p>C'est le meme piege que la bordure du monde, sous un autre visage : un poste reel, une
+     * correction juste, un solde negatif. La lecon s'ajoute aux deux regles d'instrument :
+     * <b>un defaut mesurable n'est pas un defaut couteux</b>. Encore faut-il que le chemin corrige
+     * soit celui que le jeu emprunte.
+     */
+    private static final boolean MIX_REMOVED_AFTER_MEASUREMENT = true;
     /** Quand masquer les faces de feuilles qui se touchent. Cote CLIENT. */
     private static ClientConfig.LeafCulling leafCulling = ClientConfig.LeafCulling.AUTO;
     /** Exemplaires dessines par pile d'objets au sol. Cote CLIENT. Voir {@code LooseItemMixin}. */
@@ -795,17 +827,6 @@ public final class Settings {
         return decayDelay;
     }
 
-    /**
-     * Lu depuis {@code hashCode()}, donc des millions de fois par seconde.
-     *
-     * <p>Volontairement sans le {@code master &&} des autres accesseurs : deux lectures de champ au
-     * lieu d'une sur le chemin le plus chaud du jeu. L'interrupteur principal coupe le brassage en
-     * remettant ce champ, pas en s'ajoutant à la condition.
-     */
-    public static boolean mix() {
-        return mix;
-    }
-
     public static ClientConfig.LeafCulling leafCulling() {
         return master ? leafCulling : ClientConfig.LeafCulling.JAMAIS;
     }
@@ -942,7 +963,6 @@ public final class Settings {
         shroud = wanted.contains("shroud") || wanted.contains("voile") || wanted.contains("occlusion");
         staticChests = wanted.contains("chests") || wanted.contains("coffres");
         decay = wanted.contains("decay") || wanted.contains("chute");
-        mix = wanted.contains("mix") || wanted.contains("brassage") || wanted.contains("hash");
         // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
         // branche AUTO dépend d'une option vidéo VRAIE par défaut en vanilla. Un banc qui se
         // contenterait d'allumer le module mesurerait donc zéro, sans rien signaler. On force ici la
@@ -1035,7 +1055,6 @@ public final class Settings {
         spill = Config.SPILL.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
-        mix = Config.MIX.get();
         mining = Config.MINING.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
@@ -1101,9 +1120,6 @@ public final class Settings {
         }
         if (decay) {
             text.append("chute-feuilles ");
-        }
-        if (mix) {
-            text.append("brassage ");
         }
         if (rationing) {
             text.append("ration ");

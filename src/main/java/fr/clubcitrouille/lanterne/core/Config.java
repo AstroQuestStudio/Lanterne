@@ -59,7 +59,6 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SPILL;
     public static final ModConfigSpec.BooleanValue DECAY;
     public static final ModConfigSpec.IntValue DECAY_DELAY;
-    public static final ModConfigSpec.BooleanValue MIX;
     public static final ModConfigSpec.IntValue NEAR_RADIUS;
     public static final ModConfigSpec.BooleanValue MINING;
 
@@ -203,20 +202,6 @@ public final class Config {
                 "proches du tronc se detachent avant les autres - mais se compte en secondes.",
                 "1 : chute quasi instantanee. 40 : deux secondes, plus contemplatif.")
                 .defineInRange("chute_feuilles_delai_ticks", 5, 1, 200);
-        MIX = BUILDER.comment(
-                "BRASSAGE DES POSITIONS : le nombre de renvoi de BlockPos, sans ses collisions.",
-                "",
-                "Vanilla calcule (y + z*31)*31 + x. Sur les 2 800 000 positions d'une zone de jeu",
-                "ordinaire, cette formule ne produit que 194 571 valeurs differentes : 93% des",
-                "positions entrent en COLLISION. Chaque collision transforme une recherche de table",
-                "en parcours de liste, et le jeu est fait de tables indexees par position - entites",
-                "de bloc, points d'interet, lumiere a propager, mises a jour planifiees.",
-                "",
-                "Le brassage de Fibonacci produit 2 868 471 valeurs sur le meme echantillon, soit",
-                "AUCUNE collision.",
-                "",
-                "Aucun effet visible en jeu : un nombre de renvoi n'est jamais sauvegarde.")
-                .define("brassage_positions", true);
         NEAR_RADIUS = BUILDER.comment(
                 "Rayon de la zone franche, en blocs : rien n'y est degrade, ni par la distance ni",
                 "par la foule. C'est le seul reglage qui arbitre un COMPROMIS et non un gain.",

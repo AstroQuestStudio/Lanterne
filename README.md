@@ -35,7 +35,7 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | Charge | Sans Lanterne | Avec | Gain | |
 |---|---:|---:|:---:|:--:|
 | **8 000 objets au sol** | 494,83 ms | 36,37 ms | **×13,60** | ✅ |
-| **1 000 vaches dans 15×15** | 30,83 ms | 27,54 ms | **×1,12** | ✅ |
+| **1 000 vaches dans 15×15** | 30,83 ms | 27,54 ms | ×1,12 | ⚠️ |
 | **4 000 orbes d'expérience** | 55,21 ms | **4,70 ms** | **×11,76** | ✅ |
 | **Sauvegarde de 64 chunks** | 114,59 ms | 38,37 ms | **×2,99** | ✅ |
 | **6 000 projectiles en vol** | 113,74 ms | 23,12 ms | **×4,92** | ✅ |
@@ -44,13 +44,29 @@ Deux phases de 25 s, médiane de 500 relevés, **scène reconstruite entre les p
 | **600 villageois** | 61,00 ms | 34,84 ms | **×1,75** | ✅ |
 | **8 000 piles au sol** *(fusion)* | 9,65 ms | 6,78 ms | **×1,42** | ✅ |
 | **10 000 entonnoirs actifs** | 13,21 ms | 10,58 ms | **×1,25** | ✅ |
-| **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | **×1,05** | ✅ |
+| **L'enclos** *(en plus du socle)* | 8,23 ms | 7,86 ms | ×1,05 | ⚠️ |
 
 <div align="center">
 
-✅ **revérifié après la réparation de l'instrument**
+✅ **au-dessus de la dérive du banc** &nbsp;·&nbsp; ⚠️ **sous la dérive : non prouvé**
 
 </div>
+
+> **Ce banc dérive de quinze pour cent, et il vient de le dire lui-même.** Lancé avec
+> `LANTERNE_MODULES=none` — donc avec **rien d'actif dans aucune des deux phases** — il a rendu
+> ×1,13 puis ×1,17. Les deux phases mesuraient rigoureusement la même chose.
+>
+> La cause est structurelle : deux phases longues et successives de 25 s, dont la seconde subit
+> toute dérive cumulative — près de 5 Go alloués et 26 ramassages par exécution, échauffement du
+> processeur, état du monde. Le même défaut avait déjà été rencontré **en sens inverse** (27 % en
+> faveur de la seconde, dus au compilateur JIT) et corrigé en portant la chauffe à 200 ticks ; il a
+> depuis changé de signe, donc de cause.
+>
+> Le banc **refuse désormais de conclure sous ×1,20**. Deux chiffres publiés retombent sous ce
+> plancher et sont marqués ⚠️ : ils ne sont ni infirmés ni confirmés, ils ne sont pas prouvés. Les
+> autres gardent leur sens et sont surestimés d'environ quinze pour cent dans leur ampleur.
+>
+> La correction propre — **entrelacer** les phases, ABABAB plutôt que AABB — reste à faire.
 
 ### Et côté client, maintenant que l'instrument ne ment plus
 
