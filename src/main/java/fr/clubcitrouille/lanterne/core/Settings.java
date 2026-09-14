@@ -376,6 +376,33 @@ public final class Settings {
     /** Ticks entre le detachement d'une feuille et sa chute. */
     private static int decayDelay = 5;
     /**
+     * Les taches d'un cerveau rangees a plat, retirees apres mesure — DIX-NEUVIEME plan demoli, et
+     * le deuxieme du jour a tomber pour la meme raison.
+     *
+     * <h2>Le profileur disait 5,1 %, la mesure a rendu 1 %</h2>
+     *
+     * <p>{@code Brain.startEachNonRunningBehavior} traverse trois tables imbriquees par creature et
+     * par tick, et l'echantillonneur la place a <b>5,1 %</b> du sommet de pile sur six cents
+     * villageois. Le poste est reel ; Lithium l'optimise depuis des annees.
+     *
+     * <pre>
+     * liste plate, test par comportement : ×1,03
+     * liste plate, groupee par activite  : ×1,01
+     * </pre>
+     *
+     * <p>La premiere version interrogeait {@code activeActivities} une fois par comportement — une
+     * cinquantaine de fois la ou vanilla le fait une quinzaine. Corrige, groupe, ramene au compte
+     * exact de vanilla : le gain a <em>baisse</em>. Il n'y avait donc rien a prendre.
+     *
+     * <p>C'est la premiere regle d'instrument, sous son visage le plus net : une methode courte et
+     * tres appelee monte haut dans un echantillonneur de temps <b>sans porter le temps qu'on lui
+     * prete</b>. Les 5,1 % vivent dans ce que la boucle appelle, pas dans la boucle.
+     *
+     * <p>Corollaire pour la suite : sur ce serveur, les micro-optimisations du cerveau sont un
+     * cul-de-sac. Ce qui reste a prendre est ailleurs, et plus gros.
+     */
+    private static final boolean COUNCIL_REMOVED_AFTER_MEASUREMENT = true;
+    /**
      * Le brassage du nombre de renvoi des positions, retire apres mesure — DIX-HUITIEME plan
      * demoli, et le premier venu d'un mod existant.
      *
