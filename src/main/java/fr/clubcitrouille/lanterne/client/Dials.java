@@ -326,10 +326,10 @@ public final class Dials extends Screen {
     public void onClose() {
         if (this.minecraft != null) {
             if (this.minecraft.levelRenderer != null && this.minecraft.level != null) {
-                this.minecraft.levelRenderer.allChanged();
+                this.minecraft.levelExtractor.allChanged();
             }
             fr.clubcitrouille.lanterne.core.Shroud.forget();
-            this.minecraft.setScreen(this.parent);
+            this.minecraft.gui.setScreen(this.parent);
         }
     }
 

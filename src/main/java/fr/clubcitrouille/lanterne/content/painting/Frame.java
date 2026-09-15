@@ -319,7 +319,7 @@ public final class Frame extends Screen {
     private void later(Runnable work) {
         Minecraft client = Minecraft.getInstance();
         client.execute(() -> {
-            if (client.screen == this) {
+            if (client.gui.screen() == this) {
                 work.run();
             }
         });

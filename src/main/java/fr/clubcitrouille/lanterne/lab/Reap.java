@@ -30,6 +30,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.Settings;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.item.DyeColor;
 
 /**
  * L'épreuve de la moisson : les villageois travaillent-ils encore ?
@@ -267,7 +269,7 @@ public final class Reap {
     private static int placeFarmers(ServerLevel level) {
         int born = 0;
         for (int i = 0; i < FARMERS; i++) {
-            Villager farmer = EntityType.VILLAGER.create(level, EntitySpawnReason.COMMAND);
+            Villager farmer = EntityTypes.VILLAGER.create(level, EntitySpawnReason.COMMAND);
             if (farmer == null) {
                 continue;
             }
@@ -532,10 +534,10 @@ public final class Reap {
             BlockPos head = foot.relative(Direction.EAST);
             level.setBlock(foot.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(head.below(), Blocks.STONE.defaultBlockState(), 3);
-            level.setBlock(foot, Blocks.WHITE_BED.defaultBlockState()
+            level.setBlock(foot, Blocks.BED.pick(DyeColor.WHITE).defaultBlockState()
                     .setValue(HorizontalDirectionalBlock.FACING, Direction.EAST)
                     .setValue(BedBlock.PART, BedPart.FOOT), 3);
-            level.setBlock(head, Blocks.WHITE_BED.defaultBlockState()
+            level.setBlock(head, Blocks.BED.pick(DyeColor.WHITE).defaultBlockState()
                     .setValue(HorizontalDirectionalBlock.FACING, Direction.EAST)
                     .setValue(BedBlock.PART, BedPart.HEAD), 3);
             laid++;

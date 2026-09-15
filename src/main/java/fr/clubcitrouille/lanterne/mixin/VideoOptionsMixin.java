@@ -47,7 +47,7 @@ public abstract class VideoOptionsMixin extends OptionsSubScreen {
         }
         list.addSmall(Button.builder(
                 Component.literal("🎃 Lanterne — rendu"),
-                pressed -> Minecraft.getInstance().setScreen(
+                pressed -> Minecraft.getInstance().gui.setScreen(
                         new Dials((VideoSettingsScreen) (Object) this)))
                 .width(150)
                 .build(), null);

@@ -21,6 +21,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.minecraft.util.LightCoordsUtil;
 
 /**
  * Le dessin d'une toile.
@@ -142,7 +143,7 @@ public class CanvasRenderer extends EntityRenderer<Canvas, CanvasState> {
                     default -> { }
                 }
                 state.light[column + row * state.width] =
-                        LevelRenderer.getLightCoords(level, new BlockPos(x, y, z));
+                        LightCoordsUtil.getLightCoords(level, new BlockPos(x, y, z));
             }
         }
     }

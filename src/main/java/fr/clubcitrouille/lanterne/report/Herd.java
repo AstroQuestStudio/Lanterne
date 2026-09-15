@@ -5,6 +5,7 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.entity.EntityTypes;
 
 /**
  * La charge d'essai : un troupeau posé de façon reproductible.
@@ -101,7 +102,7 @@ public final class Herd {
             double x = centreX + Math.cos(angle) * spread;
             double z = centreZ + Math.sin(angle) * spread;
 
-            Cow cow = EntityType.COW.create(level, EntitySpawnReason.COMMAND);
+            Cow cow = EntityTypes.COW.create(level, EntitySpawnReason.COMMAND);
             if (cow == null) {
                 continue;
             }

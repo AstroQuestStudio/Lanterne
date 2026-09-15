@@ -401,7 +401,7 @@ public final class Glass {
         }
 
         // À partir d'ici la caméra est posée à chaque image : la fenêtre doit rester visible.
-        if (minecraft.gameRenderer.getGameRenderState().windowRenderState.isMinimized) {
+        if (minecraft.gameRenderer.gameRenderState().windowRenderState.isMinimized) {
             refuse(minecraft, "fenêtre réduite pendant la mesure — l'affichage est sauté, "
                     + "le temps d'image ne veut plus rien dire ici");
             return;
@@ -542,7 +542,6 @@ public final class Glass {
     private static void unchain(Minecraft minecraft) {
         minecraft.options.enableVsync().set(false);
         minecraft.options.framerateLimit().set(UNCAPPED);
-        minecraft.getWindow().updateVsync(false);
         Lanterne.LOG.info("[VITRE] Laisse retirée : synchronisation verticale coupée, plafond porté "
                 + "à {}. Sans cela, le banc mesure la fréquence de l'écran.", UNCAPPED);
     }
@@ -582,7 +581,7 @@ public final class Glass {
     private static void invalidateTerrain() {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.levelRenderer != null) {
-            minecraft.levelRenderer.allChanged();
+            minecraft.levelExtractor.allChanged();
         }
     }
 

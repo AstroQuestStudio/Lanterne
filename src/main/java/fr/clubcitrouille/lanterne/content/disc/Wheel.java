@@ -336,7 +336,7 @@ public final class Wheel {
         Groove.clientSide(new Groove.Turntable() {
             @Override
             public void open(Post.Open payload) {
-                Minecraft.getInstance().setScreen(new Lathe(payload.pos()));
+                Minecraft.getInstance().gui.setScreen(new Lathe(payload.pos()));
             }
 
             @Override

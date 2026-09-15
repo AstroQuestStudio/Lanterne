@@ -86,8 +86,8 @@ public final class Gauge {
 
     private static void draw(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         Minecraft client = Minecraft.getInstance();
-        if (!Settings.gauge() || client.player == null || client.options.hideGui
-                || client.screen != null || filled < 8) {
+        if (!Settings.gauge() || client.player == null || client.gui.hud.isHidden()
+                || client.gui.screen() != null || filled < 8) {
             return;
         }
 

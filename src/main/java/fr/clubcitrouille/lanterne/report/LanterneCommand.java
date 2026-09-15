@@ -18,6 +18,7 @@ import net.minecraft.world.phys.Vec3;
 import fr.clubcitrouille.lanterne.core.Census;
 import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.core.TickBudget;
+import net.minecraft.world.entity.EntityTypes;
 
 /**
  * Le rapport, l'interrupteur, le banc et la charge — tout ce qui permet de juger le mod.
@@ -337,7 +338,7 @@ public final class LanterneCommand {
             double x = centre.x + Math.cos(angle) * spread;
             double z = centre.z + Math.sin(angle) * spread;
 
-            Cow cow = EntityType.COW.create(level, EntitySpawnReason.COMMAND);
+            Cow cow = EntityTypes.COW.create(level, EntitySpawnReason.COMMAND);
             if (cow == null) {
                 continue;
             }

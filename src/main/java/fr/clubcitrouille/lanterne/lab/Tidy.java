@@ -246,7 +246,7 @@ public final class Tidy {
      */
     private static void assertBoatBlocks(ServerLevel level) {
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 40, 40);
-        var boat = net.minecraft.world.entity.EntityType.OAK_BOAT.create(
+        var boat = net.minecraft.world.entity.EntityTypes.OAK_BOAT.create(
                 level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
         if (boat == null || !level.addFreshEntity(boat)) {
             Lanterne.LOG.warn("[OBJETS] Bateau — NON MESURÉ : le bateau d'essai n'a pas pu être créé.");

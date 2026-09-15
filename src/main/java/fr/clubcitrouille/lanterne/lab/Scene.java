@@ -15,6 +15,7 @@ import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import net.minecraft.world.entity.EntityTypes;
 
 /**
  * Les charges d'essai : reproduire ce qui casse réellement un serveur.
@@ -851,7 +852,7 @@ public final class Scene {
         for (int i = 0; i < count; i++) {
             double x = (dice.nextDouble() - 0.5d) * side;
             double z = (dice.nextDouble() - 0.5d) * side;
-            var villager = net.minecraft.world.entity.EntityType.VILLAGER.create(
+            var villager = net.minecraft.world.entity.EntityTypes.VILLAGER.create(
                     level, EntitySpawnReason.COMMAND);
             if (villager == null) {
                 continue;
@@ -1180,7 +1181,7 @@ public final class Scene {
         }
         int ground = ground(level);
         while (flying < arrowsWanted) {
-            var arrow = net.minecraft.world.entity.EntityType.ARROW.create(
+            var arrow = net.minecraft.world.entity.EntityTypes.ARROW.create(
                     level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
             if (arrow == null) {
                 return;
@@ -1543,7 +1544,7 @@ public final class Scene {
             double x = (dice.nextDouble() - 0.5d) * PEN_SIDE;
             double z = (dice.nextDouble() - 0.5d) * PEN_SIDE;
 
-            Cow cow = EntityType.COW.create(level, EntitySpawnReason.COMMAND);
+            Cow cow = EntityTypes.COW.create(level, EntitySpawnReason.COMMAND);
             if (cow == null) {
                 continue;
             }
@@ -1846,7 +1847,7 @@ public final class Scene {
             double x = (dice.nextDouble() - 0.5d) * side;
             double z = (dice.nextDouble() - 0.5d) * side;
 
-            var charge = net.minecraft.world.entity.EntityType.TNT.create(
+            var charge = net.minecraft.world.entity.EntityTypes.TNT.create(
                     level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
             if (charge == null) {
                 continue;

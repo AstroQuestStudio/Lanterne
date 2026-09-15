@@ -13,6 +13,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.Settings;
+import net.minecraft.world.entity.EntityTypes;
 
 /**
  * L'épreuve qui décide si le raccourci des projectiles a le droit d'exister.
@@ -97,7 +98,7 @@ public final class Volley {
     private static void fire(ServerLevel level) {
         int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0);
 
-        target = EntityType.COW.create(level, EntitySpawnReason.COMMAND);
+        target = EntityTypes.COW.create(level, EntitySpawnReason.COMMAND);
         if (target == null) {
             Lanterne.LOG.warn("[TIR] impossible de créer la cible — épreuve abandonnée.");
             step = Step.DONE;
@@ -108,7 +109,7 @@ public final class Volley {
         level.addFreshEntity(target);
         healthBefore = target.getHealth();
 
-        AbstractArrow arrow = (AbstractArrow) EntityType.ARROW.create(level, EntitySpawnReason.COMMAND);
+        AbstractArrow arrow = (AbstractArrow) EntityTypes.ARROW.create(level, EntitySpawnReason.COMMAND);
         if (arrow == null) {
             Lanterne.LOG.warn("[TIR] impossible de créer la flèche — épreuve abandonnée.");
             step = Step.DONE;

@@ -54,7 +54,7 @@ public final class Hands implements Easel.Brushwork {
      */
     @Override
     public void open(PaintingOpen payload) {
-        Minecraft.getInstance().setScreen(new Frame(payload.entityId(), payload.hash(),
+        Minecraft.getInstance().gui.setScreen(new Frame(payload.entityId(), payload.hash(),
                 payload.width(), payload.height(), payload.trim(), Hoard.rules()));
     }
 }

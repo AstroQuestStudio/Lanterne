@@ -65,8 +65,8 @@ public final class Slate {
         batch = Math.max(1, sync.batch());
         if (sync.open()) {
             Minecraft client = Minecraft.getInstance();
-            if (client.player != null && !(client.screen instanceof Counter)) {
-                client.setScreen(new Counter());
+            if (client.player != null && !(client.gui.screen() instanceof Counter)) {
+                client.gui.setScreen(new Counter());
             }
         }
     }

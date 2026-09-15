@@ -83,7 +83,7 @@ public final class Foliage {
         lastMode = mode;
         lastCutout = cutout;
         if (changed && minecraft.levelRenderer != null && minecraft.level != null) {
-            minecraft.levelRenderer.allChanged();
+            minecraft.levelExtractor.allChanged();
         }
     }
 

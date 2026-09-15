@@ -55,7 +55,7 @@ public abstract class ParticleVeilMixin {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        Camera camera = minecraft.gameRenderer.getMainCamera();
+        Camera camera = minecraft.gameRenderer.mainCamera();
         if (camera == null) {
             return;
         }

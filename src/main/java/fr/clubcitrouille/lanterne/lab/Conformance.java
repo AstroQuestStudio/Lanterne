@@ -14,6 +14,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.Settings;
+import net.minecraft.world.entity.EntityTypes;
 
 /**
  * L'épreuve de conformité : ce que le mod ne doit pas avoir changé.
@@ -112,7 +113,7 @@ public final class Conformance {
             double z = copy * 4d;
             double ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                     (int) x, (int) z);
-            Cow cow = EntityType.COW.create(level, EntitySpawnReason.COMMAND);
+            Cow cow = EntityTypes.COW.create(level, EntitySpawnReason.COMMAND);
             if (cow == null) {
                 continue;
             }

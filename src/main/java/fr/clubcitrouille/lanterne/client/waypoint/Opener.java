@@ -22,7 +22,7 @@ public final class Opener {
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft client = Minecraft.getInstance();
-        if (client.player == null || client.screen != null) {
+        if (client.player == null || client.gui.screen() != null) {
             return;
         }
         boolean asked = false;
@@ -46,7 +46,7 @@ public final class Opener {
                     .withStyle(net.minecraft.ChatFormatting.GRAY));
             return;
         }
-        client.setScreen(new Board());
+        client.gui.setScreen(new Board());
     }
 
     /** Le carnet est-il quelque part dans l'inventaire ? Le tenir en main n'est pas exigé. */

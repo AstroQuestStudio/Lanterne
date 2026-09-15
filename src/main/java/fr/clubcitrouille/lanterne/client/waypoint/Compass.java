@@ -80,7 +80,7 @@ public final class Compass {
     private static void draw(net.minecraft.client.gui.GuiGraphicsExtractor graphics,
                              net.minecraft.client.DeltaTracker delta) {
         Minecraft client = Minecraft.getInstance();
-        if (client.player == null || client.options.hideGui || client.screen != null) {
+        if (client.player == null || client.gui.hud.isHidden() || client.gui.screen() != null) {
             return;
         }
         List<Waypoint> near = Marks.byDistance();

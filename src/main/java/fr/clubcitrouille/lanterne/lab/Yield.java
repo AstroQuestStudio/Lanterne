@@ -17,6 +17,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.report.Herd;
+import net.minecraft.world.entity.EntityTypes;
 
 /**
  * L'épreuve du rendement : une ferme produit-elle encore autant ?
@@ -165,7 +166,7 @@ public final class Yield {
                     (int) Math.floor(x), (int) Math.floor(z));
 
             if (i < HENS) {
-                Chicken hen = EntityType.CHICKEN.create(level, EntitySpawnReason.COMMAND);
+                Chicken hen = EntityTypes.CHICKEN.create(level, EntitySpawnReason.COMMAND);
                 if (hen == null) {
                     continue;
                 }
@@ -176,7 +177,7 @@ public final class Yield {
                     HENHOUSE.add(hen);
                 }
             } else {
-                Cow calf = EntityType.COW.create(level, EntitySpawnReason.COMMAND);
+                Cow calf = EntityTypes.COW.create(level, EntitySpawnReason.COMMAND);
                 if (calf == null) {
                     continue;
                 }
