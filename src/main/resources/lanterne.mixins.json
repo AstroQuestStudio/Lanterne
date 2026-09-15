@@ -59,7 +59,9 @@
     "RemoveBlockMixin",
     "PackIndexMixin",
     "JigsawPlacerMixin",
-    "NoiseCalqueMixin"
+    "NoiseCalqueMixin",
+    "FilonNoiseMixin",
+    "FilonGeneratorMixin"
   ],
   "client": [
     "EntityCullMixin",

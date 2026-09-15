@@ -169,7 +169,9 @@ par seconde.
 **JMF.** Mort. Dernière version **2.1.1e, 23 mai 2003**. Licence propriétaire. Aucun codec moderne.
 
 **Extraction de flux YouTube (yt-dlp / NewPipe / InnerTube).** **Écartée, et c'est la seule ligne
-juridiquement nette de tout le dossier.** yt-dlp est sous Unlicense — l'outil est libre — mais les
+juridiquement nette de tout le dossier.** *(Ne pas confondre avec l'**intégration**, qui est
+autorisée et qui est désormais implémentée — voir la §3 bis ci-dessous, qui corrige une erreur de
+cette reconnaissance.)* yt-dlp est sous Unlicense — l'outil est libre — mais les
 conditions d'utilisation de YouTube interdisent en toutes lettres trois choses que l'extraction fait
 toutes les trois : `download`, `automated means (such as robots, botnets or scrapers)`, et
 `circumvent, disable, fraudulently engage with… including security-related features`. Le
@@ -179,6 +181,30 @@ lignes** : le client se comporte en navigateur, la publicité est servie, aucune
 n'est contournée. C'est un point réel en faveur de Chromium, et le seul.
 
 ---
+
+## 3 bis. Une erreur de cette reconnaissance, et sa correction
+
+**Ce document écartait YouTube. C'était faux, et cela a coûté un écran noir à un joueur.**
+
+La faute est une confusion entre deux gestes que les conditions d'utilisation traitent
+différemment :
+
+| | Ce que c'est | Statut |
+|---|---|---|
+| **Extraction** | retrouver l'adresse du fichier vidéo et le décoder soi-même (`yt-dlp`, NewPipe, InnerTube) | **interdite** — téléchargement, moyen automatisé, et souvent contournement d'une protection |
+| **Intégration** | afficher le lecteur publié par l'hébergeur, dans sa forme `/embed/` | **autorisée** — et nommément |
+
+Le texte de YouTube réserve l'accès aux « pages de lecture vidéo, **au lecteur intégrable**, ou à
+d'autres moyens explicitement autorisés ». Le lecteur intégrable est donc **cité comme moyen
+autorisé** : c'est ce pour quoi il existe, la publicité est servie par le lecteur officiel, et la vue
+est comptée. C'est ce que font CinemaMod et WaterMedia depuis des années.
+
+J'avais lu la première ligne et conclu pour les deux. La conclusion « YouTube est écarté » ne suivait
+pas des prémisses, elle les dépassait.
+
+**Ce qui en découle** : `content/screen/Embed.java` transforme l'adresse collée en la forme publiée
+pour cet usage — `watch?v=`, `youtu.be/`, `/shorts/` et `/embed/` sont toutes reconnues, ainsi que
+Vimeo et Dailymotion — et `client/screen/Chrome.java` l'affiche dans un navigateur.
 
 ## 4. Recommandation
 
@@ -210,12 +236,24 @@ n'est contournée. C'est un point réel en faveur de Chromium, et le seul.
    ni la position de lecture ni l'instant.
 6. **Dream Displays le fait déjà en 26.2**, sous LGPL-3.0. La voie est éprouvée, pas spéculative.
 
-### Ce qu'on perd, dit franchement
+### Deux moteurs, et le choix se fait sur l'adresse
 
-**Les grands hébergeurs de vidéo.** Aucun ne sert de fichier directement. Sans extraction de flux —
-et on l'a écartée pour de bonnes raisons — cette voie joue des fichiers directs et du HLS, pas des
-pages. C'est cohérent avec la liste blanche d'administrateur : on autorise des domaines dont on sert
-soi-même les médias. Un serveur qui veut YouTube installe Rinku, et le second moteur prend le relais.
+FFmpeg lit des **fichiers** et des flux ; il ne lira jamais une page. Un navigateur affiche des
+**pages** ; le faire ouvrir un `.mp4` marcherait et coûterait un processus Chromium là où trente
+lignes de décodage suffisent.
+
+`Engine.forSource` regarde donc l'adresse avant de choisir. Le repli ne vaut que dans un sens : un
+fichier peut se lire dans un navigateur, une page ne se lira jamais dans un décodeur.
+
+**L'ordre de préférence absolu qui figurait ici était un défaut de conception**, et il a produit un
+faux diagnostic en jeu : FFmpeg, mis en tête, ouvrait la page YouTube, y trouvait du HTML, et rendait
+« Invalid data found when processing input » — ce qui a fait conclure à un décodeur manquant alors
+qu'il était installé et fonctionnel.
+
+**Ce que le joueur paie** : rien s'il ne lit que des fichiers. Celui qui veut YouTube installe
+**Rinku** (LGPL-2.1-or-later, 26.2, NeoForge) — qui télécharge son propre Chromium, avec son propre
+écran de progression. Lanterne ne redistribue ni ne télécharge rien de tout cela, et `Chrome.java`
+l'appelle **par réflexion** : le mod démarre normalement sans lui.
 
 ### Sur la réintroduction de ffmpeg, puisque le dépôt vient de l'écarter
 
@@ -294,6 +332,35 @@ flux réseau et aucun recalage entre les deux pistes. `client/screen/Airwave.jav
 manque par du silence plutôt que de rendre `false`** — rendre `false` voudrait dire « le morceau est
 fini », et un hoquet de réseau couperait le son pour de bon.
 
+### 5.3 bis Le lecteur intégré, branché pour de bon
+
+`client/screen/Chrome.java` n'est plus un relevé : c'est un moteur. Il appelle **Rinku** par
+réflexion, sans dépendance de compilation, et `Engine.forSource` le choisit dès que l'adresse
+désigne une page.
+
+**La question qui décidait de tout était la texture** — un navigateur qui ne rendrait que dans une
+fenêtre aurait été inutilisable. La réponse est meilleure qu'espéré : `RinkuBrowser` enregistre sa
+texture dans le `TextureManager` de vanilla et expose son `Identifier`. On le passe **tel quel** au
+type de rendu, comme celui d'une pellicule. **Le dessin des écrans n'a pas eu à changer d'une ligne**
+— d'où `Engine.Reel.texture()`, qui laisse les deux moteurs arriver au même endroit.
+
+Signatures employées (branche `26.2.0`) : `Rinku.isInitialized()`, `Rinku.createBrowser(String,
+boolean, int, int)`, `RinkuBrowser.getTextureIdentifier()`, `isTextureReady()`, `resize(int, int)`,
+`close()`, `getRenderer().getTextureWidth()/getTextureHeight()`, et `executeJavaScript(String,
+String, int)` hérité de `CefBrowserOsr`.
+
+**L'horloge partagée pilote la page.** Un script court, envoyé quatre fois par seconde, agit sur
+l'élément `<video>` : position, lecture/pause, volume. L'élément HTML plutôt que l'API d'IFrame,
+parce qu'il est présent chez tous les hébergeurs et qu'il n'y a pas d'API à suivre quand l'un d'eux
+change la sienne. Le seuil de correction est **une demi-seconde** et non les 80 ms de `Clock` : un
+`currentTime` imposé à un lecteur web coûte une remise en tampon, et corriger dix fois par seconde
+donnerait une vidéo qui bégaie en permanence pour rester juste au centième.
+
+**Le son du lecteur intégré n'est pas spatialisé**, et c'est annoncé plutôt que découvert. Il sort
+directement vers le périphérique audio. Le volume réglé dans le bloc est appliqué *dans la page*, ce
+qui donne une décroissance avec la distance mais aucune direction. Un chemin existe pour récupérer le
+PCM et le spatialiser — un gestionnaire audio global au navigateur — il n'est pas écrit.
+
 ### 5.4 Ce qui n'a toujours pas été vu tourner
 
 - **Le téléversement vers la carte graphique.** Il demande un contexte graphique, donc le jeu lancé.
@@ -308,6 +375,10 @@ fini », et un hoquet de réseau couperait le son pour de bon.
   d'un échec silencieux.
 - **Le décodage matériel** (D3D11VA, VAAPI, VideoToolbox) est disponible dans ces binaires mais **n'est
   pas encore demandé** : le décodage reste logiciel. C'est le prochain gain, et il est gros.
+- **Tout le chemin du lecteur intégré.** Les signatures viennent de la lecture des sources de Rinku
+  et sont exactes ; rien n'en a été exécuté, faute de pouvoir lancer le client. Si une seule a bougé,
+  `Chrome.wire()` échoue proprement et l'ardoise affiche « installe Rinku » — c'est-à-dire le pire
+  cas possible, qui reste lisible.
 
 ### 5.5 Un avertissement de la machine virtuelle à surveiller
 

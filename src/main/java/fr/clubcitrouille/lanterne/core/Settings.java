@@ -1160,6 +1160,21 @@ public final class Settings {
 
 
     /**
+     * Retire la correction d'horloge du minage, exprès, pour vérifier que l'épreuve sait la voir.
+     *
+     * <p>Même principe que {@code EntityThrottle.BROKEN_ON_PURPOSE}, et pour la même raison : une
+     * épreuve qui ne peut pas échouer ne prouve rien. {@code LANTERNE_BREAK_MINING=1} rend au
+     * serveur son compte de tours de boucle ; la manche « serveur en retard » de {@code lab.Cognee}
+     * <b>doit</b> alors annoncer que la bûche ne tombe pas.
+     *
+     * <p>Lu une fois pour toutes, et jamais en cours de partie : la correction pose le compteur à
+     * partir d'une origine, et l'éteindre puis la rallumer ferait sauter ce compteur au milieu d'un
+     * cassage en cours.
+     */
+    private static final boolean MINING_BROKEN_ON_PURPOSE =
+            "1".equals(System.getenv("LANTERNE_BREAK_MINING"));
+
+    /**
      * Le minage ne dépend PAS de l'interrupteur général.
      *
      * <p>Ce n'est pas une optimisation mais une <b>correction de justesse</b> : elle ne rend rien plus
@@ -1167,7 +1182,7 @@ public final class Settings {
      * de la porter, sinon il mesurerait un jeu où les blocs ne cassent pas.
      */
     public static boolean mining() {
-        return mining;
+        return mining && !MINING_BROKEN_ON_PURPOSE;
     }
 
     /**

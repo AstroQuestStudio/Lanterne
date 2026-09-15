@@ -263,6 +263,14 @@ public final class Quarry {
     private static long allocatedDuringGeneration;
     private static int genChunksCounted;
     private static String genStages = "";
+    /**
+     * Le total de {@code minecraft:noise} figé au même instant que la ventilation.
+     *
+     * <p>Dénominateur de {@code lab/Filon}. Le relever au rapport plutôt qu'ici y mêlerait
+     * l'amorçage et la relecture de la région de chargement, et les pourcentages seraient faux —
+     * même raison que pour les octets par chunk.
+     */
+    private static long genNoiseNanos;
 
     private Quarry() {}
 
@@ -309,6 +317,7 @@ public final class Quarry {
         // dépôt — un pourcentage n'a de sens que rapporté à ce qui a été totalisé.
         allocationMark = allocatedByAllThreads();
         fr.clubcitrouille.lanterne.core.Forge.reset();
+        Filon.reset();
         Settings.setEnabled(true);
 
         Lanterne.LOG.info(
@@ -420,6 +429,7 @@ public final class Quarry {
             allocatedDuringGeneration = allocatedByAllThreads() - allocationMark;
             genChunksCounted = genChunksDone;
             genStages = fr.clubcitrouille.lanterne.core.Forge.describe();
+            genNoiseNanos = fr.clubcitrouille.lanterne.core.Forge.nanos("minecraft:noise");
             Lanterne.LOG.info("[CARRIÈRE] Génération appariée terminée — {} mesures avec le mod, {} sans, "
                     + "sur la même grille. Amorçage, hors mesure, de la région de chargement.",
                     genOnFilled, genOffFilled);
@@ -739,6 +749,15 @@ public final class Quarry {
                 + "qui a les cœurs — voir lab/Swarm, qui mesure cet autre régime.");
 
         Lanterne.LOG.info("[CPS] ── Où va le temps d'un chunk, étape par étape ──{}", genStages);
+
+        // <h2>Et à l'intérieur de l'étape du bruit, qui pèse à elle seule les deux tiers</h2>
+        //
+        // Dire « le bruit, 64 % » ne désigne pas un endroit où creuser : c'est une région, et elle
+        // contient trois boucles sans rapport. La ventilation ci-dessous les sépare — voir lab/Filon
+        // pour la lecture de source qui les identifie et pour ce que la mesure coûte.
+        Lanterne.LOG.info("[FILON] ── Le dedans de l'étape du bruit ──{}",
+                Filon.ventilation(genNoiseNanos));
+        Lanterne.LOG.info("[FILON] ── Les postes, au détail ──{}", Filon.describe(genChunksCounted));
     }
 
     /**

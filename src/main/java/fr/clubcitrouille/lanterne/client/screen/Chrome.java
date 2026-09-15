@@ -1,92 +1,127 @@
 package fr.clubcitrouille.lanterne.client.screen;
 
-import java.util.List;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.util.Locale;
+
+import net.minecraft.resources.Identifier;
+
+import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.content.screen.Clock;
+import fr.clubcitrouille.lanterne.content.screen.Embed;
 
 /**
- * Le second moteur : un Chromium embarqué, s'il se trouve déjà installé.
+ * Le lecteur intégré : un navigateur que le joueur a installé, piloté par l'horloge partagée.
  *
- * <h2>Ce qu'il apporte, et qu'aucune bibliothèque de décodage n'apportera</h2>
+ * <h2>La correction qui a rendu ce fichier nécessaire</h2>
  *
- * <p>Il ne joue pas un fichier : il ouvre une <b>page</b>. Toute la différence est là. Un hébergeur
- * de vidéo qui ne sert pas de fichier — c'est-à-dire tous les grands — devient accessible, avec son
- * lecteur, ses sous-titres, ses pistes audio et sa publicité. Et il y devient accessible <b>sans rien
- * contourner</b> : le client se comporte en navigateur, ce qu'il est.
+ * <p>La première reconnaissance de ce chantier écartait YouTube. Elle citait les conditions
+ * d'utilisation, et elle avait tort — <b>par confusion entre deux gestes très différents</b>.
  *
- * <p>C'est le seul point où il gagne, et il est réel. L'autre voie — extraire l'adresse du flux par
- * un outil tiers — demande de contourner en permanence des mesures que l'hébergeur remet en place, ce
- * qui est à la fois une course perdue d'avance et le seul endroit de tout ce chantier où l'on
- * franchirait une ligne juridique nette. Ce dépôt ne la franchira pas, et c'est aussi pourquoi
- * l'extraction n'est pas un moteur candidat.
+ * <p><b>Extraire</b> le flux — retrouver l'adresse du fichier pour le décoder soi-même, à la façon de
+ * {@code yt-dlp} — est bien interdit : c'est du téléchargement automatisé, et cela suppose de
+ * contourner une protection. C'était vrai et cela reste vrai.
  *
- * <h2>Ce qu'il coûte, chiffres en main</h2>
+ * <p><b>Intégrer</b> ne l'est pas. Le texte réserve l'accès aux « pages de lecture vidéo, <em>au
+ * lecteur intégrable</em>, ou à d'autres moyens explicitement autorisés ». Le lecteur intégrable est
+ * <b>nommé</b>, c'est ce pour quoi il existe, et l'affichage passe par le lecteur officiel : la
+ * publicité est servie, la vue est comptée. C'est ce que font depuis toujours les mods de cinéma.
  *
- * <ul>
- *   <li><b>Cent quatre-vingts mébioctets</b> téléchargés au premier lancement, sur Windows x86-64 —
- *       et <b>quatre cent vingt-neuf</b> une fois décompressés sur le disque du joueur. Sur Linux,
- *       cinq cent cinquante-huit.</li>
- *   <li><b>Quatre à six processus</b> qui vivent hors du tas de la machine virtuelle, dont un dédié
- *       au rendu. Aucun réglage de mémoire du lanceur ne les concerne : ils prennent la mémoire du
- *       système, celle qui manquait déjà.</li>
- *   <li>Une lignée de forks où <b>des processus survivent à la fermeture du jeu</b> — le défaut est
- *       ouvert depuis novembre 2023 en amont, et n'a reçu qu'un contournement.</li>
- * </ul>
+ * <p>Écarter la seconde au nom de la première a coûté un écran noir à un joueur. Voir
+ * {@link Embed}, qui transforme l'adresse collée en la forme que l'hébergeur publie pour cet usage.
  *
- * <p>Pour un mod dont la raison d'être est de rendre le jeu plus léger, faire démarrer un navigateur
- * complet pour afficher une vidéo est une contradiction qu'aucun chiffre ne rachète. D'où l'ordre de
- * {@code Engine.CANDIDATES} : {@link Lav} d'abord, celui-ci seulement s'il est <b>déjà là</b>.
+ * <h2>Rien n'est embarqué, rien n'est téléchargé par nous</h2>
  *
- * <h2>Déjà là, et jamais installé par nous</h2>
+ * <p>Ce moteur ne dépend de rien à la compilation et ne tire aucun octet. Il regarde si <b>Rinku</b>
+ * est installé — le fork vivant de MCEF, LGPL-2.1-or-later, qui couvre la 26.2 sur NeoForge — et s'en
+ * saisit par réflexion. Rinku apporte son propre Chromium, le télécharge lui-même, et montre son
+ * propre écran de progression : nous n'avons ni à le déclencher ni à le surveiller.
  *
- * <p>Ce moteur ne télécharge rien, ne dépose rien, et n'ajoute aucune dépendance à l'archive. Il
- * regarde si un mod compagnon fournissant un Chromium embarqué est chargé, et s'en sert le cas
- * échéant. Un joueur qui n'en veut pas n'a rien à refuser : il lui suffit de ne pas l'installer.
+ * <p>Le joueur qui ne veut pas de navigateur ne l'installe pas et garde les liens directs par FFmpeg,
+ * sans rien télécharger de plus. Celui qui veut YouTube installe un mod. <b>Personne ne paie cent
+ * quatre-vingts mébioctets pour une fonction qu'il n'emploie pas</b> — ce qui est tout l'intérêt de
+ * ne pas l'embarquer.
  *
- * <p>C'est aussi ce qui garde la question de licence simple. Les forks vivants de ce mod sont en
- * LGPL-2.1-<em>or-later</em>, ce qui se marierait avec la GPL-3.0-only de ce dépôt — la clause
- * « or later » est ce qui le permet, et une LGPL-2.1-only ne le permettrait pas. Mais la question ne
- * se pose pas : rien de leur code n'entre ici, et l'appel se fait par réflexion sur un mod que le
- * joueur a installé de son côté.
+ * <h2>La texture tombe juste, et c'était la question qui décidait de tout</h2>
  *
- * <h2>Ce qui manque</h2>
+ * <p>Un navigateur hors écran qui ne rendrait que dans une fenêtre aurait été inutilisable : il
+ * aurait fallu relire les pixels depuis la carte graphique à chaque image. Rinku rend mieux que cela
+ * — il enregistre sa texture dans le gestionnaire de vanilla et expose son {@code Identifier}. On le
+ * passe donc <b>tel quel</b> au type de rendu, exactement comme celui d'une pellicule de
+ * {@link Film}. Rien du rendu des écrans n'a eu à changer.
  *
- * <ol>
- *   <li><b>Le pont n'est pas écrit.</b> Créer un navigateur hors écran, lui donner une taille, lui
- *       charger une adresse, recevoir ses images et les téléverser — le mécanisme amont est un
- *       {@code onPaint} qui rend un tampon BGRA et des rectangles sales.</li>
- *   <li><b>L'horloge ne commande pas un navigateur.</b> Un lecteur web tient sa propre position et ne
- *       la cède pas : on la pilote par injection de JavaScript — « va à telle seconde », « mets en
- *       pause » — ce qui est indirect, asynchrone, et dépendant de la page. La synchronisation au
- *       dixième de seconde que {@code Clock} rend possible avec un décodeur direct ne peut pas être
- *       tenue ici ; elle serait de l'ordre de la demi-seconde. <b>Cela doit être annoncé et non
- *       découvert</b>, parce que c'est très exactement la fonction que l'on demande.</li>
- *   <li><b>Le nom de la classe compagnon n'est pas certain.</b> La lignée a changé de nom au moins
- *       une fois ; on sonde donc plusieurs noms plutôt qu'un seul, et l'on préfère un relevé qui se
- *       trompe en disant « absent » à un relevé qui se trompe en disant « présent ».</li>
- * </ol>
+ * <h2>Ce que le son ne fera pas, et il faut le dire</h2>
+ *
+ * <p>Le son d'un navigateur sort <b>directement vers le périphérique audio</b>. Il n'est donc
+ * <b>pas spatialisé</b> : il ne baisse pas quand on s'éloigne de l'écran, et il ne vient d'aucune
+ * direction. C'est une limite réelle du chemin intégré, et elle est annoncée plutôt que découverte.
+ *
+ * <p>Ce qui reste possible : le rendre muet. Le volume réglé dans l'écran du bloc est donc appliqué
+ * <em>dans la page</em> — voir {@link #SCRIPT} — ce qui donne une décroissance avec la distance même
+ * si elle n'a pas de direction. Un chemin existe pour récupérer le flux brut et le spatialiser
+ * vraiment ; il passe par un gestionnaire audio global à tout le navigateur, et il n'est pas écrit.
  */
 public final class Chrome implements Engine {
     public static final Chrome INSTANCE = new Chrome();
 
-    /**
-     * Les noms sous lesquels un Chromium embarqué a pu s'installer.
-     *
-     * <p>Plusieurs, et non un seul : la lignée compte un ancêtre abandonné, un fork longtemps de
-     * référence et gelé, et un fork actif qui a été renommé. Sonder un seul nom reviendrait à
-     * déclarer « absent » un moteur parfaitement présent, et le joueur n'aurait aucun moyen de
-     * comprendre pourquoi.
-     */
-    private static final List<String> PROBES = List.of(
-            "com.cinemamod.mcef.MCEF",
-            "de.keksuccino.rinku.Rinku",
-            "net.montoyo.mcef.api.API");
+    /** La classe d'entrée de Rinku. Son absence est la seule chose qui distingue « installé ». */
+    private static final String ENTRY = "de.keksuccino.rinku.Rinku";
 
-    private Verdict verdict;
+    /**
+     * Le script qui met la page à l'heure de tout le monde.
+     *
+     * <h2>Pourquoi l'élément {@code <video>} et pas l'API du lecteur</h2>
+     *
+     * <p>YouTube publie une API d'IFrame avec {@code seekTo}, {@code playVideo}, {@code pauseVideo}.
+     * Elle suppose d'être dans le cadre <em>parent</em> et de dialoguer par messages ; ici le lecteur
+     * <b>est</b> la page du haut, et il n'y a pas de parent.
+     *
+     * <p>L'élément {@code <video>} du HTML, lui, est là dans tous les cas — chez YouTube, chez Vimeo,
+     * chez Dailymotion, et sur n'importe quelle page qui lit une vidéo. Un seul script les pilote
+     * tous, et il n'y a pas d'API à suivre quand un hébergeur change la sienne.
+     *
+     * <h2>Le seuil est bien plus large que celui de l'horloge, et c'est voulu</h2>
+     *
+     * <p>{@code Clock.correct} rattrape à partir de quatre-vingts millisecondes. Ce serait ruineux
+     * ici : un {@code currentTime} imposé à un lecteur web coûte une remise en tampon, parfois une
+     * requête réseau, et une image figée pendant ce temps. Corriger dix fois par seconde donnerait
+     * une vidéo qui bégaie en permanence pour rester juste au centième.
+     *
+     * <p>Une demi-seconde est en dessous de ce qu'on remarque entre deux écrans dans une même pièce,
+     * et au-dessus de ce qu'un lecteur web fait de dérive en une minute. La correction se fait donc
+     * <b>dans la page</b>, qui est la seule à pouvoir comparer sans aller-retour : on lui envoie la
+     * position voulue, elle décide si elle bouge.
+     */
+    private static final String SCRIPT =
+            "(function(){var v=document.querySelector('video');if(!v)return;"
+            + "if(Math.abs(v.currentTime-%1$s)>0.5){try{v.currentTime=%1$s;}catch(e){}}"
+            + "if(%2$s){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}"
+            + "else{if(!v.paused)v.pause();}"
+            + "v.volume=%3$s;v.muted=(%3$s<=0.001);})()";
+
+    /** Les poignées vers Rinku, résolues une fois. Nulles tant que le mod n'est pas là. */
+    private static final class Bridge {
+        MethodHandle initialised;
+        MethodHandle create;
+        MethodHandle textureId;
+        MethodHandle textureReady;
+        MethodHandle resize;
+        MethodHandle script;
+        MethodHandle close;
+        MethodHandle renderer;
+        MethodHandle widthOf;
+        MethodHandle heightOf;
+        boolean ok;
+    }
+
+    private static Bridge bridge;
 
     private Chrome() {}
 
     @Override
     public String label() {
-        return "Chromium embarqué";
+        return "Lecteur intégré (Rinku)";
     }
 
     @Override
@@ -94,34 +129,279 @@ public final class Chrome implements Engine {
         if (!Consent.remoteAllowed()) {
             return Verdict.SANS_CONSENTEMENT;
         }
-        if (this.verdict == null) {
-            this.verdict = present() ? Verdict.SANS_PONT : Verdict.SANS_MOD;
+        Bridge wired = wire();
+        if (wired == null || !wired.ok) {
+            return Verdict.SANS_MOD;
         }
-        return this.verdict;
+        try {
+            // Rinku télécharge son Chromium tout seul, avec son propre écran de progression. Tant
+            // qu'il n'a pas fini, il n'est pas initialisé — et créer un navigateur lèverait. Ce
+            // n'est pas une panne : c'est une attente, et l'ardoise le dira.
+            return (boolean) wired.initialised.invoke() ? Verdict.PRET : Verdict.SANS_BIBLIOTHEQUE;
+        } catch (Throwable problem) {
+            return Verdict.SANS_MOD;
+        }
     }
 
     /**
-     * Le point de branchement.
+     * Ouvre une page.
      *
-     * <p>Rend {@code null} tant que le pont n'existe pas — voir l'en-tête. La signature est celle de
-     * {@link Lav}, et c'est l'intérêt de l'interface : le jour où l'un des deux est écrit, rien
-     * d'autre ne bouge dans le mod.
+     * <p>La hauteur demandée vient de {@code Grade}, comme pour FFmpeg : un navigateur rendu en
+     * 1280 × 720 coûte quatre fois moins qu'en 2560 × 1440, et c'est le même arbitrage. La largeur
+     * est déduite d'un seizième-neuvième, parce qu'une page n'a pas de « forme native » à respecter.
      */
     @Override
     public Reel open(String source, int wantedHeight) {
-        return null;
+        if (verdict() != Verdict.PRET) {
+            return null;
+        }
+        Embed.Form form = Embed.of(source);
+        try {
+            int height = Math.clamp(wantedHeight, 240, 1440);
+            int width = Math.max(2, Math.round(height * 16f / 9f) & ~1);
+            Object browser = bridge.create.invoke(form.url(), false, width, height);
+            if (browser == null) {
+                return null;
+            }
+            return new Pane(browser, width, height);
+        } catch (Throwable refused) {
+            Lanterne.LOG.warn("[PROJECTION] lecteur intégré indisponible : {}",
+                    String.valueOf(refused));
+            return null;
+        }
     }
 
-    private static boolean present() {
-        for (String name : PROBES) {
+    /**
+     * Résout les poignées, une fois.
+     *
+     * <p>Par réflexion et non par dépendance : Rinku est facultatif, et le nommer à la compilation
+     * ferait de ce mod un mod qui refuse de démarrer sans lui. Les poignées de méthode coûtent, une
+     * fois résolues, à peu près ce que coûte un appel ordinaire — ce qui compte quand on en fait
+     * quelques-unes par image.
+     */
+    private static synchronized Bridge wire() {
+        if (bridge != null) {
+            return bridge;
+        }
+        Bridge wired = new Bridge();
+        bridge = wired;
+        try {
+            ClassLoader loader = Chrome.class.getClassLoader();
+            Class<?> entry = Class.forName(ENTRY, false, loader);
+            Class<?> browser = Class.forName("de.keksuccino.rinku.RinkuBrowser", false, loader);
+            Class<?> renderer = Class.forName("de.keksuccino.rinku.RinkuRenderer", false, loader);
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+
+            wired.initialised = lookup.findStatic(entry, "isInitialized",
+                    MethodType.methodType(boolean.class));
+            wired.create = lookup.findStatic(entry, "createBrowser",
+                    MethodType.methodType(browser, String.class, boolean.class, int.class, int.class));
+            wired.textureId = lookup.findVirtual(browser, "getTextureIdentifier",
+                    MethodType.methodType(Identifier.class));
+            wired.textureReady = lookup.findVirtual(browser, "isTextureReady",
+                    MethodType.methodType(boolean.class));
+            wired.resize = lookup.findVirtual(browser, "resize",
+                    MethodType.methodType(void.class, int.class, int.class));
+            wired.close = lookup.findVirtual(browser, "close", MethodType.methodType(void.class));
+            wired.renderer = lookup.findVirtual(browser, "getRenderer",
+                    MethodType.methodType(renderer));
+            wired.widthOf = lookup.findVirtual(renderer, "getTextureWidth",
+                    MethodType.methodType(int.class));
+            wired.heightOf = lookup.findVirtual(renderer, "getTextureHeight",
+                    MethodType.methodType(int.class));
+            // « executeJavaScript » est hérité de JCEF, dont Rinku embarque un fork dans son propre
+            // jar. On le cherche donc sur la classe du navigateur, qui l'expose par héritage, plutôt
+            // que sur une interface d'org.cef qu'on n'a aucune raison de nommer.
+            wired.script = lookup.findVirtual(browser, "executeJavaScript",
+                    MethodType.methodType(void.class, String.class, String.class, int.class));
+            wired.ok = true;
+            Lanterne.LOG.info("[PROJECTION] lecteur intégré détecté : Rinku.");
+        } catch (Throwable absent) {
+            // Absent, ou d'une version dont les signatures ont bougé. Les deux se traitent pareil :
+            // on ne s'en sert pas, et l'ardoise dit quoi installer. Au niveau « debug » parce qu'un
+            // mod facultatif qui manque n'est pas une anomalie.
+            Lanterne.LOG.debug("[PROJECTION] Rinku absent ou incompatible : {}",
+                    String.valueOf(absent));
+        }
+        return wired;
+    }
+
+    /**
+     * Une page ouverte, tenue à l'heure de l'horloge partagée.
+     *
+     * <p>Elle ne décode rien elle-même et n'écrit dans aucune pellicule : le navigateur tient sa
+     * propre texture, et Rinku la pousse vers la carte graphique tout seul, à chaque image du jeu.
+     * {@link #present} n'a donc rien à téléverser — seulement à dire l'heure.
+     */
+    private static final class Pane implements Reel {
+        /**
+         * Millisecondes entre deux mises à l'heure.
+         *
+         * <p>Quatre fois par seconde. Chaque appel traverse la frontière vers le processus du
+         * navigateur et fait analyser un script : à soixante hertz ce serait une dépense permanente
+         * pour corriger une dérive qui se compte en millisecondes par minute.
+         */
+        private static final long BEAT = 250L;
+
+        private final Object browser;
+        private final int width;
+        private final int height;
+
+        private long spokeAt;
+        private long shownMillis;
+        private volatile boolean shut;
+        private String trouble = "";
+
+        Pane(Object browser, int width, int height) {
+            this.browser = browser;
+            this.width = width;
+            this.height = height;
+        }
+
+        @Override
+        public boolean present(long millis, Film film) {
+            if (this.shut) {
+                return false;
+            }
+            this.shownMillis = millis;
+            long now = System.currentTimeMillis();
+            if (now - this.spokeAt < BEAT) {
+                return false;
+            }
+            this.spokeAt = now;
+            speak(millis);
+            return true;
+        }
+
+        /** Envoie la position, l'état de lecture et le volume à la page. */
+        private void speak(long millis) {
             try {
-                Class.forName(name, false, Chrome.class.getClassLoader());
-                return true;
-            } catch (Throwable absent) {
-                // Ce nom-là n'est pas celui du mod installé, ou aucun mod n'est installé. Les deux
-                // se traitent pareil, et ni l'un ni l'autre n'est une anomalie à journaliser.
+                String code = String.format(Locale.ROOT, SCRIPT,
+                        String.format(Locale.ROOT, "%.3f", millis / 1000d),
+                        this.playing ? "true" : "false",
+                        String.format(Locale.ROOT, "%.3f", this.gain));
+                bridge.script.invoke(this.browser, code, "", 0);
+            } catch (Throwable ignored) {
+                // Une page qui n'a pas fini de charger, ou qui vient d'être fermée. Ni l'un ni
+                // l'autre n'est une panne : le battement suivant réessaiera dans un quart de
+                // seconde. Journaliser ferait une ligne toutes les 250 ms au démarrage.
             }
         }
-        return false;
+
+        private volatile boolean playing;
+        private volatile float gain = 1f;
+
+        /** Appelé par {@link Gaze} : l'horloge dit si l'on doit jouer ou attendre. */
+        void playing(boolean value) {
+            this.playing = value;
+        }
+
+        @Override
+        public Identifier texture() {
+            try {
+                return this.shut || !(boolean) bridge.textureReady.invoke(this.browser)
+                        ? null : (Identifier) bridge.textureId.invoke(this.browser);
+            } catch (Throwable problem) {
+                return null;
+            }
+        }
+
+        @Override
+        public boolean ready() {
+            return !this.shut && texture() != null;
+        }
+
+        @Override
+        public boolean broken() {
+            return this.shut;
+        }
+
+        @Override
+        public String trouble() {
+            return this.trouble;
+        }
+
+        @Override
+        public int width() {
+            try {
+                int seen = (int) bridge.widthOf.invoke(bridge.renderer.invoke(this.browser));
+                return seen > 0 ? seen : this.width;
+            } catch (Throwable problem) {
+                return this.width;
+            }
+        }
+
+        @Override
+        public int height() {
+            try {
+                int seen = (int) bridge.heightOf.invoke(bridge.renderer.invoke(this.browser));
+                return seen > 0 ? seen : this.height;
+            } catch (Throwable problem) {
+                return this.height;
+            }
+        }
+
+        /**
+         * Durée inconnue, toujours.
+         *
+         * <p>On pourrait la lire dans la page — {@code v.duration} — mais {@code executeJavaScript}
+         * ne rend rien : c'est un envoi sans réponse. La récupérer demanderait un pont de messages
+         * dans l'autre sens, pour une valeur qui ne sert qu'à dessiner une barre de progression.
+         *
+         * <p>Zéro veut dire « inconnue » pour {@link Clock}, qui cesse alors de replier la boucle et
+         * laisse la position courir. C'est le bon comportement pour un lecteur qui gère lui-même sa
+         * fin de vidéo.
+         */
+        @Override
+        public long duration() {
+            return 0L;
+        }
+
+        /**
+         * Aucune dérive rapportée, et ce n'est pas un aveu.
+         *
+         * <p>La correction ne se fait pas ici : elle se fait <b>dans la page</b>, par le script, qui
+         * est le seul à pouvoir comparer la position voulue et la position réelle sans aller-retour.
+         * Rendre zéro dit à {@code Clock.correct} de ne rien tenter de plus — ce qui est exact, parce
+         * que la correction a déjà eu lieu.
+         */
+        @Override
+        public long drift() {
+            return 0L;
+        }
+
+        @Override
+        public void rate(float multiplier) {
+            // Un lecteur web accélère mal et audiblement. Le script préfère un saut au-delà d'une
+            // demi-seconde, ce qui rend le rattrapage progressif sans objet ici.
+        }
+
+        @Override
+        public void volume(float value) {
+            this.gain = Math.clamp(value, 0f, 1f);
+        }
+
+        @Override
+        public void close() {
+            if (this.shut) {
+                return;
+            }
+            this.shut = true;
+            try {
+                // Sur le fil de rendu : c'est la condition pour que Rinku libère ses ressources
+                // graphiques tout de suite plutôt qu'à un moment qu'il choisira. Gaze ferme depuis
+                // le tick client, qui est ce fil.
+                bridge.close.invoke(this.browser);
+            } catch (Throwable ignored) {
+                // Un navigateur déjà parti. Rien à sauver, et rien à dire.
+            }
+        }
+    }
+
+    /** Le volet de cette bobine, si c'en est un. Sert à {@link Gaze} pour transmettre la lecture. */
+    static void playing(Reel reel, boolean value) {
+        if (reel instanceof Pane pane) {
+            pane.playing(value);
+        }
     }
 }

@@ -78,6 +78,18 @@ public final class Forge {
         COUNTS.computeIfAbsent(status, key -> new AtomicLong()).incrementAndGet();
     }
 
+    /**
+     * Le total cumulé d'une étape, en nanosecondes, ou zéro si elle n'a jamais été vue.
+     *
+     * <p>Sert de <b>dénominateur</b> à {@code lab/Filon}, qui ventile l'intérieur de l'étape du
+     * bruit. Un sous-poste ne veut rien dire sans le total auquel il se rapporte — c'est la règle
+     * d'instrument que ce dépôt s'est donnée après la chute libre du recensement.
+     */
+    public static long nanos(String status) {
+        AtomicLong tally = NANOS.get(status);
+        return tally == null ? 0L : tally.get();
+    }
+
     /** Le relevé, trié du plus coûteux au moins coûteux. */
     public static String describe() {
         long total = 0L;

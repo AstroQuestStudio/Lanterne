@@ -234,16 +234,15 @@ public class Console extends Screen {
         // se contenter d'un état : un joueur a déjà lu « refus du joueur » dans son journal et en a
         // conclu que ffmpeg manquait sur sa machine.
         boolean yes = Consent.remoteAllowed();
+        maybeFetchButton(left, bottom);
+
         addRenderableWidget(Button.builder(Component.literal(yes
                         ? "Médias distants : AUTORISÉS" : "▶ Autoriser les médias distants"),
                         button -> {
+                            // Consentir n'est pas demander à télécharger : c'est lever
+                            // l'interdiction. Le téléchargement a son propre bouton, ci-dessous,
+                            // et il annonce son poids. Voir la note de Gaze.pump.
                             Consent.allowRemote(!yes);
-                            // Dire oui doit suffire. Sans cet appel, le joueur aurait consenti puis
-                            // attendu sans rien voir jusqu'à ce qu'un écran soit regardé assez
-                            // longtemps pour que le tour de ronde s'en aperçoive.
-                            if (!yes) {
-                                Fetch.ensure();
-                            }
                             rebuildWidgets();
                         })
                 .bounds(left + 166, bottom - 46, 144, 18)
@@ -262,7 +261,7 @@ public class Console extends Screen {
 
     private int panelHeight() {
         // Quatre barres pour un écran, six pour un projecteur, plus les bandes fixes.
-        return HEADER + 24 + 22 + 14 + bars().length * ROW + 80;
+        return HEADER + 24 + 22 + 14 + bars().length * ROW + 104;
     }
 
     @Override
@@ -487,6 +486,32 @@ public class Console extends Screen {
             String value = bar.write().apply(bar.value());
             graphics.text(this.font, value, left + WIDTH - 48, rowY + 2, TEXT, false);
         }
+    }
+
+    /**
+     * Le bouton de téléchargement, qui n'apparaît que quand il sert.
+     *
+     * <p>Il porte son poids dans son libellé. Personne ne devrait découvrir dans son journal qu'un
+     * jeu vient de tirer trente et un mébioctets ; et un bouton permanent qu'on ne peut pas presser
+     * n'apprend rien à personne.
+     */
+    private void maybeFetchButton(int left, int bottom) {
+        if (!Consent.remoteAllowed() || Fetch.state() != Fetch.State.ABSENT
+                || Fetch.platform() == null) {
+            return;
+        }
+        addRenderableWidget(Button.builder(
+                        Component.literal("⭳ Télécharger le décodeur — 31 Mio"),
+                        button -> {
+                            Fetch.ensure();
+                            rebuildWidgets();
+                        })
+                .bounds(left + 10, bottom - 94, 300, 18)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Les bibliothèques de FFmpeg, depuis Maven Central.\n"
+                                + "Une seule fois, vérifiées par empreinte.\n"
+                                + "Nécessaire pour les liens .mp4 / .m3u8 — pas pour YouTube.")))
+                .build());
     }
 
     /**

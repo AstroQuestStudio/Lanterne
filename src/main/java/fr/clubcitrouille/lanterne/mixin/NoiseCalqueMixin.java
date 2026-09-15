@@ -60,7 +60,16 @@ public abstract class NoiseCalqueMixin {
                             + "Lnet/minecraft/world/level/levelgen/DensityFunction$Visitor;)"
                             + "Lnet/minecraft/world/level/levelgen/NoiseRouter;"))
     private NoiseRouter lanterne$keep(NoiseRouter router, DensityFunction.Visitor visitor) {
+        // Ce détournement est aussi le seul endroit d'où le premier décalque du constructeur soit
+        // chronométrable : y poser un second détournement depuis lab/Filon reviendrait à se disputer
+        // la même instruction. Quand LANTERNE_FILON est absent, Filon.ON est une constante fausse et
+        // les deux lectures d'horloge disparaissent à la compilation à la volée.
+        long started = fr.clubcitrouille.lanterne.lab.Filon.ON ? System.nanoTime() : 0L;
         NoiseRouter traced = router.mapAll(visitor);
+        if (fr.clubcitrouille.lanterne.lab.Filon.ON) {
+            fr.clubcitrouille.lanterne.lab.Filon.add(
+                    fr.clubcitrouille.lanterne.lab.Filon.DECALQUE, System.nanoTime() - started);
+        }
         this.lanterne$source = router;
         this.lanterne$traced = traced;
         return traced;

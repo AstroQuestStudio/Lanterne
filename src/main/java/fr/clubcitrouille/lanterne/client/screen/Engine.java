@@ -2,6 +2,10 @@ package fr.clubcitrouille.lanterne.client.screen;
 
 import java.util.List;
 
+import net.minecraft.resources.Identifier;
+
+import fr.clubcitrouille.lanterne.content.screen.Embed;
+
 import fr.clubcitrouille.lanterne.Lanterne;
 
 /**
@@ -124,6 +128,24 @@ public interface Engine {
         boolean present(long millis, Film film);
 
         /**
+         * La texture que cette bobine porte elle-même, ou {@code null}.
+         *
+         * <h2>Deux moteurs, deux façons d'arriver à l'écran</h2>
+         *
+         * <p>Un décodeur rend des octets : il les écrit dans une pellicule qu'on lui a réservée, et
+         * c'est {@link Film} qui porte la texture. Un navigateur, lui, <b>possède déjà</b> la
+         * sienne — il la peint tout seul, à chaque image, et l'enregistre auprès du gestionnaire de
+         * textures du jeu.
+         *
+         * <p>Rendre un {@code Identifier} ici permet aux deux d'arriver au même endroit sans que le
+         * rendu ait à savoir lequel il regarde. C'est ce qui a fait que brancher le lecteur intégré
+         * n'a demandé <b>aucun changement</b> dans le dessin des écrans.
+         */
+        default Identifier texture() {
+            return null;
+        }
+
+        /**
          * Le flux est-il ouvert et ses dimensions connues ?
          *
          * <p>Faux au début, et ce n'est pas une erreur : ouvrir une adresse réseau est un
@@ -184,18 +206,36 @@ public interface Engine {
     List<Engine> CANDIDATES = List.of(Lav.INSTANCE, Chrome.INSTANCE, Still.INSTANCE);
 
     /**
-     * Le moteur retenu pour cette partie.
+     * Le moteur qui convient à <b>cette</b> source.
      *
-     * <p>Le choix est refait à chaque appel, et ce n'est pas un gaspillage : il tient en trois
-     * lectures de champ, et il doit pouvoir changer en cours de partie. Le consentement du joueur est
-     * un réglage qu'il bascule pendant qu'il regarde un écran — le figer au démarrage voudrait dire
-     * qu'un refus ne prend effet qu'au prochain lancement du jeu, ce qui n'est pas un refus.
+     * <h2>Le choix dépend de l'adresse, et l'ignorer donnait de faux diagnostics</h2>
+     *
+     * <p>Il y avait un ordre de préférence absolu : FFmpeg, puis le navigateur, puis l'ardoise. Il
+     * est faux, parce que les deux moteurs ne savent pas lire les mêmes choses.
+     *
+     * <p>FFmpeg lit des <b>fichiers</b> et des flux. Sur une page de lecteur, il trouve du HTML et
+     * rend « Invalid data found when processing input » — ce qui est arrivé, et ce qui a fait
+     * conclure à un décodeur manquant alors qu'il était installé et parfaitement fonctionnel.
+     *
+     * <p>Le navigateur affiche des <b>pages</b>. Le faire ouvrir un {@code .mp4} marcherait, et
+     * coûterait un processus Chromium là où trente lignes de décodage suffisent.
+     *
+     * <p>On regarde donc l'adresse d'abord — {@link Embed} sait la reconnaître — et l'on ne
+     * retombe sur l'autre que si le premier n'est pas disponible. Un joueur qui a Rinku mais pas
+     * FFmpeg peut ainsi lire un {@code .mp4} par le navigateur, ce qui vaut mieux que rien.
      */
-    static Engine chosen() {
-        for (Engine candidate : CANDIDATES) {
-            if (candidate.verdict() == Verdict.PRET) {
-                return candidate;
-            }
+    static Engine forSource(String source) {
+        boolean page = Embed.of(source).kind() != Embed.Kind.FICHIER;
+        Engine first = page ? Chrome.INSTANCE : Lav.INSTANCE;
+        Engine second = page ? Lav.INSTANCE : Chrome.INSTANCE;
+        if (first.verdict() == Verdict.PRET) {
+            return first;
+        }
+        // Le repli ne vaut que dans un sens : un fichier peut se lire dans un navigateur, une page
+        // ne se lira jamais dans un décodeur. Proposer FFmpeg pour une page ferait échouer
+        // l'ouverture et afficherait un message sur le conteneur, qui n'apprendrait rien.
+        if (!page && second.verdict() == Verdict.PRET) {
+            return second;
         }
         return Still.INSTANCE;
     }
@@ -218,7 +258,10 @@ public interface Engine {
             note.append(" « ").append(candidate.label()).append(" » → ")
                     .append(candidate.verdict().label()).append(" ;");
         }
-        Lanterne.LOG.info("{} retenu : « {} ».", note, chosen().label());
+        // Plus de « retenu : … » : depuis que le moteur se choisit d'après la source, il n'y a plus
+        // de moteur retenu dans l'absolu. Annoncer l'état de chacun est ce qui renseigne vraiment —
+        // et c'est déjà ce que la ligne fait.
+        Lanterne.LOG.info("{}", note);
     }
 
     /** Le drapeau d'annonce. Une interface ne peut pas porter de champ mutable ; celle-ci le peut. */

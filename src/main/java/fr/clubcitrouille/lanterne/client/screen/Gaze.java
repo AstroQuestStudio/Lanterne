@@ -8,6 +8,7 @@ import java.util.Map;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.content.screen.Clock;
@@ -158,10 +159,35 @@ public final class Gaze {
         show.breadth = breadth;
     }
 
-    /** La pellicule d'un écran, ou {@code null} : il n'en a pas, ou pas encore. */
-    public static Film film(BlockPos pos) {
+    /**
+     * L'image d'un écran : de quoi la dessiner, d'où qu'elle vienne.
+     *
+     * @param id la texture à lier
+     * @param aspect son rapport largeur sur hauteur, pour le cadrage
+     */
+    public record Picture(Identifier id, float aspect) {}
+
+    /**
+     * Ce qu'un écran a à montrer, ou {@code null}.
+     *
+     * <p>Une pellicule remplie par un décodeur, ou la texture qu'un navigateur tient lui-même : le
+     * rendu ne fait pas la différence, et c'est tout l'intérêt. Voir {@code Engine.Reel.texture}.
+     */
+    public static Picture picture(BlockPos pos) {
         Show show = SHOWS.get(pos);
-        return show == null ? null : show.film;
+        if (show == null) {
+            return null;
+        }
+        Engine.Reel reel = show.reel;
+        if (reel != null) {
+            Identifier own = reel.texture();
+            if (own != null) {
+                return new Picture(own, (float) reel.width() / Math.max(1, reel.height()));
+            }
+        }
+        Film film = show.film;
+        return film == null ? null
+                : new Picture(film.id(), (float) film.width() / Math.max(1, film.height()));
     }
 
     /**
@@ -202,9 +228,20 @@ public final class Gaze {
         // c'est cette ligne, unique et fausse, qui a envoyé chercher au mauvais endroit.
         Fetch.arm();
         Engine.announce();
-        if (Consent.remoteAllowed() && Fetch.state() == Fetch.State.ABSENT) {
-            Fetch.ensure();
-        }
+        // <h2>Pourquoi le téléchargement n'est PAS déclenché ici</h2>
+        //
+        // Il l'était : « consentement donné et décodeur absent » suffisait. Un audit l'a relevé, et
+        // la remarque est juste — le consentement est un état PERSISTÉ. Un joueur qui a dit oui il y
+        // a trois semaines, pour un écran qu'il a depuis cassé, voyait son jeu partir chercher
+        // trente et un mébioctets au démarrage suivant sans qu'aucun geste neuf ne l'ait demandé.
+        //
+        // Le consentement reste la condition NÉCESSAIRE — Fetch.ensure le vérifie en première
+        // ligne — mais il cesse d'être la condition SUFFISANTE. Ce qui déclenche désormais est une
+        // intention présente : le bouton de l'écran de réglages, que l'ardoise nomme quand un écran
+        // qu'on regarde a besoin du décodeur. Voir Slate et Console.
+        //
+        // Ce que cela coûte : un clic de plus, une fois. Ce que cela achète : aucun téléchargement
+        // que le joueur n'ait demandé au moment où il le demande.
         long now = tick();
 
         // Ce qu'on n'a pas vu depuis deux secondes s'en va. En premier : les places libérées
@@ -257,7 +294,8 @@ public final class Gaze {
     /** Relit l'ardoise de cette séance. Une fois par tour de ronde, et jamais depuis le rendu. */
     private static void refreshSlate(Show show, Feed feed) {
         Engine.Reel reel = show.reel;
-        boolean playing = show.film != null && reel != null && !reel.broken();
+        boolean playing = reel != null && !reel.broken()
+                && (show.film != null || reel.texture() != null);
         boolean opening = reel != null && !reel.ready() && !reel.broken();
         String trouble = reel == null ? null : reel.trouble();
         show.slate = Slate.of(feed, opening, playing, trouble);
@@ -285,7 +323,7 @@ public final class Gaze {
         if (!admits(wanted).ok()) {
             return;
         }
-        Engine engine = Engine.chosen();
+        Engine engine = Engine.forSource(wanted);
         if (engine.verdict() != Engine.Verdict.PRET) {
             return;
         }
@@ -315,6 +353,9 @@ public final class Gaze {
         Feed feed = stage.feed();
         Clock beat = stage.clock();
         long target = beat.position(gameTime(), 0f) + Clock.compensation(ping());
+        // Un lecteur web tient son propre état de lecture : il faut le lui dire, là où un décodeur
+        // se contente de rendre l'image de l'instant demandé.
+        Chrome.playing(reel, !beat.paused());
 
         // La dérive, et ce qu'on en fait. La politique vit dans Clock — une fonction pure, qu'on
         // peut relire et discuter sans lancer le jeu. Ici on ne fait qu'obéir.
@@ -330,6 +371,13 @@ public final class Gaze {
         float loudness = feed.loudness(distanceToPlayer(pos));
         reel.volume(loudness);
         sing(pos, show, reel, loudness);
+
+        // Une bobine qui porte sa propre texture n'a pas besoin de pellicule : le navigateur
+        // peint la sienne. Lui en réserver une serait trois mébioctets et demi de mémoire vidéo
+        // pour une texture que personne n'écrirait jamais.
+        if (reel.texture() != null) {
+            return;
+        }
 
         // La pellicule est allouée ICI, sur le fil client, et jamais depuis le fil de décodage :
         // créer une texture n'est pas sûr ailleurs. On attend que la bobine connaisse sa taille,

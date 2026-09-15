@@ -166,10 +166,10 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
 
         state.sight = feed.sight();
 
-        Film film = Gaze.film(panel.getBlockPos());
-        if (film != null) {
-            state.film = film.id();
-            state.aspect = (float) film.width() / Math.max(1, film.height());
+        Gaze.Picture picture = Gaze.picture(panel.getBlockPos());
+        if (picture != null) {
+            state.film = picture.id();
+            state.aspect = picture.aspect();
             state.what = "";
             state.todo = "";
         } else {

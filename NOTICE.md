@@ -21,7 +21,7 @@ Leur code n'entre pas dans Lanterne, quelle que soit la licence de Lanterne :
 | Projet | Licence | Ce qu'on en retient |
 |---|---|---|
 | EntityCulling | tr7zw Protective | L'idée : un raycast asynchrone vers chaque entité. Réécrit. |
-| Sodium | PolyForm Shield 1.0.0 | Rien n'est copié. Lanterne cohabite avec lui. |
+| Sodium | PolyForm Shield 1.0.0 | Rien n'est copié. Lanterne cohabite avec lui, et se greffe sur son écran d'options — voir plus bas. |
 | TT20 | PolyForm Shield 1.0.0 | L'idée : dégrader le tick quand le TPS chute. Réécrit. |
 | ai-improvements | All Rights Reserved | L'idée seule. |
 | mobtimizations | All Rights Reserved | L'idée seule. |
@@ -336,11 +336,64 @@ est dans `notes/projecteur.md`.
 | Candidat | Licence vérifiée | Compatible GPL-3.0-only ? | Comment il serait appelé |
 |---|---|---|---|
 | **FFmpeg via bytedeco** (`org.bytedeco:ffmpeg`) | greffon Apache-2.0 **ou** GPLv2+CE au choix ; binaires sans `--enable-gpl` en **LGPL v3** (`--enable-version3` est dans `cppbuild.sh`), avec `--enable-gpl` en **GPL v3** | **oui**, les deux variantes | **retenu et branché.** Liaisons Java (832 Kio) embarquées par jarJar ; binaires de la variante **LGPL v3** téléchargés une fois de Maven Central, empreintes SHA-256 pinées dans `client/screen/Fetch.java`. Aucune ligne de bytedeco n'est recopiée. |
-| **MCEF / Rinku** (Chromium embarqué) | **LGPL-2.1-or-later** — la clause « or later » est ce qui le rend compatible ; une LGPL-2.1-**only** ne le serait pas | oui, mais sans objet | mod compagnon **que le joueur installe lui-même**, appelé par réflexion. Jamais téléchargé ni redistribué par Lanterne |
+| **Rinku** (ex-MCEF, Chromium embarqué) | **LGPL-2.1-or-later** — la clause « or later » est ce qui le rend compatible ; une LGPL-2.1-**only** ne le serait pas | oui, mais sans objet | **retenu et branché.** Mod compagnon **que le joueur installe lui-même**, appelé par **réflexion** (`client/screen/Chrome.java`) — aucune dépendance de compilation, aucune ligne recopiée, jamais téléchargé ni redistribué par Lanterne. Sert les lecteurs intégrables (YouTube, Vimeo, Dailymotion) ; voir `content/screen/Embed.java`. |
 
 [Dream Displays](https://github.com/arnodoelinger/dreamdisplays) (LGPL-3.0) a été
 lu pour établir qu'un décodage FFmpeg avec accélération matérielle se pratique en
 26.2 et sous quelle licence ; aucune de ses lignes n'a été reprise.
+
+Les sources de [Rinku](https://github.com/Keksuccino/Rinku) (branche `26.2.0`) ont
+été lues pour en relever les **signatures publiques** — c'est ce qu'il faut pour
+appeler un mod par réflexion, et cela ne constitue pas une reprise de code. Rien de
+son implémentation n'entre dans Lanterne, qui fonctionne entièrement sans lui.
+
+### La greffe chez Sodium — une API appelée, pas une ligne reprise
+
+Sodium ne complète pas l'écran vidéo de vanilla : il le **remplace**. Son
+`OptionsScreenMixin` se pose sur `OptionsScreen.lambda$init$3` — la fabrique qui
+construit `VideoSettingsScreen` au clic sur « Graphismes » — en `HEAD` et
+`cancellable`, et lui substitue son propre écran. Le bouton que pose
+`mixin/VideoOptionsMixin.java` disparaît donc avec l'écran qui le portait, et
+avec lui l'accès aux soixante-cinq réglages du mod.
+
+Sodium publie une API pour exactement ce cas, et `client/sodium/Graft.java`
+l'utilise : une **page externe** inscrite dans la colonne de gauche de son écran,
+qui ouvre les cadrans au clic.
+
+| Ce qui est employé | Licence vérifiée | Compatible GPL-3.0-only ? | Comment |
+|---|---|---|---|
+| `net.caffeinemc:sodium-neoforge-api:0.9.2+mc26.2` | **PolyForm Shield 1.0.0** — `LICENSE.md` lu dans l'artefact lui-même, pas sur l'étiquette du dépôt. Source ouverte à la lecture, **non libre** : clause de non-concurrence, non reconnue par l'OSI, absente de la liste des licences libres de la FSF. Le POM publié ne déclare aucun bloc `<licenses>`, l'artefact hérite donc de la licence du dépôt. | **Non, en tant que source.** Aucune ligne n'est donc reprise. | `compileOnly` dans `build.gradle`. Ni `jarJar`, ni ombrage, ni redistribution : `unzip -l` sur l'archive publiée ne trouve **aucune** entrée `caffeinemc`. Lanterne écrit sa propre implémentation de leurs interfaces ; Sodium la charge lui-même par `Class.forName` sur une chaîne de `neoforge.mods.toml`. |
+
+Trois points à ne pas confondre, parce qu'ils ont trois réponses différentes :
+
+1. **Copier du code Sodium** — exclu, définitivement. PolyForm Shield est
+   incompatible avec la GPL-3.0, dans les deux sens. La ligne du tableau des
+   non-absorbables, en tête de ce fichier, reste vraie mot pour mot.
+2. **Redistribuer l'artefact** — exclu aussi, et c'est `compileOnly` qui le
+   garantit mécaniquement plutôt que par promesse.
+3. **Appeler l'API** — c'est l'usage que le concédant prévoit et documente. Son
+   `USAGE.md` le dit sans ambiguïté : *« Historically, third-party mods have
+   mixed into Sodium to add buttons to their own settings pages. With this API,
+   these mods will not need to touch Sodium's internals anymore »*. La greffe
+   par mixin dans ses internes — la pratique que cette API remplace — serait
+   *plus* problématique, pas moins : elle couplerait Lanterne à du code
+   PolyForm au lieu de s'en tenir à une frontière publiée.
+
+Deux réserves qu'il vaut mieux écrire que découvrir :
+
+- **La clause de non-concurrence** de PolyForm Shield interdit d'employer le
+  logiciel pour fournir un produit qui lui fait concurrence, et son texte précise
+  que deux choses se concurrencent « même lorsqu'elles offrent leurs fonctions
+  par des interfaces de nature différente ». Lanterne ne remplace pas le moteur
+  de rendu de chunks de Sodium et n'entend pas s'y substituer — il se greffe sur
+  lui. L'appréciation reste néanmoins celle du concédant.
+- **La liaison à l'exécution.** Une œuvre GPL-3.0 qui, chez l'utilisateur, se lie
+  à une bibliothèque GPL-incompatible est le cas classique du *linking*. Ce qui
+  est distribué ici, ce sont deux archives séparées, que l'utilisateur assemble
+  lui-même ; Lanterne ne télécharge ni n'embarque Sodium. Si le doute devait être
+  levé formellement, la voie prévue est une *permission additionnelle* au titre
+  de l'**article 7 de la GPL-3.0**, autorisant explicitement la liaison avec
+  Sodium. Ceci est un raisonnement, pas un avis juridique.
 
 ## Les modules d'origine
 

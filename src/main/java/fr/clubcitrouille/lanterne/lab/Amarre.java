@@ -262,6 +262,17 @@ public final class Amarre {
     private static double calmLateness;
     private static int calmOverruns;
     private static int calmStreak;
+    private static int calmRestarts;
+    private static boolean calmGaveUp;
+
+    /**
+     * Reprises encore autorisées à la phase au repos avant qu'elle ne renonce.
+     *
+     * <p>Assez pour absorber les à-coups d'une machine de développement qui fait tourner autre chose
+     * à côté ; pas assez pour qu'une épreuve tourne indéfiniment sur un serveur qui ne se calmera
+     * jamais.
+     */
+    private static int calmBudget = 40;
 
     /** Verdicts des deux tableaux déterministes. */
     private static boolean deadBandOk;
@@ -402,6 +413,8 @@ public final class Amarre {
                 }
                 Elastique.reset();
                 calmOverruns = 0;
+                calmRestarts = 0;
+                calmGaveUp = false;
                 step = Step.CALM;
                 waiting = CALM_TICKS;
             }
@@ -410,7 +423,27 @@ public final class Amarre {
                 if (tickStarted != 0L && System.nanoTime() - tickStarted > NOMINAL_NANOS) {
                     calmOverruns++;
                 }
-                if (--waiting > 0) {
+                // <h2>On attend un état, pas un délai</h2>
+                //
+                // Si une fenêtre entre dans la zone d'élargissement, la phase cesse d'être « au
+                // repos » et le relevé cesse de vouloir dire quelque chose. Plutôt que de le publier
+                // en s'excusant, on le jette et l'on recommence : ce qu'on cherche, c'est une série
+                // de cent mouvements jugés pendant laquelle le module n'a JAMAIS eu le droit d'agir.
+                //
+                // Sans cela, l'épreuve refusait de conclure une fois sur deux sur une machine de
+                // développement — et une épreuve qui refuse au hasard finit par être ignorée.
+                if (Elastique.worstLateness() >= 1.5d) {
+                    calmRestarts++;
+                    Elastique.reset();
+                    calmOverruns = 0;
+                    waiting = CALM_TICKS;
+                    if (--calmBudget <= 0) {
+                        calmGaveUp = true;
+                    } else {
+                        return;
+                    }
+                }
+                if (!calmGaveUp && --waiting > 0) {
                     return;
                 }
                 calmSteps = Elastique.samples();
@@ -802,8 +835,8 @@ public final class Amarre {
         Lanterne.LOG.info("[AMARRE] ── Tableau 3 · le monde réel ──");
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[AMARRE] Au repos (module armé)  : %d pas · %d élargissement(s) · pire retard ×%.2f "
-                        + "· %d tick(s) > 50 ms",
-                calmSteps, calmWidened, calmLateness, calmOverruns));
+                        + "· %d tick(s) > 50 ms · %d reprise(s)",
+                calmSteps, calmWidened, calmLateness, calmOverruns, calmRestarts));
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[AMARRE] En charge, SANS le module : %d pas · %d retour(s) en arrière "
                         + "(%d vitesse, %d cohérence) · pire retard ×%.2f · %d tick(s) > 50 ms",
@@ -833,13 +866,14 @@ public final class Amarre {
         // constater qu'il n'a rien fait garde donc tout son sens. Ce qui ôterait son sens au tableau,
         // c'est une fenêtre réellement entrée dans la zone d'élargissement — là, élargir serait le
         // comportement demandé, et le relevé ne prouverait plus rien.
-        if (calmLateness >= 1.5d) {
+        if (calmGaveUp || calmLateness >= 1.5d) {
             Lanterne.LOG.error(String.format(Locale.ROOT,
-                    "[AMARRE] REFUS DE CONCLURE sur le repos : une fenêtre a atteint ×%.2f, "
-                    + "c'est-à-dire la zone où le module a le DROIT d'élargir (%d élargissement(s), "
-                    + "%d tick(s) > 50 ms). Ce n'est pas le module qu'il faudrait accuser, c'est ce "
-                    + "relevé qu'il faut jeter. La garantie reste éprouvée par le tableau 1, qui ne "
-                    + "dépend d'aucune scène.", calmLateness, calmWidened, calmOverruns));
+                    "[AMARRE] REFUS DE CONCLURE sur le repos : après %d reprise(s), la machine n'a "
+                    + "jamais tenu %d mouvements d'affilée sans qu'une fenêtre n'atteigne la zone "
+                    + "d'élargissement (pire ×%.2f). Le module y a le DROIT d'agir : ce n'est pas "
+                    + "lui qu'il faudrait accuser, c'est ce relevé qu'il faut jeter. La garantie "
+                    + "reste éprouvée par le tableau 1, qui ne dépend d'aucune scène.",
+                    calmRestarts, CALM_TICKS, calmLateness));
         } else if (calmWidened > 0L) {
             Lanterne.LOG.error(String.format(Locale.ROOT,
                     "[AMARRE] NON CONFORME : %d pas sur %d ont été élargis alors que le serveur "
@@ -850,9 +884,10 @@ public final class Amarre {
         } else {
             Lanterne.LOG.info(String.format(Locale.ROOT,
                     "[AMARRE] CONFORME : au repos, %d pas réellement jugés par le code du jeu, pire "
-                    + "fenêtre ×%.2f (bande morte), zéro élargissement. Ce tableau éprouve le "
-                    + "BRANCHEMENT — que le module voit bien passer les paquets et n'y touche pas ; "
-                    + "c'est le tableau 1 qui éprouve la loi.", calmSteps, calmLateness));
+                    + "fenêtre ×%.2f (bande morte), zéro élargissement, %d reprise(s). Ce tableau "
+                    + "éprouve le BRANCHEMENT — que le module voit bien passer les paquets et n'y "
+                    + "touche pas ; c'est le tableau 1 qui éprouve la loi.",
+                    calmSteps, calmLateness, calmRestarts));
         }
 
         // Puis l'utilité, qui a le droit de ne rien pouvoir dire.

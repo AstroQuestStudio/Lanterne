@@ -132,10 +132,10 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
 
         state.sight = feed.sight();
 
-        Film film = Gaze.film(beamer.getBlockPos());
-        state.film = film == null ? null : film.id();
-        if (film != null) {
-            state.aspect = (float) film.width() / Math.max(1, film.height());
+        Gaze.Picture picture = Gaze.picture(beamer.getBlockPos());
+        state.film = picture == null ? null : picture.id();
+        if (picture != null) {
+            state.aspect = picture.aspect();
             state.what = "";
             state.todo = "";
         } else {

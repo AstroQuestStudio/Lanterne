@@ -51,27 +51,4 @@ public final class Still implements Engine {
         return null;
     }
 
-    /**
-     * La ligne à écrire sur l'ardoise.
-     *
-     * <p>Elle nomme ce qui manque plutôt que de s'excuser. « Aucun décodeur vidéo » est une
-     * information ; « une erreur est survenue » n'en est pas une.
-     */
-    public static String slate() {
-        Engine best = Engine.CANDIDATES.get(0);
-        for (Engine candidate : Engine.CANDIDATES) {
-            if (candidate != INSTANCE) {
-                best = candidate;
-                break;
-            }
-        }
-        return switch (best.verdict()) {
-            // Impératif, et non constat. « Médias distants refusés » décrivait un état ; le joueur
-            // a besoin du geste suivant, et l'ardoise est le seul endroit où il regarde.
-            case SANS_CONSENTEMENT -> "Clique ce bloc → « Médias distants » pour autoriser la lecture";
-            case SANS_MOD -> "Aucun décodeur vidéo installé";
-            case SANS_BIBLIOTHEQUE -> "Décodeur à télécharger — clique ce bloc";
-            default -> "Aucun décodeur vidéo — voir notes/projecteur.md";
-        };
-    }
 }

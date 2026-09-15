@@ -125,6 +125,16 @@ public final class SelfTest {
     private static boolean aide;
 
     /**
+     * Vrai si l'on éprouve la cognée — une bûche tombe-t-elle quand le serveur est en retard ?
+     *
+     * <p>La seule épreuve du dépôt qui doit <b>ralentir le serveur exprès</b>. À vitesse normale,
+     * le compteur de ticks et l'horloge murale disent la même chose, et rien ne distingue
+     * {@code MiningMixin} de son absence : une épreuve à vitesse normale vaudrait « conforme » même
+     * sur du vanilla. Voir {@code lab.Cognee}.
+     */
+    private static boolean cognee;
+
+    /**
      * Vrai si l'on éprouve l'élastique — les seuils de mouvement mesurés à l'horloge.
      *
      * <p>La seule épreuve du dépôt qui doit d'abord prouver que son module <b>ne fait rien</b> :
@@ -349,6 +359,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de duel armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_COGNEE"))) {
+            cognee = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de la cognée armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_AMARRE"))) {
             amarre = true;
             step = Step.SETTLING;
@@ -397,7 +414,7 @@ public final class SelfTest {
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
-                    && !sommaire && !aide && !amarre)) {
+                    && !sommaire && !aide && !amarre && !cognee)) {
             return;
         }
 
@@ -425,7 +442,26 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Duel.running()
                 && !fr.clubcitrouille.lanterne.lab.Levee.running()
                 && !fr.clubcitrouille.lanterne.lab.Amarre.running()
+                && !fr.clubcitrouille.lanterne.lab.Cognee.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
+            return;
+        }
+
+        if (cognee) {
+            // Une doublure, et c'est obligatoire : le serveur n'accepte une action de cassage que
+            // d'un joueur — il vérifie la portée du bras, le mode de jeu et la protection du point
+            // d'apparition avant de regarder quoi que ce soit d'autre. Aucun ticket de chunk ne
+            // remplace cela.
+            if (fr.clubcitrouille.lanterne.lab.Cognee.running()) {
+                fr.clubcitrouille.lanterne.lab.Cognee.tick(server);
+            } else if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                fr.clubcitrouille.lanterne.lab.Cognee.begin(server);
+                step = Step.LAUNCHED;
+            }
             return;
         }
 
