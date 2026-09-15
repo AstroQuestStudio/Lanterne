@@ -136,6 +136,20 @@ neoForge {
 // être déclaré : le greffon de NeoForge n'ajoute que les siens et ceux de Mojang.
 repositories {
     mavenCentral()
+
+    // <h2>Le dépôt de CaffeineMC, pour l'API d'options de Sodium — et pour elle seule</h2>
+    //
+    // « includeGroup » n'est pas une précaution de style : sans lui, Gradle interrogerait ce
+    // serveur pour CHAQUE dépendance du projet avant de retomber sur Maven Central. Un dépôt
+    // de mod qui répond lentement — ou pas du tout — ralentirait alors une compilation qui n'a
+    // rien à voir avec lui.
+    maven {
+        name = 'CaffeineMC'
+        url = 'https://maven.caffeinemc.net/releases'
+        content {
+            includeGroup 'net.caffeinemc'
+        }
+    }
 }
 
 // <h2>Le décodeur vidéo : les liaisons embarquées, les binaires téléchargés</h2>
@@ -166,6 +180,34 @@ repositories {
 // classes, au choix du preneur. Les binaires publiés sans « --enable-gpl » sont en LGPL v3.
 // Les deux conviennent à la GPL-3.0-only de ce mod. Voir notes/projecteur.md.
 dependencies {
+    // <h2>L'API d'options de Sodium : « compileOnly », et rien d'autre</h2>
+    //
+    // Sodium remplace l'écran vidéo de vanilla. Le bouton que « mixin/VideoOptionsMixin » y pose
+    // disparaît donc dès qu'il est installé, et avec lui l'accès aux soixante-cinq réglages du mod.
+    // Sodium prévoit ce cas : « net.caffeinemc:sodium-neoforge-api » est un artefact SÉPARÉ de
+    // quarante-neuf kibioctets, qui ne contient que « net/caffeinemc/mods/sodium/api/** » — aucune
+    // ligne du moteur de rendu. C'est lui que « client/sodium/Graft.java » implémente.
+    //
+    // Trois raisons de le déclarer « compileOnly » plutôt que « implementation », et la troisième
+    // est la seule qui compte vraiment :
+    //
+    //   1. On ne s'en sert qu'à la compilation. La classe qui l'implémente n'est nommée nulle part
+    //      dans le mod — c'est Sodium qui la charge par « Class.forName » sur une chaîne lue dans
+    //      « neoforge.mods.toml ». Sans Sodium, elle n'est jamais résolue.
+    //   2. « implementation » le ferait apparaître dans les métadonnées publiées, c'est-à-dire
+    //      annoncer une dépendance qui n'en est pas une.
+    //   3. LA LICENCE. Sodium est sous PolyForm Shield 1.0.0 — source ouverte à la lecture, mais
+    //      NON LIBRE : clause de non-concurrence, non reconnue par l'OSI, incompatible avec la
+    //      GPL-3.0-only de ce mod. Le fichier « LICENSE.md » est embarqué jusque dans l'artefact
+    //      d'API, il a été lu et non supposé. Rien n'en est copié, rien n'en est embarqué par
+    //      jarJar, rien n'en est ombré : l'archive publiée de Lanterne ne contient AUCUN octet de
+    //      Sodium, et c'est « compileOnly » qui le garantit. Voir NOTICE.md.
+    //
+    // La version suit celle de Minecraft : l'API n'est pas compatible d'une version du jeu à
+    // l'autre — « ResourceLocation » y est devenu « Identifier » en 26.x, et le renommage traverse
+    // toute la signature des constructeurs d'options.
+    compileOnly 'net.caffeinemc:sodium-neoforge-api:0.9.2+mc26.2'
+
     jarJar(implementation('javazoom:jlayer:[1.0.1,1.1)')) {
         version {
             prefer '1.0.1'

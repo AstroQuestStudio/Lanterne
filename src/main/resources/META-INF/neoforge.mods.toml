@@ -31,3 +31,30 @@ type = "required"
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
+
+# Sodium remplace l'écran vidéo de vanilla, et emporte avec lui le bouton que
+# « mixin/VideoOptionsMixin » y pose. « optional » dit exactement ce qu'il faut : s'il est là,
+# on se greffe chez lui ; s'il n'est pas là, rien ne change et rien ne manque.
+#
+# L'intervalle commence à 0.9 parce que c'est la première version publiée pour 26.2 — un
+# intervalle plus large ne couvrirait rien de plus et laisserait croire que des versions plus
+# anciennes conviennent. « CLIENT » parce qu'un écran d'options n'existe pas sur un serveur
+# dédié : ce côté-là ne doit ni le chercher ni s'en plaindre.
+[[dependencies.${mod_id}]]
+modId = "sodium"
+type = "optional"
+versionRange = "[0.9,)"
+ordering = "NONE"
+side = "CLIENT"
+
+# La porte vers les cadrans, quand c'est Sodium qui tient l'écran vidéo.
+#
+# C'est le mécanisme de découverte que Sodium publie pour les mods tiers : il parcourt les
+# métadonnées de tous les mods chargés, lit cette clé, et fait lui-même le « Class.forName ».
+# Le nom n'apparaît donc QUE dans ce fichier, comme texte — aucune classe de Lanterne ne
+# référence « Graft », et sans Sodium elle n'est jamais chargée.
+#
+# La clé est celle du code de Sodium, « ConfigManager.CONFIG_ENTRY_POINT_KEY », relue dans le
+# jar plutôt que dans sa documentation.
+[modproperties.${mod_id}]
+"sodium:config_api_user" = "fr.clubcitrouille.lanterne.client.sodium.Graft"

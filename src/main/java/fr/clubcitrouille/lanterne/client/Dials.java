@@ -117,6 +117,17 @@ public final class Dials extends Screen {
     private static final String ENV_NOTE =
             "Sans ligne dans le fichier : s'arme par LANTERNE_MODULES.";
 
+    /**
+     * Le nom de la porte, écrit une fois pour les deux qui y mènent.
+     *
+     * <p>Il y a deux chemins vers cet écran, et il n'y en aura jamais qu'un d'ouvert à la fois :
+     * {@code mixin/VideoOptionsMixin} quand l'écran vidéo est celui de vanilla,
+     * {@code client/sodium/Graft} quand Sodium l'a remplacé. Deux littéraux à tenir pour un seul
+     * intitulé, c'est l'occasion d'en corriger un et pas l'autre — et le joueur qui change de mod de
+     * rendu verrait alors le nom de la porte changer sous lui sans raison.
+     */
+    public static final Component DOOR = Component.literal("🎃 Lanterne — rendu");
+
     private final Screen parent;
     private final List<Family> families = new ArrayList<>();
     private int picked;

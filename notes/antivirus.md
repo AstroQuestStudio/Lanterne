@@ -48,7 +48,7 @@ dossier.**
 
 ## 2. L'archive du mod est propre — inventaire exhaustif
 
-`lanterne-4.0.0.jar`, 2 110 680 octets.
+`lanterne-4.0.0.jar`, 2 110 680 octets, tel qu'audité **avant** la correction :
 
 ```
 SHA-256 : bc0e6c54f3dfdbb2f64d38e97b84a11c54ca906e6602d528ed2b3c6a79fbfca4
@@ -80,6 +80,11 @@ Les trois jars embarqués sont eux aussi du Java pur — vérifié entrée par e
 | `javacpp-1.5.14.jar` | 543 106 o | 225 `.class`, 44 `.properties`, 3 `.xml` | **0** |
 | `ffmpeg-8.1.2-1.5.14.jar` | 289 137 o | 218 `.class`, 1 `.xml`, 1 `.properties` | **0** |
 | `jlayer-1.0.1.jar` | 143 624 o | 71 `.class`, 4 `.ser`, 1 `.xml` | **0** |
+
+*(Après correction, l'archive reconstruite — 2 125 963 octets,
+`d993d361ccc6ca06e8d27d522709aa6e61c7ce31afe35187e7cdc52b25f41c76` — présente le même profil : 605
+entrées, toujours zéro exécutable et zéro script. C'est cette empreinte-là qui est publiée dans le
+`README.md`.)*
 
 > **Rien d'inattendu n'est entré dans l'archive.** Le contrôle demandé a été fait, et il est négatif.
 > Si un antivirus signale `lanterne-4.0.0.jar` lui-même, c'est une heuristique sur un jar non signé,
@@ -180,7 +185,7 @@ joueur. Le dossier passe de 77 Mio à environ 74,5 Mio — le gain n'est pas la 
 
 Corriger le filtre n'enlève rien des machines où le décodeur est **déjà** installé : les fichiers y
 sont posés, et le marqueur `pret.txt` fait qu'on ne réinstallera jamais par-dessus. D'où `scrub(Path)`,
-appelée depuis `arm()` au moment où l'on retrouve une installation existante. Elle **ne retéléchargé
+appelée depuis `arm()` au moment où l'on retrouve une installation existante. Elle **ne retélécharge
 rien** — les 31 Mio de FFmpeg restent en place — et retire seulement ce qui n'aurait pas dû être écrit.
 
 ### c. `arm()` exige désormais le consentement

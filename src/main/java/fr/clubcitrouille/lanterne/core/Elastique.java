@@ -43,14 +43,38 @@ package fr.clubcitrouille.lanterne.core;
  * <b>quatre pas</b> pendant que le serveur en attendait un — et il est jugé comme s'il n'en avait
  * fait qu'un.
  *
- * <p>Le second seuil est le plus traître. Après avoir accumulé le déplacement, le serveur l'applique
- * <b>d'un seul coup</b> : un unique appel à {@code move()} sur un delta quatre fois trop grand. Le
- * client, lui, l'avait parcouru en quatre petits pas. Un gros pas et quatre petits pas ne rencontrent
- * pas la même géométrie : le gros heurte le coin que les petits contournaient. L'écart qui en résulte
- * dépasse le quart de bloc, et le joueur repart en arrière.
+ * <p>Pire : passé <b>cinq</b> paquets dans la même fenêtre, le jeu ne se contente pas de ne plus
+ * élargir la tolérance, il la <b>réduit</b> :
+ *
+ * <pre>
+ * if (deltaPackets &gt; 5) { LOGGER.debug("… sending move packets too frequently …") ; deltaPackets = 1 ; }
+ * </pre>
+ *
+ * <p>C'est une punition destinée au client bavard, et elle est justifiée. Mais elle frappe aussi le
+ * joueur honnête, et elle le frappe au pire moment : cinq paquets, c'est un quart de seconde de gel,
+ * et au-delà la tolérance retombe à cent blocs au carré <em>au moment précis</em> où le joueur a le
+ * plus avancé. Une pause du ramasse-miettes d'une seconde et demie suffit alors à faire dépasser le
+ * seuil à un simple sprinteur.
  *
  * <p><b>C'est un faux positif pur.</b> Le joueur n'a pas triché ; le serveur a mesuré avec une règle
  * qui a rétréci.
+ *
+ * <h2>Le mécanisme qu'on croyait, et ce que la mesure a dit</h2>
+ *
+ * <p>On a d'abord attribué l'élastique au <em>troisième</em> seuil, celui de cohérence : le serveur
+ * refaisant d'un seul grand pas le chemin que le client avait parcouru en plusieurs petits, et
+ * heurtant le coin que les petits contournaient. C'est une histoire séduisante. Elle est fausse.
+ *
+ * <p>Le code du jeu la réfute : {@code lastGood} est réécrit après <b>chaque</b> paquet accepté, si
+ * bien qu'un appel à {@code move()} ne couvre jamais qu'un seul pas de client, quel que soit le
+ * retard. Il n'y a pas de « grand pas ». Ce qui reste figé tout le tick, c'est {@code firstGood} —
+ * et c'est donc l'écart à {@code firstGood}, examiné par le contrôle de <b>vitesse</b>, qui grandit.
+ *
+ * <p>L'épreuve {@code Amarre} l'a confirmé sans appel : sur toutes ses exécutions, <b>dix</b>
+ * déclenchements du contrôle de vitesse et <b>zéro</b> du contrôle de cohérence. Le seuil de
+ * cohérence reste élargi par prudence — il existe des chemins où le serveur applique un delta plus
+ * grand, notamment après une reprise de synchronisation — mais il n'est pas la cause du symptôme,
+ * et ce fichier ne prétendra pas le contraire.
  *
  * <h2>La correction, et pourquoi c'est un carré</h2>
  *
@@ -107,8 +131,12 @@ package fr.clubcitrouille.lanterne.core;
  *
  * <p><b>3. La garde anti-inondation de vanilla est laissée intacte.</b> Le jeu ramène
  * {@code deltaPackets} à un dès qu'il dépasse cinq — c'est sa punition du client bavard. Ce module
- * <b>n'y touche pas</b>, et n'en a pas besoin : le facteur de retard, qui croît avec le temps réel,
- * couvre à lui seul le cas du joueur honnête pris dans une pause du ramasse-miettes.
+ * <b>n'y touche pas</b>, et c'est un choix : on aurait pu relever ce plafond au nombre de paquets
+ * qu'un client à vingt hertz aurait légitimement pu envoyer, ce qui aurait été exact. Mais cela
+ * aurait desserré une garde dont le seul objet est d'empêcher un client de <em>s'acheter</em> de la
+ * tolérance en inondant le serveur. Le facteur de retard, lui, ne dépend que de l'horloge du
+ * serveur, et il couvre déjà le cas du joueur honnête : on corrige donc par là, et on laisse la
+ * garde anti-inondation exactement où Mojang l'a mise.
  *
  * <p>Restent les deux plafonds ci-dessous, qui bornent l'élargissement quoi qu'il arrive. Un serveur
  * qu'on ferait ramer exprès ne donne donc pas une tolérance illimitée.
