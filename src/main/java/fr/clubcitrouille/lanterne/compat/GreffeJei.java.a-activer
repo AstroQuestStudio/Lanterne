@@ -1,0 +1,121 @@
+package fr.clubcitrouille.lanterne.compat;
+
+import java.util.List;
+
+import mezz.jei.api.IModPlugin;
+import mezz.jei.api.JeiPlugin;
+import mezz.jei.api.constants.RecipeTypes;
+import mezz.jei.api.registration.IRecipeRegistration;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+
+import fr.clubcitrouille.lanterne.Lanterne;
+
+/**
+ * La greffe JEI : nos recettes rendues à l'afficheur quand le serveur ne les lui donne pas.
+ *
+ * <h2>CE FICHIER N'EST PAS COMPILÉ EN L'ÉTAT — ce qu'il faut faire pour l'allumer</h2>
+ *
+ * <p>Il porte l'extension {@code .java.a-activer} et {@code javac} l'ignore donc entièrement. Ce
+ * n'est pas de la coquetterie : il est le seul fichier du dépôt qui nomme {@code mezz.jei}, et
+ * cette dépendance de compilation <b>n'est pas encore déclarée</b>. Le laisser en {@code .java}
+ * casserait la compilation de tout le mod, pour tout le monde, tant que les deux lignes ci-dessous
+ * manquent. Un correctif d'affichage ne vaut pas ce prix-là.
+ *
+ * <p>Pour l'allumer, dans l'ordre — et le premier point seul ne suffit pas :
+ *
+ * <ol>
+ *   <li>dans {@code build.gradle}, bloc {@code repositories} :
+ *       <pre>maven { url = 'https://maven.blamejared.com' }</pre></li>
+ *   <li>dans {@code build.gradle}, bloc {@code dependencies} :
+ *       <pre>compileOnly 'mezz.jei:jei-26.2-neoforge-api:30.29.0.201'</pre></li>
+ *   <li>renommer ce fichier en {@code GreffeJei.java}.</li>
+ * </ol>
+ *
+ * <p>{@code compileOnly} et non {@code implementation}, pour la raison déjà écrite à propos de
+ * Sodium : l'API de JEI ne doit ni partir dans le jar, ni apparaître dans les métadonnées publiées
+ * comme une dépendance que nous imposerions. Rien n'est à déclarer dans
+ * {@code neoforge.mods.toml} : JEI ne charge cette classe que s'il trouve lui-même l'annotation
+ * {@link JeiPlugin}, et sans JEI aucune ligne de ce fichier n'est jamais chargée. Un serveur sans
+ * JEI ne s'apercevra de rien — c'est exactement le contrat « facultatif » voulu.
+ *
+ * <h2>Le défaut, en une ligne de journal</h2>
+ *
+ * <pre>
+ * [21:01:40] [Render thread/INFO]: Loaded 1585 vanilla recipes from client resources.
+ * [21:01:42] [Render thread/WARN]: This neoforge server does not have JEI installed.
+ * </pre>
+ *
+ * <p>Mille cinq cent quatre-vingt-cinq : le compte exact de {@code data/minecraft/recipe} dans le
+ * jar du jeu, et pas une de plus. Le raisonnement complet — pourquoi ce chemin de secours ne lit
+ * que le pack de vanilla, et pourquoi il ne peut structurellement pas voir un mod — est dans
+ * {@link RecettesEmbarquees}. Ce fichier-ci n'est que la prise de courant.
+ *
+ * <h2>Pourquoi aucune catégorie n'est déclarée, et pourquoi c'est la bonne réponse</h2>
+ *
+ * <p>Le réflexe, devant « JEI ne montre pas mes crafts », est d'écrire une catégorie. Ce serait
+ * faux ici : Lanterne n'enregistre <b>aucun</b> type de recette — pas un {@code RecipeSerializer},
+ * pas un {@code RecipeType} — et ses stations ne transforment rien. L'atelier peint, la boutique
+ * échange contre une monnaie, le projecteur décode une vidéo, le cœur de repère ouvre un passage :
+ * aucune n'a d'entrée et de sortie à montrer dans une grille. Les onze recettes du mod sont onze
+ * recettes d'<b>établi</b> ordinaires, et la catégorie qui sait les peindre existe déjà — c'est
+ * celle de vanilla. Il n'y avait rien à créer, seulement quelque chose à lui donner.
+ *
+ * <h2>Ce que cette greffe ne fera jamais</h2>
+ *
+ * <p>Elle ne parle que si personne de mieux placé n'a parlé — voir
+ * {@link RecettesEmbarquees#necessaire()}. Sur un serveur qui a JEI, elle se tait et laisse la
+ * vérité du serveur passer. En solo, elle se tait. Elle n'existe que pour le troisième cas : un
+ * serveur distant sans JEI, c'est-à-dire la plupart des hébergements gratuits.
+ */
+@JeiPlugin
+public final class GreffeJei implements IModPlugin {
+    /**
+     * L'identifiant du greffon.
+     *
+     * <p>JEI s'en sert pour nommer le greffon dans ses propres journaux et pour l'écarter s'il
+     * plante — {@code PluginHelper.removePluginsWithCrashingUids}. Un nom parlant fait donc la
+     * différence entre « JEI a désactivé un greffon » et « JEI a désactivé le nôtre ».
+     */
+    @Override
+    public Identifier getPluginUid() {
+        return Identifier.fromNamespaceAndPath(Lanterne.ID, "greffe");
+    }
+
+    /**
+     * Le seul moment où nous avons quelque chose à dire à JEI.
+     *
+     * <p>L'instant est bien choisi et ce n'est pas un hasard : {@code JeiStarter.start} a déjà
+     * décidé, tout en haut, s'il avait des recettes du serveur ou s'il devait se rabattre sur le
+     * pack de vanilla. Quand il nous appelle ici, la question est donc <b>tranchée</b>, et
+     * {@link RecettesEmbarquees#necessaire()} lit une réponse stable plutôt qu'un état en cours.
+     *
+     * <p>L'annuaire vient du monde du client parce que c'est celui qui porte les étiquettes du
+     * serveur : elles arrivent à la connexion, et sans elles un ingrédient écrit
+     * {@code "#minecraft:shulker_boxes"} ne se résoudrait pas.
+     */
+    @Override
+    public void registerRecipes(IRecipeRegistration inscription) {
+        if (!RecettesEmbarquees.necessaire()) {
+            return;
+        }
+        ClientLevel monde = Minecraft.getInstance().level;
+        if (monde == null) {
+            // JEI ne démarre pas sans monde ; si cela arrive quand même, se taire est le seul
+            // comportement juste : sans annuaire, aucune recette ne se décoderait correctement.
+            return;
+        }
+
+        List<RecipeHolder<CraftingRecipe>> notres = RecettesEmbarquees.lire(monde.registryAccess());
+        if (notres.isEmpty()) {
+            return;
+        }
+        inscription.addRecipes(RecipeTypes.CRAFTING, notres);
+        Lanterne.LOG.info("[JEI] {} recettes de Lanterne relues dans notre jar : ce serveur n'a pas "
+                + "JEI, et son chemin de secours ne lit que le pack de vanilla.", notres.size());
+    }
+}

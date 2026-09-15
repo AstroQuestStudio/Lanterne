@@ -89,6 +89,8 @@ public final class SelfTest {
 
     /** Vrai si l'on éprouve les explosions. */
     private static boolean boom;
+    /** Vrai si l'on éprouve le terrassement. */
+    private static boolean terrassement;
 
     /** Vrai si l'on éprouve les fluides. */
     private static boolean flow;
@@ -435,12 +437,19 @@ public final class SelfTest {
             } catch (NumberFormatException malformed) {
                 pregenRadius = 0;
             }
-            if (pregenRadius > 0) {
+        if (pregenRadius > 0) {
                 step = Step.SETTLING;
                 waiting = SETTLE;
                 Lanterne.LOG.info("Épreuve de pré-génération armée, rayon {}.", pregenRadius);
                 return;
             }
+        }
+        if ("1".equals(System.getenv(fr.clubcitrouille.lanterne.lab.Terrassement.LANTERNE_TERRASSEMENT))) {
+            terrassement = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de terrassement armée.");
+            return;
         }
         if ("1".equals(System.getenv("LANTERNE_SEUIL"))) {
             seuil = true;
@@ -471,13 +480,16 @@ public final class SelfTest {
 
     /** Fait avancer la procédure. Appelé à chaque tick du serveur. */
     public static void tick(MinecraftServer server) {
+        if (fr.clubcitrouille.lanterne.lab.Cohue.claim(server)) {
+            return;
+        }
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
                     && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel
-                    && !seuil && pregenRadius <= 0)) {
+                    && !seuil && !terrassement && pregenRadius <= 0)) {
             return;
         }
 
@@ -508,7 +520,8 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Cognee.running()
                 && !fr.clubcitrouille.lanterne.lab.Cheptel.running()
                 && !fr.clubcitrouille.lanterne.lab.Seuil.running()
-                && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
+                && !fr.clubcitrouille.lanterne.lab.Surge.running()
+                && !fr.clubcitrouille.lanterne.lab.Terrassement.running() && waiting-- > 0) {
             return;
         }
 
@@ -534,6 +547,17 @@ public final class SelfTest {
             return;
         }
 
+        if (terrassement) {
+            // Aucune doublure : le /fill est exécuté par une source de commande du serveur, et les
+            // chunks sont tenus par les tickets que Terrassement.begin pose lui-même.
+            if (fr.clubcitrouille.lanterne.lab.Terrassement.running()) {
+                fr.clubcitrouille.lanterne.lab.Terrassement.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Terrassement.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
         if (pregenRadius > 0) {
             if (fr.clubcitrouille.lanterne.lab.Pregen.running()) {
                 return; // Pregen.tick est deja appele par le tick du serveur
