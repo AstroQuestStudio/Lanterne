@@ -70,6 +70,30 @@ neoForge {
     }
 }
 
+// <h2>Le décodeur MP3, embarqué dans l'archive</h2>
+//
+// Le mod ne convertit plus les fichiers du joueur : il les décode. Le Vorbis et le WAV sont lus par
+// du code du dépôt ; le MP3 est délégué à JLayer, qui est un vrai décodeur — bancs de filtres,
+// tables de Huffman, réservoir de bits — et qu'il serait déraisonnable de réécrire.
+//
+// « jarJar » le place dans META-INF/jarjar de l'archive publiée, d'où NeoForge le charge au
+// démarrage. Sans cela il serait présent à la compilation et ABSENT à l'exécution : la panne ne se
+// verrait ni ici ni au lancement, seulement quand un joueur clique sur « Graver ».
+//
+// La licence est la LGPL-2.1, compatible avec la GPL-3.0-only du mod. Le dépôt Maven central doit
+// être déclaré : le greffon de NeoForge n'ajoute que les siens et ceux de Mojang.
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    jarJar(implementation('javazoom:jlayer:[1.0.1,1.1)')) {
+        version {
+            prefer '1.0.1'
+        }
+    }
+}
+
 tasks.withType(ProcessResources).configureEach {
     var replaceProperties = [
             minecraft_version      : minecraft_version,
@@ -89,6 +113,37 @@ tasks.withType(ProcessResources).configureEach {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// Le chemin de classes, depose sur disque pour le controleur de mixins.
+//
+// Une cible de mixin est une CHAINE DE CARACTERES, que le compilateur ne relit
+// jamais. Un mixin dont la methode visee a ete renommee compile parfaitement et
+// n'echoue qu'au demarrage du jeu. Le passage a 26.2 l'a demontre :
+// EntityCullMixin visait « LevelRenderer.extractVisibleEntities », methode
+// deplacee dans une classe neuve. Tout compilait, le serveur dedie demarrait —
+// et pour cause, un serveur dedie ne charge aucun mixin client. Le defaut
+// n'aurait ete visible qu'au premier lancement par un joueur.
+//
+// « tools/verifie_mixins.py » relit ces chaines et les confronte au bytecode. Il
+// lui faut le chemin de classes complet : sans les jars de NeoForge, tout mixin
+// visant une classe de NeoForge serait signale a tort, et un controleur qui crie
+// au loup se fait debrancher.
+tasks.register('cheminDeClasses') {
+    dependsOn tasks.named('compileJava')
+    def sortie = layout.buildDirectory.file('chemin-de-classes.txt')
+    def entrees = configurations.named('compileClasspath')
+    outputs.file(sortie)
+    doLast {
+        sortie.get().asFile.text = entrees.get().files.collect { it.absolutePath }.join(';')
+    }
+}
+
+tasks.register('verifieMixins', Exec) {
+    group = 'verification'
+    description = 'Chaque mixin vise-t-il encore une methode qui existe ?'
+    dependsOn tasks.named('cheminDeClasses')
+    commandLine 'python', file('tools/verifie_mixins.py').absolutePath
 }
 
 // Compilation partielle, pour travailler a deux sur ce depot.

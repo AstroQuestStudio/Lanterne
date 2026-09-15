@@ -10,9 +10,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.extract.LevelExtractor;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.world.entity.Entity;
 
@@ -31,9 +31,22 @@ import fr.clubcitrouille.lanterne.core.Shroud;
  * méthode elle-même s'appliquerait à tous, y compris là où la notion de « caché par un mur » n'a
  * aucun sens et où la caméra passée n'est pas celle du joueur.
  *
- * <p>Envelopper l'appel <em>depuis {@code extractVisibleEntities}</em> restreint l'effet au seul
- * chemin visé : la boucle de rendu du monde, celle dont la ligne suivante appelle
- * {@code extractEntity}.
+ * <p>Envelopper l'appel <em>depuis {@code isEntityVisible}</em> restreint l'effet au seul chemin
+ * visé. Cette méthode n'a que deux appelants dans tout le jeu : la boucle d'extraction du monde, et
+ * l'afficheur de boîtes de collision du débogage. Tous deux regardent depuis la caméra du joueur,
+ * là où « caché par un mur » veut dire quelque chose.
+ *
+ * <h2>Ce que la 26.2 a déplacé, et pourquoi il fallait le voir</h2>
+ *
+ * <p>Ce mixin visait {@code LevelRenderer} jusqu'en 26.1. La 26.2 a coupé le rendu en deux —
+ * extraction puis soumission — et la moitié amont vit désormais dans
+ * {@link LevelExtractor}, dans un paquet neuf. Le code compilait toujours : une cible de mixin est
+ * une <em>chaîne de caractères</em>, que le compilateur ne relit jamais. Elle n'aurait échoué qu'au
+ * démarrage du client, et le serveur dédié ne charge pas les mixins client — rien ne l'aurait
+ * signalé avant qu'un joueur ne voie l'écran d'erreur.
+ *
+ * <p>Au passage, l'appel enveloppé a lui aussi bougé : {@code shouldRender} n'est plus appelé
+ * directement depuis la boucle mais depuis {@code isEntityVisible}, qu'elle interroge.
  *
  * <h2>L'ordre des deux tests n'est pas indifférent</h2>
  *
@@ -42,7 +55,7 @@ import fr.clubcitrouille.lanterne.core.Shroud;
  * pour un coût de quelques comparaisons de boîte, bien moindre qu'un parcours de grille. Inverser
  * les deux ferait payer un lancer de rayon à des créatures situées derrière le joueur.
  */
-@Mixin(LevelRenderer.class)
+@Mixin(LevelExtractor.class)
 public abstract class EntityCullMixin {
     @Inject(method = "extractVisibleEntities", at = @At("HEAD"))
     private void lanterne$openFrame(Camera camera, Frustum frustum, DeltaTracker deltaTracker,
@@ -53,7 +66,7 @@ public abstract class EntityCullMixin {
     }
 
     @WrapOperation(
-            method = "extractVisibleEntities",
+            method = "isEntityVisible",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/entity/EntityRenderDispatcher;"
