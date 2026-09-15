@@ -160,18 +160,42 @@ def cibles_de_classe(texte, table):
 
 
 def noms_de_methodes(texte):
-    """Les « method = "..." » ; une valeur peut porter plusieurs noms séparés par des virgules."""
+    """Les cibles « method = "..." », séparées selon qu'elles portent ou non une signature.
+
+    <h2>L'angle mort qui a fait échouer un démarrage</h2>
+
+    Cette fonction ne rendait que des NOMS. C'était insuffisant, et cela s'est
+    payé : « BlockEntityVeilMixin » visait
+    « tryExtractRenderState(BlockEntity, float, CrumblingOverlay, Frustum) », et
+    la 26.2 a inséré un booléen avant le Frustum. Le nom existait toujours, donc
+    le contrôleur se taisait — et Mixin refusait de s'appliquer au lancement du
+    client. Écran d'erreur chez le joueur, sur un dépôt qui compilait et dont le
+    serveur dédié démarrait : un serveur dédié ne charge aucun mixin client, rien
+    ne pouvait le signaler de ce côté.
+
+    Quand une cible donne sa signature, on la vérifie donc entièrement. Quand elle
+    ne donne qu'un nom — ce qui est permis, et fréquent — on ne peut vérifier que
+    le nom, et c'est dit.
+
+    @return deux ensembles : les noms seuls, et les couples (nom, signature).
+    """
     noms = set()
+    signes = set()
     for brut in re.findall(r'method\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+)', texte):
         assemble = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', brut))
+        # Attention : une signature contient des virgules dans les types generiques ?
+        # Non — un descripteur JVM n'en contient aucune. Decouper sur la virgule est
+        # donc sur, a condition de recoller les morceaux d'une meme parenthese.
         for morceau in assemble.split(","):
             morceau = morceau.strip()
             if not morceau:
                 continue
-            # « nom(Ljava/lang/Object;)V » -> on ne garde que le nom : la
-            # signature d'une méthode visée par « method » peut être partielle.
-            noms.add(morceau.split("(")[0].strip())
-    return noms
+            forme = re.match(r"^([\w<>$]+)(\(.*\).+)$", morceau)
+            if forme:
+                signes.add((forme.group(1), forme.group(2)))
+            else:
+                noms.add(morceau.split("(")[0].strip())
+    return noms, signes
 
 
 def cibles_invoke(texte):
@@ -339,8 +363,9 @@ def main():
                             f"ce mixin ne s'applique donc jamais.")
             continue
 
-        # 1 et 2 : la classe visée, et les noms de méthodes qu'on y cherche.
+        # 1 et 2 : la classe visée, les noms de méthodes, et leurs signatures.
         connus = set()
+        signatures = set()
         introuvable = False
         for classe in classes:
             lu = membres(classe, jar)
@@ -350,13 +375,31 @@ def main():
                 introuvable = True
                 continue
             connus |= lu[0]
+            signatures |= lu[1]
         if introuvable:
             continue
 
-        for nom in noms_de_methodes(texte):
+        noms, signes = noms_de_methodes(texte)
+        for nom in noms:
             if nom.startswith("<") or nom.startswith("Lanterne"):
                 continue
             if nom not in connus:
+                plaintes.append(f"{fichier.name} : method = « {nom} » — "
+                                f"absente de {', '.join(classes)}.")
+
+        # Les cibles qui donnent leur signature entiere sont verifiees entierement.
+        # C'est le controle qui manquait, et son absence a coute un ecran d'erreur
+        # au lancement : voir la note de « noms_de_methodes ».
+        for nom, signature in signes:
+            if nom.startswith("<") or nom.startswith("Lanterne"):
+                continue
+            if (nom, signature) in signatures:
+                continue
+            if nom in connus:
+                autres = sorted(s for (m, s) in signatures if m == nom)
+                plaintes.append(f"{fichier.name} : method = « {nom} » existe, mais PAS avec la "
+                                f"signature {signature}. Trouvee(s) : {'; '.join(autres)}")
+            else:
                 plaintes.append(f"{fichier.name} : method = « {nom} » — "
                                 f"absente de {', '.join(classes)}.")
 

@@ -1,12 +1,18 @@
 package fr.clubcitrouille.lanterne.client.ponder;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 
+import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.content.disc.Groove;
 import fr.clubcitrouille.lanterne.content.painting.Easel;
 import fr.clubcitrouille.lanterne.content.waypoint.Gates;
@@ -50,25 +56,116 @@ public final class Guide {
     private static final int GREEN = 0x6FCF97;
     private static final int PAPER = 0xE8E8E8;
 
-    private static List<Scene> scenes;
+    private static List<Scene> scenes = List.of();
+    /**
+     * L'objet vers sa scène.
+     *
+     * <p>Une table et non un parcours : {@link Hint} l'interroge à <b>chaque infobulle affichée</b>,
+     * y compris pour les milliers d'objets qui n'ont pas de guide. Un parcours de listes imbriquées
+     * n'aurait rien coûté de mesurable, mais écrire un parcours là où une table s'écrit en trois
+     * lignes est le genre de négligence dont ce mod fait profession de se moquer.
+     */
+    private static Map<Item, Scene> byItem = Map.of();
+
+    /** Le monde pour lequel ces scènes ont été bâties. Voir {@link #all()}. */
+    private static Level bound;
+    /** Après un échec, l'instant à partir duquel on a le droit de réessayer. */
+    private static long retryAt;
+    private static boolean complained;
 
     /**
-     * Les scènes, construites au premier besoin.
+     * Les scènes, ou une liste vide quand aucun monde n'est chargé.
      *
-     * <p>Jamais à l'initialisation de la classe : ces scénarios nomment des blocs et des objets du
-     * mod, et {@code DeferredHolder.get()} lève tant que l'enregistrement n'est pas clos. Un champ
-     * statique les construirait au chargement de la classe, c'est-à-dire potentiellement trop tôt,
-     * et la panne se produirait au démarrage plutôt qu'ici — donc très loin de sa cause.
+     * <h2>Un guide ne peut pas exister hors d'une partie, et ce n'est pas un choix</h2>
+     *
+     * <p>Une première version bâtissait les scènes au premier besoin, en notant qu'il fallait
+     * attendre la fin de l'enregistrement des registres. C'était juste, et insuffisant — au point
+     * d'avoir fait <b>planter le jeu</b> d'un joueur qui a ouvert le guide depuis le menu principal.
+     *
+     * <p>La condition réelle est plus forte : en 26.2, {@code new ItemStack(ItemLike)} passe par
+     * {@code item.builtInRegistryHolder()} puis {@code new PatchedDataComponentMap(item.components())}
+     * — {@code ItemStack.java} lignes 249-255 — et {@code Holder.Reference.components()} lève
+     * {@code NullPointerException("Components not bound yet")} tant que le champ est nul
+     * ({@code Holder.java} ligne 277). Or ces composants sont liés par
+     * {@code ReloadableServerResources}, c'est-à-dire <b>au chargement d'un monde ou d'un paquet de
+     * données</b>.
+     *
+     * <p>Donc : <b>on ne construit pas d'{@code ItemStack} hors d'un monde chargé.</b> C'est une
+     * rupture de la 26.2, elle ne se voit à la lecture d'aucune signature, et elle ne se manifeste
+     * que depuis le menu principal — là où l'on n'essaie jamais rien en développement.
+     *
+     * <p>Le cache est lié au <em>monde</em> et non posé une fois pour toutes, pour la même raison :
+     * les composants viennent d'un paquet de données, donc une scène bâtie dans un monde pourrait
+     * mentir dans un autre.
      */
     public static List<Scene> all() {
-        if (scenes == null) {
+        Level level = Minecraft.getInstance().level;
+        if (level == null) {
+            forget();
+            return List.of();
+        }
+        if (bound == level) {
+            return scenes;
+        }
+        if (System.currentTimeMillis() < retryAt) {
+            return scenes;
+        }
+        build(level);
+        return scenes;
+    }
+
+    /** Un monde est-il chargé, et le guide a-t-il quelque chose à montrer ? */
+    public static boolean ready() {
+        return !all().isEmpty();
+    }
+
+    /**
+     * Bâtit les scènes, et ne laisse jamais rien s'échapper.
+     *
+     * <p>Au pire de ce qui peut arriver, le guide est vide et une ligne part au journal. Un écran de
+     * plantage pour un <em>guide</em> serait le comble : le seul écran du mod dont le propos est
+     * d'éviter qu'on se perde.
+     */
+    private static void build(Level level) {
+        try {
             List<Scene> built = new ArrayList<>();
             built.add(gate());
             built.add(burner());
             built.add(canvas());
+            Map<Item, Scene> table = new IdentityHashMap<>();
+            for (Scene s : built) {
+                // La première scène qui revendique un objet le garde : deux guides pour un même
+                // objet voudraient dire deux réponses à une seule question, et le maintien de la
+                // touche n'a pas de quoi en proposer un choix.
+                s.subjects().forEach(item -> table.putIfAbsent(item, s));
+            }
             scenes = List.copyOf(built);
+            byItem = table;
+            bound = level;
+            complained = false;
+        } catch (RuntimeException failure) {
+            forget();
+            // Une seconde avant de réessayer : la liaison des composants peut n'être pas tout à fait
+            // finie à l'instant où le monde paraît, et réessayer à chaque image remplirait le journal
+            // d'une exception par image pendant que le problème se résout tout seul.
+            retryAt = System.currentTimeMillis() + 1000L;
+            if (!complained) {
+                complained = true;
+                Lanterne.LOG.warn("Guide illustré indisponible pour l'instant : {}", failure.toString());
+            }
         }
-        return scenes;
+    }
+
+    private static void forget() {
+        bound = null;
+        scenes = List.of();
+        byItem = Map.of();
+    }
+
+    /** La scène qui répond à cet objet, ou {@code null} — le cas de l'immense majorité des objets. */
+    public static Scene sceneFor(Item item) {
+        all();
+        return byItem.get(item);
     }
 
     // -------------------------------------------------------------------------
@@ -86,8 +183,13 @@ public final class Guide {
         ItemStack steel = new ItemStack(Items.FLINT_AND_STEEL);
         ItemStack walker = new ItemStack(Items.PLAYER_HEAD);
 
-        Scene s = Scene.named("portail", heart.copy());
-        s.aim(0.5f, 1.4f, 0f, 2.1f);
+        // Le cœur, et lui seul. L'obsidienne serait tentante — c'est par elle qu'on commence — mais
+        // ajouter une ligne de Lanterne à l'infobulle d'un bloc de vanilla, c'est parler par-dessus
+        // un objet qui ne nous appartient pas, chez tous les joueurs et pour tous les usages.
+        Scene s = Scene.named("portail", heart.copy()).about(Gates.HEART_ITEM.get());
+        // Les trois plans larges partagent le même cadrage. Ce n'est pas de la paresse : revenir
+        // exactement au même plan après chaque gros plan est ce qui permet de ne pas se perdre.
+        s.aim(0.5f, 1.5f, 0f, 2.2f);
 
         s.say("sol");
         s.raise(Scene.box(-2, -1, -1, 3, -1, 1), floor, 1);
@@ -100,7 +202,7 @@ public final class Guide {
         s.hold(16);
 
         s.say("coeur");
-        s.pan(0.5f, 0.4f, 0f, 3.4f, 24);
+        s.pan(0.2f, 0.3f, 0f, 3.4f, 24);
         s.hold(20);
         s.swap(0, 0, 0, heart);
         s.spark(0f, 0.2f, 0f, VIOLET);
@@ -109,9 +211,9 @@ public final class Guide {
         s.hold(88);
 
         s.say("allumer");
-        s.pan(0.5f, 1.8f, 0f, 2.3f, 26);
+        s.pan(0.5f, 1.5f, 0f, 2.2f, 26);
         s.hold(18);
-        s.fly(steel, 3.6f, 2.8f, -1.8f, 0.4f, 0.3f, -0.5f, 28);
+        s.fly(steel, 11.4f, 9.5f, -0.5f, 0.4f, 0.3f, -0.5f, 28);
         s.spark(0f, 0.3f, 0f, AMBER);
         s.hold(6);
         // La nappe monte rangée par rangée : un portail qui paraîtrait d'un bloc ressemblerait à un
@@ -124,7 +226,7 @@ public final class Guide {
         s.hold(44);
 
         s.say("relier");
-        s.pan(0.2f, 0.2f, 0f, 3.6f, 24);
+        s.pan(0.1f, 0.2f, 0f, 3.6f, 24);
         s.halo(0, 0, 0, GREEN, 80);
         s.tag(0f, 0.4f, 0f, "relier.note", 80);
         s.hold(80);
@@ -132,7 +234,7 @@ public final class Guide {
         s.say("traverser");
         s.pan(0.5f, 1.5f, 0f, 2.2f, 26);
         s.hold(12);
-        s.fly(walker, 0.5f, 1.1f, 2.6f, 0.5f, 1.1f, -0.1f, 34);
+        s.fly(walker, 0.5f, 1.1f, 3.6f, 0.5f, 1.1f, 0.2f, 34);
         s.spark(0.5f, 1.4f, 0f, VIOLET);
         s.hold(26);
 
@@ -152,8 +254,9 @@ public final class Guide {
         ItemStack blank = new ItemStack(Groove.BLANK.get());
         ItemStack disc = new ItemStack(Groove.DISC.get());
 
-        Scene s = Scene.named("graveur", machine.copy());
-        s.aim(0f, 0.2f, 0f, 2.8f);
+        Scene s = Scene.named("graveur", machine.copy())
+                .about(Groove.BURNER_ITEM.get(), Groove.BLANK.get(), Groove.DISC.get());
+        s.aim(0f, -0.3f, 0f, 3.0f);
 
         s.say("poser");
         s.raise(Scene.box(-2, -1, -1, 2, -1, 1), floor, 1);
@@ -162,9 +265,9 @@ public final class Guide {
         s.hold(26);
 
         s.say("charger");
-        s.pan(0f, 0.3f, 0f, 3.6f, 22);
+        s.pan(0f, 0.1f, 0f, 4.0f, 22);
         s.hold(14);
-        s.fly(blank, 2.6f, 2.2f, -1.6f, 0.1f, 0.3f, -0.4f, 26);
+        s.fly(blank, 6.1f, 4.6f, -0.4f, 0.1f, 0.3f, -0.4f, 26);
         s.hold(18);
 
         s.say("graver");
@@ -179,7 +282,7 @@ public final class Guide {
 
         s.say("prendre");
         s.hold(10);
-        s.fly(disc, 0.1f, 0.4f, -0.4f, 2.4f, 1.8f, -1.6f, 26);
+        s.fly(disc, 0.1f, 0.4f, -0.4f, -10.8f, -5.7f, -0.4f, 26);
         s.hold(24);
 
         return s.seal();
@@ -196,8 +299,9 @@ public final class Guide {
         ItemStack wall = new ItemStack(Blocks.STONE_BRICKS);
         ItemStack brush = new ItemStack(Easel.BRUSH.get());
 
-        Scene s = Scene.named("tableau", brush.copy());
-        s.aim(0f, 1.4f, 0.5f, 2.2f);
+        Scene s = Scene.named("tableau", brush.copy())
+                .about(Easel.BRUSH.get());
+        s.aim(0f, 1.2f, 0.5f, 2.2f);
 
         s.say("mur");
         s.raise(Scene.box(-2, -1, -1, 2, -1, 1), floor, 1);
@@ -205,9 +309,9 @@ public final class Guide {
         s.hold(14);
 
         s.say("pinceau");
-        s.pan(0f, 1.6f, 0.4f, 2.8f, 24);
+        s.pan(0f, 1.3f, 0.4f, 2.4f, 24);
         s.hold(12);
-        s.fly(brush, 3f, 3.2f, -2f, 0.2f, 1.8f, 0.2f, 26);
+        s.fly(brush, 9.7f, 8.4f, 0.2f, 0.2f, 1.8f, 0.2f, 26);
         // La toile paraît case par case, de bas en haut : on voit son emprise se dessiner sur le mur,
         // ce qui est le seul retour qui compte à la pose.
         for (int y = 1; y <= 3; y++) {
@@ -221,7 +325,7 @@ public final class Guide {
         s.hold(86);
 
         s.say("image");
-        s.pan(0f, 2f, 0.4f, 3.2f, 24);
+        s.pan(0f, 2.0f, 0.4f, 3.2f, 24);
         s.hold(10);
         // La toile se teinte : c'est l'image qui arrive. On ne peut pas montrer une vraie image —
         // elle vient du dossier du joueur — et prétendre le contraire serait inventer un décor.

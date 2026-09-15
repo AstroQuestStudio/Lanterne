@@ -104,11 +104,17 @@ public final class Theatre extends Screen {
      * @param parent l'écran auquel revenir, ou {@code null} pour revenir au jeu
      */
     public static void open(Screen parent) {
+        if (!Guide.ready()) {
+            return;
+        }
         Minecraft.getInstance().gui.setScreen(new Theatre(parent));
     }
 
     /** Ouvre le guide sur un sujet nommé, ou sur le premier si le nom est inconnu. */
     public static void open(Screen parent, String subject) {
+        if (!Guide.ready()) {
+            return;
+        }
         Theatre screen = new Theatre(parent);
         List<Scene> all = Guide.all();
         for (int i = 0; i < all.size(); i++) {
@@ -117,6 +123,16 @@ public final class Theatre extends Screen {
                 break;
             }
         }
+        Minecraft.getInstance().gui.setScreen(screen);
+    }
+
+    /** Ouvre le guide directement sur une scène. Le chemin de {@link Hint}, depuis un objet survolé. */
+    public static void open(Screen parent, Scene scene) {
+        if (!Guide.ready()) {
+            return;
+        }
+        Theatre screen = new Theatre(parent);
+        screen.chapter = Math.max(0, Guide.all().indexOf(scene));
         Minecraft.getInstance().gui.setScreen(screen);
     }
 
@@ -132,8 +148,32 @@ public final class Theatre extends Screen {
         this.panelY = Math.max(6, (this.fit.viewHeight() - HEIGHT) / 2);
     }
 
+    /**
+     * L'écran n'a-t-il plus rien à montrer ?
+     *
+     * <p>À demander avant toute entrée. Le dessin se retire de lui-même quand le catalogue se vide,
+     * mais un clic ou une touche peut arriver dans l'intervalle, et {@link #scene()} lirait alors
+     * hors d'une liste vide.
+     */
+    private boolean vacant() {
+        return Guide.all().isEmpty();
+    }
+
+    /**
+     * La scène courante.
+     *
+     * <p>Le numéro de chapitre est ramené dans les bornes à chaque lecture plutôt que gardé juste par
+     * construction. C'est bon marché, et cela couvre le cas qu'on n'écrirait jamais exprès : le
+     * catalogue est lié au monde chargé — voir {@link Guide#all()} — donc il peut <em>changer de
+     * taille sous l'écran</em> si le monde change pendant qu'il est ouvert.
+     *
+     * <p>N'est appelée que lorsque le catalogue n'est pas vide ; {@link #extractRenderState} ferme
+     * l'écran avant, et {@link #vacant()} garde les entrées.
+     */
     private Scene scene() {
-        return Guide.all().get(this.chapter);
+        List<Scene> all = Guide.all();
+        this.chapter = Math.max(0, Math.min(this.chapter, all.size() - 1));
+        return all.get(this.chapter);
     }
 
     // --- Le temps ------------------------------------------------------------
@@ -199,6 +239,12 @@ public final class Theatre extends Screen {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY,
             float partial) {
         super.extractRenderState(graphics, mouseX, mouseY, partial);
+        // Le catalogue n'existe que dans un monde chargé. Quitter sa partie en laissant le guide
+        // ouvert le viderait sous l'écran : on se retire plutôt que de dessiner du vide.
+        if (Guide.all().isEmpty()) {
+            onClose();
+            return;
+        }
         advance();
 
         this.fit.open(graphics);
@@ -282,8 +328,9 @@ public final class Theatre extends Screen {
 
         Scene scene = scene();
         // Le décor est posé au tiers gauche : la colonne de droite appartient aux étiquettes, et un
-        // décor centré les ferait écrire par-dessus lui.
-        this.stage.centre(x0 + (x1 - x0) * 0.36f, y0 + (y1 - y0) * 0.58f);
+        // décor centré les ferait écrire par-dessus lui. En hauteur, au milieu exactement — le hublot
+        // est bien plus large que haut, et c'est la hauteur qui manque.
+        this.stage.centre(x0 + (x1 - x0) * 0.32f, y0 + (y1 - y0) * 0.50f);
         scene.place(this.stage, this.clock);
         scene.draw(graphics, this.stage, this.clock);
 
@@ -446,6 +493,9 @@ public final class Theatre extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubled) {
+        if (vacant()) {
+            return false;
+        }
         int mx = (int) this.fit.x(event.x());
         int my = (int) this.fit.y(event.y());
         if (event.button() != 0) {
@@ -490,7 +540,7 @@ public final class Theatre extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-        if (this.scrubbing) {
+        if (this.scrubbing && !vacant()) {
             grab((int) this.fit.x(event.x()));
             return true;
         }
@@ -511,6 +561,9 @@ public final class Theatre extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+        if (vacant()) {
+            return false;
+        }
         // La molette parcourt le temps, et non la liste : c'est le geste qu'on fait sans y penser
         // devant une animation, et la liste tient de toute façon en entier à l'écran.
         seek(this.clock - (float) scrollY * 10f);
@@ -519,6 +572,9 @@ public final class Theatre extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
+        if (vacant()) {
+            return super.keyPressed(event);
+        }
         switch (event.key()) {
             case InputConstants.KEY_SPACE -> {
                 toggle();

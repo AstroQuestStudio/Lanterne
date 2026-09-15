@@ -119,6 +119,25 @@ public final class Settings {
      */
     private static boolean digue = true;
 
+    /**
+     * Le sommaire des paquets zip. Voir {@link Sommaire}.
+     *
+     * <p>Le seul module de ce mod qui n'agit <b>ni pendant le tick ni pendant l'image</b>, mais au
+     * chargement. Le banc de vitesse ne le verra donc jamais, quelle que soit son efficacité — c'est
+     * la même raison qui a fait écrire une épreuve séparée pour la compression des paquets.
+     */
+    private static boolean sommaire = true;
+
+    /**
+     * Le tampon mutable sur les pilotes concernés. Voir {@code client.Tampon}.
+     *
+     * <p>Seul module de ce mod livré allumé <b>sans avoir été mesuré ici</b>. Ce n'est pas un
+     * relâchement de la règle : c'est un rétroportage d'un correctif que Mojang a écrit lui-même en
+     * 26.3, et la mesure qui le justifie est la sienne, pas la nôtre. Le javadoc de {@code Tampon}
+     * le dit en premier paragraphe et non en note.
+     */
+    private static boolean tampon = true;
+
 
     /** La fusion des orbes d.expérience, débridée. Voir Clump. */
     private static boolean clump = true;
@@ -899,6 +918,33 @@ public final class Settings {
         return master && digue;
     }
 
+    /**
+     * Le sommaire ne dépend PAS de l'interrupteur général.
+     *
+     * <p>Il est consulté pendant le chargement des paquets, c'est-à-dire <b>avant</b> qu'un banc
+     * puisse basculer quoi que ce soit, et son index est déjà bâti quand la première mesure
+     * commence. Le lier au maître donnerait l'illusion qu'on peut le couper à chaud — ce qui est
+     * faux — et son épreuve, qui le bascule elle-même, en a besoin indépendamment.
+     */
+    public static boolean sommaire() {
+        return sommaire;
+    }
+
+    /** Bascule le sommaire pendant son épreuve, et le rend ensuite. */
+    public static void setSommaire(boolean value) {
+        sommaire = value;
+    }
+
+    /**
+     * Le tampon ne dépend pas de l'interrupteur général, pour la même raison que la lentille : il
+     * est consulté à la création du périphérique graphique, une seule fois, bien avant qu'un banc
+     * puisse basculer quoi que ce soit — et le rebasculer ensuite ne referait pas les tampons déjà
+     * alloués.
+     */
+    public static boolean tampon() {
+        return tampon;
+    }
+
     public static boolean clump() {
         return master && clump;
     }
@@ -1176,6 +1222,8 @@ public final class Settings {
         // relevés du recensement et dans le nom d'autres épreuves. Un mot-clé qui ressemble à un
         // autre est ce qui a fait mesurer deux modules pour un, trois fois dans ce dépôt.
         digue = wanted.contains("digue");
+        sommaire = wanted.contains("sommaire");
+        tampon = wanted.contains("tampon");
         boxes = wanted.contains("boites") || wanted.contains("boxes");
         clump = wanted.contains("clump") || wanted.contains("orbes");
         vigil = wanted.contains("vigil") || wanted.contains("garde");

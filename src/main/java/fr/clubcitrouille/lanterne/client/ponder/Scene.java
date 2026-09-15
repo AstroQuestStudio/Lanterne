@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -96,6 +97,16 @@ public final class Scene {
         final int colour;
         final float in;
         float out = Float.MAX_VALUE;
+        /**
+         * Le départ est-il joué, ou net ?
+         *
+         * <p>Il faut les deux, et le distinguer n'est pas un raffinement. L'effacement occupe les
+         * six ticks <em>qui précèdent</em> {@link #out} — c'est la seule façon d'avoir disparu à
+         * l'instant dit. Pour {@code take}, c'est juste. Pour {@code swap}, ce serait absurde : le
+         * bloc se mettrait à rétrécir six ticks avant qu'on l'échange, donc avant que quoi que ce
+         * soit ne se produise, et le regard partirait chercher la cause au mauvais endroit.
+         */
+        boolean melt;
 
         Piece(float x, float y, float z, ItemStack look, boolean alongX, int colour, float in) {
             this.x = x;
@@ -126,6 +137,8 @@ public final class Scene {
 
     private final String key;
     private final ItemStack icon;
+    /** Les objets dont cette scène est la réponse. Voir {@link #about}. */
+    private final List<Item> subjects = new ArrayList<>();
 
     private final List<Piece> pieces = new ArrayList<>();
     private final List<Word> words = new ArrayList<>();
@@ -155,6 +168,22 @@ public final class Scene {
      */
     public static Scene named(String key, ItemStack icon) {
         return new Scene(key, icon);
+    }
+
+    /**
+     * Les objets auxquels cette scène répond.
+     *
+     * <p>C'est ce qui permet au guide de s'ouvrir <b>depuis l'objet</b> plutôt que depuis un menu —
+     * le seul geste qui arrive au bon moment, c'est-à-dire quand on tient la chose et qu'on se
+     * demande à quoi elle sert. Voir {@link Hint}.
+     */
+    public Scene about(Item... items) {
+        this.subjects.addAll(List.of(items));
+        return this;
+    }
+
+    public List<Item> subjects() {
+        return this.subjects;
     }
 
     // --- Les verbes ----------------------------------------------------------
@@ -232,6 +261,7 @@ public final class Scene {
         Piece old = this.standing.remove(cell(x, y, z));
         if (old != null) {
             old.out = this.now + LIFT;
+            old.melt = true;
         }
         return this;
     }
@@ -265,6 +295,12 @@ public final class Scene {
      *
      * <p>C'est le verbe qui porte les gestes : le briquet qui va vers le cœur, le disque qui entre
      * dans le graveur. Un geste montré vaut une phrase épargnée, et c'est tout le propos.
+     *
+     * <p><b>Les points de départ sont hors du décor, et c'est voulu.</b> La projection isométrique
+     * comprime : un départ posé « trois blocs plus loin » ne s'éloigne que d'une trentaine de pixels,
+     * parce qu'un pas vers l'est et un pas vers le sud partent tous deux vers la gauche et se
+     * compensent presque. Les départs sont donc choisis pour leur <em>trajet à l'écran</em> — l'objet
+     * entre par le bord du hublot — et calculés en inversant la projection, pas devinés.
      */
     public Scene fly(ItemStack look, float x1, float y1, float z1,
                      float x2, float y2, float z2, int ticks) {
@@ -487,7 +523,7 @@ public final class Scene {
             // deux images, et c'est ce qui lui donne du poids.
             size = Ease.lerp(0.74f, 1f, Ease.back(k));
         }
-        float left = p.out - t;
+        float left = p.melt ? p.out - t : Float.MAX_VALUE;
         if (left < LIFT) {
             float k = Ease.in(1f - left / LIFT);
             size *= 1f - k;
@@ -497,10 +533,9 @@ public final class Scene {
     }
 
     private void drawPane(GuiGraphicsExtractor graphics, Stage stage, Piece p, float t) {
+        // Douze ticks de montée, et rien pour redescendre : une nappe posée reste, et aucun scénario
+        // n'a eu besoin de l'éteindre. Le jour où il le faudra, ce sera un {@code out} de plus ici.
         float fade = Ease.out(Ease.over(t, p.in, p.in + 12f));
-        if (p.out != Float.MAX_VALUE) {
-            fade *= 1f - Ease.over(t, p.out - LIFT, p.out);
-        }
         if (fade <= 0.02f) {
             return;
         }

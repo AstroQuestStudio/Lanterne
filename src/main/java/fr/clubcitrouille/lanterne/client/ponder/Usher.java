@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.network.chat.Component;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -19,18 +20,24 @@ import org.jspecify.annotations.Nullable;
 /**
  * L'ouvreur : par où l'on entre dans le guide.
  *
+ * <h2>La troisième porte, et pourquoi il en faut trois</h2>
+ *
+ * <p>La bonne porte est celle de {@link Hint} : maintenir une touche sur l'objet qu'on regarde. Le
+ * bouton au bas de l'écran de réglages en est une deuxième, pour qui ne sait pas que la première
+ * existe. Celle-ci est la troisième, et elle sert les cas que les deux autres ne couvrent pas —
+ * revoir un guide sans avoir l'objet en main, et le dire à quelqu'un dans une discussion.
+ *
  * <h2>Pourquoi une commande <em>cliente</em></h2>
  *
- * <p>Create ouvre son guide depuis JEI, en maintenant une touche sur un objet de l'inventaire. C'est
- * la plus belle porte qui soit — on y arrive au moment exact où l'on se demande à quoi sert l'objet
- * qu'on regarde — et Lanterne n'a pas JEI en dépendance, ni ne veut en prendre une pour ouvrir un
- * écran.
- *
- * <p>Ponder, lui, expose aussi une commande, mais elle est <b>serveur</b> : elle doit envoyer un
- * paquet au client pour qu'il ouvre l'écran, parce qu'en 1.21 il n'y avait pas mieux. NeoForge 26.2
- * donne {@link RegisterClientCommandsEvent}, donc une commande qui ne quitte jamais le client. Pas de
+ * <p>Ponder expose aussi une commande, mais elle est <b>serveur</b> : elle doit envoyer un paquet au
+ * client pour qu'il ouvre l'écran, parce qu'en 1.21 il n'y avait pas mieux. NeoForge 26.2 donne
+ * {@link RegisterClientCommandsEvent}, donc une commande qui ne quitte jamais le client. Pas de
  * paquet, pas de permission, pas de code commun qui nommerait un écran — et donc aucun risque pour un
  * serveur dédié, qui ne chargera jamais ce fichier.
+ *
+ * <p>Le mot {@code guide} est libre : {@code report/LanterneCommand.java} tient déjà un
+ * {@code /lanterne} côté serveur, et n'y déclare pas cette branche. Ce qui ne s'analyse pas ici part
+ * au serveur comme avant.
  *
  * <h2>Pourquoi l'ouverture est différée d'un tick</h2>
  *
@@ -80,6 +87,14 @@ public final class Usher {
         asked = false;
         String subject = wanted;
         wanted = null;
+        if (!Guide.ready()) {
+            // Ne peut normalement pas arriver — une commande se tape en jeu — mais la scène est liée
+            // au monde chargé, et un écran qui ne s'ouvre pas sans rien dire passe pour une panne.
+            if (client.player != null) {
+                client.player.sendOverlayMessage(Component.translatable("lanterne.guide.hors_jeu"));
+            }
+            return;
+        }
         if (subject == null) {
             Theatre.open(null);
         } else {

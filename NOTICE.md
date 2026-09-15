@@ -29,6 +29,9 @@ Leur code n'entre pas dans Lanterne, quelle que soit la licence de Lanterne :
 | MemoryLeakFix | LGPL-2.1-only | Incompatible avec GPL-3. L'idée seule. |
 | DSBG | CC-BY-ND-4.0 | Sans dérivée : l'idée seule. |
 | server_heater | The Lambda License | L'idée seule. |
+| WaterMedia | PolyForm Strict 1.0.0 | Redistribution et dérivés interdits. Son `vlcj` est shadé sous une licence commerciale de Caprica qui **ne se transmet pas aux forks**. Rien n'en est repris. |
+| VideoPlayer (NGoedix) | All Rights Reserved | Le `LICENSE` fait 20 octets et dit exactement cela. L'idée seule. |
+| WATERFrAMES | *aucun fichier `LICENSE`* | Donc tous droits réservés par défaut. L'idée seule. |
 
 Une licence protège l'**expression**, pas l'idée. Lire ces sources pour
 comprendre un mécanisme est licite et a été fait ; en recopier les lignes ne
@@ -57,8 +60,49 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `core/Moulds.java` + `mixin/StateCacheDedupMixin.java` | Idée de [FerriteCore](https://github.com/malte0811/FerriteCore) (malte0811) | MIT |
 | `content/painting/*` — l'Atelier, les tableaux | **Rien.** Idée de [Immersive Paintings](https://github.com/Luke100000/ImmersivePaintings) (Luke100000), architecture entièrement différente. | GPL-3.0 (compatible) |
 | `content/disc/*` — le Sillon, les disques | **Rien.** Écrit pour ce projet. | — |
+| `content/screen/*` + `client/screen/*` — l'Écran, le Projecteur | **Rien n'est copié.** Aucun décodeur n'est embarqué à ce jour. Le relevé des projets étudiés et de leurs licences est dans `notes/projecteur.md` ; les deux moteurs prévus sont branchés derrière `client/screen/Engine.java` et appelés par réflexion, jamais par incorporation de code. | voir ci-dessous |
 | `assets/lanterne/shaders/post/fsr_easu.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (EASU)**, [AMD](https://github.com/GPUOpen-Effects/FidelityFX-FSR) — `ffx_fsr1.h` | MIT |
 | `assets/lanterne/shaders/post/fsr_rcas.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (RCAS)**, *idem* | MIT |
+| `core/Digue.java` + `mixin/{BeeHive,BeeHoming,MapChunk,GameEventChunk,SleepBed,RemoveBlock}Mixin.java` — la digue | Idée et points d'accroche de [ServerCore](https://github.com/Wesley1808/ServerCore) (Wesley1808), paquet `optimizations/sync_loads` | MIT |
+| `core/Sommaire.java` + `mixin/PackIndexMixin.java` — le sommaire des zip | Idée de [quick-pack](https://github.com/DrexHD/quick-pack) (DrexHD) | **GPL-3.0-only** |
+| `client/Tampon.java` + `mixin/BufferStorageMixin.java` — le tampon mutable | Idée de [framepace](https://github.com/lap2ka/framepace) (Lap2ka), lui-même rétroportage du correctif **Mojang MC-307596** livré en 26.3 | MIT |
+
+**La digue** mérite une précision, parce qu'elle s'écarte de sa source sur trois points et
+qu'un lecteur pressé croirait à une copie :
+
+- **Deux des sept mixins de `ServerCore` ont été écartés**, sur lecture des sources 26.2 et
+  non par prudence. `LevelMixin` redirige `hasChunkAt` dans
+  `updateNeighbourForOutputSignal` ; or `ServerChunkCache` redéfinit `hasChunk` en 26.2
+  (ligne 266) et ne bloque plus. `StructureCheckMixin` n'est pas un refus de chargement mais
+  un pré-test de biome pour le trésor enfoui, et il change la génération. Le détail est dans
+  `Digue.REJECTED_UPDATE_NEIGHBOUR` et `Digue.REJECTED_STRUCTURE_BIOME`.
+- **Un point d'accroche a été ajouté** que `ServerCore` n'a pas :
+  `Bee$BeeGoToHiveGoal.canBeeUse`, qui charge le chunk de la ruche à chaque évaluation du but,
+  c'est-à-dire bien plus souvent que le `getBeehiveBlockEntity` protégé par l'original.
+- **Le refus a été rendu non destructif.** Chez `ServerCore`, une abeille dont le chunk de
+  ruche est absent **oublie sa ruche pour de bon** : `Bee.aiStep` efface `hivePos` dès que
+  `isHiveValid()` rend faux. `BeeHiveMixin` garde la mémoire tant que le seul motif d'échec est
+  l'absence du chunk. L'épreuve `lab/Levee.java` le vérifie, et
+  `LANTERNE_BREAK_DIGUE=1` rétablit le comportement d'origine pour qu'elle puisse échouer.
+
+**Le sommaire** ne reprend aucune ligne de `quick-pack`, dont les neuf mixins ont pourtant été
+lus. Deux différences de conception :
+
+- `quick-pack` construit l'index à l'ouverture du paquet, en s'accrochant aux deux `RETURN` de
+  `FilePackResources$FileResourcesSupplier.openFull` avec trois `@Local`. Ici l'index est bâti
+  **paresseusement**, au premier `listResources` : un paquet ouvert et jamais interrogé ne paie
+  rien, et il n'y a aucune dépendance au nom d'une variable locale.
+- `quick-pack` réimplémente `getNamespaces` par `@WrapMethod`. Ici on se contente de **retenir**
+  ce que vanilla a rendu : rejouer l'extraction d'espace de noms aurait créé une seconde vérité à
+  maintenir, et sa validation avec.
+
+**Ce qui a été lu et NON repris**, avec le motif — cette liste vaut autant que la précédente :
+
+| Projet | Licence | Pourquoi non |
+|---|---|---|
+| [krypton-fnp](https://github.com/404Setup/KryptonReno) — `ServerCullingManager` | LGPL-3.0 (absorbable) | Son propre auteur le limite à `Display` et `HangingEntity` — *« Only entities whose purpose is visual decoration are safe to remove from a vanilla client »*. Les créatures, qui sont le poste de paquets, sont exclues par conception. Et le mécanisme **ajoute** jusqu'à seize `level.clip` par tick sur le fil du serveur pour économiser de la bande passante : sur un VPS à un cœur, c'est échanger la ressource rare contre l'abondante. `core/NetworkThrottle.java` espace déjà ces envois sans jamais faire disparaître l'entité. |
+| [structure-layout-optimizer](https://github.com/TelepathicGrunt/StructureLayoutOptimizer) — moitié Jigsaw | MIT (absorbable) | Non repris **faute de mesure**, pas faute de valeur : le gisement est réel et intact en 26.2. Voir `core/Stencil.java` pour la moitié déjà reprise, et la réserve qui la concerne désormais. |
+| `ServerCore` — le régulateur de distances | MIT | Doublon de `core/Tide.java`. Deux boucles d'asservissement sur la même grandeur oscillent. |
 | `client/ponder/*` — le guide illustré | **Rien.** Idée, vocabulaire et disposition d'écran de [Ponder](https://github.com/Creators-of-Create/Ponder) (Creators of Create), extrait de [Create](https://github.com/Creators-of-Create/Create) — voir ci-dessous. | MIT (compatible) |
 
 L'ordonnanceur de tick mérite la même précision. **Immersive Optimization** est
@@ -199,9 +243,14 @@ n'est pas par scrupule :
   accéléré. Sa barre de progression n'accepte donc le clic que sur des repères
   posés à la main. Ici une scène est une **fonction pure du temps** ; reculer
   coûte ce que coûte avancer, et la barre accepte n'importe quel instant.
-- **Son branchement suppose JEI.** Lanterne n'en a pas la dépendance et n'en veut
-  pas. `RegisterClientCommandsEvent`, apparu depuis, donne une commande purement
-  cliente — sans paquet, sans permission, sans code commun qui nommerait un écran.
+- **Son branchement suppose JEI.** Chez Create, le geste « maintenir W sur un
+  objet » passe par une greffe JEI, parce que les objets de la liste de JEI ne
+  sont pas dans des cases d'inventaire. Ici il n'a coûté **aucune dépendance** :
+  `ItemStack.getTooltipLines` déclenche `ItemTooltipEvent` (sources 26.2,
+  ligne 926), et JEI construit ses infobulles par ce même appel — vérifié dans la
+  table des constantes de `mezz.jei.library.render.ItemStackRenderer`, jar
+  `jei-26.2-neoforge-30.29.0.201`. Écouter l'évènement suffit, et couvre du même
+  coup l'inventaire, JEI, EMI et REI. Voir `client/ponder/Hint.java`.
 
 Ce qui lui est perdu, en revanche, doit être dit aussi : le rendu d'objet impose
 l'angle de l'inventaire, donc **notre caméra ne tourne pas**. Elle se déplace et
@@ -215,6 +264,23 @@ revient à décider seul du sort de toutes les faces de feuilles ; celui-ci
 partout ailleurs — de sorte qu'éteint, il ne change rigoureusement rien. Le
 réglage à trois branches et l'accrochage à l'option `cutoutLeaves` de 26.1 n'ont
 pas d'équivalent en amont.
+
+### La projection — deux moteurs, aucun code repris
+
+Aucun décodeur vidéo n'existe dans le jeu ni dans la machine virtuelle : tout mod
+qui affiche de la vidéo appelle du natif venu d'ailleurs. Lanterne n'en embarque
+**aucun à ce jour** ; `client/screen/Engine.java` déclare l'interface, et les deux
+candidats se contentent d'un relevé de ce qui manque. Le dossier chiffré est dans
+`notes/projecteur.md`.
+
+| Candidat | Licence vérifiée | Compatible GPL-3.0-only ? | Comment il serait appelé |
+|---|---|---|---|
+| **FFmpeg via bytedeco** (`org.bytedeco:ffmpeg`) | greffon Apache-2.0 **ou** GPLv2+CE au choix ; binaires sans `--enable-gpl` en **LGPL v3** (`--enable-version3` est dans `cppbuild.sh`), avec `--enable-gpl` en **GPL v3** | **oui**, les deux variantes | dépendance déclarée, binaires téléchargés de Maven Central |
+| **MCEF / Rinku** (Chromium embarqué) | **LGPL-2.1-or-later** — la clause « or later » est ce qui le rend compatible ; une LGPL-2.1-**only** ne le serait pas | oui, mais sans objet | mod compagnon **que le joueur installe lui-même**, appelé par réflexion. Jamais téléchargé ni redistribué par Lanterne |
+
+[Dream Displays](https://github.com/arnodoelinger/dreamdisplays) (LGPL-3.0) a été
+lu pour établir qu'un décodage FFmpeg avec accélération matérielle se pratique en
+26.2 et sous quelle licence ; aucune de ses lignes n'a été reprise.
 
 ## Les modules d'origine
 

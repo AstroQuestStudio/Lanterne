@@ -17,12 +17,13 @@
   "block.lanterne.coeur_de_repere": "Cœur de repère",
   "item.lanterne.coeur_de_repere": "Cœur de repère",
   "block.lanterne.portail_repere": "Portail de repère",
-
+  "key.lanterne.guide": "Guide illustré (sur un objet)",
+  "lanterne.guide.infobulle": "Maintiens %s pour le guide illustré",
+  "lanterne.guide.hors_jeu": "Le guide illustré s'ouvre une fois en jeu.",
   "lanterne.guide.titre": "Guide illustré",
   "lanterne.guide.enseigne": "guide",
   "lanterne.guide.aide": "espace : lire ou arrêter · ← → : chapitre · molette : parcourir · R : reprendre · Échap : fermer",
   "lanterne.guide.bouton": "Guide illustré »",
-
   "lanterne.guide.portail.titre": "Portails de repère",
   "lanterne.guide.portail.sol": "Un portail de repère se bâtit comme celui du Nether, et au même endroit dans la partie.",
   "lanterne.guide.portail.cadre": "Un cadre d'obsidienne, deux blocs de large sur trois de haut au minimum. C'est la taille que tu connais déjà.",
@@ -32,17 +33,19 @@
   "lanterne.guide.portail.relier": "Clique le cœur à main nue : tu le nommes, tu le teintes, tu l'ouvres aux autres, et tu choisis où il mène.",
   "lanterne.guide.portail.relier.note": "Le retour s'installe tout seul si la destination ne menait nulle part.",
   "lanterne.guide.portail.traverser": "Traverse. Casser le cœur efface le portail — et les destinations que d'autres ont inscrites chez eux.",
-
   "lanterne.guide.graveur.titre": "Graveur de vinyle",
   "lanterne.guide.graveur.poser": "Le graveur est une machine : on la fabrique, on la pose, elle travaille.",
   "lanterne.guide.graveur.charger": "Glisse un disque vierge dedans, en cliquant le bloc avec le vierge en main.",
   "lanterne.guide.graveur.graver": "Clique à main nue : tu donnes un lien ou un fichier, et la gravure commence.",
   "lanterne.guide.graveur.graver.note": "Six secondes. Si quoi que ce soit échoue, le vierge revient — toujours.",
   "lanterne.guide.graveur.prendre": "Clique encore pour prendre le disque. Il se joue dans n'importe quel juke-box.",
-
   "lanterne.guide.tableau.titre": "Tableaux",
   "lanterne.guide.tableau.mur": "Un tableau se pose sur un mur, comme dans la vraie vie.",
   "lanterne.guide.tableau.pinceau": "Clique le mur avec le pinceau : une toile vide s'accroche tout de suite.",
   "lanterne.guide.tableau.toile.note": "Aucun écran ne s'interpose : tu vois d'abord son emprise, tu la remplis ensuite.",
-  "lanterne.guide.tableau.image": "Clique la toile pour ouvrir l'atelier, et choisis l'image par un lien, un fichier, ou la bibliothèque du serveur."
+  "lanterne.guide.tableau.image": "Clique la toile pour ouvrir l'atelier, et choisis l'image par un lien, un fichier, ou la bibliothèque du serveur.",
+  "block.lanterne.ecran": "Écran",
+  "item.lanterne.ecran": "Écran",
+  "block.lanterne.projecteur": "Projecteur",
+  "item.lanterne.projecteur": "Projecteur"
 }

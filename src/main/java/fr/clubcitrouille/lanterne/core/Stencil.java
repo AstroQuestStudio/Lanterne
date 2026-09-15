@@ -40,6 +40,61 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  * <p>Une maison de village qui chevauche quatre chunks est donc préparée <b>quatre fois en
  * entier</b>, pour n'en écrire qu'un quart à chaque passage. Le reste est jeté à la ligne suivante.
  *
+ * <h2>⚠ CE RAISONNEMENT N'EST PLUS VRAI EN 26.2 SOUS NEOFORGE — et les chiffres ci-dessous non plus</h2>
+ *
+ * <p>Le pseudo-code ci-dessus est celui de la 26.1.2. La 26.2 patchée NeoForge écrit autre chose,
+ * et il faut la lire en entier
+ * ({@code StructureTemplate.java}, lignes 445-458) :
+ *
+ * <pre>
+ * boolean processOnlyInCurrentChunk = true;
+ * for (StructureProcessor processor : settings.getProcessors()) {
+ *     if (processor.evaluatesEntirePieceState()) { processOnlyInCurrentChunk = false; break; }
+ * }
+ * BoundingBox chunkBb = settings.getBoundingBox();
+ * for (StructureBlockInfo blockInfo : blockInfoList) {
+ *     BlockPos blockPos = calculateRelativePosition(settings, blockInfo.pos).offset(position);
+ *     if (!processOnlyInCurrentChunk || chunkBb == null || chunkBb.isInside(blockPos)) {   // ← ICI
+ *         StructureBlockInfo processed = new StructureBlockInfo(blockPos, blockInfo.state,
+ *                 blockInfo.nbt != null ? blockInfo.nbt.copy() : null);
+ *         …toute la chaîne des processeurs…
+ *     }
+ * }
+ * </pre>
+ *
+ * <p><b>L'objet neuf, la copie de balise et la chaîne de processeurs sont déjà derrière le test de
+ * fenêtre.</b> Le pochoir n'épargne donc plus ce qu'il a été écrit pour épargner : il ne reste que
+ * la transformation de position — et il l'ajoute une fois de plus, puisque {@code processBlockInfos}
+ * la refait ligne 457 pour les blocs qui passent.
+ *
+ * <p>Le garde-fou {@code evaluatesEntirePieceState} de NeoForge déclenche d'ailleurs sur le même
+ * ensemble que le garde-fou trois ci-dessous : {@code CappedProcessor} est le seul processeur de
+ * vanilla à redéfinir {@code finalizeProcessing}, et le seul à rendre {@code true}. Le pochoir est
+ * un sous-ensemble strict du comportement de NeoForge, en plus prudent.
+ *
+ * <h2>La mesure, refaite sur 26.2 / NeoForge 26.2.0.88</h2>
+ *
+ * <pre>
+ * gabarit nu          : 0,210 ms sans · 0,195 ms avec   →  ×1,07
+ * gabarit + 2 procs   : 0,156 ms sans · 0,148 ms avec   →  ×1,06
+ * tri : 326 400 blocs examinés, 224 400 écartés (68,8 %), 0 renoncement
+ * conformité : 15 360 positions sur quatre orientations, AUCUN écart
+ * </pre>
+ *
+ * <p>Les deux régimes sont <b>sous la dérive de ×1,08 du laboratoire</b>. Le module fonctionne — le
+ * taux d'écart est toujours de 68,8 % — et ce qu'il écarte ne coûte plus rien, parce que le jeu
+ * l'écarte déjà.
+ *
+ * <p><b>Les ×1,17 et ×1,54 annoncés plus bas sont ceux de la 26.1.2 et ne doivent plus être
+ * republiés.</b> Ils sont conservés ici parce qu'ils sont vrais de la version où ils ont été pris, et
+ * parce que la comparaison est l'information : c'est le même banc, le même gabarit, la même fenêtre,
+ * et Mojang-NeoForge a fait le travail entre les deux.
+ *
+ * <p>Le module n'est pas retiré, pour une seule raison : il ne <em>perd</em> rien — les deux mesures
+ * penchent du bon côté, faiblement et dans le même sens. Il devient en revanche un candidat au
+ * retrait, et la question à trancher n'est pas « rapporte-t-il ? » mais « justifie-t-il un point
+ * d'accroche sur {@code placeInWorld} ? ».
+ *
  * <h2>Ce que fait le module, et où il s'arrête</h2>
  *
  * <p>Il pose le pochoir avant la peinture : la liste de blocs remise à {@code processBlockInfos} est

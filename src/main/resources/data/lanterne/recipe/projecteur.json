@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "CCC",
+    "CLG",
+    "CRC"
+  ],
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "L": "minecraft:glowstone_dust",
+    "G": "minecraft:glass",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "lanterne:projecteur",
+    "count": 1
+  }
+}

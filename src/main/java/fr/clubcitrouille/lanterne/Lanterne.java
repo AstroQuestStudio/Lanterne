@@ -101,6 +101,20 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.content.shop.Bazaar.register(modBus);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.shop.Bazaar::onRegisterCommands);
+        // La projection : l'ecran et le projecteur. Deux fichiers de reglages, parce que les deux
+        // decisions n'appartiennent pas a la meme personne — la liste blanche des domaines engage
+        // l'administrateur, le consentement a charger un media distant engage le joueur et son
+        // adresse IP. Voir content.screen.Sieve.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                fr.clubcitrouille.lanterne.content.screen.Booth.SPEC, "lanterne-projecteur.toml");
+        modBus.addListener(fr.clubcitrouille.lanterne.content.screen.Booth::apply);
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
+                fr.clubcitrouille.lanterne.client.screen.Consent.SPEC,
+                "lanterne-projecteur-client.toml");
+        modBus.addListener(fr.clubcitrouille.lanterne.client.screen.Consent::apply);
+        fr.clubcitrouille.lanterne.content.screen.Screens.register(modBus);
+        NeoForge.EVENT_BUS.addListener(
+                fr.clubcitrouille.lanterne.content.screen.Screens::onRegisterCommands);
         Settings.configureFromEnvironment();
         fr.clubcitrouille.lanterne.core.Hush.install();
         fr.clubcitrouille.lanterne.core.Machine.appraise();
@@ -113,11 +127,17 @@ public final class Lanterne {
             // Apres Compass : la touche de la boutique reutilise la categorie de
             // raccourcis qu'il declare, et NeoForge refuse un identifiant en double.
             fr.clubcitrouille.lanterne.client.shop.Bell.register(modBus);
+            // Meme raison : la touche du guide illustre reutilise cette meme categorie.
+            fr.clubcitrouille.lanterne.client.ponder.Hint.register(modBus);
             fr.clubcitrouille.lanterne.client.Gauge.register(modBus);
             // Le rendu des tableaux : la mosaïque, le magot et le dessin n'existent que côté client
             // et ne doivent jamais être chargés par un serveur dédié.
             fr.clubcitrouille.lanterne.content.painting.CanvasRenderer.register(modBus);
             fr.clubcitrouille.lanterne.content.disc.Wheel.install();
+            // Le rendu des ecrans, l'ecran de reglages et le decodeur. Un serveur dedie ne doit
+            // nommer aucune de ces classes : voir client.screen.Projection pour le plantage exact
+            // que la garde evite, et pourquoi il n'existe qu'une porte.
+            fr.clubcitrouille.lanterne.client.screen.Projection.register(modBus);
         }
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,

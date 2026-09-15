@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "lanterne:block/projecteur_cote",
+    "front": "lanterne:block/projecteur_face_actif",
+    "side": "lanterne:block/projecteur_cote"
+  }
+}

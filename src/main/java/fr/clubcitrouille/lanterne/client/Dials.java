@@ -698,7 +698,12 @@ public final class Dials extends Screen {
                 .translatable("lanterne.guide.bouton").getString();
         int left = guideLeft(right);
         boolean over = inside(mouseX, mouseY, left - 4, bottom - FOOTER + 4, right - 8, bottom - 4);
-        graphics.text(this.font, label, left, bottom - FOOTER + 8, over ? AMBER : DIM, false);
+        // Éteint hors partie, et pas seulement inactif : le guide met en scène de vrais objets, et en
+        // 26.2 un ItemStack ne peut pas être construit tant qu'aucun monde n'a lié les composants.
+        // Cet écran s'ouvre aussi depuis le menu principal, d'où ce gris — voir Guide.all().
+        boolean ready = fr.clubcitrouille.lanterne.client.ponder.Guide.ready();
+        graphics.text(this.font, label, left, bottom - FOOTER + 8,
+                !ready ? FAINT : over ? AMBER : DIM, false);
     }
 
     /**
@@ -906,7 +911,12 @@ public final class Dials extends Screen {
         if (button == 0 && inside(mouseX, mouseY, guideLeft(this.panelX + WIDTH) - 4,
                 this.panelY + HEIGHT - FOOTER + 4,
                 this.panelX + WIDTH - 8, this.panelY + HEIGHT - 4)) {
-            fr.clubcitrouille.lanterne.client.ponder.Theatre.open(this);
+            if (fr.clubcitrouille.lanterne.client.ponder.Guide.ready()) {
+                fr.clubcitrouille.lanterne.client.ponder.Theatre.open(this);
+            } else {
+                say(net.minecraft.network.chat.Component
+                        .translatable("lanterne.guide.hors_jeu").getString());
+            }
             return true;
         }
         return super.mouseClicked(event, doubled);

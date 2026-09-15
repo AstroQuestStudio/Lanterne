@@ -1,0 +1,50 @@
+{
+  "variants": {
+    "facing=north,lit=false": {
+      "model": "lanterne:block/projecteur"
+    },
+    "facing=north,lit=true": {
+      "model": "lanterne:block/projecteur_actif"
+    },
+    "facing=south,lit=false": {
+      "model": "lanterne:block/projecteur",
+      "y": 180
+    },
+    "facing=south,lit=true": {
+      "model": "lanterne:block/projecteur_actif",
+      "y": 180
+    },
+    "facing=west,lit=false": {
+      "model": "lanterne:block/projecteur",
+      "y": 270
+    },
+    "facing=west,lit=true": {
+      "model": "lanterne:block/projecteur_actif",
+      "y": 270
+    },
+    "facing=east,lit=false": {
+      "model": "lanterne:block/projecteur",
+      "y": 90
+    },
+    "facing=east,lit=true": {
+      "model": "lanterne:block/projecteur_actif",
+      "y": 90
+    },
+    "facing=up,lit=false": {
+      "model": "lanterne:block/projecteur",
+      "x": 270
+    },
+    "facing=up,lit=true": {
+      "model": "lanterne:block/projecteur_actif",
+      "x": 270
+    },
+    "facing=down,lit=false": {
+      "model": "lanterne:block/projecteur",
+      "x": 90
+    },
+    "facing=down,lit=true": {
+      "model": "lanterne:block/projecteur_actif",
+      "x": 90
+    }
+  }
+}

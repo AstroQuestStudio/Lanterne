@@ -132,6 +132,15 @@ public final class SelfTest {
      */
     private static boolean levee;
 
+    /**
+     * Vrai si l'on éprouve le sommaire des paquets zip.
+     *
+     * <p>Elle fabrique sa propre scène — un zip de soixante mille entrées — parce qu'une épreuve
+     * qui dépend de ce qui traîne sur le disque de celui qui la lance ne rend aucun chiffre
+     * comparable. Voir {@code lab.Sommaire}.
+     */
+    private static boolean sommaire;
+
     /** Vrai si l'on eprouve que la maree descend puis remonte. */
     private static boolean surge;
 
@@ -303,6 +312,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de duel armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_SOMMAIRE"))) {
+            sommaire = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du sommaire armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_LEVEE"))) {
             levee = true;
             step = Step.SETTLING;
@@ -335,7 +351,19 @@ public final class SelfTest {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
-                    && !wits && !reap && !surge && !mason && !grove && !duel && !levee)) {
+                    && !wits && !reap && !surge && !mason && !grove && !duel && !levee
+                    && !sommaire)) {
+            return;
+        }
+
+        if (sommaire) {
+            // Aucune doublure, aucun chunk : cette épreuve fabrique un fichier zip et le lit. Elle
+            // n'a besoin d'aucun monde — c'est le seul banc du dépôt dans ce cas.
+            if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Sommaire.run(server);
+                step = Step.LAUNCHED;
+                server.halt(false);
+            }
             return;
         }
         if (!Conformance.running() && !Kitchen.running()

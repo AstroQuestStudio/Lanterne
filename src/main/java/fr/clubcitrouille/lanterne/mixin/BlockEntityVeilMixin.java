@@ -51,17 +51,45 @@ public abstract class BlockEntityVeilMixin {
     @Shadow
     public Vec3 cameraPos;
 
+    /**
+     * <h2>Ce mixin a fait échouer le démarrage du client, et le contrôleur ne l'avait pas vu</h2>
+     *
+     * <p>La 26.2 a inséré un {@code boolean} avant le {@code Frustum} : la méthode visée prend
+     * désormais cinq arguments. La cible portant sa <b>signature entière</b>, elle ne correspondait
+     * plus à rien, et Mixin refusait de s'appliquer — écran d'erreur au lancement, alors que tout
+     * compilait et que le serveur dédié démarrait sans broncher. Un serveur dédié ne charge aucun
+     * mixin client : rien ne pouvait le signaler de ce côté.
+     *
+     * <p>{@code tools/verifie_mixins.py} ne relevait alors que le <em>nom</em> d'une cible
+     * {@code method}, et {@code tryExtractRenderState} existe toujours. Il vérifie désormais la
+     * signature quand elle est donnée — c'est très exactement l'angle mort que son propre en-tête
+     * annonçait, et il aura fallu qu'il morde pour le fermer.
+     *
+     * <h2>Ce que le nouveau paramètre apprend, et qui vaut mieux qu'un simple raccommodage</h2>
+     *
+     * <p>{@code isGloballyRendered} désigne les blocs-entités que le jeu dessine <b>sans se soucier
+     * de la visibilité de leur section</b> : le rayon d'une balise, une passerelle de l'End. Ils sont
+     * conçus pour se voir à travers le terrain, de très loin.
+     *
+     * <p>Les voiler serait donc casser leur raison d'être — et le repère qu'un joueur a bâti pour
+     * retrouver sa base disparaîtrait dès qu'une colline s'interpose. On les laisse passer.
+     */
     @Inject(
             method = "tryExtractRenderState(Lnet/minecraft/world/level/block/entity/BlockEntity;F"
-                    + "Lnet/minecraft/client/renderer/feature/ModelFeatureRenderer$CrumblingOverlay;"
+                    + "Lnet/minecraft/client/renderer/feature/ModelFeatureRenderer$CrumblingOverlay;Z"
                     + "Lnet/minecraft/client/renderer/culling/Frustum;)"
                     + "Lnet/minecraft/client/renderer/blockentity/state/BlockEntityRenderState;",
             at = @At("HEAD"),
             cancellable = true)
     private <E extends BlockEntity, S extends BlockEntityRenderState> void lanterne$veil(
             E blockEntity, float partialTicks, ModelFeatureRenderer.CrumblingOverlay breakProgress,
-            Frustum frustum, CallbackInfoReturnable<S> callback) {
+            boolean globallyRendered, Frustum frustum, CallbackInfoReturnable<S> callback) {
         if (!Settings.shroud() || !Settings.veilBlockEntities()) {
+            return;
+        }
+        // Un rayon de balise se voit a travers le terrain par construction : le voiler reviendrait a
+        // supprimer le repere qu'un joueur a bati pour retrouver sa base. Voir la note ci-dessus.
+        if (globallyRendered) {
             return;
         }
         // Un bloc en cours de cassage porte sa fissure : la cacher ferait disparaître le retour

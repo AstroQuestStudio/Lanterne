@@ -488,11 +488,25 @@ Ponder, lui, expose trois chemins d'ouverture :
 3. **La navigation interne** : un index, un index d'étiquettes, un écran par
    étiquette.
 
-Lanterne n'a pas JEI, et n'en veut pas. Le premier chemin (infobulle + touche
-maintenue) est le plus élégant mais demande de se greffer sur le rendu des
-infobulles. Le deuxième est, dans notre cas, **plus simple que chez Ponder** :
-NeoForge 26.2 expose `RegisterClientCommandsEvent`, donc une commande purement
-cliente, sans paquet, sans serveur, sans permission.
+**Ce que Lanterne en fait.** Le premier chemin est le bon — c'est littéralement ce
+que l'utilisateur a demandé — et il s'est avéré **gratuit**, contre toute attente.
+Deux faits, lus et non supposés :
+
+- `ItemStack.getTooltipLines` déclenche `ItemTooltipEvent` (`ItemStack.java`
+  ligne 926 des sources 26.2, via `EventHooks.onItemTooltip`) ;
+- JEI construit ses infobulles par ce même appel — `getTooltipLines` figure dans
+  la table des constantes de `mezz.jei.library.render.ItemStackRenderer`, jar
+  `jei-26.2-neoforge-30.29.0.201`.
+
+Écouter l'évènement d'infobulle suffit donc à savoir quel objet est survolé, **y
+compris dans la liste de JEI**, sans greffe, sans dépendance facultative, sans
+ligne dans `build.gradle` — et cela couvrira EMI ou REI de la même façon. Voir
+`client/ponder/Hint.java`.
+
+Le deuxième chemin est gardé pour les cas où l'on n'a pas l'objet en main, et il
+est chez nous **plus simple que chez Ponder** : NeoForge 26.2 expose
+`RegisterClientCommandsEvent`, donc une commande purement cliente, sans paquet,
+sans serveur, sans permission.
 
 ---
 
@@ -569,7 +583,24 @@ Les trois choix qui en découlent sont écrits dans le javadoc de
    même chose qu'avancer, c'est-à-dire rien. C'est plus simple que Ponder *et*
    plus capable — là où sa barre n'accepte le clic que sur un repère, la nôtre
    accepte n'importe quel instant.
-3. **Pas de rotation de caméra.** Le rendu d'objet impose l'angle de l'inventaire
+3. **Le guide n'existe qu'en partie**, et ce n'est pas un choix. En 26.2,
+   `new ItemStack(ItemLike)` passe par `item.builtInRegistryHolder()` puis
+   `new PatchedDataComponentMap(item.components())` — `ItemStack.java` lignes
+   249-255 — et `Holder.Reference.components()` lève
+   `NullPointerException("Components not bound yet")` tant que le champ est nul
+   (`Holder.java` ligne 277). Ces composants sont liés par
+   `ReloadableServerResources`, c'est-à-dire **au chargement d'un monde**.
+
+   **On ne peut donc pas construire un `ItemStack` depuis le menu principal.**
+   C'est une rupture de la 26.2 qui n'apparaît dans aucune signature, et elle a
+   coûté un plantage : l'écran des réglages s'ouvre aussi hors partie, et le
+   bouton du guide y menait. Le catalogue est désormais **lié au monde chargé**,
+   vide hors partie, reconstruit quand le monde change — les composants viennent
+   d'un paquet de données, donc une scène bâtie dans un monde pourrait mentir
+   dans un autre — et sa construction est enveloppée : au pire le guide est vide,
+   jamais un écran rouge. Voir `Guide.all()`.
+
+4. **Pas de rotation de caméra.** Le rendu d'objet impose l'angle de l'inventaire
    (30° / 225°, la même famille axonométrique que le -35° / 55° de Ponder). On
    garde donc le déplacement et le zoom, qui sont continus et suffisent, et on
    perd la rotation. C'est le prix, il est écrit noir sur blanc, et il est bien
