@@ -662,6 +662,12 @@ public final class Settings {
      * que le joueur n'a pas demandé, pas un coût.
      */
     private static boolean reclame = true;
+    /** Le court-circuit des cellules de ciel. Voir {@code core.Ciel}. */
+    private static boolean ciel = true;
+    /** La memoisation de la recherche de biome. Voir {@code core.Climat}. */
+    private static boolean climat = true;
+    /** Le cache de paquet de chunk. Voir {@code core.Emballage}. */
+    private static boolean emballage = true;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -1248,6 +1254,21 @@ public final class Settings {
         return reclame;
     }
 
+    /** Le court-circuit des cellules de ciel. Voir {@code core.Ciel}. */
+    public static boolean ciel() {
+        return ciel;
+    }
+
+    /** La memoisation de la recherche de biome. Voir {@code core.Climat}. */
+    public static boolean climat() {
+        return climat;
+    }
+
+    /** Le cache de paquet de chunk. Voir {@code core.Emballage}. */
+    public static boolean emballage() {
+        return emballage;
+    }
+
     /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
@@ -1429,6 +1450,9 @@ public final class Settings {
         burin = wanted.contains("burin");
         ecluse = wanted.contains("ecluse");
         reclame = wanted.contains("reclame");
+        ciel = wanted.contains("ciel");
+        climat = wanted.contains("climat");
+        emballage = wanted.contains("emballage");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -1556,6 +1580,9 @@ public final class Settings {
         burin = Config.BURIN.get();
         ecluse = Config.ECLUSE.get();
         reclame = Config.RECLAME.get();
+        ciel = Config.CIEL.get();
+        climat = Config.CLIMAT.get();
+        emballage = Config.EMBALLAGE.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -1665,6 +1692,15 @@ public final class Settings {
         }
         if (reclame) {
             text.append("reclame ");
+        }
+        if (ciel) {
+            text.append("ciel ");
+        }
+        if (climat) {
+            text.append("climat ");
+        }
+        if (emballage) {
+            text.append("emballage ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

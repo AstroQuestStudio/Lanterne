@@ -74,6 +74,9 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue BURIN;
     public static final ModConfigSpec.BooleanValue ECLUSE;
     public static final ModConfigSpec.BooleanValue RECLAME;
+    public static final ModConfigSpec.BooleanValue CIEL;
+    public static final ModConfigSpec.BooleanValue CLIMAT;
+    public static final ModConfigSpec.BooleanValue EMBALLAGE;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -552,7 +555,48 @@ public final class Config {
                 "publier le chiffre.")
                 .define("ecluse", false);
 
-        RECLAME = BUILDER.comment(
+        CIEL = BUILDER.comment(
+                "LE CIEL : une cellule de terrain entierement vide n'est pas remplie bloc par bloc.",
+                "",
+                "Un chunk du surmonde fait 384 blocs de haut, soit 48 cellules de 8. La surface est",
+                "vers la cellule 17 : DEUX TIERS des cellules sont en plein ciel. Pour chacune, le jeu",
+                "fait 4x8x4 = 128 evaluations - interpolation, aquifere, regles de materiaux - pour",
+                "aboutir a de l'air, qui est jete.",
+                "",
+                "L'interpolation trilineaire est une combinaison CONVEXE des huit coins de la cellule.",
+                "Si les huit sont negatifs, tout l'interieur l'est : c'est un theoreme, pas une",
+                "heuristique. Combine au chemin rapide de l'aquifere (au-dessus de skipSamplingAboveY,",
+                "le resultat est rendu sans echantillonnage), la cellule est de l'air PARTOUT.",
+                "",
+                "Le terrain engendre est bit-identique. Un terrain plus rapide mais different serait",
+                "un monde casse : les structures ne tomberaient plus ou les cartes les annoncent.")
+                .define("ciel", true);
+        CLIMAT = BUILDER.comment(
+                "LE CLIMAT : la recherche de biome ne refait pas deux fois la meme descente d'arbre.",
+                "",
+                "L'etape des biomes pese 22,6 % du temps de generation sur un seul fil, et",
+                "Climate.RTree.search en est le coeur. C'est une fonction PURE : les memes six",
+                "parametres climatiques rendent toujours le meme biome. La memoiser est donc exacte",
+                "par construction.",
+                "",
+                "Ni Noisium ni FastNoise ne touchent a ce chemin. FastNoise declare l'intention",
+                "(OPTIMIZE_BIOME_TREE) mais ne l'implemente pas. Ce terrain est vierge.")
+                .define("climat", true);
+        EMBALLAGE = BUILDER.comment(
+                "L'EMBALLAGE : le paquet d'un chunk n'est pas reconstruit a chaque envoi.",
+                "",
+                "Mesure du banc du seuil, distance de vue 10, monde deja ecrit :",
+                "  arrivee a froid : 2197 ms cumulees (chunks a lire PUIS emballer)",
+                "  arrivee a chaud :  939 ms cumulees (chunks deja en memoire : emballage SEUL)",
+                "",
+                "43 % du cout d'une arrivee est donc de l'emballage pur, et il est repaye",
+                "INTEGRALEMENT a chaque connexion, chaque changement de dimension, chaque",
+                "aller-retour. Aucune pre-generation ne l'enleve.",
+                "",
+                "Le cache est invalide des qu'un bloc du chunk change : un paquet perime montrerait",
+                "au joueur un monde qui n'existe plus.")
+                .define("emballage", true);
+                RECLAME = BUILDER.comment(
                 "La RECLAME : retire les messages publicitaires que l'hebergeur injecte.",
                 "",
                 "Un hebergement gratuit se paie autrement : le demon ecrit de temps a autre une",
