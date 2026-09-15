@@ -80,6 +80,12 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue COLONNE;
     public static final ModConfigSpec.BooleanValue REMBLAI;
     public static final ModConfigSpec.BooleanValue FOULE;
+    public static final ModConfigSpec.IntValue TIDE_MIN_VIEW;
+    public static final ModConfigSpec.IntValue TIDE_MAX_VIEW;
+    public static final ModConfigSpec.IntValue TIDE_MIN_SIMULATION;
+    public static final ModConfigSpec.IntValue TIDE_MAX_SIMULATION;
+    public static final ModConfigSpec.IntValue TIDE_START_VIEW;
+    public static final ModConfigSpec.IntValue TIDE_START_SIMULATION;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -561,6 +567,54 @@ public final class Config {
                 "publier le chiffre.")
                 .define("ecluse", false);
 
+        TIDE_MIN_VIEW = BUILDER.comment(
+                "Distance de VUE minimale : la maree ne descend jamais en dessous.",
+                "",
+                "Sous 3, un joueur ne voit plus assez loin pour se deplacer sans que le monde",
+                "apparaisse devant lui. Si le serveur rame encore a ce plancher, ce n'est plus un",
+                "probleme de distance et la maree cesse d'agir - elle le dit dans le journal.")
+                .defineInRange("maree_vue_min", 3, 2, 32);
+        TIDE_MAX_VIEW = BUILDER.comment(
+                "Distance de VUE maximale : la maree ne monte jamais au-dessus.",
+                "",
+                "0 (defaut) : le plafond est ce que server.properties demande.",
+                "",
+                "Une valeur non nulle PRIME sur server.properties, dans les deux sens. C'est donc le",
+                "moyen d'autoriser la maree a depasser ce que le fichier du serveur annonce, quand",
+                "la machine le permet - ou de la brider en dessous sans toucher au fichier.")
+                .defineInRange("maree_vue_max", 0, 0, 32);
+        TIDE_MIN_SIMULATION = BUILDER.comment(
+                "Distance de SIMULATION minimale. Meme principe que maree_vue_min.",
+                "",
+                "Attention : la simulation decide ce qui VIT. Trop bas, les fermes s'arretent des",
+                "que le joueur s'eloigne un peu. C'est le reglage a ne pas descendre a la legere.")
+                .defineInRange("maree_simulation_min", 3, 2, 32);
+        TIDE_MAX_SIMULATION = BUILDER.comment(
+                "Distance de SIMULATION maximale. 0 : ce que server.properties demande.",
+                "",
+                "Meme regle que maree_vue_max - une valeur non nulle prime dans les deux sens.")
+                .defineInRange("maree_simulation_max", 0, 0, 32);
+        TIDE_START_VIEW = BUILDER.comment(
+                "Distance de VUE au demarrage. La maree monte ensuite si le tick le permet.",
+                "",
+                "La maree descendait depuis ce que server.properties demande. Elle part desormais",
+                "d'ici et MONTE, sans jamais depasser server.properties.",
+                "",
+                "Pourquoi partir d'en bas - mesure du banc du seuil, une arrivee de joueur :",
+                "  vue 10 : 21 x 21 = 441 chunks livres, 2197 ms de tick cumule",
+                "  vue  5 : 11 x 11 = 121 chunks             3,6 fois moins",
+                "",
+                "Un serveur qui demarre bas est fluide TOUT DE SUITE et gagne de l'horizon quand il",
+                "constate qu'il peut. L'inverse fait payer a tout le monde une distance que la",
+                "machine ne tenait pas.",
+                "",
+                "0 : ancien comportement, on demarre au plafond.")
+                .defineInRange("maree_depart_vue", 5, 0, 32);
+        TIDE_START_SIMULATION = BUILDER.comment(
+                "Distance de SIMULATION au demarrage. Meme principe que maree_depart_vue.",
+                "",
+                "0 : ancien comportement, on demarre au plafond.")
+                .defineInRange("maree_depart_simulation", 5, 0, 32);
         REMBLAI = BUILDER.comment(
                 "LE REMBLAI : poser ou casser beaucoup de blocs d'un coup.",
                 "",

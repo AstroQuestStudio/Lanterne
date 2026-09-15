@@ -92,11 +92,19 @@ public final class Tide {
      */
     private static final int GRACE_SECONDS = 90;
 
-    /** Distance de vue en dessous de laquelle on ne descend jamais. */
-    private static final int FLOOR_VIEW = 4;
+    /**
+     * Les quatre bornes, relues à chaque battement.
+     *
+     * <p>Relues et non retenues : une marée court pendant des heures, et l'administrateur qui
+     * s'aperçoit qu'elle monte trop haut doit pouvoir la brider sans redémarrer.
+     */
+    private static int floorView() {
+        return Config.TIDE_MIN_VIEW.get();
+    }
 
-    /** Distance de simulation en dessous de laquelle on ne descend jamais. */
-    private static final int FLOOR_SIMULATION = 3;
+    private static int floorSimulation() {
+        return Config.TIDE_MIN_SIMULATION.get();
+    }
 
     /** Les plafonds, relevés au démarrage : ce que l'administrateur a demandé. */
     private static int ceilingView = -1;
@@ -108,16 +116,76 @@ public final class Tide {
 
     private Tide() {}
 
-    /** Relève les plafonds. Appelé une fois, quand le serveur est prêt. */
+    /**
+     * Relève les plafonds, et pose le point de départ.
+     *
+     * <h2>Partir d'en bas plutôt que d'en haut</h2>
+     *
+     * <p>La marée descendait depuis ce que l'administrateur avait demandé. Elle part désormais du
+     * <b>départ</b> réglé, et <em>monte</em> — sans jamais dépasser le plafond, qui reste ce que
+     * l'administrateur a demandé.
+     *
+     * <p>L'inversion n'est pas cosmétique, et le banc du seuil dit pourquoi. À distance de vue dix,
+     * un joueur qui arrive fait livrer <b>441 chunks</b>, mesurés à 2197 ms de tick cumulé. À cinq,
+     * il en fait livrer <b>121</b> :
+     *
+     * <pre>
+     * vue 10 : 21 x 21 = 441 chunks
+     * vue  5 : 11 x 11 = 121 chunks     3,6 fois moins
+     * </pre>
+     *
+     * <p>Un serveur qui démarre en bas est donc fluide <b>tout de suite</b>, et il gagne de
+     * l'horizon quand il constate qu'il peut se le permettre. L'inverse — démarrer haut et
+     * s'effondrer sous la charge — fait payer à tout le monde une distance que la machine ne tenait
+     * pas.
+     *
+     * <p>Mettre le départ à zéro rend l'ancien comportement : on commence au plafond.
+     */
     public static void anchor(MinecraftServer server) {
         ceilingView = server.getPlayerList().getViewDistance();
         ceilingSimulation = server.getPlayerList().getSimulationDistance();
         sinceLastMove = 0;
         grace = GRACE_SECONDS;
         adjustments = 0L;
-        Lanterne.LOG.info("[MARÉE] Plafonds relevés — vue {}, simulation {}. La marée ne montera "
-                + "jamais au-dessus, et ne touchera à rien pendant {} s.",
-                ceilingView, ceilingSimulation, GRACE_SECONDS);
+
+        // Le depart ne peut pas depasser le plafond : un administrateur qui demande une distance de
+        // quatre a decide quelque chose, et ce module n'a pas a la lui remonter.
+        // Un plafond explicite PRIME sur server.properties, dans les deux sens : c'est ce qui
+        // permet a la maree de monter plus haut que le fichier du serveur quand la machine le
+        // porte, ou de rester en dessous sans qu'on ait a toucher au fichier.
+        int wantedView = Config.TIDE_MAX_VIEW.get();
+        if (wantedView > 0) {
+            ceilingView = wantedView;
+        }
+        int wantedSimulation = Config.TIDE_MAX_SIMULATION.get();
+        if (wantedSimulation > 0) {
+            ceilingSimulation = wantedSimulation;
+        }
+
+        int startView = Config.TIDE_START_VIEW.get();
+        int startSimulation = Config.TIDE_START_SIMULATION.get();
+        boolean lowered = false;
+        if (startView > 0 && startView < ceilingView) {
+            server.getPlayerList().setViewDistance(startView);
+            lowered = true;
+        }
+        if (startSimulation > 0 && startSimulation < ceilingSimulation) {
+            server.getPlayerList().setSimulationDistance(startSimulation);
+            lowered = true;
+        }
+
+        if (lowered) {
+            Lanterne.LOG.info("[MARÉE] Départ en vue {} et simulation {} — plafonds {} et {}. Elle "
+                    + "montera d'elle-même si le tick le permet, et ne dépassera jamais les "
+                    + "plafonds. Rien ne bouge pendant {} s.",
+                    server.getPlayerList().getViewDistance(),
+                    server.getPlayerList().getSimulationDistance(),
+                    ceilingView, ceilingSimulation, GRACE_SECONDS);
+        } else {
+            Lanterne.LOG.info("[MARÉE] Plafonds relevés — vue {}, simulation {}. La marée ne montera "
+                    + "jamais au-dessus, et ne touchera à rien pendant {} s.",
+                    ceilingView, ceilingSimulation, GRACE_SECONDS);
+        }
     }
 
     /**
@@ -171,13 +239,13 @@ public final class Tide {
     private static boolean lower(MinecraftServer server) {
         var players = server.getPlayerList();
         int simulation = players.getSimulationDistance();
-        if (simulation > FLOOR_SIMULATION) {
+        if (simulation > floorSimulation()) {
             players.setSimulationDistance(simulation - 1);
             announce("descend", "simulation", simulation, simulation - 1, server);
             return true;
         }
         int view = players.getViewDistance();
-        if (view > FLOOR_VIEW) {
+        if (view > floorView()) {
             players.setViewDistance(view - 1);
             announce("descend", "vue", view, view - 1, server);
             return true;
