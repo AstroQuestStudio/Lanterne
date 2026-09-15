@@ -105,6 +105,7 @@ public final class SelfTest {
      */
     private static boolean cheptel;
     private static boolean seuil;
+    private static int pregenRadius;
 
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
     private static boolean swarm;
@@ -421,6 +422,26 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve du cheptel armée.");
             return;
         }
+        // Une pre-generation entiere, tous les chunks au MEME reglage.
+        //
+        // Le banc de carriere apparie un chunk sur deux dans la meme grille : deux chunks « mod
+        // actif » n'y sont donc jamais adjacents, et un module qui exploite le VOISINAGE - le cache
+        // de colonnes - n'a personne a qui servir. Ce protocole-ci ne peut pas le neutraliser, et
+        // c'est en outre le cas d'usage reel : pre-generer une carte.
+        String radius = System.getenv("LANTERNE_PREGEN");
+        if (radius != null && !radius.isBlank()) {
+            try {
+                pregenRadius = Integer.parseInt(radius.trim());
+            } catch (NumberFormatException malformed) {
+                pregenRadius = 0;
+            }
+            if (pregenRadius > 0) {
+                step = Step.SETTLING;
+                waiting = SETTLE;
+                Lanterne.LOG.info("Épreuve de pré-génération armée, rayon {}.", pregenRadius);
+                return;
+            }
+        }
         if ("1".equals(System.getenv("LANTERNE_SEUIL"))) {
             seuil = true;
             step = Step.SETTLING;
@@ -456,7 +477,7 @@ public final class SelfTest {
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
                     && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel
-                    && !seuil)) {
+                    && !seuil && pregenRadius <= 0)) {
             return;
         }
 
@@ -509,6 +530,28 @@ public final class SelfTest {
             } else if (step == Step.LOADING) {
                 fr.clubcitrouille.lanterne.lab.Cheptel.begin(server);
                 step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (pregenRadius > 0) {
+            if (fr.clubcitrouille.lanterne.lab.Pregen.running()) {
+                return; // Pregen.tick est deja appele par le tick du serveur
+            }
+            if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Pregen.begin(server.overworld(), pregenRadius);
+                step = Step.LAUNCHED;
+            } else if (step == Step.LAUNCHED) {
+                Lanterne.LOG.info("[PRÉGÉN] modules actifs pendant cette mesure : {}",
+                        fr.clubcitrouille.lanterne.core.Settings.describe());
+                Lanterne.LOG.info("[PRÉGÉN] Colonne : {}",
+                        fr.clubcitrouille.lanterne.core.Colonne.summary());
+                Lanterne.LOG.info(String.format(java.util.Locale.ROOT,
+                        "[PRÉGÉN] Ciel : %d cellule(s) examinée(s), %d vidée(s) (%.1f %%)",
+                        fr.clubcitrouille.lanterne.core.Ciel.examined(),
+                        fr.clubcitrouille.lanterne.core.Ciel.emptied(),
+                        fr.clubcitrouille.lanterne.core.Ciel.rate()));
+                server.halt(false);
             }
             return;
         }

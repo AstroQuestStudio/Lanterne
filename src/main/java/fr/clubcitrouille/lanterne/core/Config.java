@@ -77,6 +77,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue CIEL;
     public static final ModConfigSpec.BooleanValue CLIMAT;
     public static final ModConfigSpec.BooleanValue EMBALLAGE;
+    public static final ModConfigSpec.BooleanValue COLONNE;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -92,6 +93,9 @@ public final class Config {
 
     public static final ModConfigSpec.BooleanValue PREGEN_PAUSE_ON_JOIN;
     public static final ModConfigSpec.IntValue PREGEN_BUDGET_MS;
+    public static final ModConfigSpec.IntValue PREGEN_IN_FLIGHT;
+    public static final ModConfigSpec.BooleanValue PREGEN_SERPENTINE;
+    public static final ModConfigSpec.BooleanValue PREGEN_ASYNC;
 
     public static final ModConfigSpec SPEC;
 
@@ -555,6 +559,30 @@ public final class Config {
                 "publier le chiffre.")
                 .define("ecluse", false);
 
+        COLONNE = BUILDER.comment(
+                "LA COLONNE : deux chunks voisins ne calculent plus deux fois le meme bruit.",
+                "",
+                "Le bruit du terrain n'est pas evalue a chaque bloc : il l'est aux COINS des",
+                "cellules, puis interpole. Cela fait une grille de 5 x 5 colonnes par chunk. A",
+                "l'interieur d'un chunk, le jeu reutilise correctement. Entre deux chunks, non :",
+                "",
+                "  chunk (0,0) calcule les colonnes cellX = 0 1 2 3 4",
+                "  chunk (1,0) calcule les colonnes cellX =         4 5 6 7 8",
+                "",
+                "La colonne 4 est calculee deux fois, et les coins quatre fois. Pour N x N chunks,",
+                "le jeu calcule 25 N^2 colonnes la ou il n'en existe que (4N+1)^2, soit 16 N^2.",
+                "25/16 = 1,5625 : 36 % du bruit interpole est recalcule a l'identique.",
+                "",
+                "C'est exact par nature, pas par approximation : une fonction de densite est PURE,",
+                "la meme position rend toujours la meme valeur. Rendre une valeur deja calculee,",
+                "c'est rendre le meme double, au bit pres.",
+                "",
+                "Ne rend rien si les chunks voisins ne sont pas engendres a peu pres en meme temps.",
+                "C'est le cas d'une pre-generation, et d'un joueur qui explore.",
+                "",
+                "Environ 6 Mo de memoire pour 4096 colonnes - a comparer aux 18 Mo qu'alloue la",
+                "generation d'UN SEUL chunk.")
+                .define("colonne", true);
         CIEL = BUILDER.comment(
                 "LE CIEL : une cellule de terrain entierement vide n'est pas remplie bloc par bloc.",
                 "",
@@ -572,15 +600,33 @@ public final class Config {
                 "un monde casse : les structures ne tomberaient plus ou les cartes les annoncent.")
                 .define("ciel", true);
         CLIMAT = BUILDER.comment(
-                "LE CLIMAT : la recherche de biome ne refait pas deux fois la meme descente d'arbre.",
+                "LE CLIMAT : la descente de l'arbre des biomes, sans ses sauts de pointeur.",
                 "",
                 "L'etape des biomes pese 22,6 % du temps de generation sur un seul fil, et",
-                "Climate.RTree.search en est le coeur. C'est une fonction PURE : les memes six",
-                "parametres climatiques rendent toujours le meme biome. La memoiser est donc exacte",
-                "par construction.",
+                "Climate.RTree.search en est le coeur. La vraie boucle chaude est Node.distance :",
+                "la machine virtuelle incorpore distance dans search, d'ou le nom que rend",
+                "l'echantillonneur.",
                 "",
-                "Ni Noisium ni FastNoise ne touchent a ce chemin. FastNoise declare l'intention",
-                "(OPTIMIZE_BIOME_TREE) mais ne l'implemente pas. Ce terrain est vierge.")
+                "Son defaut n'est pas arithmetique, il est MEMORIEL. Un noeud porte ses bornes dans",
+                "un Parameter[7] - un tableau d'objets, donc sept sauts de pointeur par noeud visite",
+                "  vanilla : 272 octets en 8 objets",
+                "  ici     : 128 octets en 1 objet, deux lignes de cache",
+                "Les quatorze bornes sont aplaties une fois, a la construction de l'arbre.",
+                "",
+                "Aucune operation arithmetique, aucun ordre de parcours, aucune borne ne change.",
+                "",
+                "CE QUI A ETE ESSAYE ET ECARTE, pour qu'on ne le cherche pas deux fois :",
+                "  - Memoiser search : ELLE N'EST PAS PURE. Elle passe le dernier resultat du fil",
+                "    comme borne initiale, et l'elagage est strict - a egalite de distance, c'est la",
+                "    feuille heritee de l'appel precedent qui est rendue.",
+                "  - Et la cle ne se repeterait jamais : depth varie de 312,5 unites quantifiees par",
+                "    pas de quart. Un chunk produit 1536 cles distinctes. Taux de succes : zero.",
+                "  - Hisser le ThreadLocal hors de la boucle : 3072 operations par chunk, soit 15 us",
+                "    contre 25,1 ms pour l'etape. Cent fois sous le seuil de derive du laboratoire.",
+                "",
+                "PLAFOND : la descente d'arbre pese 4,2 % de la generation. Meme rendue gratuite",
+                "elle ne rendrait pas plus. Le banc de debit ne verra pas ce module ; l'instrument",
+                "est LANTERNE_FILON=1, poste BIOMES.")
                 .define("climat", true);
         EMBALLAGE = BUILDER.comment(
                 "L'EMBALLAGE : le paquet d'un chunk n'est pas reconstruit a chaque envoi.",
@@ -740,10 +786,75 @@ public final class Config {
                 "avancant vite sur un serveur vide. Baisser si vous generez pendant que des joueurs",
                 "jouent ET que pause_a_la_connexion est a false.",
                 "",
-                "Le budget est relu a CHAQUE chunk soumis, jamais une fois par tick : une",
-                "soumission peut declencher une generation synchrone et depasser largement ce qu'on",
-                "aurait estime en debut de tick.")
+                "Le budget est relu a CHAQUE chunk soumis, jamais une fois par tick.",
+                "",
+                "HISTOIRE DE CE REGLAGE, parce qu'elle explique pourquoi il n'a longtemps rien fait :",
+                "la soumission passait par getChunkFuture, dont le nom ment. Appelee depuis un tick,",
+                "elle BLOQUE jusqu'a ce que le chunk soit entierement fabrique. Une seule soumission",
+                "coutait donc le prix entier d'un chunk - environ 89 ms sur la machine visee, soit",
+                "pres du double d'un tick. Regler ce nombre de 1 a 45 ne changeait rigoureusement",
+                "rien : la boucle sortait toujours apres exactement un chunk.",
+                "",
+                "Le debit mesure alors, 11,2 chunks par seconde, est exactement l'inverse d'un tick",
+                "ainsi allonge. C'etait la signature du blocage, pas la vitesse de la machine.",
+                "",
+                "Depuis que la soumission est asynchrone, ce reglage borne ce qu'il annonce.")
                 .defineInRange("budget_ms_par_tick", 30, 1, 45);
+        PREGEN_IN_FLIGHT = BUILDER.comment(
+                "Combien de chunks la pre-generation demande sans attendre les precedents.",
+                "",
+                "Sur un coeur unique, en demander plus ne peut PAS generer plus vite : le calcul",
+                "est le meme et il n'y a qu'un coeur pour le faire. Le seul interet est de ne",
+                "jamais laisser le coeur inoccupe entre deux etapes d'un chunk - des trous de",
+                "quelques dizaines de microsecondes, face a des dizaines de millisecondes de calcul",
+                "par chunk. Deux ou trois suffisent donc deja a les boucher.",
+                "",
+                "Au-dela, on ne paie que : chaque chunk en vol retient le cone de voisins que son",
+                "statut FULL exige, chaque soumission recopie la table des chunks residents, et il",
+                "a ete mesure 18 Mo alloues par chunk sur un tas de 4 Go.",
+                "",
+                "8 par defaut. Monter si la mesure montre un coeur qui s'ennuie ; descendre si la",
+                "memoire serre. Ce reglage n'existait pas avant, et l'ancienne constante de 24 ne",
+                "servait a rien : la soumission etait bloquante, il n'y a jamais eu qu'un chunk en",
+                "vol a la fois.")
+                .defineInRange("chunks_en_vol", 8, 1, 64);
+        PREGEN_SERPENTINE = BUILDER.comment(
+                "Parcourir le carre ligne par ligne plutot qu'en anneaux autour de l'origine.",
+                "",
+                "Un chunk au statut FULL exige de ses voisins des statuts intermediaires. Les deux",
+                "parcours enchainent des positions voisines, mais pas avec le meme FRONT : pour un",
+                "carre de cote S, le serpentin avance une ligne (S chunks), la spirale un anneau",
+                "(4S). A couverture egale la spirale garde quatre fois plus de voisinage a portee,",
+                "donc en relit davantage depuis le disque.",
+                "",
+                "Ce que le serpentin perd, et c'est serieux : arrete a mi-course il a fabrique une",
+                "bande et non un disque autour du point d'apparition. La spirale reste donc le",
+                "defaut. Mettre a true pour une pre-generation qu'on sait mener a son terme d'un",
+                "coup, sur un monde neuf.",
+                "",
+                "Ni l'un ni l'autre ne change le terrain : l'ordre des demandes n'entre dans aucune",
+                "graine. Le reglage est lu AU LANCEMENT et fige pour toute la duree - les deux",
+                "parcours n'ont pas le meme curseur.")
+                .define("parcours_en_serpentin", false);
+        PREGEN_ASYNC = BUILDER.comment(
+                "Demander les chunks sans bloquer le fil principal.",
+                "",
+                "Laisser a true. Ce reglage n'existe que pour pouvoir mesurer l'ancienne voie plutot",
+                "que d'avoir a croire sur parole ce qui suit.",
+                "",
+                "getChunkFuture() ment sur son nom : appelee depuis le fil principal - et un",
+                "gestionnaire de tick l'est toujours - elle ne rend la main qu'une fois le chunk",
+                "entierement fabrique. La pre-generation etait donc strictement serielle, le budget",
+                "par tick etait depasse d'un chunk entier a chaque fois (89 ms mesurees contre 30",
+                "demandees), et le serveur restait en retard en permanence. Or c'est le retard qui",
+                "coute le plus cher : tant que le tick deborde, le jeu refuse de decharger et",
+                "d'ecrire les chunks finis, et il en accumule des milliers - que chaque nouvelle",
+                "soumission repaie ensuite en recopiant la table.",
+                "",
+                "A true, on passe par la voie asynchrone que le jeu utilise lui-meme. Le terrain",
+                "produit est identique : les deux chemins finissent sur le meme appel de generation",
+                "et sur le meme niveau de ticket.")
+                .define("soumission_asynchrone", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

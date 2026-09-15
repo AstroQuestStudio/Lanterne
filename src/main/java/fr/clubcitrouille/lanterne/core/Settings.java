@@ -668,6 +668,8 @@ public final class Settings {
     private static boolean climat = true;
     /** Le cache de paquet de chunk. Voir {@code core.Emballage}. */
     private static boolean emballage = true;
+    /** Le cache de colonnes de bruit. Voir {@code core.Colonne}. */
+    private static boolean colonne = true;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -1269,6 +1271,11 @@ public final class Settings {
         return emballage;
     }
 
+    /** Le cache de colonnes de bruit. Voir {@code core.Colonne}. */
+    public static boolean colonne() {
+        return colonne;
+    }
+
     /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
@@ -1453,6 +1460,7 @@ public final class Settings {
         ciel = wanted.contains("ciel");
         climat = wanted.contains("climat");
         emballage = wanted.contains("emballage");
+        colonne = wanted.contains("colonne");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -1583,6 +1591,7 @@ public final class Settings {
         ciel = Config.CIEL.get();
         climat = Config.CLIMAT.get();
         emballage = Config.EMBALLAGE.get();
+        colonne = Config.COLONNE.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -1701,6 +1710,9 @@ public final class Settings {
         }
         if (emballage) {
             text.append("emballage ");
+        }
+        if (colonne) {
+            text.append("colonne ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

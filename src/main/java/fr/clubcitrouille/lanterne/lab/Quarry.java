@@ -598,6 +598,24 @@ public final class Quarry {
                 fr.clubcitrouille.lanterne.core.Cadastre.describe());
         Lanterne.LOG.info("[CARRIÈRE] Calque : {}",
                 fr.clubcitrouille.lanterne.core.Calque.describe());
+        // Un contrôle qui ne se publie pas ne sert à rien : ces trois lignes existent parce que la
+        // première exécution des audits de la colonne et du ciel n'a rien affiché du tout, et qu'un
+        // silence se lit trop facilement comme une réussite.
+        Lanterne.LOG.info("[CARRIÈRE] Colonne : {}",
+                fr.clubcitrouille.lanterne.core.Colonne.summary());
+        Lanterne.LOG.info(String.format(java.util.Locale.ROOT,
+                "[CARRIÈRE] Ciel : %d cellule(s) examinée(s), %d vidée(s) (%.1f %%) · %d position(s) "
+                + "recontrôlée(s), %d faute(s)",
+                fr.clubcitrouille.lanterne.core.Ciel.examined(),
+                fr.clubcitrouille.lanterne.core.Ciel.emptied(),
+                fr.clubcitrouille.lanterne.core.Ciel.rate(),
+                fr.clubcitrouille.lanterne.core.Ciel.checked(),
+                fr.clubcitrouille.lanterne.core.Ciel.faults()));
+        if (fr.clubcitrouille.lanterne.core.Colonne.broken()
+                || fr.clubcitrouille.lanterne.core.Ciel.broken()) {
+            Lanterne.LOG.error("[CARRIÈRE] UN CONTRÔLE A ÉCHOUÉ — ne pas publier ce jar. Le terrain "
+                    + "engendré n'est pas celui de vanilla.");
+        }
 
         Lanterne.LOG.info(
                 "[CARRIÈRE] VERDICT génération : {} — chunks appariés dans la MÊME grille, un sur deux "
