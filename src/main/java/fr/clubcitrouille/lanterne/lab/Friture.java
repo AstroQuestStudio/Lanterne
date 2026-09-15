@@ -457,10 +457,24 @@ public final class Friture {
      * comprime l'écart entre le début et la fin. Elle prend alors la place unique du rattrapage. On
      * casse ensuite la seconde <b>dans les règles</b>, et l'on regarde si elle tombe.
      */
+    /**
+     * Manche 3, première moitié : deux refus d'affilée, et la place unique qui décide.
+     *
+     * <h2>Pourquoi la version précédente ne prouvait rien</h2>
+     *
+     * <p>Elle refusait la première bûche, puis cassait la seconde <b>dans les règles</b>. Or une
+     * case cassée dans les règles ne consulte jamais le rattrapage : elle franchit les sept
+     * dixièmes et tombe sur-le-champ. La manche réussissait donc <em>aussi</em> avec le sabotage —
+     * elle mesurait le chemin normal en croyant mesurer le filet. C'est la faute que ce dépôt
+     * appelle « la zone franche », transposée à une place de rattrapage.
+     *
+     * <p>La place ne compte que lorsque la seconde case est <b>refusée elle aussi</b> — et c'est ce
+     * qui arrive sur une mauvaise ligne, où les refus viennent en série. On refuse donc les deux, et
+     * l'on regarde laquelle le serveur finit par abattre tout seul.
+     */
     private static void judgeChain(ServerLevel level, ServerPlayer actor) {
-        // La première : on abandonne le cassage en cours et l'on repart, pour que le compteur du
-        // serveur reparte de zéro. Sa fin arrive donc aussitôt après, très en deçà du seuil : c'est
-        // un refus, et il est provoqué exactement comme la gigue le provoque quand elle comprime
+        // Premier refus : on repart de zéro et l'on conclut aussitôt. Le serveur ne voit qu'un
+        // tick écoulé, très en deçà du seuil — exactement ce que fait la gigue quand elle comprime
         // l'écart entre le début et la fin.
         push(actor, log, ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK);
         push(actor, log, ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK);
@@ -473,54 +487,55 @@ public final class Friture {
             return;
         }
 
-        // Et maintenant la seconde, DANS LES RÈGLES. Elle doit être tenue pendant de vrais ticks de
-        // serveur : c'est le point sur lequel la première version de ce banc s'est trompée. Elle
-        // appelait « gameMode.tick() » trois cents fois dans le même tour de boucle, ce qui ne fait
-        // pas passer le temps — et avec le minage compté à l'horloge (MiningMixin), trois cents
-        // tours dans la même milliseconde ne valent RIEN. La manche échouait alors pour une raison
-        // d'horloge en annonçant une raison de rattrapage : le pire genre de faux.
+        // Second refus, sur l'autre case. C'est ici que tout se joue : vanilla trouve sa place déjà
+        // prise et ne met RIEN dedans — la case n'est pas différée, elle est perdue.
         push(actor, second, ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK);
-        held = 0;
-        chaining = true;
-        Lanterne.LOG.info("[FRITURE] Manche {} · première bûche refusée, place du rattrapage prise. "
-                + "On casse maintenant la seconde dans les règles, {} ticks durant.",
-                round + 1, clientTicks);
-    }
-
-    /** La seconde bûche de la manche d'enchaînement, jugée après de vrais ticks de serveur. */
-    private static void judgeChainSecond(ServerLevel level, ServerPlayer actor) {
-        if (actor == null) {
-            anyFailure = true;
-            note("ÉPREUVE INVALIDE : la doublure a quitté la scène pendant l'enchaînement.");
-            return;
-        }
-        float serverProgress = part * (held + 1);
-        if (serverProgress < SERVER_THRESHOLD) {
-            anyFailure = true;
-            note(String.format(Locale.ROOT,
-                    "ÉPREUVE INVALIDE : la seconde bûche n'a accumulé que %.2f de progression, sous "
-                    + "le seuil de %.2f. Son refus viendrait de l'horloge et non du rattrapage.",
-                    serverProgress, SERVER_THRESHOLD));
-            return;
-        }
-
         push(actor, second, ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK);
         if (level.getBlockState(second).isAir()) {
+            anyFailure = true;
+            note("ÉPREUVE INVALIDE : la seconde bûche est tombée au geste alors qu'on voulait la "
+                    + "faire refuser elle aussi. Sans second refus, le rattrapage n'est jamais "
+                    + "consulté et la manche mesure le chemin normal.");
+            return;
+        }
+
+        held = 0;
+        chaining = true;
+        Lanterne.LOG.info("[FRITURE] Manche {} · les DEUX bûches ont été refusées. On laisse "
+                + "maintenant le serveur travailler {} ticks : son rattrapage abattra celle qu'il a "
+                + "gardée, et l'autre restera debout pour toujours. Places rendues jusqu'ici : {}.",
+                round + 1, clientTicks, Burin.handovers());
+    }
+
+    /**
+     * Manche 3, seconde moitié : laquelle des deux le serveur a-t-il abattue ?
+     *
+     * <p>Aucune action n'est poussée ici. On regarde seulement ce que le serveur a fait tout seul,
+     * ce qui est la seule façon d'observer le rattrapage : il ne s'exprime que dans son {@code
+     * tick()}, jamais en réponse à un paquet.
+     */
+    private static void judgeChainSecond(ServerLevel level, ServerPlayer actor) {
+        boolean firstGone = level.getBlockState(log).isAir();
+        boolean secondGone = level.getBlockState(second).isAir();
+
+        if (secondGone) {
             note(String.format(Locale.ROOT,
-                    "CONFORME : après un refus sur la première bûche, la SECONDE tombe quand même. "
-                    + "La place du rattrapage a changé de main %d fois — elle appartient à la case "
-                    + "sur laquelle le joueur travaille, et non à celle qu'il a quittée.",
-                    Burin.handovers()));
+                    "CONFORME : les deux bûches ont été refusées, et c'est la DERNIÈRE — celle sur "
+                    + "laquelle le joueur travaillait — que le serveur a fini par abattre. La place "
+                    + "du rattrapage a changé de main %d fois. La première est restée debout, et "
+                    + "c'est voulu : le joueur l'avait quittée, et vanilla l'aurait fait tomber dans "
+                    + "son dos.", Burin.handovers()));
             return;
         }
         anyFailure = true;
-        note("NON CONFORME : la seconde bûche TIENT ENCORE, alors qu'elle a été cassée dans les "
-                + "règles. Le refus sur la première a pris la place unique du rattrapage — "
-                + "« if (!this.hasDelayedDestroy) » — et la seconde n'y a plus droit : elle n'est "
-                + "pas différée, elle est PERDUE. Et le tick du serveur passe d'abord par la case "
-                + "retenue, donc la case en cours n'avance même plus à l'écran. C'est très "
-                + "exactement « ça veut pas TOUT casser » : ce n'est pas un bloc qui résiste, c'est "
-                + "le premier refus qui condamne ceux d'après.");
+        note(String.format(Locale.ROOT,
+                "NON CONFORME : la seconde bûche est TOUJOURS debout, et le rattrapage a servi à "
+                + "l'autre (tombée : %s). Le premier refus avait pris la place unique — "
+                + "« if (!this.hasDelayedDestroy) » — et le second n'y a plus eu droit : il n'est "
+                + "pas différé, il est PERDU. Le joueur voit donc tomber la case qu'il a quittée, "
+                + "et rester debout celle qu'il minait. C'est très exactement « ça veut pas TOUT "
+                + "casser » : ce n'est pas un bloc qui résiste, c'est le premier refus qui condamne "
+                + "ceux d'après.", firstGone ? "oui" : "non"));
     }
 
     private static void restore(ServerPlayer actor) {
