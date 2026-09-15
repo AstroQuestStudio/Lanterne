@@ -1,0 +1,28 @@
+{
+    "passes": [
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "lanterne:post/aa_edge",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "lanterne:scene",
+                    "bilinear": false
+                }
+            ],
+            "output": "lanterne:aa"
+        },
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "lanterne:post/fsr_easu",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "lanterne:aa",
+                    "bilinear": false
+                }
+            ],
+            "output": "minecraft:main"
+        }
+    ]
+}

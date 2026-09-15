@@ -72,6 +72,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue DECAY_DELAY;
     public static final ModConfigSpec.IntValue NEAR_RADIUS;
     public static final ModConfigSpec.BooleanValue MINING;
+    public static final ModConfigSpec.BooleanValue BURIN;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -493,6 +494,22 @@ public final class Config {
                 "Ce n'est PAS un assouplissement du seuil : les 0,7 restent, et la reference reste",
                 "l'horloge du serveur. On corrige une unite de mesure, pas une tolerance.")
                 .define("minage_horloge_reelle", true);
+        BURIN = BUILDER.comment(
+                "Cassage robuste a une mauvaise connexion.",
+                "CORRIGE DEUX REFUS DE VANILLA que le reseau provoque, et qui rendent le bloc au",
+                "client (le « bloc fantome ») :",
+                "1. La portee du bras est jugee sur la position que le SERVEUR croit au joueur, qui",
+                "   a l'age du dernier paquet de mouvement recu. A 400 ms d'aller-retour, un joueur",
+                "   qui marche est 1,1 bloc en arriere de la ou il se voit - au-dela de la marge",
+                "   d'un bloc de vanilla. L'action est alors jetee EN SILENCE.",
+                "2. Le rattrapage (la « destruction differee ») n'a qu'UNE place, et son tick passe",
+                "   avant celui du cassage en cours. Un seul refus, et les blocs suivants n'ont plus",
+                "   de filet : c'est « ca veut pas TOUT casser ».",
+                "Ce n'est PAS un assouplissement du seuil de 0,7, et la marge n'est JAMAIS elargie",
+                "sur la foi d'un symptome - seule la latence mesuree par le serveur peut l'ouvrir,",
+                "elle est plafonnee a 2 blocs, et elle revient au chiffre de vanilla des que la",
+                "ligne redevient bonne. Casser a distance reste refuse.")
+                .define("cassage_robuste_reseau", true);
         RATIONING = BUILDER.comment("Rationnement : reagir pendant le tick, et non au suivant.")
                 .define("ration", true);
         SAVE = BUILDER.comment(

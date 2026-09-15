@@ -19,6 +19,7 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import fr.clubcitrouille.lanterne.client.upscale.Pivot;
+import fr.clubcitrouille.lanterne.client.upscale.Rival;
 import fr.clubcitrouille.lanterne.client.upscale.Upscale;
 import fr.clubcitrouille.lanterne.core.ClientConfig;
 import fr.clubcitrouille.lanterne.core.Config;
@@ -256,14 +257,29 @@ public final class Dials extends Screen {
         image.add(Dial.cycle("Upscaling", Dials::scaleLabel,
                 () -> Upscale.broken() ? FAINT : Upscale.active() ? AMBER : DIM,
                 Dials::cycleScale,
-                "Le monde est rendu plus petit, puis remonté à la taille de l'écran. L'interface"
-                        + " reste native. Procédé actuel : SPATIAL, d'après FSR 1.0 d'AMD.",
-                "Le gain vient du NOMBRE DE PIXELS RENDUS, pas du remonteur : à 67 % par dimension"
-                        + " il reste 45 % des pixels, donc 55 % de travail en moins. Sur une carte"
-                        + " NVIDIA, FSR donne donc quasiment les mêmes images/s que DLSS ; ce qui"
-                        + " diffère un peu, c'est la tenue des fins détails en mouvement.",
-                "Effet immédiat. Se juge à l'œil, pas au compteur : la netteté du monde baisse avec"
-                        + " le facteur."));
+                "Le monde est rendu plus petit, puis remonté à la taille de l'écran ; l'interface"
+                        + " reste native. Procédé : SPATIAL, d'après FSR 1.0 d'AMD.",
+                "Un pack de SHADERS NE DONNE PAS d'images par seconde : il en COÛTE. C'est le prix"
+                        + " de la lumière, des ombres et de l'eau. Ce réglage est ce qui les rend"
+                        + " jouables — on économise 55 % des pixels à 67 % par dimension, et on"
+                        + " dépense cette économie en shaders.",
+                "Le gain vient du NOMBRE DE PIXELS RENDUS, pas du remonteur : sur une carte NVIDIA,"
+                        + " FSR donne donc quasiment les mêmes images/s que DLSS ; seule la tenue"
+                        + " des fins détails en mouvement diffère un peu. Effet immédiat, et se"
+                        + " juge à l'œil : la netteté baisse avec le facteur."));
+        image.add(Dial.cycle("Anticrénelage", () -> Upscale.antialias() ? "actif" : "coupé",
+                () -> !Upscale.active() ? FAINT : Upscale.antialias() ? ON : OFF,
+                Dials::toggleAntialias,
+                "Lisse les contours AVANT la remontée d'échelle. C'est ce qui empêche de « voir les"
+                        + " pixels ».",
+                "AMD en fait une CONDITION d'emploi de FSR : « Image should already be well"
+                        + " anti-aliased ». Minecraft n'anticrénèle rien, donc sans cette passe EASU"
+                        + " reçoit des marches d'escalier et les AGRANDIT au lieu de les lisser —"
+                        + " puis la netteté ci-dessous les raffermit. Le défaut se voit surtout"
+                        + " sous 67 % (Équilibré et en dessous).",
+                "Effet immédiat. Prix : une passe de plus, mais à la résolution RÉDUITE — donc sur"
+                        + " 44 % des pixels au préréglage Qualité. À couper seulement pour"
+                        + " comparer."));
         image.add(Dial.cycle("Netteté", () -> Upscale.edge().label(),
                 () -> Upscale.active() ? AMBER : FAINT,
                 Dials::cycleEdge,
@@ -463,6 +479,13 @@ public final class Dials extends Screen {
                 "CORRIGE UN DÉFAUT DE VANILLA : à 15 TPS, le client accumule 20 unités là où le"
                         + " serveur en compte 15, et le bloc revient. On corrige une unité de"
                         + " mesure, pas une tolérance."));
+        world.add(Dial.serverFlag("Cassage sur mauvaise ligne", Config.BURIN,
+                "Le cassage rendu robuste à une connexion lente ou irrégulière.",
+                "CORRIGE DEUX REFUS DE VANILLA : la portée du bras jugée sur une position vieille"
+                        + " d'une demi-latence, et le rattrapage qui n'a qu'UNE place et se coince"
+                        + " au premier refus — après quoi plus rien ne casse. La marge ne s'ouvre"
+                        + " qu'en proportion de la latence mesurée, plafonnée à 2 blocs, et revient"
+                        + " au chiffre de vanilla dès que la ligne redevient bonne."));
         this.families.add(world);
     }
 
@@ -619,6 +642,12 @@ public final class Dials extends Screen {
         commit();
     }
 
+    /** L'anticrénelage n'a que deux états : le sens du clic ne lui dit rien. */
+    private static void toggleAntialias(int ignoredDirection) {
+        Upscale.toggleAntialias();
+        commit();
+    }
+
     /**
      * Bascule le backend graphique demandé au prochain lancement.
      *
@@ -665,6 +694,12 @@ public final class Dials extends Screen {
     private static String scaleLabel() {
         if (Upscale.broken()) {
             return "en panne";
+        }
+        // Dit AVANT le réglage du joueur : sa valeur est intacte et reviendra d'elle-même, mais
+        // afficher « Qualité 67 % » pendant qu'un pack de shaders nous tient en retrait serait un
+        // mensonge — et le genre de mensonge qui fait croire que le mod ne sert à rien.
+        if (Rival.stands()) {
+            return Rival.describe();
         }
         if (!Settings.lens() || Lens.preset() == Lens.Preset.NATIF) {
             return "désactivée";

@@ -63,6 +63,9 @@ public abstract class EntityCullMixin {
         if (Settings.shroud()) {
             Shroud.openFrame();
         }
+        if (Settings.horizon()) {
+            fr.clubcitrouille.lanterne.core.Horizon.openFrame();
+        }
     }
 
     @WrapOperation(
@@ -77,9 +80,22 @@ public abstract class EntityCullMixin {
         if (!original.call(dispatcher, entity, frustum, camX, camY, camZ)) {
             return false;
         }
-        if (!Settings.shroud()) {
-            return true;
+        if (Settings.shroud() && Shroud.hidden(entity, camX, camY, camZ)) {
+            return false;
         }
-        return !Shroud.hidden(entity, camX, camY, camZ);
+        // <h2>L'horizon vient en dernier, et l'ordre n'est pas indifférent</h2>
+        //
+        // Il compte ce qu'il laisse passer, et ce compte pilote son propre rayon. Le placer avant le
+        // voile lui ferait compter des créatures que le voile allait écarter de toute façon : il
+        // croirait la foule plus dense qu'elle n'est, et rapprocherait sa limite pour rien — en
+        // pénalisant précisément les joueurs que le voile protège déjà bien.
+        //
+        // Voir Horizon, et la réserve qui y est écrite en toutes lettres : ce module n'a pas été
+        // mesuré, et il est éteint par défaut.
+        if (Settings.horizon()
+                && fr.clubcitrouille.lanterne.core.Horizon.beyond(entity, camX, camY, camZ)) {
+            return false;
+        }
+        return true;
     }
 }

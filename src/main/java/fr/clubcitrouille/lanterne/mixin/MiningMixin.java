@@ -65,18 +65,49 @@ public abstract class MiningMixin {
     @Shadow
     private int gameTicks;
 
-    /** Instant du premier tick observé, origine de l'horloge de ce joueur. */
+    /**
+     * Instant qui sert d'origine à l'horloge de ce joueur.
+     *
+     * <h2>Pourquoi ce n'est pas « l'instant du premier tick »</h2>
+     *
+     * <p>C'était sa première définition, et elle portait un défaut qu'aucun banc ne pouvait voir,
+     * parce qu'il ne se déclenche qu'au moment où le module <b>s'allume</b> — jamais quand il est
+     * allumé depuis le début.
+     *
+     * <p>L'origine était posée au premier tick <em>où le module a la main</em>. Si le module
+     * s'allume en cours de partie — un rechargement de configuration, l'écran de réglages, un banc
+     * qui appelle {@code Settings.setEnabled} — le compteur de vanilla a déjà couru : il vaut le
+     * nombre de ticks écoulés depuis l'arrivée du joueur, soit des dizaines de milliers. Le tick
+     * suivant le ramenait à <b>un</b>.
+     *
+     * <p>Un compteur qui recule est un poison, et il ne s'évacue pas : la progression se lit
+     * {@code gameTicks - destroyProgressStart}, donc <b>négative</b>, donc le bloc est refusé ; le
+     * serveur le range alors en destruction différée, dont la progression est négative elle aussi
+     * et n'atteindra jamais un. Or cette place est <b>unique</b> — {@code if (!hasDelayedDestroy)}
+     * — et son tick passe avant celui du cassage en cours. Un seul recul, et plus rien ne se casse
+     * jusqu'à ce que le compteur ait regagné tout le terrain perdu : vingt minutes de partie,
+     * vingt minutes de forêt incassable.
+     *
+     * <p>L'origine est donc <b>calée sur le compteur de vanilla</b>, et recalée à chaque tick où le
+     * module n'a pas la main. Allumer ou éteindre le module devient alors sans effet sur la valeur
+     * du compteur : seule sa <em>façon d'avancer</em> change, ce qui est tout ce qu'on voulait.
+     */
     @Unique
     private long lanterne$origin;
 
+    /** Faux tant que l'origine n'a jamais été posée. {@code System.nanoTime()} peut valoir zéro. */
+    @Unique
+    private boolean lanterne$anchored;
+
     @Inject(method = "tick", at = @At("HEAD"))
     private void lanterne$countRealTime(CallbackInfo callback) {
-        if (!Settings.mining()) {
-            return;
-        }
         long now = System.nanoTime();
-        if (lanterne$origin == 0L) {
-            lanterne$origin = now;
+        if (!Settings.mining() || !lanterne$anchored) {
+            // Caler l'origine de sorte que l'horloge reprenne EXACTEMENT là où le compteur de
+            // vanilla en est. Tant que le module dort, on refait ce calage à chaque tour : le jour
+            // où il se réveille, la valeur qu'il pose est la même que celle qu'il remplace.
+            lanterne$origin = now - (long) this.gameTicks * 50_000_000L;
+            lanterne$anchored = true;
             return;
         }
         // Vanilla fait « gameTicks++ » juste après ce point d'accroche. On pose donc la valeur
@@ -84,6 +115,18 @@ public abstract class MiningMixin {
         // valeur finale ici la ferait dépasser d'une unité à chaque tick, et le minage deviendrait
         // deux fois trop rapide — une correction pire que le défaut.
         long elapsed = (now - lanterne$origin) / 50_000_000L;
-        this.gameTicks = (int) Math.max(0L, elapsed) - 1;
+        // <h2>Le maximum n'est pas une précaution de style</h2>
+        //
+        // Il interdit au compteur de reculer, quoi qu'il arrive à l'horloge — et c'est la seule
+        // propriété dont dépend tout ce qui est écrit au-dessus. On compare les deux valeurs
+        // AVANT l'incrément de vanilla, donc « moins un » des deux côtés : après son « ++ », le
+        // compteur vaudra le plus grand de son ancienne valeur et du temps écoulé.
+        //
+        // Le cas qu'il traite vraiment est le rattrapage : quand le serveur a du retard, il
+        // enchaîne plusieurs tours de boucle dans la même tranche de cinquante millisecondes.
+        // L'horloge, elle, n'a pas bougé. Le compteur ne bouge donc pas non plus — ce qui est
+        // juste, puisque le joueur n'a pas tenu son bouton plus longtemps pour autant — mais il ne
+        // recule pas davantage.
+        this.gameTicks = (int) Math.max((long) this.gameTicks - 1L, elapsed - 1L);
     }
 }

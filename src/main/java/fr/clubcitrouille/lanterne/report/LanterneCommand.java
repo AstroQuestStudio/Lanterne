@@ -322,6 +322,16 @@ public final class LanterneCommand {
                                     .withStyle(ChatFormatting.AQUA), false);
                             return 1;
                         }))
+                // Le burin se lit, et ne se règle pas depuis le chat — même raison que l'élastique
+                // juste au-dessus : ce qu'il ouvre est une marge de portée, donc une surface
+                // d'attaque, et une surface d'attaque ne s'ouvre pas d'un mot lancé en jeu.
+                .then(Commands.literal("burin")
+                        .executes(context -> {
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "Burin — " + fr.clubcitrouille.lanterne.core.Burin.describe())
+                                    .withStyle(ChatFormatting.AQUA), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("maree")
                         .executes(context -> {
                             context.getSource().sendSuccess(() -> Component.literal(

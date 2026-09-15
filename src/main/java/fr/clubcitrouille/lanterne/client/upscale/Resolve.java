@@ -48,7 +48,15 @@ final class Resolve {
      */
     static final Identifier SCENE = Identifier.fromNamespaceAndPath(Lanterne.ID, "scene");
 
-    private static final Set<Identifier> ALLOWED = Set.of(PostChain.MAIN_TARGET_ID, SCENE);
+    /**
+     * La cible intermédiaire de l'anticrénelage, elle aussi à la taille réduite.
+     *
+     * <p>Externe pour la même raison que {@link #SCENE} : une cible interne déclarée dans le JSON
+     * prendrait la taille de l'écran, et l'anticrénelage doit travailler <b>avant</b> la remontée.
+     */
+    static final Identifier AA = Identifier.fromNamespaceAndPath(Lanterne.ID, "aa");
+
+    private static final Set<Identifier> ALLOWED = Set.of(PostChain.MAIN_TARGET_ID, SCENE, AA);
 
     private static final Resolve.Bundle BUNDLE = new Resolve.Bundle();
 
@@ -56,7 +64,11 @@ final class Resolve {
 
     /** La chaîne correspondant à la netteté choisie, ou {@code null} si elle n'a pas pu se charger. */
     static PostChain chain() {
-        Identifier id = Identifier.fromNamespaceAndPath(Lanterne.ID, Upscale.edge().path());
+        // La variante anticrénelée n'est demandée que si sa cible existe vraiment : une allocation
+        // refusée fait redescendre sur la chaîne sans anticrénelage, et non échouer la remontée.
+        boolean aa = Upscale.antialias() && Scene.antialiasTarget() != null;
+        Identifier id = Identifier.fromNamespaceAndPath(Lanterne.ID,
+                aa ? Upscale.chainPath() : Upscale.edge().path());
         PostChain chain;
         try {
             chain = Minecraft.getInstance().getShaderManager().getPostChain(id, ALLOWED);
@@ -85,6 +97,10 @@ final class Resolve {
             FrameGraphBuilder frame = new FrameGraphBuilder();
             BUNDLE.screen = frame.importExternal("main", screen);
             BUNDLE.scene = frame.importExternal("lanterne scène", scene);
+            RenderTarget aa = Scene.antialiasTarget();
+            if (aa != null) {
+                BUNDLE.aa = frame.importExternal("lanterne anticrénelage", aa);
+            }
             chain.addToFrame(frame, screen.width, screen.height, BUNDLE);
             // UNPOOLED et non le bassin du jeu : les cibles intermédiaires des chaînes sont
             // déclarées « persistent » dans les JSON, donc gardées par PostChain lui-même. Il ne
@@ -98,6 +114,7 @@ final class Resolve {
         } finally {
             BUNDLE.screen = null;
             BUNDLE.scene = null;
+            BUNDLE.aa = null;
         }
     }
 
@@ -111,6 +128,7 @@ final class Resolve {
     private static final class Bundle implements PostChain.TargetBundle {
         private ResourceHandle<RenderTarget> screen;
         private ResourceHandle<RenderTarget> scene;
+        private ResourceHandle<RenderTarget> aa;
 
         @Override
         public void replace(Identifier id, ResourceHandle<RenderTarget> handle) {
@@ -118,6 +136,8 @@ final class Resolve {
                 this.screen = handle;
             } else if (SCENE.equals(id)) {
                 this.scene = handle;
+            } else if (AA.equals(id)) {
+                this.aa = handle;
             } else {
                 throw new IllegalArgumentException("Cible inconnue de la remontée : " + id);
             }
@@ -128,7 +148,10 @@ final class Resolve {
             if (PostChain.MAIN_TARGET_ID.equals(id)) {
                 return this.screen;
             }
-            return SCENE.equals(id) ? this.scene : null;
+            if (SCENE.equals(id)) {
+                return this.scene;
+            }
+            return AA.equals(id) ? this.aa : null;
         }
     }
 }

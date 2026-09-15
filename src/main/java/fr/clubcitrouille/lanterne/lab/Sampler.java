@@ -497,6 +497,103 @@ public final class Sampler {
         watched = fragment;
     }
 
+    /**
+     * Un poste du relevé : son nom, et la part du travail qu'il porte.
+     *
+     * <p>{@code share} vaut entre zéro et un — et non entre zéro et cent. Le rapport qui l'affiche
+     * multipliera ; celui qui le multiplie par une durée de tick, lui, n'a rien à diviser.
+     */
+    public record Post(String label, double share, int hits) {}
+
+    /**
+     * Le relevé, rendu au lieu d'être imprimé.
+     *
+     * <h2>Pourquoi un pourcentage ne suffit pas à comparer deux charges</h2>
+     *
+     * <p>{@link #report} imprime des parts, et c'est ce qu'il faut pour lire <em>un</em> profil : on
+     * cherche le poste le plus lourd, et la part le désigne.
+     *
+     * <p>Mais la question posée par {@link Cheptel} est autre — <b>comment chaque poste grandit quand
+     * la charge grandit</b> — et la part ne peut pas y répondre. Un poste qui reste à dix pour cent
+     * alors que le tick passe de cinq à soixante millisecondes a été multiplié par douze ; le profil
+     * affiche « 10 % » des deux côtés et ne dit rien.
+     *
+     * <p>Ce qui se compare entre deux paliers est la <b>durée absolue</b> : la part, multipliée par la
+     * durée du tick. D'où ce rendu, qui laisse l'appelant faire la multiplication qu'il est le seul à
+     * pouvoir faire.
+     *
+     * <p>À ne lire qu'après {@link #stop} : un relevé pris pendant que le profileur tourne encore
+     * changerait sous les pieds de qui le lit.
+     *
+     * @return les sommets de pile, du plus lourd au plus léger
+     */
+    public static synchronized List<Post> snapshot() {
+        List<Post> posts = new ArrayList<>();
+        if (working == 0) {
+            return posts;
+        }
+        List<Map.Entry<String, int[]>> rows = new ArrayList<>(TOPS.entrySet());
+        rows.sort(Comparator.comparingInt((Map.Entry<String, int[]> e) -> e.getValue()[0]).reversed());
+        for (Map.Entry<String, int[]> row : rows) {
+            posts.add(new Post(row.getKey(), row.getValue()[0] / (double) working, row.getValue()[0]));
+        }
+        return posts;
+    }
+
+    /**
+     * Relevés pris pendant que le serveur travaillait.
+     *
+     * <p>C'est le dénominateur de toutes les parts, et il a sa place dans un rapport : une part de
+     * trente pour cent tirée de six relevés ne vaut pas une part de trente pour cent tirée de mille.
+     * Voir la troisième règle d'instrument de ce dépôt — un pourcentage n'a de sens que rapporté à ce
+     * qui a été totalisé.
+     */
+    public static synchronized int workingSamples() {
+        return working;
+    }
+
+    /** Relevés pris en tout, sommeil compris. */
+    public static synchronized int totalSamples() {
+        return samples;
+    }
+
+    /**
+     * Qui appelle la méthode surveillée, rendu au lieu d'être imprimé.
+     *
+     * <h2>Pourquoi cette vue décide de tout quand un poste est quadratique</h2>
+     *
+     * <p>Un poste qui grandit comme le carré de la charge ne s'optimise pas : il se <b>supprime</b>.
+     * Et l'on ne peut le supprimer qu'à l'endroit où il est demandé, jamais là où il est exécuté —
+     * personne n'a jamais accéléré une recherche spatiale en la rendant plus rapide.
+     *
+     * <p>La question « qui appelle ? » est donc la seule qui mène quelque part, et {@code report} la
+     * réservait au journal. Un banc qui doit choisir sa cible a besoin de la lire.
+     *
+     * <p>Les parts portent ici sur le total des appelants relevés, et non sur le travail : ce qu'on
+     * veut savoir est <em>quelle part des appels vient d'où</em>, pas quelle part du tick.
+     */
+    public static synchronized List<Post> callers() {
+        List<Post> posts = new ArrayList<>();
+        int total = 0;
+        for (int[] tally : CALLERS.values()) {
+            total += tally[0];
+        }
+        if (total == 0) {
+            return posts;
+        }
+        List<Map.Entry<String, int[]>> rows = new ArrayList<>(CALLERS.entrySet());
+        rows.sort(Comparator.comparingInt((Map.Entry<String, int[]> e) -> e.getValue()[0]).reversed());
+        for (Map.Entry<String, int[]> row : rows) {
+            posts.add(new Post(row.getKey(), row.getValue()[0] / (double) total, row.getValue()[0]));
+        }
+        return posts;
+    }
+
+    /** Le motif actuellement surveillé, pour que le rapport dise sur quoi porte la vue. */
+    public static String watching() {
+        return watched;
+    }
+
     private static void dump(Map<String, int[]> from, int limit) {
         List<Map.Entry<String, int[]>> rows = new ArrayList<>(from.entrySet());
         rows.sort(Comparator.comparingInt((Map.Entry<String, int[]> e) -> e.getValue()[0]).reversed());

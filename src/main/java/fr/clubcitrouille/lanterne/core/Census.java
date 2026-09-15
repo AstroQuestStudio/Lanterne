@@ -127,11 +127,24 @@ public final class Census {
      * mod cesserait d'agir dans ce monde sans que rien ne le dise.
      */
     private static Long2ShortOpenHashMap tableOf(ResourceKey<Level> dimension) {
-        return DISTANCES.computeIfAbsent(dimension, ignored -> {
+        Long2ShortOpenHashMap table = DISTANCES.computeIfAbsent(dimension, ignored -> {
             Long2ShortOpenHashMap fresh = new Long2ShortOpenHashMap();
             fresh.defaultReturnValue(UNSEEN);
             return fresh;
         });
+        // <h2>Le mémo doit céder devant une table neuve</h2>
+        //
+        // {@link #memoTable} retient la dernière table servie, y compris {@code null} quand le monde
+        // n'avait encore jamais été recensé. Si le premier recensement en fabriquait une sans le dire,
+        // le mémo continuerait de rendre {@code null} — donc {@code distanceOfBlock} rendrait zéro,
+        // donc la pleine simulation, <b>pour toujours et dans ce monde seulement</b>.
+        //
+        // Le mod n'aurait rien cassé : il aurait simplement cessé d'agir, en silence. C'est exactement
+        // la forme qu'avait le débordement d'entier qui l'a neutralisé pendant six bancs, et c'est
+        // pourquoi cette ligne existe avant même qu'un banc n'ait eu l'occasion de la réclamer.
+        memoDimension = dimension;
+        memoTable = table;
+        return table;
     }
 
     /**
@@ -278,11 +291,40 @@ public final class Census {
         // compteur remis à zéro par le dernier monde à ticker rendrait « 0 chunk recensé » sur un
         // serveur parfaitement sain — le genre de faux négatif qui a déjà fait perdre une soirée.
         chunksByLevel.put(dimension, table.size());
-        if (tick % 200 == 0) {
-            Lanterne.LOG.info(
-                    "[RECENSEMENT] {} · joueurs dans le niveau : {} · retenus : {} · chunks : {}",
-                    dimension.identifier(), level.players().size(), seen, table.size());
+        announce(dimension, level, seen, table.size());
+    }
+
+    /** Ce que la dernière ligne de journal disait, par monde. Voir {@link #announce}. */
+    private static final java.util.Map<ResourceKey<Level>, String> ANNOUNCED =
+            new java.util.HashMap<>();
+
+    /**
+     * Dit ce que le recensement a trouvé — mais seulement quand cela change.
+     *
+     * <h2>Une ligne toutes les dix secondes est une ligne qu'on cesse de lire</h2>
+     *
+     * <p>Cette ligne partait tous les deux cents ticks, quoi qu'il arrive. Sur un serveur vide, cela
+     * donne six lignes par minute qui répètent toutes « joueurs : 0 · chunks : 0 » — et le journal
+     * d'un hébergeur, qui ne garde que les dernières milliers de lignes, se retrouve entièrement
+     * rempli de cette phrase. L'utilisateur l'a relevé sur le sien.
+     *
+     * <p>Le défaut n'est pas le volume, c'est ce qu'il coûte : un journal qu'on ne peut plus lire ne
+     * sert plus à diagnostiquer quoi que ce soit, et c'est précisément le jour d'une panne qu'on en
+     * a besoin. Une ligne répétée mille fois cache celle qui compte.
+     *
+     * <p>On ne parle donc que lorsque le relevé a <b>changé</b>. Un serveur qui tourne en régime dit
+     * une ligne au premier recensement puis se tait ; un serveur où quelqu'un arrive le dit
+     * immédiatement, sans attendre le prochain multiple de deux cents.
+     */
+    private static void announce(ResourceKey<Level> dimension, ServerLevel level, int seen,
+            int chunks) {
+        String state = seen + "/" + level.players().size() + "/" + chunks;
+        if (state.equals(ANNOUNCED.get(dimension))) {
+            return;
         }
+        ANNOUNCED.put(dimension, state);
+        Lanterne.LOG.info("[RECENSEMENT] {} · joueurs dans le niveau : {} · retenus : {} · chunks : {}",
+                dimension.identifier(), level.players().size(), seen, chunks);
     }
 
     /**
@@ -345,13 +387,60 @@ public final class Census {
     }
 
     /**
+     * Le dernier monde interrogé, et sa table — un mémo d'une seule entrée.
+     *
+     * <h2>Trois virgule deux millisecondes dans une lecture de table</h2>
+     *
+     * <p>La ventilation du cheptel, à dix mille entités et mod actif, place deux postes côte à côte
+     * juste derrière la recherche spatiale :
+     *
+     * <pre>
+     * Long2ShortOpenHashMap.get   1,61 ms
+     * HashMap.hash                1,55 ms
+     * </pre>
+     *
+     * <p>Ce sont les <b>nôtres</b>. La première est la lecture du chunk dans la carte des distances ;
+     * la seconde est la lecture de la carte elle-même, {@code DISTANCES.get(level.dimension())}, qui
+     * hache un {@code ResourceKey} <em>par entité et par tick</em>. Trois millisecondes sur trente-six,
+     * soit près d'un dixième du tick restant, pour retrouver dix mille fois de suite la même table.
+     *
+     * <p>C'est la troisième fois que ce projet trouve son propre coût dans une méthode de commodité —
+     * après le {@code computeIfAbsent} de {@link Solid}, qui prenait le chemin des écritures verrou
+     * compris, et le {@code CallbackInfoReturnable} de l'injection de collision. Le motif est toujours
+     * le même : une écriture parfaitement claire, sur un chemin parcouru cent mille fois par seconde.
+     *
+     * <h2>Pourquoi une seule entrée suffit</h2>
+     *
+     * <p>Le serveur tick ses mondes <b>l'un après l'autre</b>, et non entrelacés. Toutes les entités
+     * d'un même monde se présentent donc à la suite, et le mémo est juste dès la deuxième. Un mémo
+     * plus grand n'attraperait rien de plus et coûterait un hachage — c'est-à-dire exactement ce qu'on
+     * cherche à supprimer.
+     *
+     * <p>La comparaison se fait par <b>référence</b> : les clés de dimension sont internées par le
+     * registre, et deux appels pour le même monde rendent le même objet. Un échec de comparaison ne
+     * coûte qu'une lecture de table de plus, c'est-à-dire ce qu'on payait avant.
+     *
+     * <p>Comme le reste de cette classe, le mémo n'est touché que depuis le fil du serveur.
+     */
+    private static ResourceKey<Level> memoDimension;
+    private static Long2ShortOpenHashMap memoTable;
+
+    /**
      * La distance applicable à une position de bloc, pour les blocs et les blocs-entités.
      *
      * <p>Le monde est un paramètre et non une commodité : sans lui, la version précédente lisait la
      * table d'une autre dimension. Voir la note de classe.
      */
     public static double distanceOfBlock(Level level, int blockX, int blockZ) {
-        Long2ShortOpenHashMap table = DISTANCES.get(level.dimension());
+        ResourceKey<Level> dimension = level.dimension();
+        Long2ShortOpenHashMap table;
+        if (dimension == memoDimension) {
+            table = memoTable;
+        } else {
+            table = DISTANCES.get(dimension);
+            memoDimension = dimension;
+            memoTable = table;
+        }
         if (table == null) {
             // Ce monde n'a encore jamais été recensé. Rendre UNSEEN reviendrait à dégrader au maximum
             // tout ce qui s'y trouve — le défaut exact qui faisait léviter les squelettes du Nether.

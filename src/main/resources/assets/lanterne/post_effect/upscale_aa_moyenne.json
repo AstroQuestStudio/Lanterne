@@ -1,0 +1,59 @@
+{
+    "targets": {
+        "swap": {
+            "persistent": true
+        }
+    },
+    "passes": [
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "lanterne:post/aa_edge",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "lanterne:scene",
+                    "bilinear": false
+                }
+            ],
+            "output": "lanterne:aa"
+        },
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "lanterne:post/fsr_easu",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "lanterne:aa",
+                    "bilinear": false
+                }
+            ],
+            "output": "swap"
+        },
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "lanterne:post/fsr_rcas",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "swap",
+                    "bilinear": false
+                }
+            ],
+            "output": "minecraft:main",
+            "uniforms": {
+                "RcasConfig": [
+                    {
+                        "name": "Tuning",
+                        "type": "vec4",
+                        "value": [
+                            0.6,
+                            0.0,
+                            0.0,
+                            0.0
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

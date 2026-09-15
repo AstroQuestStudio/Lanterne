@@ -41,6 +41,7 @@
     "StrollMixin",
     "CompressionMixin",
     "MiningMixin",
+    "BurinMixin",
     "ElastiqueMixin",
     "SectionStorageAccessor",
     "PoiStreamMixin",

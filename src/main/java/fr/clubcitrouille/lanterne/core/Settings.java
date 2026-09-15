@@ -417,6 +417,19 @@ public final class Settings {
      */
     private static boolean shroud = true;
     /**
+     * L'horizon : au-delà d'une certaine foule, les créatures les plus lointaines ne sont plus
+     * préparées.
+     *
+     * <p>Voir {@link Horizon}. <b>Éteint par défaut, et délibérément.</b> Le dépôt s'interdit de
+     * lancer un client, ce module n'a donc <em>aucune mesure</em> derrière lui — et la première règle
+     * de ce projet est qu'un module non mesuré n'existe pas. Il est écrit, il est branché, il est
+     * documenté, et il attend {@code lab/Glass} et quelqu'un qui puisse l'exécuter.
+     *
+     * <p>L'allumer sans l'avoir mesuré serait refaire l'erreur du module de redstone, qui a tourné
+     * des mois en perdant douze pour cent sans que personne ne le sache.
+     */
+    private static boolean horizon;
+    /**
      * Les coffres rendus comme des blocs ordinaires plutot que comme des entites animees.
      *
      * <p>Voir {@code StaticChestRendererMixin}. Repris de Faster Block Entities, sous GPL-3.0 —
@@ -628,6 +641,13 @@ public final class Settings {
      * retard, les blocs cessent de casser parce que les deux bouts ne comptent pas la même chose.
      */
     private static boolean mining = true;
+    /**
+     * Le cassage rendu robuste à une mauvaise connexion.
+     *
+     * <p>Voir {@link Burin}. Deux refus de vanilla que le réseau provoque : la portée du bras jugée
+     * sur une position périmée, et la place unique du rattrapage qui se coince au premier refus.
+     */
+    private static boolean burin = true;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -1053,6 +1073,10 @@ public final class Settings {
         return master && shroud;
     }
 
+    public static boolean horizon() {
+        return master && horizon;
+    }
+
     public static boolean staticChests() {
         return master && staticChests;
     }
@@ -1186,6 +1210,21 @@ public final class Settings {
     }
 
     /**
+     * Le burin ne dépend PAS de l'interrupteur général, pour la même raison que le minage.
+     *
+     * <p>Ce n'est pas une optimisation : il ne rend rien plus rapide, il fait qu'un geste du joueur
+     * aboutisse quand la ligne est mauvaise. Un banc qui coupe tout doit continuer de le porter,
+     * sinon il mesurerait un jeu où les blocs reviennent en place.
+     *
+     * <p>Le sabotage vit dans {@link Burin}, et non ici : la marge de portée et la place du
+     * rattrapage sont deux effets d'un même module, et il faut pouvoir les retirer ensemble sans
+     * éteindre le module — sinon l'épreuve ne mesurerait plus le module mais son absence.
+     */
+    public static boolean burin() {
+        return burin;
+    }
+
+    /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
      * carnet invisible en cours de partie.
@@ -1292,6 +1331,7 @@ public final class Settings {
         poi = wanted.contains("poi") || wanted.contains("interet");
         spill = wanted.contains("spill") || wanted.contains("effets") || wanted.contains("tableau");
         shroud = wanted.contains("shroud") || wanted.contains("voile") || wanted.contains("occlusion");
+        horizon = wanted.contains("horizon");
         staticChests = wanted.contains("chests") || wanted.contains("coffres");
         decay = wanted.contains("decay") || wanted.contains("chute");
         moulds = wanted.contains("moules");
@@ -1360,6 +1400,9 @@ public final class Settings {
                 ? ClientConfig.LeafCulling.TOUJOURS
                 : ClientConfig.LeafCulling.JAMAIS;
         mining = !wanted.contains("nomining");
+        // « burin » n'appartient qu'à ce module : aucun autre mot-clé du fichier ne le contient, et
+        // il ne contient aucun d'eux. C'est la condition pour qu'un banc isole réellement.
+        burin = wanted.contains("burin");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -1389,6 +1432,7 @@ public final class Settings {
      */
     public static void applyFromClientConfig() {
         shroud = ClientConfig.SHROUD.get();
+        horizon = ClientConfig.HORIZON.get();
         staticChests = ClientConfig.STATIC_CHESTS.get();
         leafCulling = ClientConfig.LEAF_CULLING.get();
         itemCopies = ClientConfig.ITEM_COPIES.get();
@@ -1416,6 +1460,9 @@ public final class Settings {
         StringBuilder text = new StringBuilder();
         if (shroud) {
             text.append("voile ");
+        }
+        if (horizon) {
+            text.append("horizon ");
         }
         if (staticChests) {
             text.append("coffres ");
@@ -1480,6 +1527,7 @@ public final class Settings {
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
+        burin = Config.BURIN.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -1580,6 +1628,9 @@ public final class Settings {
         }
         if (tampon) {
             text.append("tampon ");
+        }
+        if (burin) {
+            text.append("burin ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

@@ -88,7 +88,25 @@ public final class EntityThrottle {
         // seul mod qui l'ait tentée l'a retirée — et c'est elle qui freine un pic avant qu'il ne
         // devienne un à-coup.
         double pressure = Pressure.now();
-        int period = Cadence.forEntity(entity, Census.distanceOf(entity), pressure);
+        // <h2>La même distance, demandée deux fois</h2>
+        //
+        // Cette ligne et la suivante appelaient chacune {@code Census.distanceOf(entity)}. C'est
+        // « une simple consultation de table », comme le dit le commentaire du dessus — et la
+        // ventilation du cheptel a chiffré ce que « simple » veut dire à dix mille entités :
+        //
+        // <pre>
+        // Long2ShortOpenHashMap.get   1,61 ms
+        // HashMap.hash                1,55 ms
+        // </pre>
+        //
+        // Trois millisecondes sur les trente-six qui restent, pour poser deux fois par entité et par
+        // tick une question dont la réponse ne peut pas avoir changé entre les deux lignes. La
+        // distance est relevée dans une carte figée pour dix ticks ; rien, ici, ne peut la bouger.
+        //
+        // Le mémo de {@link Census} supprime l'un des deux postes, cette variable supprime la moitié
+        // de l'autre. Aucun des deux ne change une décision.
+        double distance = Census.distanceOf(entity);
+        int period = Cadence.forEntity(entity, distance, pressure);
 
         // La zone franche prime sur la foule. Voir Cadence.untouched : la garantie « rien n'est
         // dégradé près d'un joueur » était écrite d'un côté et enfreinte de l'autre, et cela se
@@ -96,7 +114,7 @@ public final class EntityThrottle {
         //
         // Le recensement de foule continue de tourner : il sert au court-circuit de bousculade et au
         // rapport, et l'interrompre ici fausserait les deux. Seule la PÉNALITÉ est levée.
-        boolean close = Cadence.untouched(Census.distanceOf(entity), pressure);
+        boolean close = Cadence.untouched(distance, pressure);
         if (Settings.density()) {
             // La foule multiplie la cadence au lieu de la faire descendre d'un cran : avec une
             // échelle continue, doubler l'attente est la traduction exacte de « on en voit deux fois

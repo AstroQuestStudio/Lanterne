@@ -59,6 +59,31 @@ public final class Understudy {
      */
     private static volatile boolean entering;
 
+    /**
+     * Latence que les doublures annoncent au serveur, en millisecondes.
+     *
+     * <h2>Pourquoi ce réglage existe, et pourquoi il n'est pas une tricherie de banc</h2>
+     *
+     * <p>Une doublure ne répond jamais aux défis de présence — {@link SilentConnection} les avale.
+     * Le serveur ne mesure donc <b>jamais</b> sa latence et la laisse à zéro pour toujours. Un banc
+     * qui veut éprouver ce que le serveur fait d'une <em>mauvaise</em> latence n'a alors rien à
+     * éprouver : il mesurerait une ligne parfaite en croyant mesurer une ligne pourrie.
+     *
+     * <p>Le jeu offre lui-même l'entrée : {@code CommonListenerCookie} porte un champ de latence,
+     * que {@code ServerCommonPacketListenerImpl} recopie tel quel dans son propre champ à la
+     * construction. C'est le chemin par lequel une latence survit à un changement de monde. On
+     * s'en sert, sans rien forcer ni rien réécrire : <b>le serveur croit ce chiffre exactement
+     * comme il croirait celui d'un vrai client lent</b>, et c'est tout ce qu'on lui demande.
+     *
+     * <p>Zéro par défaut : les autres bancs ne doivent rien changer à ce qu'ils mesuraient.
+     */
+    private static int announcedLatencyMs;
+
+    /** Voir {@link #announcedLatencyMs}. À poser AVANT {@link #enter}. */
+    public static void announceLatency(int millis) {
+        announcedLatencyMs = Math.max(0, millis);
+    }
+
     private Understudy() {}
 
     /**
@@ -144,7 +169,7 @@ public final class Understudy {
             // doublure doit ressembler à ce qu'elle double, y compris dans ce qu'elle prétend
             // comprendre.
             server.getPlayerList().placeNewPlayer(line, player,
-                    new CommonListenerCookie(profile, 0, ClientInformation.createDefault(), false,
+                    new CommonListenerCookie(profile, announcedLatencyMs, ClientInformation.createDefault(), false,
                             net.neoforged.neoforge.network.connection.ConnectionType.NEOFORGE));
         } catch (Exception refused) {
             Lanterne.LOG.warn("Doublure {} refusée : {}", index, refused.toString());

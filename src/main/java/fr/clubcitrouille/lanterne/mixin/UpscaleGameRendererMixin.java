@@ -127,10 +127,41 @@ public abstract class UpscaleGameRendererMixin {
             CallbackInfo callback) {
         RenderTarget scene = Scene.borrow(this.mainRenderTarget);
         if (scene == null) {
+            lanterne$resetSkyIfNeeded();
             return;
         }
         this.lanterne$screen = this.mainRenderTarget;
         this.mainRenderTarget = scene;
+        lanterne$resetSkyIfNeeded();
+    }
+
+    /**
+     * Fait rebâtir le ciel quand la toile a changé d'identité.
+     *
+     * <h2>Pourquoi ici et nulle part ailleurs</h2>
+     *
+     * <p>{@code SkyRenderer} garde la cible de rendu dans un champ <b>final</b>, capturé à sa
+     * construction — voir l'en-tête de {@link Scene}. Lui substituer un autre objet le laisse
+     * dessiner dans l'ancien, qui peut avoir été détruit entre-temps.
+     *
+     * <p>Vanilla sait rebâtir le ciel : il suffit de lever {@code shouldResetSkyRenderer}. Mais
+     * l'instant est contraint des deux côtés. {@code LevelExtractor} <b>efface</b> ce drapeau à
+     * chaque extraction, donc le lever plus tôt ne servirait à rien ; et {@code addSkyPass} le lit
+     * pendant {@code LevelRenderer.render}, donc le lever plus tard serait trop tard. Entre les
+     * deux il n'y a qu'un endroit, et c'est celui-ci — l'échange lui-même.
+     */
+    @Unique
+    private void lanterne$resetSkyIfNeeded() {
+        if (!Scene.consumeSkyStale()) {
+            return;
+        }
+        try {
+            this.gameRenderState().levelRenderState.shouldResetSkyRenderer = true;
+        } catch (Throwable problem) {
+            // Un état de rendu pas encore bâti : la prochaine image repassera ici, et le pire cas
+            // est une image de ciel mal placée — pas une image perdue.
+            Upscale.note("le ciel n'a pas pu être signalé pour reconstruction", problem);
+        }
     }
 
     /**

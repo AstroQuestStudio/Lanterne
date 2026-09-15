@@ -37,6 +37,7 @@ public final class ClientConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.BooleanValue SHROUD;
+    public static final ModConfigSpec.BooleanValue HORIZON;
     public static final ModConfigSpec.IntValue SHROUD_DELAY;
     public static final ModConfigSpec.IntValue SHROUD_NEAR;
     public static final ModConfigSpec.IntValue SHROUD_BUDGET;
@@ -51,6 +52,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue LENS;
     public static final ModConfigSpec.EnumValue<Lens.Preset> LENS_PRESET;
     public static final ModConfigSpec.EnumValue<Upscale.Edge> LENS_EDGE;
+    public static final ModConfigSpec.BooleanValue LENS_AA;
     public static final ModConfigSpec.BooleanValue LENS_SWELL;
     public static final ModConfigSpec.BooleanValue TAMPON;
     public static final ModConfigSpec.BooleanValue DIN;
@@ -101,6 +103,20 @@ public final class ClientConfig {
                 "1000 vaches sous un toit : 29,9 -> 238,8 images par seconde, soit x7,98.",
                 "Effet immediat, sans rechargement.")
                 .define("voile", true);
+        HORIZON = BUILDER.comment(
+                "L'HORIZON : au-dela d'une certaine foule, les creatures les plus LOINTAINES ne sont",
+                "plus preparees. Le voile n'ecarte que ce qu'un mur cache ; il ne peut rien contre",
+                "dix mille vaches a decouvert, et c'est ce cas-la que l'horizon vise.",
+                "",
+                "En deca de 1500 creatures preparees, il ne fait RIEN. Au-dela, il rapproche sa",
+                "limite jusqu'a revenir dans le budget, sans jamais descendre sous 32 blocs - une",
+                "bete avec laquelle on peut interagir ne disparait donc jamais.",
+                "",
+                "ETEINT PAR DEFAUT, et ce n'est pas un oubli : ce depot ne peut pas lancer de client,",
+                "ce module n'a donc AUCUNE mesure derriere lui. La regle du projet est qu'un module",
+                "non mesure n'existe pas. A allumer si vous voulez l'eprouver, et merci de publier",
+                "le chiffre.")
+                .define("horizon", false);
         SHROUD_DELAY = BUILDER.comment(
                 "Delai avant de reexaminer une meme creature, en millisecondes.",
                 "100 (defaut) : une verification toutes les six images a 60 images par seconde.",
@@ -253,6 +269,24 @@ public final class ClientConfig {
                 "MOYENNE : le defaut.",
                 "FORTE   : la limite que RCAS s'autorise.")
                 .defineEnum("lentille_nettete", Upscale.Edge.MOYENNE);
+        LENS_AA = BUILDER.comment(
+                "L'ANTICRENELAGE, applique AVANT la remontee d'echelle.",
+                "",
+                "La documentation d'AMD pose une condition d'emploi a FSR 1.0, sous le titre",
+                "\"Expected input\" : \"Image should already be well anti-aliased by a technique",
+                "like TAA, MSAA etc.\" Ce n'est pas une recommandation, c'est une precondition.",
+                "",
+                "Or Minecraft n'anticrenele rien par defaut. Sans cette passe, EASU recoit des",
+                "marches d'escalier et ne les lisse pas : il les AGRANDIT, et RCAS les raffermit",
+                "ensuite. C'est ce qui fait \"voir les pixels\", d'autant plus que le facteur est",
+                "fort.",
+                "",
+                "Prix : une passe plein ecran a la resolution REDUITE, donc sur 44 % des pixels au",
+                "prereglage Qualite. Les zones plates sortent au premier test.",
+                "",
+                "A couper seulement pour comparer : le defaut est actif parce que l'auteur de",
+                "l'algorithme le demande.")
+                .define("lentille_anticrenelage", true);
         LENS_SWELL = BUILDER.comment(
                 "LA HOULE : le facteur suit le taux d'images au lieu d'etre choisi une fois.",
                 "",

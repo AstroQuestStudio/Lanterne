@@ -35,9 +35,66 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * NeoForge l'active à la demande d'un mod tiers, et une cible sans pochoir prise pour une cible avec
  * ferait échouer le premier rendu qui s'en sert. On recopie donc ce que la cible principale annonce
  * plutôt que de supposer.
+ *
+ * <h2>L'identité de la toile est un contrat — et il a été rompu une fois</h2>
+ *
+ * <p>Toute la conception du module repose sur l'idée que ses lecteurs relisent
+ * {@code gameRenderer.mainRenderTarget()} à chaque usage. C'est vrai <b>presque</b> partout. Une
+ * classe de 26.2 fait exception, et elle a été trouvée en suivant la piste d'un mod concurrent :
+ *
+ * <pre>SkyRenderer.java:64   private final RenderTarget renderTarget;
+ * LevelRenderer.java:333  this.skyRenderer = new SkyRenderer(…, this.gameRenderer.mainRenderTarget());</pre>
+ *
+ * <p>{@code SkyRenderer} <b>capture l'objet</b> à sa construction et s'en sert à treize endroits.
+ * Comme il est bâti pendant {@code LevelRenderer.render}, c'est-à-dire pendant notre échange, il
+ * capture <b>la toile</b>. Et il n'est rebâti que si {@code shouldResetSkyRenderer} est levé — ce
+ * que vanilla ne fait qu'au rechargement des ressources.
+ *
+ * <p>Deux conséquences, toutes deux atteignables sans aucun mod tiers :
+ *
+ * <ul>
+ *   <li>La toile est détruite — le joueur coupe le réglage, ou la houle change de palier — et le
+ *       ciel continue d'écrire dans <b>des textures libérées</b>.</li>
+ *   <li>La toile naît alors que le ciel tenait la vraie cible, et le ciel se peint à pleine taille
+ *       pendant que le reste du monde se peint en réduit.</li>
+ * </ul>
+ *
+ * <p>D'où les deux règles que cette classe applique désormais, et qu'il ne faut pas défaire :
+ *
+ * <ol>
+ *   <li><b>La toile est redimensionnée sur place</b>, jamais remplacée. Un changement de taille ne
+ *       change donc pas son identité, et le champ du ciel reste juste — il relit ses vues de
+ *       texture à chaque usage, seule la <em>référence</em> était en cause.</li>
+ *   <li>Quand l'identité change malgré tout — création, destruction — {@link #consumeSkyStale()}
+ *       le signale, et le mixin lève le drapeau de vanilla pour que le ciel soit rebâti.</li>
+ * </ol>
+ *
+ * <p>Le remède complet serait d'échanger les <em>champs de texture</em> à l'intérieur de l'unique
+ * cible plutôt que l'objet, comme le fait {@code vitrail-shaders} pour cette raison exacte. C'est
+ * plus sûr et plus invasif : il y faut un accesseur de mixin sur {@code RenderTarget}, dont les
+ * quatre champs sont protégés. À faire le jour où quelqu'un pourra regarder une image.
  */
 public final class Scene {
     private static RenderTarget target;
+
+    /**
+     * La cible intermédiaire de l'anticrénelage, à la <b>taille réduite</b>.
+     *
+     * <h2>Pourquoi elle est allouée ici et non déclarée dans le JSON</h2>
+     *
+     * <p>Une cible interne de {@code PostChain} prend par défaut la taille de l'écran, et le JSON
+     * ne peut lui en donner qu'une <b>fixe</b>. Or celle-ci doit suivre la toile : l'anticrénelage
+     * travaille <em>avant</em> la remontée, donc à la résolution réduite — et cette résolution
+     * change avec le préréglage, avec la houle et avec la fenêtre.
+     *
+     * <p>On la fournit donc comme cible externe, exactement comme la toile elle-même. Sans
+     * profondeur : une passe plein écran n'en a pas l'usage, et c'est autant de mémoire graphique
+     * qu'on ne prend pas.
+     */
+    private static RenderTarget aa;
+
+    /** Voir {@link #consumeSkyStale()}. */
+    private static boolean skyStale;
 
     private Scene() {}
 
@@ -52,6 +109,15 @@ public final class Scene {
      */
     public static RenderTarget borrow(RenderTarget screen) {
         if (screen == null || !Upscale.active()) {
+            release();
+            return null;
+        }
+
+        // Un moteur de shaders détourne le rendu dans son propre pipeline, et notre échange de
+        // cible principale n'a pas été observé composer avec lui. On rend la main plutôt que de
+        // risquer une image fausse : voir Rival, qui porte le raisonnement et la façon de changer
+        // d'avis le jour où quelqu'un aura regardé le résultat.
+        if (Rival.stands()) {
             release();
             return null;
         }
@@ -78,11 +144,28 @@ public final class Scene {
             return null;
         }
 
+        // Redimensionner SUR PLACE plutôt que jeter et réallouer. Ce n'est pas une économie :
+        // c'est une correction. Voir le chapitre « L'identité de la toile est un contrat » en tête
+        // de cette classe — SkyRenderer garde l'OBJET dans un champ final, et lui en substituer un
+        // autre le laisserait dessiner dans une cible détruite.
+        if (target != null && target.useStencil == screen.useStencil
+                && (target.width != width || target.height != height)) {
+            try {
+                target.resize(width, height);
+                Lanterne.LOG.debug("[ÉCHELLE] Toile redimensionnée en {}×{}.", width, height);
+            } catch (Throwable problem) {
+                Lanterne.LOG.warn("[ÉCHELLE] Redimensionnement de la toile refusé.", problem);
+                release();
+            }
+        }
+
         if (target == null || target.width != width || target.height != height) {
             release();
             try {
                 target = new TextureTarget("Lanterne / toile", width, height, true,
                         screen.useStencil, GpuFormat.RGBA8_UNORM);
+                // Une toile neuve : l'identité change, donc le ciel doit être rebâti.
+                skyStale = true;
             } catch (Throwable problem) {
                 target = null;
                 Lanterne.LOG.warn("[ÉCHELLE] Impossible d'allouer une toile de {}×{}.",
@@ -93,7 +176,32 @@ public final class Scene {
             Lanterne.LOG.info("[ÉCHELLE] Toile de {}×{} pour un écran de {}×{} — {} % des pixels.",
                     width, height, screen.width, screen.height, Upscale.pixelPercent());
         }
+
+        if (Upscale.antialias()) {
+            if (aa == null || aa.width != width || aa.height != height) {
+                releaseAa();
+                try {
+                    aa = new TextureTarget("Lanterne / anticrénelage", width, height, false,
+                            false, GpuFormat.RGBA8_UNORM);
+                } catch (Throwable problem) {
+                    // On ne casse pas la mise à l'échelle pour autant : sans cette cible, la
+                    // chaîne « aa_ » échouerait à s'exécuter, alors on redescend sur la variante
+                    // sans anticrénelage plutôt que de rendre en natif. Une image moins propre
+                    // vaut mieux qu'une image en moins.
+                    aa = null;
+                    Lanterne.LOG.warn("[ÉCHELLE] Cible d'anticrénelage de {}×{} refusée : la "
+                            + "remontée se fera sans elle.", width, height, problem);
+                }
+            }
+        } else {
+            releaseAa();
+        }
         return target;
+    }
+
+    /** La cible d'anticrénelage, ou {@code null} si elle n'est ni voulue ni allouable. */
+    static RenderTarget antialiasTarget() {
+        return aa;
     }
 
     /**
@@ -124,6 +232,30 @@ public final class Scene {
         if (target != null) {
             target.destroyBuffers();
             target = null;
+            // La toile disparaît : si le ciel l'avait capturée, il dessine désormais dans une
+            // cible détruite. Il doit être rebâti avant la prochaine passe de ciel.
+            skyStale = true;
+        }
+        releaseAa();
+    }
+
+    /**
+     * Le ciel doit-il être rebâti parce que la toile a changé d'identité ?
+     *
+     * <p>Consommé par le mixin, qui seul a le bon moment pour poser le drapeau de vanilla : il faut
+     * le faire <b>après</b> l'extraction — qui l'efface à chaque image — et <b>avant</b> la passe de
+     * ciel. Il n'y a qu'un instant qui satisfasse les deux, et c'est l'échange lui-même.
+     */
+    public static boolean consumeSkyStale() {
+        boolean was = skyStale;
+        skyStale = false;
+        return was;
+    }
+
+    private static void releaseAa() {
+        if (aa != null) {
+            aa.destroyBuffers();
+            aa = null;
         }
     }
 

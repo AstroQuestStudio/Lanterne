@@ -121,6 +121,7 @@ public final class Guide {
         line(source, "/lanterne maree", "Distances de vue et de simulation : où elles en sont.");
         line(source, "/lanterne elastique", "Les retours en arrière du joueur : combien ont été "
                 + "évités, et quel retard le serveur a pris. Éteint par défaut.");
+        line(source, "/lanterne burin", "Le cassage sur mauvaise ligne : latence mesurée, marge de portée accordée, places de rattrapage rendues.");
         if (admin) {
             line(source, "/lanterne maree on", "La marée suit à nouveau la charge.");
             line(source, "/lanterne maree off", "Fige les distances où elles sont.");

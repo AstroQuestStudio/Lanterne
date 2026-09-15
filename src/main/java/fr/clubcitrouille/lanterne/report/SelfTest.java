@@ -96,6 +96,15 @@ public final class SelfTest {
     /** Vrai si l'on éprouve la génération et le chargement des chunks. */
     private static boolean quarry;
 
+    /**
+     * Vrai si l'on ventile le temps du tick sur plusieurs tailles de troupeau.
+     *
+     * <p>La seule épreuve du dépôt qui mesure la <b>même</b> charge à plusieurs échelles. Voir
+     * {@code lab/Cheptel} : un poste quadratique est invisible à mille et décide de tout à dix mille,
+     * et aucun banc à palier unique ne peut faire la différence.
+     */
+    private static boolean cheptel;
+
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
     private static boolean swarm;
 
@@ -133,6 +142,16 @@ public final class SelfTest {
      * sur du vanilla. Voir {@code lab.Cognee}.
      */
     private static boolean cognee;
+
+    /**
+     * Vrai si l'on éprouve la friture — le cassage au bout d'une mauvaise ligne.
+     *
+     * <p>La seule épreuve du dépôt qui fabrique un défaut de <b>réseau</b> et non de charge. Elle
+     * le peut parce que Minecraft parle en TCP : rien ne se perd, rien ne se désordonne, et tout
+     * ce qu'une mauvaise ligne fait à ce chemin de code est de déplacer l'instant d'arrivée des
+     * paquets et de vieillir la position connue du joueur. Voir {@code lab.Friture}.
+     */
+    private static boolean friture;
 
     /**
      * Vrai si l'on éprouve l'élastique — les seuils de mouvement mesurés à l'horloge.
@@ -366,6 +385,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de la cognée armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_FRITURE"))) {
+            friture = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de la friture armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_AMARRE"))) {
             amarre = true;
             step = Step.SETTLING;
@@ -385,6 +411,13 @@ public final class SelfTest {
             step = Step.SETTLING;
             waiting = SETTLE;
             Lanterne.LOG.info("Épreuve de la digue armée.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_CHEPTEL"))) {
+            cheptel = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du cheptel armée.");
             return;
         }
 
@@ -414,7 +447,7 @@ public final class SelfTest {
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
-                    && !sommaire && !aide && !amarre && !cognee)) {
+                    && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel)) {
             return;
         }
 
@@ -443,7 +476,30 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Levee.running()
                 && !fr.clubcitrouille.lanterne.lab.Amarre.running()
                 && !fr.clubcitrouille.lanterne.lab.Cognee.running()
+                && !fr.clubcitrouille.lanterne.lab.Cheptel.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
+            return;
+        }
+
+        if (cheptel) {
+            // Une doublure, et elle est indispensable : sans joueur, aucun chunk n'est simulé, les
+            // bêtes naissent dans un monde qui ne tick pas, et le profil serait celui d'un serveur
+            // vide. C'est le piège dans lequel six épreuves de ce dépôt sont déjà tombées.
+            //
+            // À une seule doublure, l'espacement ne sert à rien : elle se pose à l'origine, donc au
+            // MILIEU du troupeau. C'est voulu, et c'est le cas qui compte — le joueur debout dans sa
+            // ferme. La zone franche protège alors les vingt-quatre premiers blocs, et le reste de
+            // l'anneau se dégrade : les deux régimes sont donc représentés dans la même mesure.
+            if (fr.clubcitrouille.lanterne.lab.Cheptel.running()) {
+                fr.clubcitrouille.lanterne.lab.Cheptel.tick(server);
+            } else if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                fr.clubcitrouille.lanterne.lab.Cheptel.begin(server);
+                step = Step.LAUNCHED;
+            }
             return;
         }
 
@@ -460,6 +516,27 @@ public final class SelfTest {
                 waiting = chunkLoadDelay();
             } else if (step == Step.LOADING) {
                 fr.clubcitrouille.lanterne.lab.Cognee.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (friture) {
+            // Une doublure, et pour la même raison que la cognée : le serveur n'accepte une action
+            // de cassage que d'un joueur, et c'est précisément la portée de SON bras que cette
+            // épreuve met en défaut. Sans joueur, il n'y a pas de portée à juger.
+            if (fr.clubcitrouille.lanterne.lab.Friture.running()) {
+                fr.clubcitrouille.lanterne.lab.Friture.tick(server);
+            } else if (step == Step.SETTLING) {
+                // La latence s'annonce AVANT l'entrée : elle voyage par le jeton de connexion, et le
+                // jeton se pose à la construction de l'écouteur. La poser après ne servirait à rien,
+                // et le banc mesurerait une ligne parfaite en croyant en mesurer une mauvaise.
+                Understudy.announceLatency(fr.clubcitrouille.lanterne.lab.Friture.latencyMs());
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                fr.clubcitrouille.lanterne.lab.Friture.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

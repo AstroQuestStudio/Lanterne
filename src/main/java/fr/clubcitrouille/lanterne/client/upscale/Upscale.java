@@ -3,6 +3,7 @@ package fr.clubcitrouille.lanterne.client.upscale;
 import java.util.Locale;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.core.ClientConfig;
 import fr.clubcitrouille.lanterne.core.Lens;
 import fr.clubcitrouille.lanterne.core.Settings;
 
@@ -82,9 +83,14 @@ public final class Upscale {
             this.label = label;
         }
 
-        /** Le chemin de la chaîne {@code post_effect} correspondante. */
+        /** Le chemin de la chaîne {@code post_effect} correspondante, sans anticrénelage. */
         public String path() {
             return "upscale_" + this.path;
+        }
+
+        /** Le nom nu du cran, dont {@link Upscale#chainPath()} compose les deux variantes. */
+        String key() {
+            return this.path;
         }
 
         public String label() {
@@ -150,6 +156,45 @@ public final class Upscale {
     }
 
     /**
+     * L'anticrénelage précède-t-il la remontée ?
+     *
+     * <h2>Pourquoi il est actif par défaut</h2>
+     *
+     * <p>Ce n'est pas un goût, c'est la condition d'emploi qu'AMD écrit noir sur blanc pour
+     * FSR 1.0, sous le titre « Expected input » : <i>« Image should already be well anti-aliased by
+     * a technique like TAA, MSAA etc. »</i> Minecraft n'anticrénèle rien. Sans cette passe, EASU
+     * reçoit des marches d'escalier et les <b>agrandit</b> au lieu de les lisser, puis RCAS les
+     * raffermit. C'est ce qui fait « voir les pixels ».
+     *
+     * <h2>Pourquoi la valeur est relue à chaque fois plutôt que mémorisée</h2>
+     *
+     * <p>Les deux autres réglages de ce module — netteté et houle — ont un champ statique parce
+     * qu'ils sont interrogés plusieurs fois par image. Celui-ci ne l'est qu'<b>une fois</b>, quand
+     * la chaîne est demandée, et un champ de plus voudrait dire une ligne de plus dans
+     * {@code restore} et une occasion de plus qu'il soit oublié. Lire directement le fichier coûte
+     * une recherche dans une table par image et ne peut pas se désynchroniser.
+     */
+    public static boolean antialias() {
+        try {
+            return ClientConfig.SPEC.isLoaded()
+                    ? ClientConfig.LENS_AA.get()
+                    : ClientConfig.LENS_AA.getDefault();
+        } catch (Throwable tooEarly) {
+            return true;
+        }
+    }
+
+    /** Le nom de la chaîne à charger : quatre crans de netteté, deux variantes d'anticrénelage. */
+    public static String chainPath() {
+        return "upscale_" + (antialias() ? "aa_" : "") + edge.key();
+    }
+
+    /** Bascule l'anticrénelage et écrit le fichier client. */
+    public static void toggleAntialias() {
+        ClientConfig.LENS_AA.set(!antialias());
+    }
+
+    /**
      * Repose les deux réglages lus dans la configuration du joueur.
      *
      * <p>Appelé quand la configuration client est chargée ou rechargée. Sans cela, un joueur qui
@@ -163,6 +208,17 @@ public final class Upscale {
         edge = savedEdge;
         swell = savedSwell;
         Swell.reset();
+    }
+
+    /**
+     * Note un incident sans éteindre le module.
+     *
+     * <p>À la différence de {@link #fail}, ceci n'est pas fatal : la mise à l'échelle continue. On
+     * l'écrit en débogage et non en avertissement parce que ces cas-là se corrigent d'eux-mêmes à
+     * l'image suivante, et qu'un avertissement par image serait un journal illisible.
+     */
+    public static void note(String what, Throwable problem) {
+        Lanterne.LOG.debug("[ÉCHELLE] {}.", what, problem);
     }
 
     /** Fait tourner la netteté d'un cran, dans un sens ou dans l'autre. */
