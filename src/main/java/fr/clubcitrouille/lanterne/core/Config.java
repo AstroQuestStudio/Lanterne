@@ -62,6 +62,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SENSES;
     public static final ModConfigSpec.BooleanValue RECALL;
     public static final ModConfigSpec.BooleanValue CADASTRE;
+    public static final ModConfigSpec.BooleanValue CALQUE;
     public static final ModConfigSpec.BooleanValue DIGUE;
     public static final ModConfigSpec.BooleanValue ELASTIQUE;
     public static final ModConfigSpec.BooleanValue SOMMAIRE;
@@ -284,6 +285,35 @@ public final class Config {
                 "Idee de StructureLayoutOptimizer (MIT) ; l'implementation est differente - voir",
                 "NOTICE.md pour ce qui n'a PAS ete repris, et pourquoi.")
                 .define("cadastre_structures", true);
+        CALQUE = BUILDER.comment(
+                "CALQUE DU ROUTEUR DE BRUIT : l'arbre des fonctions de densite, decalque une fois",
+                "par chunk au lieu de trois.",
+                "",
+                "Avant de fabriquer le relief d'un chunk, le jeu 'decalque' son arbre de fonctions de",
+                "densite : il le parcourt en entier pour y glisser les caches propres a ce chunk.",
+                "Le constructeur de NoiseChunk le fait deux fois. Puis l'etape des BIOMES en demande",
+                "SIX DE PLUS, une par dimension du climat - temperature, vegetation, continents,",
+                "erosion, profondeur, cretes.",
+                "",
+                "Ces six-la sont deja calculees : le constructeur les avait entre les mains et les a",
+                "jetees. Ce module les garde.",
+                "",
+                "POURQUOI CE PARCOURS COUTE. Les fonctions de densite sont des records, donc leur",
+                "hashCode est structurel et RECURSIF, et rien ne le memorise. Le decalque range",
+                "chaque noeud dans une table de hachage : hacher un noeud parcourt tout son",
+                "sous-arbre. Le cout total est donc quadratique en la taille de l'arbre, pour un",
+                "routeur de surmonde qui compte plusieurs centaines de noeuds - et c'est refait a",
+                "chaque chunk. Le profileur le voyait sans qu'on sache le lire : Objects.hashCode a",
+                "2,7 % d'un profil de generation de terrain.",
+                "",
+                "RESULTAT IDENTIQUE, et c'est demontrable : decalquer deux fois le meme arbre avec la",
+                "meme table rend LES MEMES OBJETS, parce que la table reconnait les noeuds",
+                "reconstruits. Ce module ne change ni une valeur, ni un ordre, ni un tirage. Il ne",
+                "sert le calque que si le routeur demande est celui qu'il a decalque ; sinon il rend",
+                "la main.",
+                "",
+                "N'agit QUE pendant la generation de terrain. Un monde deja explore n'y passe plus.")
+                .define("calque_routeur_bruit", true);
         DIGUE = BUILDER.comment(
                 "DIGUE : le tick du serveur ne descend jamais au disque.",
                 "",

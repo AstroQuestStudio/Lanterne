@@ -75,6 +75,43 @@ neoForge {
                     jvmArgument '-XX:+UseG1GC'
                 }
             }
+            // <h2>Mesurer comme si la machine n'avait qu'un coeur</h2>
+            //
+            // Choisir le ramasseur ne suffit pas : G1 dimensionne ses reservoirs de fils sur le
+            // nombre de processeurs qu'il VOIT. Lance sur le Ryzen a huit coeurs de mesure, il
+            // ouvre huit fils paralleles et deux fils concurrents, c'est-a-dire une configuration
+            // que la MyBox n'aura jamais. Comparer serial et G1 dans ces conditions repondrait a
+            // une question que personne ne se pose.
+            //
+            //   ./gradlew runServer -Pgc=g1 -Pcoeurs=1
+            //
+            // « ActiveProcessorCount » est l'option prevue par HotSpot pour exactement cela : tout
+            // ce qui se dimensionne sur le nombre de processeurs — ramasseur, compilateur, pool
+            // commun — se dimensionne sur ce nombre-la.
+            //
+            // Ce qu'elle ne fait PAS : empecher le systeme de donner huit coeurs a ces fils. Le
+            // banc reproduit la CONFIGURATION de la cible, pas sa PENURIE. Voir lab/Fonte.java, qui
+            // le redit dans son rapport pour qu'aucun chiffre ne circule sans cette reserve.
+            if (project.hasProperty('coeurs')) {
+                jvmArgument "-XX:ActiveProcessorCount=${project.property('coeurs')}".toString()
+            }
+            // <h2>Mesurer sur le tas de la cible, et non sur celui du poste de developpement</h2>
+            //
+            // La premiere comparaison serial/G1 a rendu un verdict vide : trois ramassages en
+            // quatre cents ticks, et des pauses de 47 a 78 ms qui se chevauchaient completement.
+            // La cause n'etait pas le bruit, c'etait le TAS — huit gigaoctets par defaut sur la
+            // machine de mesure, contre quatre sur la MyBox. Avec autant de place, le ramasseur ne
+            // passe presque jamais, et deux ramasseurs qui ne passent pas se ressemblent beaucoup.
+            //
+            //   ./gradlew runServer -Pgc=g1 -Pcoeurs=1 -Ptas=2000
+            //
+            // Deux mille megaoctets place aussi le banc du BON cote du seuil de 1792 Mo : la
+            // machine virtuelle retient alors G1 malgre le coeur unique, ce qui est exactement la
+            // configuration que core/Creuset.java signale a l'administrateur.
+            if (project.hasProperty('tas')) {
+                jvmArgument "-Xmx${project.property('tas')}m".toString()
+                jvmArgument "-Xms${project.property('tas')}m".toString()
+            }
         }
     }
 
@@ -143,6 +180,30 @@ dependencies {
         version {
             prefer '8.1.2-1.5.14'
         }
+    }
+}
+
+// <h2>La licence voyage avec le jar, et ce n'est pas une politesse</h2>
+//
+// Le jar publie ne contenait QUE le manifeste, la configuration des mixins et
+// neoforge.mods.toml. Ni le texte de la GPL, ni le fichier d'attributions. Or :
+//
+//   - la GPL-3.0 exige (article 4) que son texte accompagne toute distribution ;
+//   - les bibliotheques embarquees par jarJar sont sous LGPL (JLayer, « version 2
+//     ou ulterieure » — verifie dans l'en-tete de ses sources, donc compatible) et
+//     sous Apache-2.0 (les liaisons de bytedeco), et l'Apache-2.0 impose en son
+//     article 4(d) de transmettre le fichier d'attributions ;
+//   - NOTICE.md est le seul endroit ou est ecrit CE QUI A ETE REPRIS ET A QUI.
+//     Le laisser dans le depot et pas dans le jar revient a crediter les auteurs
+//     devant ceux qui lisent le code, et pas devant ceux qui installent le mod.
+//
+// Un depot irreprochable et un jar muet, c'est le jar qui est distribue.
+tasks.named('jar', Jar) {
+    from(rootProject.file('LICENSE')) {
+        into 'META-INF'
+    }
+    from(rootProject.file('NOTICE.md')) {
+        into 'META-INF'
     }
 }
 

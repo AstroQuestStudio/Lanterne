@@ -55,9 +55,63 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * </pre>
  *
  * <p>On peut donc tenir <b>un bit en mémoire et quatre sur le disque</b>. Le monde reste lisible par
- * un serveur vanilla, le paquet réseau reste celui que le client attend, et seule la mémoire vive
- * baisse. Les constantes nécessaires existent déjà dans le jeu — {@code ONE_BIT_LINEAR},
- * {@code TWO_BITS_LINEAR}, {@code THREE_BITS_LINEAR} — où elles servent aux biomes, jamais aux blocs.
+ * un serveur vanilla, et seule la mémoire vive baisse. Les constantes nécessaires existent déjà dans
+ * le jeu — {@code ONE_BIT_LINEAR}, {@code TWO_BITS_LINEAR}, {@code THREE_BITS_LINEAR} — où elles
+ * servent aux biomes, jamais aux blocs.
+ */
+
+/**
+ * ADDENDUM — ce que le relevé a répondu, et pourquoi le module n'a pas été écrit.
+ *
+ * <h2>Le chiffre</h2>
+ *
+ * <pre>
+ * 5 834 sections pesées, 9 166 vides ou à valeur unique (déjà gratuites)
+ * payé 11,92 Mo · nécessaire 10,74 Mo · gaspillé 1,18 Mo, soit 9,9 %
+ *
+ *   4 bits : 4 920 sections, 1,18 Mo gaspillés
+ *   5 bits :   756 sections, 0,00 Mo
+ *   6 bits :   158 sections, 0,00 Mo
+ * </pre>
+ *
+ * <p>Neuf virgule neuf pour cent, et non « du simple au quadruple ». La note de classe ci-dessus
+ * raisonnait sur la section de sous-sol ordinaire — pierre et air, deux états, un bit suffirait — et
+ * elle avait raison sur ce cas-là. Ce qu'elle ignorait, c'est <b>combien</b> de sections lui
+ * ressemblent. La réponse est : peu. Une section de terrain réel porte de la pierre, de la terre, de
+ * l'herbe, de l'eau, du gravier, trois minerais et de l'air ; elle a donc entre neuf et seize états
+ * distincts, et elle paie quatre bits parce qu'elle en a <b>besoin</b> de quatre.
+ *
+ * <p>Les sections vraiment pauvres en états, elles, sont déjà gratuites : le jeu les range en palette
+ * à valeur unique, à zéro bit. Elles sont 9 166 sur 15 000 — soixante et un pour cent du terrain ne
+ * coûte déjà rien. Le gaspillage cherché se trouvait dans la tranche étroite qui reste.
+ *
+ * <h2>La porte de sortie n'était pas propre</h2>
+ *
+ * <p>La note annonçait que « le paquet réseau reste celui que le client attend ». C'est <b>faux</b>,
+ * et la lecture de {@code PalettedContainer.Data.write} le dit en une ligne :
+ *
+ * <pre>
+ * buffer.writeByte(this.storage.getBits());   // les bits EN MÉMOIRE, pas ceux du disque
+ * buffer.writeFixedSizeLongArray(this.storage.getRaw());
+ * </pre>
+ *
+ * <p>Un serveur qui tiendrait un bit en mémoire annoncerait donc « un bit » au client. Un client
+ * vanilla appellerait {@code getConfigurationForBitCount(1)}, qui rend {@code FOUR_BITS_LINEAR}, et
+ * allouerait un tableau de deux cent cinquante-six {@code long} pour en lire soixante-quatre. Le
+ * reste du paquet serait décalé, et la connexion tomberait au premier chunk.
+ *
+ * <p>Le disque, lui, était bien protégé : {@code pack()} ré-encode toujours vers
+ * {@code bitsInStorage()}. C'est le réseau qui ne l'était pas — et l'écart entre les deux ne se voit
+ * qu'en lisant le code, jamais en lisant l'interface.
+ *
+ * <p>Il resterait à ré-encoder chaque section à l'envoi. Sur un cœur unique, payer un ré-encodage de
+ * 4 096 cases par section envoyée pour récupérer 1,18 Mo sur 220 est un marché qu'on refuse.
+ *
+ * <h2>Le poste est clos</h2>
+ *
+ * <p>Un virgule un huit mégaoctet sur un tas retenu de 220 Mo, soit un demi pour cent, au prix d'une
+ * rupture de protocole et d'un ré-encodage dans le chemin d'envoi. L'outil reste : c'est lui qui a
+ * permis de refuser, et il refusera de nouveau sur un modpack qui changerait la donne.
  */
 public final class Weave {
     /** Rayon du relevé, en chunks. */

@@ -172,6 +172,9 @@ public final class SelfTest {
     /** Vrai si l'on dresse l'inventaire de la mémoire retenue. */
     private static boolean inventaire;
 
+    /** Vrai si l'on éprouve ce que le ramasse-miettes prend au tick. */
+    private static boolean fonte;
+
     /** Vrai si l'on éprouve le placement des pièces d'une structure à jigsaw. */
     private static boolean bourg;
 
@@ -215,6 +218,13 @@ public final class SelfTest {
             step = Step.SETTLING;
             waiting = SETTLE;
             Lanterne.LOG.info("Épreuve du bourg armée.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_FONTE"))) {
+            fonte = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du ramasse-miettes armée.");
             return;
         }
         if ("1".equals(System.getenv("LANTERNE_INVENTAIRE"))) {
@@ -385,7 +395,7 @@ public final class SelfTest {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
-                    && !inventaire
+                    && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
                     && !sommaire && !aide && !amarre)) {
             return;
@@ -496,6 +506,25 @@ public final class SelfTest {
                 fr.clubcitrouille.lanterne.lab.Bourg.tick(server);
             } else if (step == Step.SETTLING) {
                 fr.clubcitrouille.lanterne.lab.Bourg.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (fonte) {
+            // Même protocole que les autres bancs d'entités : poser la doublure, ATTENDRE que les
+            // chunks arrivent, puis seulement peupler. Créer le troupeau avant que les chunks ne
+            // soient là le fait disparaître aussitôt — la faute qui a coûté deux rapports à « 0
+            // entité dans le monde ».
+            if (fr.clubcitrouille.lanterne.lab.Fonte.running()) {
+                return;
+            }
+            if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                fr.clubcitrouille.lanterne.lab.Fonte.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

@@ -58,7 +58,8 @@
     "SleepBedMixin",
     "RemoveBlockMixin",
     "PackIndexMixin",
-    "JigsawPlacerMixin"
+    "JigsawPlacerMixin",
+    "NoiseCalqueMixin"
   ],
   "client": [
     "EntityCullMixin",

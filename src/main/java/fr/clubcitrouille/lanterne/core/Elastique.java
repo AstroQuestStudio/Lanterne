@@ -176,8 +176,24 @@ public final class Elastique {
     private static long widened;
     /** Le pire retard observé, en multiples de la durée nominale d'un tick. */
     private static double worstLateness;
-    /** Retours en arrière réellement subis, comptés par {@code ElastiqueMixin}. */
-    private static long rollbacks;
+    /**
+     * Retours en arrière dus au contrôle de vitesse, comptés par {@code ElastiqueMixin}.
+     *
+     * <h2>Pourquoi les deux branches se comptent séparément</h2>
+     *
+     * <p>Le jeu renvoie le joueur en arrière par <b>deux</b> chemins distincts, et un compteur unique
+     * les aurait confondus. Or ils ne se déclenchent pas dans les mêmes conditions, et le premier
+     * relevé de cette épreuve l'a montré de la pire façon : le compteur d'origine n'était posé que
+     * sur la branche de cohérence, et il annonçait donc zéro pendant que la branche de vitesse
+     * renvoyait le joueur en arrière sous les yeux de l'épreuve.
+     *
+     * <p>Les séparer, c'est pouvoir dire <em>lequel</em> des deux mécanismes le module a désamorcé —
+     * et, le jour où l'un des deux cesse de se déclencher, savoir lequel.
+     */
+    private static long speedRollbacks;
+
+    /** Retours en arrière dus au contrôle de cohérence. Voir {@link #speedRollbacks}. */
+    private static long coherenceRollbacks;
 
     private Elastique() {}
 
@@ -199,6 +215,38 @@ public final class Elastique {
     /** Vrai si le levier de sabotage est armé. Le banc l'annonce dans son en-tête. */
     public static boolean toothless() {
         return TOOTHLESS;
+    }
+
+    /**
+     * Vrai quand une épreuve veut compter sans que le module agisse.
+     *
+     * <h2>Ce que le premier relevé n'avait pas pu dire</h2>
+     *
+     * <p>La première version ne comptait que lorsque le module était armé. Le bras <b>témoin</b> de
+     * l'épreuve — celui qui tourne sans protection, et qui donne le point de comparaison — annonçait
+     * donc « 0 pas jugé, pire retard ×0,00 », ce qui était tout ce qu'on pouvait en dire, et qui ne
+     * valait rien. Un témoin qu'on n'instrumente pas n'est pas un témoin.
+     *
+     * <p>Ce drapeau existe pour cela, et il est <b>éteint en jeu</b> : hors épreuve, un serveur qui
+     * n'a pas allumé l'élastique ne paie même pas une lecture d'horloge par paquet de mouvement. Un
+     * module éteint doit coûter zéro, et pas « presque zéro ».
+     */
+    private static boolean observing;
+
+    public static boolean observing() {
+        return observing;
+    }
+
+    private static int traceLeft = 3;
+
+    /** Diagnostic temporaire. */
+    public static boolean traceBudget() {
+        return traceLeft-- > 0;
+    }
+
+    /** Réservé aux épreuves. Voir {@link #observing}. */
+    public static void observe(boolean value) {
+        observing = value;
     }
 
     /**
@@ -235,7 +283,10 @@ public final class Elastique {
      * <p>Rend la valeur reçue <b>à l'identique</b> tant qu'on est en bande morte : c'est ce qui rend
      * la promesse « vanilla au bit près » vérifiable plutôt que plausible.
      */
-    public static float widenSpeed(float vanilla, long frozenNanos) {
+    public static float widenSpeed(float vanilla, long frozenNanos, boolean armed) {
+        if (!armed) {
+            return vanilla;
+        }
         double factor = factor(frozenNanos, CEILING_SPEED);
         return factor == 1d ? vanilla : (float) (vanilla * factor);
     }
@@ -265,14 +316,17 @@ public final class Elastique {
      * <p>Le seuil de cohérence, lui, est atteint par tout mouvement qui va jusqu'au bout de son
      * traitement, sur le fil du serveur, une fois. Le compteur mesure donc ce que son nom dit.
      */
-    public static double widenResidual(double vanilla, long frozenNanos) {
+    public static double widenResidual(double vanilla, long frozenNanos, boolean armed) {
         double late = lateness(frozenNanos);
         samples++;
         if (late > worstLateness) {
             worstLateness = late;
         }
-        if (late >= DEAD_BAND) {
+        if (armed && late >= DEAD_BAND) {
             widened++;
+        }
+        if (!armed) {
+            return vanilla;
         }
         double factor = factor(frozenNanos, CEILING_RESIDUAL);
         return factor == 1d ? vanilla : vanilla * factor;
@@ -288,9 +342,14 @@ public final class Elastique {
         return capped * capped;
     }
 
-    /** Un retour en arrière a tout de même eu lieu. Appelé par le mixin, dans la branche du jeu. */
-    public static void countRollback() {
-        rollbacks++;
+    /** Le contrôle de vitesse vient de renvoyer un joueur en arrière. */
+    public static void countSpeedRollback() {
+        speedRollbacks++;
+    }
+
+    /** Le contrôle de cohérence vient de renvoyer un joueur en arrière. */
+    public static void countCoherenceRollback() {
+        coherenceRollbacks++;
     }
 
     public static long samples() {
@@ -301,8 +360,17 @@ public final class Elastique {
         return widened;
     }
 
+    /** Tous les retours en arrière, quel qu'en soit le mécanisme. */
     public static long rollbacks() {
-        return rollbacks;
+        return speedRollbacks + coherenceRollbacks;
+    }
+
+    public static long speedRollbacks() {
+        return speedRollbacks;
+    }
+
+    public static long coherenceRollbacks() {
+        return coherenceRollbacks;
     }
 
     public static double worstLateness() {
@@ -315,15 +383,17 @@ public final class Elastique {
             return "élastique éteint";
         }
         return String.format(java.util.Locale.ROOT,
-                "%d paquet(s) jugé(s) · %d élargi(s) · pire retard ×%.2f · %d retour(s) en arrière%s",
-                samples, widened, worstLateness, rollbacks,
+                "%d mouvement(s) jugé(s) · %d élargi(s) · pire retard ×%.2f · %d retour(s) en "
+                + "arrière (%d vitesse, %d cohérence)%s",
+                samples, widened, worstLateness, rollbacks(), speedRollbacks, coherenceRollbacks,
                 TOOTHLESS ? " · SABOTÉ (LANTERNE_BREAK_ELASTIQUE)" : "");
     }
 
     public static void reset() {
         samples = 0L;
         widened = 0L;
-        rollbacks = 0L;
+        speedRollbacks = 0L;
+        coherenceRollbacks = 0L;
         worstLateness = 0d;
     }
 }

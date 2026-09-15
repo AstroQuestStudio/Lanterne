@@ -18,7 +18,6 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
-import fr.clubcitrouille.lanterne.client.upscale.Deep;
 import fr.clubcitrouille.lanterne.client.upscale.Pivot;
 import fr.clubcitrouille.lanterne.client.upscale.Upscale;
 import fr.clubcitrouille.lanterne.core.ClientConfig;
@@ -240,13 +239,20 @@ public final class Dials extends Screen {
 
     private void buildImage() {
         Family image = new Family("L'image", false, "échelle de rendu et mesure");
-        image.add(Dial.cycle("Mise à l'échelle", Dials::scaleLabel,
+        // « Upscaling » et non « FSR » : le joueur veut savoir CE QU'IL OBTIENT, pas quelle
+        // bibliothèque a gagné le pari. Le nom du procédé appartient à la colonne de détail, qui a
+        // la place de le nommer et de créditer son auteur.
+        image.add(Dial.cycle("Upscaling", Dials::scaleLabel,
                 () -> Upscale.broken() ? FAINT : Upscale.active() ? AMBER : DIM,
                 Dials::cycleScale,
-                "Le monde est rendu plus petit, puis remonté par FSR 1.0. L'interface reste native.",
-                "67 % par dimension, c'est 45 % de pixels en moins — et 45 % de travail en moins."
-                        + " Prix : la netteté du monde baisse avec le facteur.",
-                "Effet immédiat. Se juge à l'œil, pas au compteur."));
+                "Le monde est rendu plus petit, puis remonté à la taille de l'écran. L'interface"
+                        + " reste native. Procédé actuel : SPATIAL, d'après FSR 1.0 d'AMD.",
+                "Le gain vient du NOMBRE DE PIXELS RENDUS, pas du remonteur : à 67 % par dimension"
+                        + " il reste 45 % des pixels, donc 55 % de travail en moins. Sur une carte"
+                        + " NVIDIA, FSR donne donc quasiment les mêmes images/s que DLSS ; ce qui"
+                        + " diffère un peu, c'est la tenue des fins détails en mouvement.",
+                "Effet immédiat. Se juge à l'œil, pas au compteur : la netteté du monde baisse avec"
+                        + " le facteur."));
         image.add(Dial.cycle("Netteté", () -> Upscale.edge().label(),
                 () -> Upscale.active() ? AMBER : FAINT,
                 Dials::cycleEdge,
@@ -259,29 +265,26 @@ public final class Dials extends Screen {
                 "L'échelle suit le taux d'images au lieu d'être choisie une fois pour toutes.",
                 "Le préréglage ci-dessus devient le PLANCHER : la houle ne descend jamais plus bas.",
                 "Dix secondes de grâce, puis un palier toutes les quatre secondes au plus."));
-        // Le backend est proposé AVANT DLSS, parce que c'est lui qui conditionne l'autre : une
-        // ligne qui annonce un verrou doit être précédée de celle qui tend la clé.
+        // Le backend suit immédiatement l'upscaling, parce que c'est de lui que dépend ce que
+        // l'upscaling pourra faire demain.
         image.add(Dial.cycle("Vulkan", () -> Pivot.state().label(), Dials::pivotColour,
                 Dials::cyclePivot,
-                "Le backend graphique du jeu. C'est la seule voie possible vers DLSS.",
-                "Mojang le marque « expérimental » et l'a rétrogradé de défaut à expérimental :"
-                        + " plus rapide sur certaines machines, plus lent sur d'autres. Aucun gain"
-                        + " n'est promis ici.",
-                "Au prochain lancement du jeu. Si Vulkan échoue, le jeu retombe DE LUI-MÊME sur"
-                        + " OpenGL, dans le même lancement — on ne peut pas se coincer, et le clic"
-                        + " se reprend au même endroit."));
-        // Le relevé se fait à l'ouverture de l'écran plutôt qu'au démarrage : il demande un
-        // périphérique graphique construit, et il est sans objet tant que personne ne le regarde.
-        image.add(Dial.cycle("DLSS", () -> {
-            Deep.probe();
-            return Deep.describe();
-        }, () -> FAINT, null,
-                "NON DISPONIBLE. La valeur dit CE QUI manque : backend, carte, chargeur ou modèle.",
-                "Le pilote installe le chargeur NGX mais PAS nvngx_dlss.dll, le modèle de"
-                        + " super-résolution : sur une machine à jour, il est absent. Sa licence"
-                        + " interdit de l'embarquer ici.",
-                "FSR 1.0 ci-dessus n'exige ni Vulkan, ni carte NVIDIA, ni téléchargement, et sert"
-                        + " donc sur n'importe quelle machine."));
+                "Le backend graphique du jeu, à la place d'OpenGL.",
+                "Le clic écrit DEUX fichiers : options.txt, et config/fml.toml où il COUPE l'écran"
+                        + " de chargement de NeoForge. Sans cela le jeu refuse de démarrer sous"
+                        + " Vulkan — NeoForge lui cède une fenêtre OpenGL. Prix : plus de barre de"
+                        + " progression au lancement, donc quelques secondes d'écran vide.",
+                "Au prochain lancement. Si Vulkan échoue, le jeu retombe DE LUI-MÊME sur OpenGL,"
+                        + " dans le même lancement : on ne peut pas se coincer. Mojang marque"
+                        + " Vulkan « expérimental » et ne promet aucun gain — ni nous."));
+        // La ligne « DLSS » a été RETIRÉE de cet écran, et c'est un gain de clarté. Elle ne pouvait
+        // que dire « non disponible » : la licence de NVIDIA interdit nommément à une œuvre sous
+        // licence libre d'embarquer son modèle. Afficher un nom de marque pour annoncer une absence
+        // n'apprend rien à personne et encombre une famille qui a mieux à montrer.
+        //
+        // Le diagnostic, lui, reste entier : Scene.give() appelle Deep.probe() à la première image,
+        // qui écrit au journal ce qui manque exactement — backend, carte, chargeur ou modèle. Voir
+        // notes/dlss-panama.md pour l'enquête et son verdict.
         image.add(Dial.toggle("Tampon mutable", Settings::tampon, ClientConfig.TAMPON,
                 "Un tampon immuable oblige le pilote à ATTENDRE quand le jeu réécrit dedans pendant"
                         + " que la carte s'en sert. Sur NVIDIA et Intel Gen7, cette attente se voit :"
@@ -611,7 +614,7 @@ public final class Dials extends Screen {
     private static int pivotColour() {
         return switch (Pivot.state()) {
             case VULKAN -> ON;
-            case VULKAN_AU_RELANCEMENT, OPENGL_AU_RELANCEMENT -> AMBER;
+            case VULKAN_AU_RELANCEMENT, OPENGL_AU_RELANCEMENT, VULKAN_ENTRAVE -> AMBER;
             case OPENGL -> DIM;
             case VULKAN_REFUSE, INCONNU -> FAINT;
         };

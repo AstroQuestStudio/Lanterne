@@ -95,20 +95,32 @@ public final class Inventaire {
      *
      * <p>Chaque {@code PalettedContainer} en porte un, et chaque section de terrain porte deux
      * conteneurs — celui des états et celui des biomes. Le détecteur n'est pas un simple drapeau :
+     * c'est un objet qui en tient deux autres, lesquels en tiennent chacun un de plus.
+     *
+     * <h2>Cette constante a d'abord été calculée, puis corrigée par la mesure</h2>
+     *
+     * <p>La première version additionnait les en-têtes et les références à la main et rendait
+     * <b>152 octets</b>. L'histogramme du tas, lui, compte :
      *
      * <pre>
-     * ThreadingDetector  en-tête 16 + 5 références    =  40 o
-     *   Semaphore        en-tête 16 + 1 référence     =  24 o
-     *     NonfairSync    en-tête 16 + état + 3 réf.   =  32 o
-     *   ReentrantLock    en-tête 16 + 1 référence     =  24 o
-     *     NonfairSync    en-tête 16 + état + 3 réf.   =  32 o
+     * ThreadingDetector                         64 992 objets   1,98 Mo    → 32 o
+     * Semaphore                                 65 111 objets   0,99 Mo    → 16 o
+     * Semaphore$NonfairSync                     64 994 objets   1,98 Mo    → 32 o
+     * ReentrantLock                             65 218 objets   1,00 Mo    → 16 o
+     * ReentrantLock$NonfairSync                 65 267 objets   1,99 Mo    → 32 o
+     * ───────────────────────────────────────────────────────   7,94 Mo   → 128 o
      * </pre>
      *
-     * <p>Cent cinquante-deux octets par conteneur, trois cent quatre par section — et cela vaut aussi
-     * pour les sections d'air pur, que le relevé compte par ailleurs comme « gratuites ». Elles ne le
-     * sont pas : elles ne paient pas de stockage, elles paient de la serrure.
+     * <p>Cent vingt-huit, et non cent cinquante-deux : le calcul à la main surestimait de dix-neuf
+     * pour cent, faute de savoir que la machine virtuelle range ces objets plus serré qu'on ne le
+     * suppose. C'est la raison d'être de cet outil — un chiffre supposé n'a pas résisté à un chiffre
+     * compté, et il ne se serait jamais fait prendre sans cela.
+     *
+     * <p>Deux cent cinquante-six octets par section, et cela vaut aussi pour les sections d'air pur
+     * que le relevé compte par ailleurs comme « gratuites ». Elles ne le sont pas : elles ne paient
+     * pas de stockage, elles paient de la serrure.
      */
-    private static final int DETECTOR_BYTES = 152;
+    private static final int DETECTOR_BYTES = 128;
 
     /** Rayon du relevé par domaine, en chunks. Le même que celui de {@code Weave}, pour comparer. */
     private static final int REACH = 12;
@@ -174,6 +186,8 @@ public final class Inventaire {
             say.accept(String.format(Locale.ROOT, "  %7.1f Mo  %5.1f %%  %s",
                     line.bytes / 1048576d, line.bytes * 100d / Math.max(1L, total), line.name));
         }
+        say.accept("");
+        suspects(lines, say);
     }
 
     /**
@@ -197,7 +211,56 @@ public final class Inventaire {
     }
 
     /** Une ligne de l'histogramme, réduite à ce qui nous intéresse. */
-    private record Line(long bytes, String name) {}
+    private record Line(long instances, long bytes, String name) {}
+
+    /**
+     * Les classes qu'on veut voir nommément, qu'elles soient dans les premières ou non.
+     *
+     * <h2>Pourquoi nommer des suspects plutôt que lire le classement</h2>
+     *
+     * <p>Le classement par poids répond « {@code byte[]} pèse cinquante-cinq mégaoctets », ce qui ne
+     * désigne aucun coupable : tout pèse en {@code byte[]} sur une machine virtuelle moderne, jusqu'aux
+     * chaînes de caractères. Les postes qui nous intéressent sont au contraire des objets <b>petits et
+     * innombrables</b>, qui ne montent jamais dans les quatorze premières lignes alors que leur total
+     * compte.
+     *
+     * <p>Le second usage est le plus important : ces lignes <b>contrôlent l'arithmétique du relevé par
+     * domaine</b>. Celui-ci calcule le poids des serrures de section à partir d'une taille d'objet
+     * supposée ; l'histogramme, lui, la compte. Si les deux chiffres divergent, c'est le calcul qui a
+     * tort — et c'est exactement le genre d'erreur qu'un module aurait ensuite propagée en silence.
+     */
+    private static final String[] SUSPECTS = {
+        "net.minecraft.util.ThreadingDetector",
+        "java.util.concurrent.Semaphore",
+        "java.util.concurrent.Semaphore$NonfairSync",
+        "java.util.concurrent.locks.ReentrantLock",
+        "java.util.concurrent.locks.ReentrantLock$NonfairSync",
+        "net.minecraft.world.level.chunk.DataLayer",
+        "net.minecraft.world.level.chunk.PalettedContainer",
+        "net.minecraft.world.level.chunk.LevelChunkSection",
+        "io.netty.buffer.PoolChunk",
+    };
+
+    /**
+     * Ce que pèsent les suspects nommés, et combien il y en a.
+     */
+    private static void suspects(List<Line> lines, Consumer<String> say) {
+        say.accept("Postes nommés — ceux qui ne montent jamais dans le classement :");
+        boolean any = false;
+        for (String wanted : SUSPECTS) {
+            for (Line line : lines) {
+                if (line.name.equals(wanted)) {
+                    any = true;
+                    say.accept(String.format(Locale.ROOT, "  %7.2f Mo  %9d objet(s)  %s",
+                            line.bytes / 1048576d, line.instances, line.name));
+                    break;
+                }
+            }
+        }
+        if (!any) {
+            say.accept("  aucun — ce qui serait surprenant, et mérite qu'on relise l'histogramme.");
+        }
+    }
 
     /**
      * Découpe la sortie de {@code GC.class_histogram}.
@@ -214,8 +277,9 @@ public final class Inventaire {
                 continue;
             }
             try {
+                long instances = Long.parseLong(parts[1]);
                 long bytes = Long.parseLong(parts[2]);
-                lines.add(new Line(bytes, parts[3]));
+                lines.add(new Line(instances, bytes, parts[3]));
             } catch (NumberFormatException header) {
                 // En-tête ou séparateur : rien à prendre, on continue.
             }
@@ -378,6 +442,13 @@ public final class Inventaire {
                 terrain / 1048576d, blockEntities, entities));
         say.accept(String.format(Locale.ROOT,
                 "  soit %.1f Ko par chunk chargé.", terrain / 1024d / chunks));
+        // Le relevé ne voit qu'un disque autour de chaque joueur ; l'histogramme voit tout. L'écart
+        // n'est pas une erreur, c'est une différence de portée — et le taire ferait passer un
+        // sous-total pour un total. Sur la mesure de référence, le relevé voyait 15 000 sections
+        // quand l'histogramme en comptait 32 496 : chunks d'apparition, autres dimensions et file
+        // de déchargement vivent hors du disque observé.
+        say.accept("  Portée : ce relevé ne couvre que le disque ci-dessus. L'histogramme, lui, "
+                + "compte tout le serveur — c'est lui qui fait foi sur les totaux.");
 
         Lanterne.LOG.info("[INVENTAIRE] chunks={} sections={}/{} etats={}o lumiere={}o "
                 + "(uniformes={}o) hauteurs={}o biomes={}o serrures={}o blocEntites={} entites={}",

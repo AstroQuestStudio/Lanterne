@@ -586,6 +586,8 @@ public final class Quarry {
         // rencontré de village.
         Lanterne.LOG.info("[CARRIÈRE] Cadastre : {}",
                 fr.clubcitrouille.lanterne.core.Cadastre.describe());
+        Lanterne.LOG.info("[CARRIÈRE] Calque : {}",
+                fr.clubcitrouille.lanterne.core.Calque.describe());
 
         Lanterne.LOG.info(
                 "[CARRIÈRE] VERDICT génération : {} — chunks appariés dans la MÊME grille, un sur deux "

@@ -437,6 +437,11 @@ public final class Settings {
      */
     private static boolean cadastre = true;
     /**
+     * Le calque du routeur de bruit, gardé au lieu d'être refait six fois par chunk. Voir
+     * {@link Calque}.
+     */
+    private static boolean calque = true;
+    /**
      * Le pochoir des gabarits de structure, retiré après re-mesure — et le premier module de ce
      * dépôt que <em>Mojang</em> ait périmé plutôt que la mesure.
      *
@@ -1097,6 +1102,18 @@ public final class Settings {
         return master && cadastre;
     }
 
+    /**
+     * Le calque suit l'interrupteur général, et il est lu depuis le POOL DE TRAVAIL.
+     *
+     * <p>Contrairement au cadastre, une lecture déchirée est ici <b>sans conséquence</b> : le calque
+     * ne tient aucun état entre deux appels. Servir le routeur déjà décalqué ou le refaire donne les
+     * mêmes objets ; la seule différence est le temps qu'on y passe. Une bascule au milieu d'un chunk
+     * ne peut donc produire qu'une mesure un peu floue, jamais un terrain différent.
+     */
+    public static boolean calque() {
+        return master && calque;
+    }
+
     public static int decayDelay() {
         return decayDelay;
     }
@@ -1271,6 +1288,10 @@ public final class Settings {
         // nom d'un bloc de vanilla qu'on retrouvera dans d'autres relevés. Un mot-clé qui ressemble
         // à un autre est exactement ce qui a fait mesurer deux modules pour un, trois fois.
         cadastre = wanted.contains("cadastre");
+        // « calque » et rien d'autre. Surtout pas « bruit » ni « climat » : le premier désigne une
+        // ÉTAPE de génération dans les relevés de la forge, le second une dimension de biome. Un
+        // mot-clé qui ressemble à un autre est ce qui a fait mesurer deux modules pour un, trois fois.
+        calque = wanted.contains("calque");
         // Quatre modules manquaient à cet appel, et c'est le troisième défaut du même genre.
         //
         // Un drapeau absent d'ici ne vaut pas « éteint » : il garde sa valeur par défaut, qui est
@@ -1437,6 +1458,7 @@ public final class Settings {
         recall = Config.RECALL.get();
         senses = Config.SENSES.get();
         cadastre = Config.CADASTRE.get();
+        calque = Config.CALQUE.get();
         digue = Config.DIGUE.get();
         elastique = Config.ELASTIQUE.get();
         sommaire = Config.SOMMAIRE.get();
@@ -1519,6 +1541,9 @@ public final class Settings {
         }
         if (cadastre) {
             text.append("cadastre ");
+        }
+        if (calque) {
+            text.append("calque ");
         }
         if (decay) {
             text.append("chute-feuilles ");

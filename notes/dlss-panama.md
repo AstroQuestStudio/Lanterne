@@ -472,9 +472,13 @@ Les cinq raisons, empilées, disent toutes la même chose :
    temporel dégrade l'image au lieu de l'améliorer.
 3. **La copie de profondeur**, à prendre sur `RenderLevelStageEvent.AfterLevel` — voir §5, aucun
    mixin nécessaire.
-4. **FSR 2**, depuis `GPUOpen-Effects/FidelityFX-FSR2` (MIT, *et non* le SDK successeur, voir
-   §4 bis). Pur nuanceur : pas de licence propriétaire, pas de fichier à télécharger, pas de
-   permission native qu'une mise à jour de Java puisse retirer, et il tourne sur OpenGL — donc
-   pour tout le monde, et non pour les seuls possesseurs de RTX sous Vulkan expérimental.
+4. ~~**FSR 2**, depuis `GPUOpen-Effects/FidelityFX-FSR2`.~~ **Écarté après enquête** : ses huit
+   passes sont des nuanceurs de **calcul**, et Blaze3D 26.2 n'en exécute aucun — ni image de
+   stockage, ni tampon de stockage, ni atomique. Le verdict et ses preuves sont dans
+   `notes/fsr2-faisabilite.md`. La licence était bonne (MIT) ; c'est le moteur qui ne suit pas.
+5. **Un remonteur temporel classique**, écrit en nuanceurs de fragment — la technique dont FSR 2
+   et DLSS descendent tous deux. Vanilla la soutient de première main : les cibles internes de
+   `PostChain` ont un champ `persistent`, c'est-à-dire un tampon d'historique. Tout s'y écrit
+   en **rassemblement**, jamais en dispersion. Voir `notes/fsr2-faisabilite.md` §4.
 
-Ce n'est pas un lot de consolation. C'est le seul des deux chemins qui aille jusqu'au joueur.
+Ce n'est pas un lot de consolation. C'est le seul des chemins qui aille jusqu'au joueur.

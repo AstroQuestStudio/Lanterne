@@ -28,6 +28,17 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * redémarrage</b>, il se perdrait exactement au moment où il devait servir. Le mod s'est déjà fait
  * prendre à cette faute sur son propre fichier de configuration ; voir {@code Dials.commit()}.
  *
+ * <h2>Un clic, deux fichiers — et le second n'est pas optionnel</h2>
+ *
+ * <p>Poser {@code VULKAN} dans {@code options.txt} ne suffit <b>pas</b> sur NeoForge : son écran de
+ * chargement cède à Minecraft une fenêtre déjà créée en OpenGL, et GLFW refuse alors d'y ouvrir une
+ * surface Vulkan. Le jeu ne démarre pas. {@link Dawn} porte la démonstration et le remède — une
+ * ligne de {@code config/fml.toml}.
+ *
+ * <p>Les deux écritures sont donc faites <b>ensemble</b>, par le même clic. Les séparer en deux
+ * réglages aurait été plus honnête à écrire et pire à utiliser : un joueur sur deux aurait fait le
+ * premier geste, conclu que Vulkan ne marche pas, et eu raison de le conclure.
+ *
  * <h2>Le filet de sécurité est réel, et il mérite d'être dit</h2>
  *
  * <p>{@code Minecraft} note à chaque lancement si le précédent s'est terminé proprement. Si non, et
@@ -63,6 +74,15 @@ public final class Pivot {
         VULKAN("actif"),
         /** Vulkan demandé, pas encore obtenu : il faut relancer le jeu. */
         VULKAN_AU_RELANCEMENT("au prochain lancement"),
+        /**
+         * Vulkan demandé, mais l'écran de chargement de NeoForge est encore actif — et il cédera à
+         * Minecraft une fenêtre OpenGL sur laquelle aucune surface Vulkan ne peut s'ouvrir.
+         *
+         * <p>Cet état existe pour le joueur qui a basculé par les options vidéo de vanilla plutôt
+         * que par ce cadran : il aurait obtenu un refus au lancement sans savoir pourquoi. Voir
+         * {@link Dawn}.
+         */
+        VULKAN_ENTRAVE("écran de chargement à couper"),
         /**
          * Vulkan demandé, aucun redémarrage en attente, et pourtant on tourne sur OpenGL. Le
          * backend a donc été tenté puis refusé par le pilote au démarrage.
@@ -105,6 +125,12 @@ public final class Pivot {
             boolean live = onVulkan();
             if (wanted == live) {
                 return wanted ? State.VULKAN : State.OPENGL;
+            }
+            // Vulkan demandé sans avoir coupé l'écran de chargement : le prochain lancement
+            // échouera, et il vaut mieux le dire maintenant qu'après le refus. Ce cas passe AVANT
+            // celui du redémarrage en attente, parce qu'il le rend inutile.
+            if (wanted && Dawn.state() == Dawn.State.ACTIF) {
+                return State.VULKAN_ENTRAVE;
             }
             // Vanilla sait déjà dire qu'un redémarrage est en attente : sa méthode compare le
             // réglage à la valeur qu'il avait au démarrage, ce qu'on ne peut pas refaire ici — le
@@ -166,6 +192,11 @@ public final class Pivot {
             // Sans cette ligne le choix ne survit pas au redémarrage, c'est-à-dire ne survit pas
             // jusqu'au seul moment où il aurait pu servir.
             options.save();
+            // Le second geste, sans lequel le premier ne sert à rien : l'écran de chargement de
+            // NeoForge cède à Minecraft une fenêtre OpenGL, et Vulkan ne peut pas y ouvrir de
+            // surface. Un clic doit suffire — un joueur qui devrait trouver tout seul une clé de
+            // config/fml.toml n'aurait pas Vulkan. Voir Dawn pour la démonstration.
+            Dawn.set(next != PreferredGraphicsApi.VULKAN);
             State after = state();
             if (after != announced) {
                 announced = after;

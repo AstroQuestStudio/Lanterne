@@ -74,7 +74,14 @@ public abstract class ElastiqueMixin {
 
     @Inject(method = "resetPosition", at = @At("TAIL"))
     private void lanterne$anchor(CallbackInfo callback) {
-        this.lanterne$anchorNanos = System.nanoTime();
+        long now = System.nanoTime();
+        if (Elastique.observing() && this.lanterne$anchorNanos != 0L
+                && now - this.lanterne$anchorNanos < 10_000_000L
+                && Elastique.traceBudget()) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.info("[TRACE-ANCRE] rappel rapproché",
+                    new Throwable("qui appelle resetPosition ?"));
+        }
+        this.lanterne$anchorNanos = now;
     }
 
     /**
@@ -101,13 +108,21 @@ public abstract class ElastiqueMixin {
      */
     @ModifyConstant(method = "handleMovePlayer", constant = @Constant(floatValue = 100.0F))
     private float lanterne$walkingAllowance(float vanilla) {
-        return Settings.elastique() ? Elastique.widenSpeed(vanilla, this.lanterne$frozenNanos()) : vanilla;
+        boolean armed = Settings.elastique();
+        if (!armed && !Elastique.observing()) {
+            return vanilla;
+        }
+        return Elastique.widenSpeed(vanilla, this.lanterne$frozenNanos(), armed);
     }
 
     /** Le même contrôle, pour un joueur en élytres — le jeu lui accorde déjà le triple. */
     @ModifyConstant(method = "handleMovePlayer", constant = @Constant(floatValue = 300.0F))
     private float lanterne$flyingAllowance(float vanilla) {
-        return Settings.elastique() ? Elastique.widenSpeed(vanilla, this.lanterne$frozenNanos()) : vanilla;
+        boolean armed = Settings.elastique();
+        if (!armed && !Elastique.observing()) {
+            return vanilla;
+        }
+        return Elastique.widenSpeed(vanilla, this.lanterne$frozenNanos(), armed);
     }
 
     /**
@@ -120,13 +135,48 @@ public abstract class ElastiqueMixin {
      */
     @ModifyConstant(method = "handleMovePlayer", constant = @Constant(doubleValue = 0.0625D))
     private double lanterne$coherenceAllowance(double vanilla) {
-        return Settings.elastique()
-                ? Elastique.widenResidual(vanilla, this.lanterne$frozenNanos())
-                : vanilla;
+        boolean armed = Settings.elastique();
+        // Un module eteint doit couter ZERO, et pas « presque zero » : sans cette garde, tout
+        // serveur paierait une lecture d'horloge par paquet de mouvement pour un module qui est
+        // eteint par defaut. Le drapeau d'observation n'est leve que par l'epreuve, qui a besoin
+        // d'instrumenter son bras temoin.
+        if (!armed && !Elastique.observing()) {
+            return vanilla;
+        }
+        long frozen = this.lanterne$frozenNanos();
+        if (Elastique.observing() && frozen > 60_000_000L) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.info("[TRACE-GEL] paquet jugé à +{} ms",
+                    frozen / 1_000_000L);
+        }
+        return Elastique.widenResidual(vanilla, frozen, armed);
     }
 
     /**
-     * Un retour en arrière a tout de même eu lieu.
+     * Le contrôle de vitesse vient de renvoyer un joueur en arrière.
+     *
+     * <h2>Le compteur qui regardait la mauvaise branche</h2>
+     *
+     * <p>Il n'y avait d'abord qu'un seul compteur, posé sur la branche de cohérence ci-dessous. Le
+     * premier relevé de l'épreuve a annoncé <b>zéro</b> retour en arrière pendant que le journal du
+     * serveur, lui, répétait « moved too quickly ». Les deux branches sont distinctes : celle-ci
+     * téléporte et <em>sort de la méthode</em> sans jamais atteindre l'autre.
+     *
+     * <p>La leçon est celle que ce dépôt répète : un compteur qui ne peut pas monter ne prouve pas
+     * que la chose n'arrive pas — il prouve qu'on ne la regardait pas.
+     *
+     * <p>Le point d'ancrage est le journal d'avertissement du jeu, reconnaissable à sa signature :
+     * {@code warn(String, Object[])} pour celui-ci, {@code warn(String, Object)} pour l'autre. Le
+     * désassemblage confirme qu'il n'y en a qu'un de chaque forme dans la méthode.
+     */
+    @Inject(method = "handleMovePlayer",
+            at = @At(value = "INVOKE",
+                     target = "Lorg/slf4j/Logger;warn(Ljava/lang/String;[Ljava/lang/Object;)V"))
+    private void lanterne$countSpeedRollback(CallbackInfo callback) {
+        Elastique.countSpeedRollback();
+    }
+
+    /**
+     * Le contrôle de cohérence vient de renvoyer un joueur en arrière.
      *
      * <p>Compté même lorsque le module est éteint, et c'est délibéré : c'est le <b>témoin</b> de
      * l'épreuve. Sans un relevé du même compteur dans le bras sans protection, il n'y aurait rien à
@@ -135,7 +185,7 @@ public abstract class ElastiqueMixin {
     @Inject(method = "handleMovePlayer",
             at = @At(value = "INVOKE",
                      target = "Lnet/minecraft/server/level/ServerPlayer;removeLatestMovementRecording()V"))
-    private void lanterne$countRollback(CallbackInfo callback) {
-        Elastique.countRollback();
+    private void lanterne$countCoherenceRollback(CallbackInfo callback) {
+        Elastique.countCoherenceRollback();
     }
 }

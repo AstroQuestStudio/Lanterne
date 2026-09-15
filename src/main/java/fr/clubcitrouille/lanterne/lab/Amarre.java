@@ -112,6 +112,38 @@ public final class Amarre {
     private static final int CROWD = 700;
 
     /**
+     * Ticks entre deux gels provoqués, pendant les bras en charge.
+     *
+     * <h2>Pourquoi l'épreuve fige le serveur elle-même</h2>
+     *
+     * <p>La première version comptait sur sept cents villageois pour produire le retard. Le relevé a
+     * été net et décevant : tick moyen à 26,9 ms, pire retard constaté <b>×1,00</b>, et un refus de
+     * conclure parfaitement mérité. Une charge d'entités allonge le tick, mais elle l'allonge
+     * <em>régulièrement</em> — et un tick régulièrement à 27 ms ne renvoie personne en arrière.
+     *
+     * <p>Ce qui renvoie un joueur en arrière, c'est un <b>à-coup</b> : une pause du ramasse-miettes,
+     * un chargement de région, un autre mod qui bloque le fil une seconde. Sur la machine visée — un
+     * seul cœur — il n'y a aucun autre cœur pour l'absorber, et c'est le cas réel qu'il faut
+     * reproduire.
+     *
+     * <p>L'épreuve endort donc le fil du serveur, franchement, pendant {@value #HICCUP_MILLIS}
+     * millisecondes. C'est un modèle grossier d'une pause « stop-the-world », et il est fidèle sur le
+     * seul point qui compte ici : le client, lui, a continué d'envoyer ses vingt pas par seconde
+     * pendant tout ce temps.
+     *
+     * <p>La charge de villageois est conservée par-dessus — elle place le serveur dans un état
+     * réaliste — mais ce n'est plus d'elle qu'on attend le retard, et l'épreuve ne fait plus semblant
+     * du contraire.
+     */
+    private static final int HICCUP_EVERY = 30;
+
+    /** Durée d'un gel provoqué, en millisecondes. Voir {@link #HICCUP_EVERY}. */
+    private static final long HICCUP_MILLIS = 3500L;
+
+    /** Demi-côté de la dalle posée sous la doublure, en blocs. */
+    private static final int SLAB = 48;
+
+    /**
      * Retours en arrière qu'il faut avoir subis, sans protection, pour que le tableau veuille dire
      * quelque chose.
      *
@@ -128,8 +160,15 @@ public final class Amarre {
      */
     private static final double STEP = 0.22d;
 
-    /** Demi-côté du terrain où la doublure fait les cent pas, en blocs. */
-    private static final double PADDOCK = 24d;
+    /**
+     * Demi-côté du terrain où la doublure fait les cent pas, en blocs.
+     *
+     * <p>Plus petit que la dalle, et il le faut : pendant un à-coup la doublure parcourt d'un trait
+     * {@code HICCUP_MILLIS / 50 × STEP} blocs, soit une quinzaine. Si elle faisait demi-tour au bord
+     * de la dalle, son écart à {@code firstGood} cesserait de croître au milieu de la salve — et
+     * c'est très exactement cet écart que l'épreuve mesure.
+     */
+    private static final double PADDOCK = 30d;
 
     /** Pas de client qu'on refuse de rejouer d'un coup, quoi qu'il se soit passé. */
     private static final int MAX_BURST = 80;
@@ -138,6 +177,10 @@ public final class Amarre {
     private static int waiting;
     private static MinecraftServer host;
     private static boolean anyFailure;
+
+    /** Centre de la dalle : la doublure fait ses allers-retours autour de ce point. */
+    private static double originX;
+    private static double originZ;
 
     /** La position que le client virtuel croit occuper, et sa direction. */
     private static double clientX;
@@ -153,9 +196,13 @@ public final class Amarre {
     private static long bareSteps;
     private static long guardedSteps;
 
-    /** Retours en arrière relevés, par bras. */
+    /** Retours en arrière relevés, par bras, et par mécanisme. */
     private static long bareRollbacks;
     private static long guardedRollbacks;
+    private static long bareSpeedRollbacks;
+    private static long guardedSpeedRollbacks;
+    private static long bareCoherenceRollbacks;
+    private static long guardedCoherenceRollbacks;
 
     /** Pire retard constaté, par bras. */
     private static double bareLateness;
@@ -197,6 +244,8 @@ public final class Amarre {
         // la figent pour la même raison.
         Settings.setTide(false);
         anyFailure = false;
+        // Sans cela, le bras temoin ne compterait rien : voir Elastique.observing.
+        Elastique.observe(true);
 
         Lanterne.LOG.info("[AMARRE] Épreuve de l'élastique armée.{}",
                 Elastique.toothless()
@@ -263,6 +312,7 @@ public final class Amarre {
                 waiting = STORM_TICKS;
             }
             case STORM_BARE -> {
+                hiccup();
                 drive(server);
                 if (tickStarted != 0L && System.nanoTime() - tickStarted > NOMINAL_NANOS) {
                     bareOverruns++;
@@ -272,6 +322,8 @@ public final class Amarre {
                 }
                 bareSteps = Elastique.samples();
                 bareRollbacks = Elastique.rollbacks();
+                bareSpeedRollbacks = Elastique.speedRollbacks();
+                bareCoherenceRollbacks = Elastique.coherenceRollbacks();
                 bareLateness = Elastique.worstLateness();
 
                 Settings.setElastique(true);
@@ -281,6 +333,7 @@ public final class Amarre {
                 waiting = STORM_TICKS;
             }
             case STORM_GUARDED -> {
+                hiccup();
                 drive(server);
                 if (tickStarted != 0L && System.nanoTime() - tickStarted > NOMINAL_NANOS) {
                     guardedOverruns++;
@@ -290,6 +343,8 @@ public final class Amarre {
                 }
                 guardedSteps = Elastique.samples();
                 guardedRollbacks = Elastique.rollbacks();
+                guardedSpeedRollbacks = Elastique.speedRollbacks();
+                guardedCoherenceRollbacks = Elastique.coherenceRollbacks();
                 guardedLateness = Elastique.worstLateness();
                 verdict();
                 finish();
@@ -313,9 +368,9 @@ public final class Amarre {
         boolean ok = true;
         for (long ms : durations) {
             long nanos = ms * 1_000_000L;
-            float walk = Elastique.widenSpeed(100.0F, nanos);
-            float fly = Elastique.widenSpeed(300.0F, nanos);
-            double coherence = Elastique.widenResidual(0.0625D, nanos);
+            float walk = Elastique.widenSpeed(100.0F, nanos, true);
+            float fly = Elastique.widenSpeed(300.0F, nanos, true);
+            double coherence = Elastique.widenResidual(0.0625D, nanos, true);
             boolean line = Float.floatToRawIntBits(walk) == Float.floatToRawIntBits(100.0F)
                     && Float.floatToRawIntBits(fly) == Float.floatToRawIntBits(300.0F)
                     && Double.doubleToRawLongBits(coherence) == Double.doubleToRawLongBits(0.0625D);
@@ -360,8 +415,8 @@ public final class Amarre {
             double wantedSpeed = Math.min(late, 16d) * Math.min(late, 16d);
             double wantedResidual = Math.min(late, 4d) * Math.min(late, 4d);
 
-            float walk = Elastique.widenSpeed(100.0F, nanos);
-            double coherence = Elastique.widenResidual(0.0625D, nanos);
+            float walk = Elastique.widenSpeed(100.0F, nanos, true);
+            double coherence = Elastique.widenResidual(0.0625D, nanos, true);
 
             boolean speedOk = close(walk, 100.0D * wantedSpeed);
             boolean residualOk = close(coherence, 0.0625D * wantedResidual);
@@ -404,9 +459,27 @@ public final class Amarre {
     /**
      * Pose le terrain et le client virtuel. Rend faux si la scène n'est pas utilisable.
      *
-     * <p>Des piliers, et non un mur : c'est une géométrie à <b>coins</b>, et le coin est exactement
-     * ce qu'un grand pas heurte alors que plusieurs petits le contournent. Un mur droit ne
-     * produirait rien — la doublure glisserait le long dans les deux cas.
+     * <h2>Une dalle nue, après une forêt de piliers</h2>
+     *
+     * <p>La première version semait des piliers, pour que le chemin ait des <b>coins</b> : l'idée
+     * était d'éprouver le contrôle de cohérence, qui naît d'un grand pas heurtant ce que plusieurs
+     * petits contournaient.
+     *
+     * <p>La lecture du code du jeu a montré que ce raisonnement était faux, et le relevé l'a
+     * confirmé. Le serveur ne fait <b>pas</b> un grand pas : {@code lastGood} est remis à jour après
+     * <em>chaque</em> paquet accepté, si bien que chaque appel à {@code move()} ne couvre qu'un seul
+     * pas de client, quel que soit le retard. Ce qui s'accumule pendant un à-coup, c'est l'écart à
+     * {@code firstGood}, qui lui reste figé tout le tick — et c'est donc le <b>contrôle de vitesse</b>
+     * qui se déclenche, pas celui de cohérence.
+     *
+     * <p>Les piliers n'éprouvaient donc pas ce qu'on croyait, et ils nuisaient à ce qu'il fallait
+     * éprouver : la doublure rebondissait dessus, restait sur place, et son écart à {@code firstGood}
+     * ne montait jamais. Une dalle nue la laisse s'éloigner en ligne droite, ce qui est exactement la
+     * situation d'un joueur qui court pendant que le serveur se fige.
+     *
+     * <p>C'est la seconde fois dans cette épreuve qu'une hypothèse plausible sur le code du jeu a dû
+     * céder devant sa lecture. Elles sont conservées ici parce qu'elles sont instructives : le
+     * mécanisme du symptôme n'est pas celui qu'on suppose spontanément.
      */
     private static boolean openScene(MinecraftServer server) {
         ServerLevel level = server.overworld();
@@ -419,29 +492,50 @@ public final class Amarre {
         }
 
         int ground = Scene.groundLevel(level);
-        clientX = actor.getX();
-        clientY = ground + 1d;
-        clientZ = actor.getZ();
-        actor.snapTo(clientX, clientY, clientZ, 0f, 0f);
+        originX = actor.getX();
+        originZ = actor.getZ();
 
-        int posts = 0;
-        for (int dx = -24; dx <= 24; dx += 4) {
-            for (int dz = -24; dz <= 24; dz += 4) {
-                // Une trouée au centre, pour que la doublure ne démarre pas dans un pilier.
-                if (Math.abs(dx) <= 2 && Math.abs(dz) <= 2) {
-                    continue;
-                }
-                BlockPos foot = BlockPos.containing(clientX + dx, ground + 1d, clientZ + dz);
-                level.setBlockAndUpdate(foot, Blocks.STONE.defaultBlockState());
-                level.setBlockAndUpdate(foot.above(), Blocks.STONE.defaultBlockState());
-                posts++;
+        int laid = 0;
+        for (int dx = -SLAB; dx <= SLAB; dx++) {
+            for (int dz = -SLAB; dz <= SLAB; dz++) {
+                BlockPos floor = BlockPos.containing(originX + dx, ground, originZ + dz);
+                // Sans mise à jour des voisins : on pose quarante mille blocs, et déclencher une
+                // cascade de propagation à chacun figerait le serveur pour de mauvaises raisons —
+                // c'est-à-dire pendant la phase où l'on prétend qu'il va bien.
+                level.setBlock(floor, Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 2);
+                level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 2);
+                laid++;
             }
         }
 
+        clientX = originX;
+        clientY = ground + 1d;
+        clientZ = originZ;
+        actor.snapTo(clientX, clientY, clientZ, 0f, 0f);
+
         lastStepNanos = System.nanoTime();
-        Lanterne.LOG.info("[AMARRE] Scène ouverte : {} pilier(s) autour de la doublure, sol à {}.",
-                posts, ground);
-        return posts > 0;
+        Lanterne.LOG.info("[AMARRE] Scène ouverte : dalle de {} colonnes, sol à {}, doublure en "
+                + "({}, {}).", laid, ground, (int) originX, (int) originZ);
+        return laid > 0;
+    }
+
+    /**
+     * Fige le fil du serveur, comme le ferait une pause du ramasse-miettes.
+     *
+     * <p>C'est le seul endroit de ce dépôt où l'on ralentit le serveur <b>exprès</b>, et cela mérite
+     * d'être dit : voir {@link #HICCUP_EVERY} pour la raison, qui est qu'une charge régulière ne
+     * reproduit pas un à-coup, et que c'est l'à-coup qui renvoie le joueur en arrière.
+     */
+    private static void hiccup() {
+        if (waiting % HICCUP_EVERY != 0) {
+            return;
+        }
+        try {
+            Thread.sleep(HICCUP_MILLIS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static void buildCharge(MinecraftServer server) {
@@ -507,7 +601,7 @@ public final class Amarre {
      * pas su refaire le chemin d'un seul grand pas.
      */
     private static void advanceOneClientTick(ServerLevel level, ServerPlayer actor) {
-        if (Math.abs(clientX) > PADDOCK * 4d || Math.abs(clientZ) > PADDOCK * 4d) {
+        if (Math.abs(clientX - originX) > PADDOCK || Math.abs(clientZ - originZ) > PADDOCK) {
             headingX = -headingX;
             headingZ = -headingZ;
         }
@@ -539,13 +633,15 @@ public final class Amarre {
                 "[AMARRE] Au repos (module armé)  : %d pas · %d élargissement(s) · pire retard ×%.2f",
                 calmSteps, calmWidened, calmLateness));
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[AMARRE] En charge, SANS le module : %d pas · %d retour(s) en arrière · pire retard "
-                        + "×%.2f · %d tick(s) > 50 ms",
-                bareSteps, bareRollbacks, bareLateness, bareOverruns));
+                "[AMARRE] En charge, SANS le module : %d pas · %d retour(s) en arrière "
+                        + "(%d vitesse, %d cohérence) · pire retard ×%.2f · %d tick(s) > 50 ms",
+                bareSteps, bareRollbacks, bareSpeedRollbacks, bareCoherenceRollbacks,
+                bareLateness, bareOverruns));
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[AMARRE] En charge, AVEC le module : %d pas · %d retour(s) en arrière · pire retard "
-                        + "×%.2f · %d tick(s) > 50 ms",
-                guardedSteps, guardedRollbacks, guardedLateness, guardedOverruns));
+                "[AMARRE] En charge, AVEC le module : %d pas · %d retour(s) en arrière "
+                        + "(%d vitesse, %d cohérence) · pire retard ×%.2f · %d tick(s) > 50 ms",
+                guardedSteps, guardedRollbacks, guardedSpeedRollbacks, guardedCoherenceRollbacks,
+                guardedLateness, guardedOverruns));
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[AMARRE] Tick moyen en fin d'épreuve : %.1f ms · pire %.1f ms",
                 TickBudget.averageMillis(), TickBudget.worstMillis()));
@@ -614,6 +710,8 @@ public final class Amarre {
                     + "LANTERNE_BREAK_ELASTIQUE=1 retire les dents du module — le tableau 2 DOIT "
                     + "alors échouer, sans quoi c'est cette épreuve qu'il faut réparer.");
         }
+        Elastique.observe(false);
+        Settings.setElastique(false);
         step = Step.DONE;
         if (host != null) {
             host.halt(false);

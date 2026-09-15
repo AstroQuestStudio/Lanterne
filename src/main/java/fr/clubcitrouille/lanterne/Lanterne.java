@@ -169,6 +169,9 @@ public final class Lanterne {
         // L'épreuve de l'élastique compte elle aussi des ticks entiers : c'est le dépassement des
         // cinquante millisecondes qui donne au tableau son échelle de retard.
         fr.clubcitrouille.lanterne.lab.Amarre.beginTick();
+        // L'épreuve du ramasseur compte elle aussi des ticks entiers : c'est la part du tick que les
+        // pauses prennent qui l'intéresse, et une pause peut tomber n'importe où dedans.
+        fr.clubcitrouille.lanterne.lab.Fonte.beginTick();
         Census.resetCounters();
         // Une fois par tick SERVEUR, et non par monde. LevelTickEvent.Pre se déclenche pour chacun
         // des trois mondes ; basculer le recensement à chaque fois faisait écraser celui de
@@ -191,6 +194,7 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
         SelfTest.tick(event.getServer());
         Bench.endTick(event.getServer().overworld());
+        fr.clubcitrouille.lanterne.lab.Fonte.endTick(event.getServer());
     }
 
     /**
@@ -229,6 +233,10 @@ public final class Lanterne {
         // Les plafonds de la maree : ce que server.properties demande, jamais depasse.
         fr.clubcitrouille.lanterne.core.Tide.anchor(event.getServer());
         fr.clubcitrouille.lanterne.core.Ballast.appraise();
+        // Le ramasseur et le tas : ce que la machine virtuelle a choisi, et s'il faut le lui dire.
+        // Après Ballast, parce que l'avertissement doit être la dernière chose que l'administrateur
+        // lise avant la bannière — pas une ligne noyée au milieu du démarrage.
+        fr.clubcitrouille.lanterne.core.Creuset.appraise();
         fr.clubcitrouille.lanterne.core.Herald.welcome(
                 (System.nanoTime() - AWOKEN) / 1_000_000L,
                 net.neoforged.fml.ModList.get().size());

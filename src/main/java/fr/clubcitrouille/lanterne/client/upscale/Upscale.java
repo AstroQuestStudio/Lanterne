@@ -22,8 +22,14 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * <h2>D'où vient le gain, et pourquoi il est si direct</h2>
  *
  * <p>Le coût d'une image est à peu près proportionnel au nombre de pixels. Rendre le monde à deux
- * tiers de chaque dimension, ce n'est pas deux tiers du travail : c'est {@code 0,67² ≈ 45 %} de
- * pixels en moins. À la moitié de chaque dimension, on en supprime les trois quarts.
+ * tiers de chaque dimension, ce n'est pas deux tiers du travail : il n'en reste que
+ * {@code 0,67² ≈ 45 %}, soit <b>55 % de pixels en moins</b>. À la moitié de chaque dimension, on en
+ * supprime les trois quarts.
+ *
+ * <p>C'est de là, et de nulle part ailleurs, que vient le gain d'images par seconde — <b>pas du
+ * remonteur</b>. DLSS, FSR et XeSS ne se disputent que la <em>qualité</em> de l'image reconstruite ;
+ * la vitesse, elle, est déjà acquise avant qu'aucun d'eux n'intervienne. C'est la réponse à la
+ * question que se pose tout possesseur de carte NVIDIA devant un procédé signé AMD.
  *
  * <p>C'est le principe de DLSS, de FSR et de XeSS. Ils ne diffèrent que par la <b>façon de
  * remonter</b> l'image, pas par l'origine du gain. FSR 1.0 est le seul des trois qui soit un pur
