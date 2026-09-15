@@ -2,10 +2,26 @@ modLoader = "javafml"
 loaderVersion = "[4,)"
 license = "${mod_license}"
 
+# Les champs d'identité, et pourquoi ils ne sont pas décoratifs.
+#
+# Un jar qui ne déclare qu'un identifiant et une version s'affiche, dans la liste des mods du jeu
+# comme dans celle de n'importe quel lanceur, sous une vignette vide et sans auteur. C'était le cas
+# ici : « neoforge.mods.toml » ne portait ni « authors », ni « logoFile », ni la moindre adresse, et
+# le MANIFEST du jar ne contenait qu'une ligne. Rien n'était cassé — il n'y avait simplement rien à
+# montrer.
+#
+# Attention en revanche : cela ne suffit PAS à faire apparaître le mod dans l'application
+# CurseForge. Elle n'inscrit dans « minecraftinstance.json » que les fichiers dont l'empreinte est
+# reconnue par SA base ; un jar compilé ici n'y figure pas, et aucune métadonnée ne peut y changer
+# quoi que ce soit. Voir README.md, « Le modpack ».
 [[mods]]
 modId = "${mod_id}"
 version = "${mod_version}"
 displayName = "${mod_name}"
+authors = "Club Citrouille"
+credits = "Les projets lus et crédités dans NOTICE.md, un par un."
+displayURL = "https://github.com/AstroQuestStudio/Lanterne"
+issueTrackerURL = "https://github.com/AstroQuestStudio/Lanterne/issues"
 description = '''
 Un seul passage, une seule décision, un budget de temps réparti.
 

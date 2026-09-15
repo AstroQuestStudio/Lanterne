@@ -154,6 +154,26 @@ public final class LanterneCommand {
                                             + " chunks. Ce qui existe déjà est sauté ; l'interrompre "
                                             + "ne perd rien, la reprise est gratuite.")
                                             .withStyle(ChatFormatting.GOLD), true);
+                                    // Distant Horizons apprend chaque chunk au moment où il est
+                                    // ECRIT — son mixin sur « ChunkMap.save » se déclenche au retour
+                                    // de « ChunkSerializer.write », et la pré-génération demande des
+                                    // chunks en statut FULL, qui passent donc toutes ses
+                                    // vérifications. La pré-génération le nourrit directement.
+                                    //
+                                    // Mais elle peut aussi le noyer : DH refuse déjà de générer en
+                                    // même temps que Chunky, « since Chunky can generate chunks
+                                    // faster than DH can process them » — et il détecte Chunky par
+                                    // un « Class.forName » qui ne nous verra jamais. Le dire ici est
+                                    // le seul moment où cela sert : après coup, les trous sont déjà
+                                    // dans la base et il faut la refaire.
+                                    if (Compagnons.present(Compagnons.HORIZONS)) {
+                                        context.getSource().sendSuccess(() -> Component.literal(
+                                                "Distant Horizons est là : il apprendra chaque chunk "
+                                                + "au moment où il est écrit. S'il prend du retard, "
+                                                + "l'horizon aura des trous — monte son nombre de "
+                                                + "fils, ou pré-génère avant de jouer.")
+                                                .withStyle(ChatFormatting.AQUA), false);
+                                    }
                                     return 1;
                                 })))
                 .then(Commands.literal("nbt")
@@ -308,6 +328,20 @@ public final class LanterneCommand {
                                     "Marée — " + fr.clubcitrouille.lanterne.core.Tide.describe(
                                             context.getSource().getServer()))
                                     .withStyle(ChatFormatting.AQUA), false);
+                            // Le plan de coupe de Distant Horizons est calculé à chaque image à
+                            // partir de « Options.getEffectiveRenderDistance() », qui vaut le
+                            // minimum entre le réglage du joueur et la distance que CE serveur
+                            // annonce. Une descente de la marée est donc comblée à l'image suivante,
+                            // sans reconstruction — et en mode automatique le recouvrement augmente
+                            // même quand la distance baisse (0,9 au-dessus de dix chunks, 0,3 à
+                            // quatre), précisément pour cacher la bordure. Voir RenderUtil
+                            // .getNearClipPlaneInBlocks dans les sources de DH.
+                            if (Compagnons.present(Compagnons.HORIZONS)) {
+                                context.getSource().sendSuccess(() -> Component.literal(
+                                        "Distant Horizons comble derrière elle, dès l'image "
+                                        + "suivante — mais seulement là où tu es déjà passé.")
+                                        .withStyle(ChatFormatting.DARK_AQUA), false);
+                            }
                             return 1;
                         })
                         .then(Commands.literal("on")

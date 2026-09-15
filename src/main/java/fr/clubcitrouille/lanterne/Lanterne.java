@@ -172,6 +172,9 @@ public final class Lanterne {
         // L'épreuve du ramasseur compte elle aussi des ticks entiers : c'est la part du tick que les
         // pauses prennent qui l'intéresse, et une pause peut tomber n'importe où dedans.
         fr.clubcitrouille.lanterne.lab.Fonte.beginTick();
+        // La ventilation du cheptel chronomètre elle aussi des ticks entiers : c'est la durée
+        // complète qui se multiplie par la part du profileur pour donner des millisecondes par poste.
+        fr.clubcitrouille.lanterne.lab.Cheptel.beginTick();
         Census.resetCounters();
         // Une fois par tick SERVEUR, et non par monde. LevelTickEvent.Pre se déclenche pour chacun
         // des trois mondes ; basculer le recensement à chaque fois faisait écraser celui de
@@ -191,6 +194,12 @@ public final class Lanterne {
         // plus haut, et elle avait coûté six bancs à trouver.
         fr.clubcitrouille.lanterne.core.Sweeper.tick(event.getServer());
         fr.clubcitrouille.lanterne.core.Tide.tick(event.getServer());
+        // Le délai de grâce du burin s'écoule au rythme du SERVEUR, et non par joueur : une grâce
+        // par joueur s'épuiserait plus vite à trois qu'à un, et la latence qu'elle attend est
+        // mesurée par un échange qui, lui, ne dépend pas du nombre de monde présent.
+        if (event.getServer().getTickCount() % 20 == 0) {
+            fr.clubcitrouille.lanterne.core.Burin.tick(event.getServer());
+        }
         fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
         SelfTest.tick(event.getServer());
         Bench.endTick(event.getServer().overworld());
@@ -240,6 +249,10 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.Herald.welcome(
                 (System.nanoTime() - AWOKEN) / 1_000_000L,
                 net.neoforged.fml.ModList.get().size());
+        // Après la bannière, et non dedans : celle-ci dit ce que vaut la machine et ce que fait le
+        // mod, celui-là dit AVEC QUI il le fait. Un joueur qui installe cinq mods ne sait pas
+        // lesquels se parlent, et aucun des cinq ne le lui dira. Voir report.Compagnons.
+        fr.clubcitrouille.lanterne.report.Compagnons.say();
     }
 
     @SubscribeEvent

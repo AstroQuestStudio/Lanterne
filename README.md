@@ -288,6 +288,13 @@ Deux façons de fournir un chunk à un joueur qui avance, mesurées sur la même
 
 > C'est le seul levier de génération dont le gain **ne dépend pas du nombre de cœurs** — il supprime le travail au lieu de le distribuer. C2ME et VMP, qui le répartissent, ne rendent rien sur un hébergement à un cœur.
 
+> **Elle nourrit Distant Horizons.** DH s'accroche au *retour* de `ChunkSerializer.write` : chaque
+> chunk écrit lui est signalé, et la pré-génération les demande en `ChunkStatus.FULL`, donc complets
+> et éclairés. Elle bâtit sa base en même temps que le monde. **Elle peut aussi le distancer** —
+> exactement le défaut pour lequel DH refuse de générer en même temps que Chunky, sauf que DH ne sait
+> pas nous détecter. `/lanterne pregen` le dit au moment où on le lance ; voir
+> **[Le modpack](#-le-modpack--lanterne--jade--journeymap--sodium--distant-horizons--jei)**.
+
 ---
 
 ## ⚓ L'Ancre de chunk
@@ -448,6 +455,12 @@ monde cesse d'être grand.
 
 > **Pourquoi une flèche et non un cap.** « 247° » demande de savoir où l'on regarde pour servir à
 > quelque chose. Un joueur ne sait pas où est le nord ; il sait où il regarde.
+
+> **Et si JourneyMap est installé ?** Les deux carnets restent, et c'est délibéré : les siens sont des
+> fichiers locaux illimités et gratuits, les nôtres sont une donnée de **serveur**, partagée,
+> contingentée, et ce sont eux qui nomment les **portails** — que JourneyMap ne sait pas faire. Le
+> raisonnement complet, et ce qu'il faudrait pour projeter les nôtres sur sa carte, sont dans
+> **[Le modpack](#-le-modpack--lanterne--jade--journeymap--sodium--distant-horizons--jei)**.
 
 ### ⚓ La Boussole d'Ancre
 
@@ -818,6 +831,12 @@ arrêté de brouter à cent quatre-vingts blocs, tout le monde voit un horizon q
 |---|---|
 | `/lanterne maree` | l'état courant, et le nombre d'ajustements |
 | `/lanterne maree on` / `off` | l'allumer ou la figer |
+
+> **Avec Distant Horizons, la Marée n'a presque plus de coût visible.** Son plan de coupe suit la
+> distance de vue vanilla à chaque image : quand la Marée descend, il comble dès l'image suivante, et
+> en mode automatique il élargit même son recouvrement à mesure que la distance se réduit. La limite
+> est ailleurs — il ne connaît que le terrain qu'il a déjà vu. Le détail, le code et les chiffres sont
+> dans **[Le modpack](#-le-modpack--lanterne--jade--journeymap--sodium--distant-horizons--jei)**.
 
 Éprouvée par `Surge` : sous 3 000 villageois à 71,6 ms, elle descend la simulation de **10 à 5**,
 puis la remonte de **5 à 10** une fois la charge retirée — sans jamais avoir touché à la distance de
@@ -1532,12 +1551,332 @@ tranquillité.
 
 ---
 
-## ⚠️ Cohabitation
+## 🧩 Le modpack — Lanterne + Jade + JourneyMap + Sodium + Distant Horizons + JEI
 
-> **Immersive Optimization** fait du tick scheduling par distance, **comme Lanterne**. Les deux
-> appliqueraient leur dégradation l'un sur l'autre. Le retirer avant de juger.
+Lanterne est le **socle de performance** de ce pack. Les autres sont des mods de confort ou de rendu.
+Cette section dit ce que chacun fait, ce que Lanterne apporte qu'aucun d'eux n'a, et **ce qu'il faut
+régler**.
 
-Lanterne est **complémentaire** de Sodium (qui optimise ce qui est *dessiné*) et de Lithium (ce qui
+Au démarrage, Lanterne écrit un second cadre après sa bannière — **« Compagnons »** — qui relève ceux
+qui sont chargés et dit ce qu'il en fait. Un joueur qui installe cinq mods ne sait pas lesquels se
+parlent, et aucun des cinq ne le lui dira.
+
+### Qui fait quoi, et où les frontières passent
+
+| Mod | Son poste | Ce qu'il ne touche pas |
+|---|---|---|
+| **Sodium** | Le moteur de rendu de chunks : maillage, tampons, mémoire GPU | Le tick, le réseau, la simulation |
+| **Distant Horizons** | Le terrain **au-delà** de la distance de vue, en niveaux de détail | Les entités, les blocs-entités, le tick |
+| **JourneyMap** | La carte, le radar, ses propres repères | Les performances |
+| **Jade** | L'infobulle du bloc visé | Idem |
+| **JEI** | La liste des objets et des recettes | Idem |
+| **Lanterne** | **Ce qui ne devrait pas être fait du tout** : le tick des entités lointaines, les paquets, la génération, la mémoire retenue | Le maillage de chunks, la carte, les recettes |
+
+**Ce que Lanterne apporte que les autres n'ont pas** : aucun des cinq ne touche au *serveur*. Sodium
+et Distant Horizons dessinent, JourneyMap et Jade affichent, JEI trie. Le tick de la vache à cent
+cinquante blocs, personne d'autre ne s'en occupe — et c'est lui qui décide du TPS.
+
+### 🌍 Distant Horizons — le seul qui touche au même terrain
+
+C'est le seul des cinq qui lit les chunks, garde sa propre base, et dessine en parallèle du rendu de
+vanilla. Quatre points ont été vérifiés dans ses sources (DH **3.2.1**, API 7.1.0, LGPL-3.0-only).
+
+**1. La Marée devient meilleure, pas dangereuse.** Le plan de coupe proche de DH — l'endroit où il
+commence à dessiner — est recalculé **à chaque image** à partir de la distance de vue *vanilla* :
+
+```java
+// core/util/RenderUtil.java — getNearClipPlaneDistanceInBlocks
+int chunkRenderDistance = MC_RENDER.getRenderDistance();        // = Options.getEffectiveRenderDistance()
+int vanillaBlockRenderedDistance = chunkRenderDistance * 16;
+nearClipPlane = vanillaBlockRenderedDistance * overdrawPreventionPercent;
+```
+
+`getEffectiveRenderDistance()` vaut le **minimum entre le réglage du joueur et la distance que le
+serveur annonce**. Il n'y a ni cache, ni reconstruction, ni invalidation : quand la Marée descend, le
+plan bouge à l'image suivante et DH comble. Mieux, en mode automatique — la valeur par défaut,
+`overdrawPrevention = -1` — le recouvrement **augmente quand la distance baisse** :
+
+| Distance de vue vanilla | Recouvrement DH | Commentaire de son auteur |
+|---|---|---|
+| ≤ 2 chunks | 0,2 | *« At low render distances this hides the vanilla RD border »* |
+| ≤ 4 | 0,3 | |
+| ≤ 6 | 0,6 | |
+| ≤ 10 | 0,8 | |
+| au-delà | 0,9 | |
+
+Au plancher de la Marée — vue 4 — DH commence donc à dessiner à **19 blocs** de la caméra. Il n'y a
+pas de trou : il y a de la basse définition.
+
+> **La limite, et elle est réelle : DH ne connaît que ce qu'il a vu.** Sur un serveur qui n'a pas DH
+> installé, sa seule source est le chunk que le serveur envoie. Rogner la distance de vue rogne donc
+> aussi ce qu'il *apprend*. Sur un terrain déjà exploré, la Marée est invisible ; en marchant vers
+> l'inconnu, elle se voit comme avant. **DH ne rachète pas le plancher, il rachète le paysage connu.**
+
+**2. La pré-génération le nourrit — directement, et c'est mesurable.** DH accroche
+`ChunkMap.save`, au **retour** de `ChunkSerializer.write` : chaque chunk *écrit sur le disque* lui est
+signalé. Or `lab/Pregen.java` demande ses chunks en `ChunkStatus.FULL` via
+`level.getChunkSource().getChunkFuture(...)` — ils sont donc complets, éclairés, et passent toutes les
+validations de DH (`!isUnsaved()`, `isLightCorrect()`, pas un `ProtoChunk`). **`/lanterne pregen`
+construit la base de DH en même temps que le monde**, sans que son propre générateur ait à tourner.
+
+> ⚠️ **Et il peut le noyer.** DH refuse déjà de générer en même temps que Chunky, textuellement :
+> *« Chunky can cause DH LODs to have holes since Chunky can generate chunks faster than DH can
+> process them. »* Il détecte Chunky par un `Class.forName("org.popcraft.chunky.api.ChunkyAPI")` —
+> **qui ne verra jamais Lanterne**. La pré-génération de Lanterne a exactement la même propriété :
+> 24 chunks en vol, 30 ms par tick. Si DH prend du retard, l'horizon garde des trous qu'il faudra
+> effacer à la main. `/lanterne pregen` le dit maintenant au moment où on le lance, parce qu'après
+> coup les trous sont déjà dans la base.
+
+**3. Le Voile ne le concerne pas.** DH ne rend **aucune** entité ni bloc-entité. Quatre preuves :
+aucun renderer d'entité dans tout le dépôt ; `DhLitWorldGenRegion.getBlockEntity()` rend `null` sauf
+pour le générateur de monstres ; `addFreshEntity()` accepte puis jette — *« Skip BlockEntity stuff.
+They aren't needed for our use case »* ; et `ChunkWrapper` n'expose aucun accesseur d'entité. Le Voile
+(`core/Shroud.java`), le voile des particules et celui des blocs-entités travaillent sur
+`LevelExtractor` et `BlockEntityRenderDispatcher`, que DH ne touche pas. **Aucun conflit.**
+
+Nuance : DH dessine tout de même des **boîtes** non-terrain — nuages et rayons de balise. Les balises
+sont détectées au niveau du *bloc* (`BlockStateWrapper.isBeaconBlock`), jamais de la bloc-entité.
+
+**4. Le coût, et le réglage qui compte sur un cœur.** DH dimensionne ses fils ainsi :
+
+```java
+// core/config/eventHandlers/presets/ThreadPresetConfigEventHandler.java
+int coreCount = (int) Math.ceil(totalProcessorCount * percent);
+return MathUtil.clamp(1, coreCount, totalProcessorCount);
+```
+
+Sur une machine **à un seul cœur**, `ceil(1 × p)` vaut 1 pour tout `p`, et la borne le ramène à 1 :
+**les cinq préréglages rendent le même nombre de fils.** Changer de préréglage n'y fait rien. Le seul
+levier qui bouge encore est `threadRunTimeRatio` — la part du temps où le fil tourne avant de
+s'endormir : **0,5** au préréglage *Minimal Impact*, **1,0** partout ailleurs. C'est le seul réglage
+de DH qui économise du CPU sur un VPS mono-cœur, et Lanterne le dit dans son cadre « Compagnons ».
+
+Sa base est un **SQLite** — `DistantHorizons.sqlite` — rangé dans le dossier `data` du monde en solo,
+et dans `.minecraft/Distant_Horizons_server_data/<serveur>/<dimension>/` en multijoueur.
+
+**5. Les mixins — le croisement complet.** Lanterne en a 69, DH en a une trentaine. **Quatre classes
+vanilla sont communes, et aucune ne produit de collision d'injecteur** :
+
+| Classe vanilla | Lanterne | Distant Horizons (NeoForge 26.2) | Verdict |
+|---|---|---|---|
+| `client.renderer.GameRenderer` | `UpscaleGameRendererMixin` → **`render`** (3 points) | `MixinGameRenderer` → **`renderLevel`** | Méthodes disjointes. Interaction réelle, voir ci-dessous |
+| `server.level.ChunkMap` | `ChunkMapMixin` → **`runGenerationTask(s)`** | `MixinChunkMap` → **`save`** | Méthodes disjointes — et c'est ce hook qui fait que la pré-génération le nourrit |
+| `net.minecraft.Util` | `ThreadCountMixin` → `maxAllowedExecutorThreads` | `MixinUtilBackgroundThread` → `backgroundExecutor` — **inactif au-dessus de 1.21.3**, donc pas en 26.2 | Aucun contact |
+| `world.level.chunk.ChunkGenerator` | *(Lanterne vise la sous-classe `NoiseBasedChunkGenerator`)* | `MixinChunkGenerator` — **corps vide au-dessus de 1.18.2** | Aucun contact |
+
+Et deux points d'accroche **indirects**, qui ne partagent pas de classe mais partagent du code :
+
+- **La génération distante de DH passe par le vrai générateur de vanilla.** `ChunkStep.apply`,
+  `NoiseChunk` et `NoiseBasedChunkGenerator` — donc `ChunkStepMixin`, `NoiseCalqueMixin`,
+  `FilonNoiseMixin` et `FilonGeneratorMixin` — s'exécuteront **sur les fils de DH**. Vérifié : les
+  trois modules concernés (`core/Forge`, `core/Calque`, `lab/Filon`) n'emploient que
+  `ConcurrentHashMap`, `AtomicLong`, `LongAdder` et `ThreadLocal`. **Pas de course de données.**
+  En revanche, **les mesures de `/lanterne forge` sont polluées par DH** : un banc de génération doit
+  se faire sans lui.
+- **La Lentille échange la cible de rendu le temps du monde.** DH dessine *à l'intérieur* de ce bloc :
+  ses niveaux de détail héritent donc de la toile réduite et sont remontés avec le reste. C'est
+  cohérent — mais si l'horizon bave, c'est la Lentille, pas DH. Elle est **éteinte par défaut**.
+
+**6. Ce qu'il ne faut pas ajouter par-dessus.** DH 3.2.1 se déclare lui-même incompatible, sur 26.2,
+avec **Vertigo** (*« prevents DH from seeing the full chunk, causing holes »*) et avec **Iris ≥ 1.11.4**
+(*« Iris added a new depth feature we need to track »*). Ce sont ses propres métadonnées, pas une
+supposition.
+
+### 🔎 Jade — rien à craindre, et une occasion qui attend un dépôt Maven
+
+Jade lit les blocs-entités de Lanterne : l'écran, le projecteur, le graveur, la veilleuse. **Il ne
+peut ni planter ni coûter quoi que ce soit dessus**, et la raison est nette : son `UniversalPlugin`
+enregistre ses fournisseurs d'inventaire, de fluide et d'énergie sur `Block.class` et `Object.class`,
+c'est-à-dire sur tout — mais il ne trouve un inventaire que par deux chemins,
+`CommonProxy.findItemHandler` (capacité NeoForge) et `CommonProxy.findContainer` (`instanceof
+Container`). **Aucune classe de Lanterne n'implémente `Container`, et le mod n'enregistre aucune
+capacité** : les deux chemins rendent `null`, `shouldRequestData` rend `false`, et aucun paquet ne
+part. Ce que Jade affichera : le nom du bloc, le nom du mod, l'outil de récolte. C'est sensé.
+
+**L'occasion existe et elle est propre.** Jade découvre ses greffons par **scan d'annotation ASM** —
+`ModFileScanData.getAnnotatedBy(WailaPlugin.class, TYPE)` — exactement comme Sodium découvre
+`client/sodium/Graft.java` par une chaîne de `neoforge.mods.toml`. Une classe annotée
+`@WailaPlugin` implémentant `IWailaPlugin` **n'est jamais chargée si Jade est absent**, et Jade
+attrape toute exception d'un greffon tiers sans faire tomber le jeu. Nos blocs pourraient donc y dire
+« portail relié à *Maison* », « écran 720p, en lecture », « graveur : 38 s gravées ».
+
+**Ce qui bloque aujourd'hui, et ce n'est pas la technique** : Jade n'a **pas de jar d'API séparé** —
+les interfaces vivent dans le mod lui-même, publié sous **CC-BY-NC-SA-4.0**, une licence non
+commerciale et sans dépôt Maven de version stable trouvable. Compiler contre lui demanderait
+d'épingler un identifiant de fichier CurseForge. Ce dépôt a pour règle de ne dépendre que de
+coordonnées reproductibles : l'occasion est notée, elle n'est pas prise.
+
+### 🧭 JourneyMap — deux carnets, et c'est le bon choix
+
+JourneyMap porte son propre système de repères. Lanterne aussi. **Ce ne sont pas des doublons, et les
+confondre ferait perdre quelque chose.**
+
+| | Repères de JourneyMap | Repères de Lanterne |
+|---|---|---|
+| Où ils vivent | Fichiers du **client**, à toi seul | Le **serveur**, dans l'Atlas |
+| Combien | Illimités | **5 par joueur**, réglable |
+| Ce qu'ils coûtent | Rien | **Un Carnet**, qu'on fabrique et qu'on perd à la mort |
+| Partage | Par son API serveur, s'il est installé des deux côtés | `/lanterne wp share`, natif |
+| Téléportation | Oui, pour un opérateur | **Jamais** — un repère dit *où*, le chemin reste à faire |
+| Portails | — | **Oui.** Un cadre d'obsidienne et un Cœur de repère |
+
+**Le verdict, et il contredit l'hypothèse de départ.** L'idée d'effacer nos repères devant les siens
+part d'une bonne intuition — il fait ça mieux depuis dix ans — mais elle efface une information qu'il
+**ne peut pas produire** : un repère de Lanterne est une donnée de serveur, partagée, contingentée, et
+c'est elle qui donne son nom à un portail. Les siens sont des fichiers locaux. Retirer les nôtres
+quand il est là, ce n'est pas retirer un doublon, c'est retirer la moitié utile.
+
+Et ce n'est **pas faisable proprement aujourd'hui** : un seul interrupteur, `reperes.actifs`,
+commande à la fois le carnet **et** les portails (`content/waypoint/Gates.java` teste
+`Settings.waypoints()` à trois endroits). L'éteindre pour se débarrasser du carnet éteint les portails
+avec. *S'il fallait un jour appliquer le retrait, il faudrait d'abord séparer ce réglage en deux.*
+
+**Ce qui serait mieux qu'un retrait — et mieux qu'une synchronisation.** Une passerelle à *deux* sens
+entre deux magasins qui font autorité chacun de son côté est le défaut que `client/waypoint/Marks.java`
+a été écrit pour éviter, textuellement : *« un repère qu'on croit partagé et qui ne l'est pas, un
+repère supprimé qui reste affiché »*. Mais une **projection à sens unique** n'a pas ce défaut : le
+serveur envoie le carnet **entier** à chaque changement, il suffirait de faire
+`removeAllWaypoints("lanterne")` puis `addWaypoint(...)` pour chacun. Sans état, sans réconciliation,
+impossible à désynchroniser — et nos repères partagés apparaîtraient sur **sa** carte, ce que nous ne
+savons pas faire.
+
+L'API le permet exactement : `@JourneyMapPlugin(apiVersion = "2.0.0")` + `IClientPlugin`, découverts
+eux aussi par scan d'annotation ASM (`NeoForgeClientHooks.getClientPluginScanResult()`), donc sans
+dépendance à l'exécution. **Ce qui bloque est le dépôt** : le seul artefact public,
+`info.journeymap:journeymap-api-neoforge`, n'existe en 26.2 **qu'en `-SNAPSHOT`**, et cet instantané
+est daté du **18 juin 2026** alors que l'API réellement embarquée dans JourneyMap 6.0.8 est datée du
+**9 septembre 2026**. Dépendre d'un instantané mouvant et périmé de trois mois, dans un dépôt dont la
+règle est « il compile, il se construit, il démarre », échangerait un confort contre un
+`NoSuchMethodError` chez le joueur. **La projection est le bon dessin ; elle attend une version
+publiée.**
+
+En attendant, les deux cohabitent sans se gêner : notre carnet est sur **G** — `B`, `J` et `N` sont à
+JourneyMap, et cette touche a été choisie pour ça — et notre affichage permanent est en haut à
+**gauche**, sa mini-carte en haut à **droite**.
+
+### 🧱 Sodium — déjà traité, et vérifié une fois de plus
+
+Sodium remplace l'écran vidéo de vanilla en annulant la seule ligne de tout Minecraft qui construit
+`VideoSettingsScreen`. Le bouton que Lanterne y pose disparaît donc **sans message**. Deux autres
+portes existent pour cette raison : une page dans **sa** colonne de gauche
+(`client/sodium/Graft.java`, par son API de configuration) et le bouton de la liste des mods
+(`client/Doorway.java`, qui ne dépend de personne).
+
+Deux vérifications faites dans ses sources (Sodium 0.9.2) :
+
+- **Le masquage des feuilles tient.** `AbstractBlockRenderContext` appelle toujours
+  `state.skipRendering(neighborBlockState, facing)` : `LeafCullMixin` s'applique sous Sodium comme
+  sans lui.
+- **Le Voile tient.** Sodium réécrit plusieurs méthodes de `LevelExtractor` par `@Overwrite`, mais
+  **ni `extractVisibleEntities` ni `isEntityVisible`** — les deux seuls points où `EntityCullMixin`
+  s'accroche. Ce détail compte : `lanterne.mixins.json` déclare `defaultRequire: 1`, donc un injecteur
+  sans cible **ferait échouer le démarrage**, pas seulement le module.
+
+Note de cohabitation à trois : avec DH et Sodium ensemble, l'écran d'options porte **le bouton de DH**
+(il s'injecte au retour de `OptionsScreen.init`), la page « Graphismes » ouvre **l'écran de Sodium**,
+et les réglages de Lanterne sont dans **sa colonne à lui**. Trois mods, trois membres différents,
+aucune collision — mais trois endroits à connaître.
+
+### 🍲 JEI — aucune dépendance, et c'est mieux ainsi
+
+Le guide illustré de Lanterne s'ouvre en maintenant une touche sur un objet. Chez Create, ce geste
+passe par une greffe JEI ; ici il passe par `ItemTooltipEvent`, que `ItemStack.getTooltipLines`
+déclenche et que JEI emploie lui-même pour bâtir ses infobulles. Conséquence : **cela marche dans
+l'inventaire, dans JEI, et dans EMI ou REI** si le pack en change un jour — sans une ligne de plus
+dans `build.gradle`. Voir `client/ponder/Hint.java`.
+
+### ⚙️ Le préréglage — ce qu'il faut poser avant la première partie
+
+Les valeurs ci-dessous sont celles qui comptent. Tout le reste peut rester d'usine.
+
+**`server.properties`** — le seul conseil que Lanterne donne tout seul au démarrage :
+
+```properties
+region-file-compression=lz4
+```
+
+Sauvegarde **3,5× plus rapide** (125 ms → 33 ms sur 64 chunks, mesuré), pour ~20 % de disque en plus.
+Rétrocompatible : la version de compression est écrite dans l'en-tête de *chaque* chunk, un monde
+écrit en deflate se relit sans rien convertir.
+
+**`config/lanterne-server.toml`** — rien à changer. Les défauts sont ceux des bancs, et **aucun des
+cinq compagnons ne fait doublon avec un module de Lanterne** : il n'y a rien à éteindre.
+
+**`config/lanterne-client.toml`** — deux réglages valent le détour :
+
+```toml
+lentille       = false   # laisser éteint SI Distant Horizons est là — voir plus haut
+voile          = true    # le Voile : ce qu'un mur cache n'est pas dessiné
+```
+
+**Distant Horizons** — quatre réglages, et un seul compte vraiment sur petite machine :
+
+| Réglage DH | Valeur | Pourquoi |
+|---|---|---|
+| `overdrawPrevention` | **`-1` (auto)** — c'est le défaut, **ne pas y toucher** | C'est le seul mode qui suit la Marée : il élargit le recouvrement quand la distance de vue baisse, et c'est ce qui cache la bordure |
+| `lodChunkRenderDistanceRadius` | 128 plutôt que 256 sur petite machine | Défaut 256 chunks. La mémoire et le temps de construction suivent le **carré** du rayon |
+| `threadRunTimeRatio` | **0,5** sur un ou deux cœurs | Le seul levier qui réduit vraiment le CPU. Préréglage *Minimal Impact* |
+| `numberOfThreads` | ne pas y toucher sur un cœur | Il y vaudra **1** quoi qu'on choisisse : `clamp(1, ceil(cœurs × %), cœurs)` |
+
+Et un geste, pas un réglage : **pré-générer avant de jouer.** `/lanterne pregen <rayon>` nourrit DH
+chunk par chunk à l'écriture — mais peut aussi le distancer, comme Chunky. Fait à l'avance, le
+problème n'existe pas.
+
+**Jade, JourneyMap, JEI** — rien à régler pour les performances. Ce ne sont pas des postes de coût
+serveur, et aucun ne heurte un module de Lanterne. Les seuls réglages qui pèsent côté client sont,
+chez JourneyMap, `renderDistanceSurfaceMax`, `renderDelay` et `autoMapPoll` : il n'expose **pas** de
+nombre de fils de cartographie, ce sont ceux-là qui font office de frein.
+
+### 📦 « CurseForge ne voit pas Lanterne dans la liste des mods »
+
+**Ce n'est pas un défaut du mod, et aucune métadonnée ne peut le corriger.** L'application CurseForge
+n'inscrit dans `minecraftinstance.json` que les fichiers dont elle **reconnaît l'empreinte** dans sa
+propre base. Vérifié sur l'instance de test :
+
+```json
+"installedAddons": [ Jade (324717), JEI (238222), JourneyMap (32274) ]
+"cachedScans": []
+```
+
+Trois mods installés *depuis* CurseForge, listés. `lanterne-4.0.0.jar` et `autominer-10.0.0.jar` —
+les deux jars **compilés à la maison** — absents tous les deux. C'est le groupe témoin : un jar qui
+n'existe pas sur CurseForge n'a pas d'empreinte chez eux, donc pas de ligne chez eux. Le jeu, lui,
+le charge très bien, parce que FML lit `META-INF/neoforge.mods.toml` et rien d'autre.
+
+**Les trois façons d'en sortir :**
+
+1. **Un lanceur qui lit le jar au lieu d'interroger une base.** Prism Launcher et l'application
+   Modrinth listent les mods d'après leurs propres métadonnées, empreinte ou pas.
+2. **Publier Lanterne sur CurseForge.** Dès que le fichier existe chez eux et qu'il est installé par
+   l'application, il apparaît — c'est le seul chemin qui satisfasse leur mécanisme.
+3. **Se contenter de la liste en jeu**, qui est complète et qui est celle qui compte.
+
+En revanche, ce qui *était* un vrai manque a été corrigé : le jar ne déclarait ni auteur, ni adresse,
+ni suivi de bogues, et son `MANIFEST.MF` faisait **vingt-cinq octets** — une ligne. Il porte
+désormais ses `Implementation-*` et `Specification-*`, et `neoforge.mods.toml` ses `authors`,
+`displayURL` et `issueTrackerURL`. C'est ce que lisent la liste des mods du jeu, les lanceurs tiers,
+et quiconque ouvre l'archive pour vérifier ce qu'il installe.
+
+> **Le logo.** `logoFile` n'est toujours pas déclaré, faute d'image. Un logo de mod se sert
+> **carré**, en **PNG**, en **256 × 256** — la liste des mods le redimensionne, et au-delà on
+> transporte des octets pour rien. Déposer l'image en `src/main/resources/lanterne.png`, puis
+> ajouter sous `displayName` :
+>
+> ```toml
+> logoFile = "lanterne.png"
+> logoBlur = true      # false si l'image est du pixel art : sinon elle sera floutée
+> ```
+
+### ⚠️ Ce qu'il ne faut PAS ajouter
+
+> **Immersive Optimization**, **ServerCore**, **adaptive-performance-tweaks**, **TT20** font du tick
+> scheduling ou de l'asservissement de distance **comme Lanterne**. Deux boucles d'asservissement sur
+> la même grandeur oscillent : c'est la règle de `notes/mine-mods-26-2.md` §4.1, et elle vaut ici.
+> N'en garder qu'une.
+
+> **Vertigo** et **Iris ≥ 1.11.4** sont déclarés incompatibles par Distant Horizons lui-même sur 26.2.
+
+Lanterne reste **complémentaire** de Sodium (qui optimise ce qui est *dessiné*) et de Lithium (ce qui
 est *calculé*). Il s'occupe de ce qui ne devrait pas être *fait*.
 
 ---

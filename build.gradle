@@ -241,6 +241,30 @@ dependencies {
 //
 // Un depot irreprochable et un jar muet, c'est le jar qui est distribue.
 tasks.named('jar', Jar) {
+    // <h2>Le manifeste faisait vingt-cinq octets</h2>
+    //
+    // Exactement une ligne : « Manifest-Version: 1.0 ». Ce n'est pas un defaut de
+    // chargement — FML lit « META-INF/neoforge.mods.toml » et se moque du reste —
+    // mais c'est ce que lisent les OUTILS : un lanceur tiers, un antivirus, un
+    // script de tri, « java -jar », et l'utilisateur qui ouvre le zip pour verifier
+    // ce qu'il installe. Ce depot a deja eu a se defendre d'un faux positif
+    // d'antivirus (voir README.md) ; un jar anonyme n'aide pas.
+    //
+    // Les noms d'attributs sont ceux de la specification JAR, pas des inventions :
+    // « Implementation-* » identifie la version livree, « Specification-* » la
+    // version d'interface visee. Ce sont ceux que « Package.getImplementationVersion »
+    // rend a l'execution.
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_name,
+                'Specification-Vendor'    : 'Club Citrouille',
+                'Specification-Version'   : minecraft_version,
+                'Implementation-Title'    : mod_name,
+                'Implementation-Version'  : mod_version,
+                'Implementation-Vendor'   : 'Club Citrouille',
+                'Automatic-Module-Name'   : 'fr.clubcitrouille.lanterne',
+        ])
+    }
     from(rootProject.file('LICENSE')) {
         into 'META-INF'
     }

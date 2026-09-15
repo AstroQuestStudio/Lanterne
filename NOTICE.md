@@ -15,7 +15,7 @@ LGPL-2.1-or-later et GPL-3.0. Cela couvre **50 des 59 cibles** retenues dans
 
 ## Ce qui n'est pas absorbable, et n'est donc pas absorbé
 
-Neuf cibles sont sous licence fermée, non commerciale, sans dérivée, ou maison.
+Ces cibles sont sous licence fermée, non commerciale, sans dérivée, ou maison.
 Leur code n'entre pas dans Lanterne, quelle que soit la licence de Lanterne :
 
 | Projet | Licence | Ce qu'on en retient |
@@ -32,6 +32,8 @@ Leur code n'entre pas dans Lanterne, quelle que soit la licence de Lanterne :
 | WaterMedia | PolyForm Strict 1.0.0 | Redistribution et dérivés interdits. Son `vlcj` est shadé sous une licence commerciale de Caprica qui **ne se transmet pas aux forks**. Rien n'en est repris. |
 | VideoPlayer (NGoedix) | All Rights Reserved | Le `LICENSE` fait 20 octets et dit exactement cela. L'idée seule. |
 | WATERFrAMES | *aucun fichier `LICENSE`* | Donc tous droits réservés par défaut. L'idée seule. |
+| Jade | CC-BY-NC-SA-4.0 | **Non commerciale et à partage identique**, donc incompatible avec la GPL-3.0. Et son API n'est pas publiée séparément : elle vit dans le mod. Rien n'en est repris, aucune dépendance n'est déclarée — voir plus bas. |
+| JourneyMap | All rights reserved | `neoforge.mods.toml` le dit mot pour mot. Seul son **jar d'API** (`info.journeymap:journeymap-api-neoforge`) est un artefact distinct ; il n'est pas employé non plus — voir plus bas. |
 
 Une licence protège l'**expression**, pas l'idée. Lire ces sources pour
 comprendre un mécanisme est licite et a été fait ; en recopier les lignes ne
@@ -67,6 +69,7 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `assets/lanterne/shaders/post/fsr_easu.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (EASU)**, [AMD](https://github.com/GPUOpen-Effects/FidelityFX-FSR) — `ffx_fsr1.h` | MIT |
 | `assets/lanterne/shaders/post/fsr_rcas.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (RCAS)**, *idem* | MIT |
 | `client/upscale/Jitter.java` — le décalage sous-pixellaire | **Rien n'est copié.** La suite de Halton est une construction mathématique publiée en 1960, sans titulaire. Le *choix* des bases 2 et 3 et la règle de période `8 × (échelle)²` sont la convention commune à DLSS, FSR 2, Unreal et Unity ; c'est une recommandation, pas du code. | — (domaine public) |
+| `assets/lanterne/shaders/post/aa_edge.fsh` — l'anticrénelage | **Rien n'est copié, et c'était obligatoire.** L'idée — détecter un contour par le contraste de luminance, en déduire une direction, fondre le long de cette direction — est celle de **FXAA**, publiée par **Timothy Lottes (NVIDIA)**. Mais `fxaa3_11.h` **ne porte aucune licence de redistribution** : seulement « COPYRIGHT (C) 2010, 2011 NVIDIA CORPORATION. ALL RIGHTS RESERVED. » suivi d'un avertissement de garantie. En reprendre une ligne serait donc une contrefaçon. Un algorithme ne se protège pas, une écriture si : celle-ci est la nôtre, et le raisonnement de chaque seuil est écrit dans le fichier. | *(aucune — d'où la réécriture)* |
 | `client/upscale/Reproject.java` — la matrice de reprojection | **Rien n'est copié.** L'accumulation temporelle avec reprojection arrière est une technique publiée, antérieure à FSR 2 comme à DLSS. L'algèbre — et notamment la translation de caméra qu'impose la matrice de vue *rotation seule* de 26.2 — est démontrée dans le javadoc et éprouvée par `tools/EssaiReproject.java`. | — |
 | `client/upscale/Pivot.java` + `client/upscale/Dawn.java` — le basculement Vulkan | **Rien.** Écrits pour ce projet. N'appellent que des méthodes **publiques** de `net.minecraft.client.Options` (`preferredGraphicsBackend`, `isRestartRequiredToApplyVideoSettings`, `save`), et substituent une ligne de `config/fml.toml`. Le défaut de NeoForge qu'ils contournent est décrit dans le javadoc de `Dawn`. | — |
 | `client/upscale/Deep.loader()` + `tools/EssaiNgx.java` — le relevé NGX | **Rien.** Les noms de fonctions `NVSDK_NGX_*` sont lus dans la **table d'export** de la DLL que le pilote installe ; aucun en-tête, aucune ligne de source du SDK de NVIDIA n'a été copiée ni même consultée. Voir `notes/dlss-panama.md`. | — |
@@ -394,6 +397,38 @@ Deux réserves qu'il vaut mieux écrire que découvrir :
   levé formellement, la voie prévue est une *permission additionnelle* au titre
   de l'**article 7 de la GPL-3.0**, autorisant explicitement la liaison avec
   Sodium. Ceci est un raisonnement, pas un avis juridique.
+
+### Les compagnons du modpack — lus, jamais repris
+
+Le modpack visé associe Lanterne à **Jade, JourneyMap, Sodium, Distant Horizons
+et JEI**. Leurs sources ont été lues pour établir la cohabitation — ce que le
+`README.md` décrit dans « Le modpack ». **Aucune ligne d'aucun des cinq n'entre
+dans Lanterne**, et aucune dépendance nouvelle n'a été ajoutée à `build.gradle`.
+
+Les licences ci-dessous ont été vérifiées **dans les fichiers**, pas sur
+l'étiquette des dépôts — ce projet a déjà trouvé cinq divergences entre les deux.
+
+| Projet | Étiquette annoncée | Texte réel | Verdict |
+|---|---|---|---|
+| **Distant Horizons** 3.2.1 (API 7.1.0) | LGPL-3.0-only | **Confirmée.** `LICENSE.LESSER.txt` porte le texte LGPLv3, et l'en-tête des 153 fichiers qui en ont un dit *« as published by the Free Software Foundation, version 3. »* — **sans** la clause « or (at your option) any later version », qui n'apparaît que dans le corps standard des licences FSF. C'est donc bien *only*. | Absorbable en droit ; **rien n'en est repris**. `notes/MINE.md` le classe « à côté » : un moteur de niveaux de détail ne s'absorbe pas, il se côtoie. |
+| *idem* — les **logos** | — | `LICENSE-LOGOS.txt` : *« Distant Horizons logos © 2024 by Pankakes are licensed under CC BY-SA 4.0 »*. **Ce n'est pas la licence du code.** | Aucun logo n'est repris. |
+| *idem* — un fichier | — | `DhChunkGenerator.java` porte en plus `Copyright (C) 2021 Tom Lee (TomTheFurry)`. Et **133 des 286 fichiers** des modules dépendants de Minecraft n'ont aucun en-tête de licence : incohérence formelle, pas une re-licence. | Signalé pour mémoire. |
+| **Jade** 26.2.10 | CC-BY-NC-SA-4.0 | Confirmée dans `META-INF/neoforge.mods.toml`. **Non commerciale et à partage identique**, donc incompatible avec la GPL-3.0. Aggravant : Jade ne publie **pas** de jar d'API séparé — `snownee.jade.api` vit dans le mod lui-même. | Ni reprise, ni dépendance. La greffe possible est décrite dans le `README.md` et **non faite**, faute d'une coordonnée Maven reproductible. |
+| **JourneyMap** 26.2-6.0.8 | All rights reserved | Confirmée dans `META-INF/neoforge.mods.toml`. Son API est en revanche un **artefact distinct**, `info.journeymap:journeymap-api-neoforge`, embarqué par jar-in-jar sous le modId `journeymap_api`. | Ni reprise, ni dépendance. La seule version publiée pour 26.2 sur `jm.gserv.me` est un **`-SNAPSHOT` daté du 18 juin 2026**, alors que l'API livrée dans le mod est datée du 9 septembre 2026 : un instantané mouvant et périmé n'est pas une dépendance acceptable ici. |
+| **JEI** 30.29.0.201 | — | Aucune dépendance n'est déclarée et aucune n'est nécessaire : `client/ponder/Hint.java` passe par `ItemTooltipEvent`, un évènement de NeoForge. | Rien à créditer. |
+| **Sodium** 0.9.2 | PolyForm Shield 1.0.0 | Voir la section précédente. | `compileOnly` sur son seul jar d'API. |
+
+Deux constats de lecture qui ne sont pas des reprises mais qui ont servi à
+trancher, et qu'il est honnête de nommer :
+
+- Le calcul du plan de coupe de Distant Horizons
+  (`core/util/RenderUtil.getNearClipPlaneDistanceInBlocks`) a été **lu** pour
+  établir que la Marée de Lanterne ne creuse pas de trou. Le résultat est décrit
+  et cité dans le `README.md` ; aucune ligne n'est recopiée dans le code.
+- Le dimensionnement de ses fils
+  (`core/config/eventHandlers/presets/ThreadPresetConfigEventHandler`) a été lu
+  pour établir qu'un seul cœur y rend toujours un seul fil. Même chose : c'est un
+  constat, pas un emprunt.
 
 ## Les modules d'origine
 
