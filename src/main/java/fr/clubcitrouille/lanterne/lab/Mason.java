@@ -197,7 +197,110 @@ public final class Mason {
         measure(server, level, template, anchor, window, dice, true,
                 "gabarit avec les deux processeurs de toute pièce à jigsaw");
 
+        conform(level, template, anchor, window, ground, size);
+
         server.halt(false);
+    }
+
+    /**
+     * La question qui compte plus que la vitesse : le pochoir bâtit-il la même chose ?
+     *
+     * <h2>Un module qui casse un village a échoué, même s'il double le débit</h2>
+     *
+     * <p>Le symptôme d'un tri mal posé ne serait pas une lenteur : ce serait <b>un mur de maison
+     * manquant</b>, sur la moitié des villages du monde, sans qu'aucun banc ne s'en aperçoive. Il
+     * n'existe aucune épreuve de ce laboratoire qui aurait pu le voir — ni la conformité, ni le
+     * rendement, ni la moisson ne regardent la génération.
+     *
+     * <p>L'épreuve est donc directe : on vide la fenêtre, on pose le gabarit <em>sans</em> le module
+     * et l'on relève chaque bloc ; on vide à nouveau, on pose <em>avec</em>, et l'on compare position
+     * par position. Toute différence est une erreur du tri, et il n'y a rien à interpréter.
+     *
+     * <h2>Quatre orientations, et ce n'est pas du zèle</h2>
+     *
+     * <p>Le tri calcule lui-même la position transformée, par {@code calculateRelativePosition}. Une
+     * erreur de signe y serait invisible sans rotation ni miroir — l'identité pardonne tout. On éprouve
+     * donc les quatre combinaisons qui font travailler la transformation : sans rien, quart de tour,
+     * demi-tour avec miroir, trois quarts de tour.
+     */
+    private static void conform(ServerLevel level, StructureTemplate template, BlockPos anchor,
+            BoundingBox window, int ground, net.minecraft.core.Vec3i size) {
+        int top = ground + Math.max(size.getX(), Math.max(size.getY(), size.getZ())) + 2;
+        Rotation[] turns = {Rotation.NONE, Rotation.CLOCKWISE_90, Rotation.CLOCKWISE_180,
+            Rotation.COUNTERCLOCKWISE_90};
+        Mirror[] mirrors = {Mirror.NONE, Mirror.NONE, Mirror.LEFT_RIGHT, Mirror.FRONT_BACK};
+
+        int faults = 0;
+        int compared = 0;
+        for (int i = 0; i < turns.length; i++) {
+            // La MÊME graine des deux côtés : le gabarit porte des coffres à butin, et leur
+            // « LootTableSeed » est tiré au hasard à la pose. Deux graines différentes rendraient
+            // deux mondes différents pour une raison qui n'a rien à voir avec le module.
+            List<net.minecraft.world.level.block.state.BlockState> bare =
+                    buildAndRead(level, template, anchor, window, ground, top, turns[i], mirrors[i],
+                            false);
+            List<net.minecraft.world.level.block.state.BlockState> sifted =
+                    buildAndRead(level, template, anchor, window, ground, top, turns[i], mirrors[i],
+                            true);
+            compared += bare.size();
+            for (int at = 0; at < bare.size(); at++) {
+                if (bare.get(at) != sifted.get(at)) {
+                    faults++;
+                }
+            }
+        }
+
+        wipe(level, window, ground, top);
+        if (faults == 0) {
+            Lanterne.LOG.info("[MAÇON] CONFORMITÉ : {} position(s) comparée(s) sur quatre "
+                    + "orientations — AUCUN écart. Le pochoir bâtit exactement ce que vanilla bâtit.",
+                    compared);
+        } else {
+            Lanterne.LOG.error("[MAÇON] CONFORMITÉ : {} écart(s) sur {} position(s) comparée(s). "
+                    + "LE POCHOIR NE BÂTIT PAS LA MÊME CHOSE QUE VANILLA — ne pas publier ce module.",
+                    faults, compared);
+        }
+    }
+
+    /** Vide la fenêtre, pose le gabarit dans l'état demandé, et relève ce qui s'y trouve. */
+    private static List<net.minecraft.world.level.block.state.BlockState> buildAndRead(
+            ServerLevel level, StructureTemplate template, BlockPos anchor, BoundingBox window,
+            int ground, int top, Rotation turn, Mirror mirror, boolean stencil) {
+        wipe(level, window, ground, top);
+        Settings.setEnabled(stencil);
+        StructurePlaceSettings settings = new StructurePlaceSettings()
+                .setMirror(mirror)
+                .setRotation(turn)
+                .setIgnoreEntities(true)
+                .setBoundingBox(window);
+        template.placeInWorld(level, anchor, anchor, settings, RandomSource.create(77L),
+                Block.UPDATE_CLIENTS);
+        Settings.setEnabled(true);
+
+        List<net.minecraft.world.level.block.state.BlockState> read = new ArrayList<>();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int x = window.minX(); x <= window.maxX(); x++) {
+            for (int z = window.minZ(); z <= window.maxZ(); z++) {
+                for (int y = ground - 1; y <= top; y++) {
+                    cursor.set(x, y, z);
+                    read.add(level.getBlockState(cursor));
+                }
+            }
+        }
+        return read;
+    }
+
+    private static void wipe(ServerLevel level, BoundingBox window, int ground, int top) {
+        var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int x = window.minX(); x <= window.maxX(); x++) {
+            for (int z = window.minZ(); z <= window.maxZ(); z++) {
+                for (int y = ground - 1; y <= top; y++) {
+                    cursor.set(x, y, z);
+                    level.setBlock(cursor, air, Block.UPDATE_CLIENTS);
+                }
+            }
+        }
     }
 
     private static void measure(MinecraftServer server, ServerLevel level, StructureTemplate template,

@@ -78,13 +78,18 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  *
  * <p>Épreuve du maçon ({@code LANTERNE_MASON=1}), sur {@code plains_big_house_1} — sept sur onze sur
  * onze, huit cent quarante-sept positions — posée à cheval sur une fenêtre de chunk, de sorte que
- * <b>68,8 % des blocs tombent dehors</b>. Médianes de quatre cents poses par côté, alternées, trois
+ * <b>68,8 % des blocs tombent dehors</b>. Médianes de quatre cents poses par côté, alternées, cinq
  * exécutions :
  *
  * <pre>
- * gabarit nu                                        ×1,17  ×1,10  ×1,18
- * avec les deux processeurs de toute pièce à jigsaw ×1,54  ×1,32  ×1,30
+ * gabarit nu                                        ×1,17  ×1,10  ×1,18  ×1,16  ×1,17
+ * avec les deux processeurs de toute pièce à jigsaw ×1,54  ×1,32  ×1,30  ×1,52  ×1,52
  * </pre>
+ *
+ * <p>Et la conformité, qui comptait plus que la vitesse : <b>15 360 positions comparées sur quatre
+ * orientations, aucun écart</b>. Le pochoir bâtit exactement ce que vanilla bâtit — y compris sous
+ * rotation et miroir, qui sont les seuls cas où une erreur dans le calcul de la position transformée
+ * se verrait.
  *
  * <p>Le second régime est le seul qui décrive quelque chose de réel : {@code SinglePoolElement.place}
  * ajoute {@code BlockIgnoreProcessor.STRUCTURE_BLOCK} et {@code JigsawReplacementProcessor.INSTANCE}
@@ -99,14 +104,19 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  */
 public final class Stencil {
     /**
-     * Sûreté d'un processeur, retenue par instance.
+     * Sûreté d'un processeur, retenue par CLASSE et non par instance.
      *
-     * <p>Les instances de processeurs sont partagées et peu nombreuses — une par entrée de
-     * {@code StructureProcessorList} de datapack. La table reste donc minuscule. Elle est concurrente
-     * parce que la génération de terrain tourne sur le <b>pool de travail</b>, et non sur le fil du
-     * serveur : c'est le premier module de ce mod dans ce cas.
+     * <p>Le mod d'origine mémorise par instance, et c'est ce qu'on avait écrit d'abord. Or les deux
+     * questions posées — le processeur vient-il de vanilla, redéfinit-il {@code finalizeProcessing}
+     * — ne dépendent que de sa <b>classe</b>. Retenir par instance n'apporte donc rien, et expose à
+     * une table qui grossit sans fin si quelqu'un fabrique des processeurs à la volée : un
+     * {@code BlockRotProcessor} neuf par appel suffirait.
+     *
+     * <p>Par classe, la table est bornée par le nombre de types chargés — une poignée — et ne peut
+     * pas fuir. Elle est concurrente parce que la génération de terrain tourne sur le <b>pool de
+     * travail</b>, et non sur le fil du serveur : c'est le premier module de ce mod dans ce cas.
      */
-    private static final Map<StructureProcessor, Boolean> SAFE = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Boolean> SAFE = new ConcurrentHashMap<>();
 
     /** Blocs de gabarit examinés, tous appels confondus. */
     private static long seen;
@@ -135,7 +145,7 @@ public final class Stencil {
             return all;
         }
         for (StructureProcessor processor : settings.getProcessors()) {
-            if (!SAFE.computeIfAbsent(processor, Stencil::judge)) {
+            if (!SAFE.computeIfAbsent(processor.getClass(), Stencil::judge)) {
                 declined++;
                 return all;
             }
@@ -188,8 +198,7 @@ public final class Stencil {
      * est déclarée sur {@code StructureProcessor} avec un corps qui rend son argument tel quel. Si la
      * classe qui la déclare n'est plus celle-là, le processeur la redéfinit.
      */
-    private static boolean judge(StructureProcessor processor) {
-        Class<?> type = processor.getClass();
+    private static boolean judge(Class<?> type) {
         if (!type.getName().startsWith("net.minecraft.")) {
             return false;
         }

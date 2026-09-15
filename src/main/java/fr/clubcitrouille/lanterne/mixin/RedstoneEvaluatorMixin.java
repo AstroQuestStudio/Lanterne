@@ -80,6 +80,30 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * de champ statique et le même test de drapeau — et la méthode reste assez courte pour être
  * incorporée. C'est la première fois dans ce projet qu'un {@code @Overwrite} est préféré à un
  * {@code @Inject} <em>pour la vitesse</em>, et la raison est mesurée, pas supposée.
+ *
+ * <h2>Après la correction, et ce que le module vaut vraiment</h2>
+ *
+ * <pre>
+ * sans : 1,16 ms · avec : 1,20 ms   →  ×0,97   ·  mémoire allouée 504,6 Mo contre 105,7 Mo
+ * sans : 1,35 ms · avec : 1,37 ms   →  ×0,98   ·  mémoire allouée 465,5 Mo contre 109,0 Mo
+ * </pre>
+ *
+ * <p>La perte a disparu : les deux exécutions tombent dans la dérive du banc, donc <b>le module ne
+ * coûte plus rien</b>. Et ce qu'il rapporte est ailleurs, sur une grandeur que ce banc mesure aussi :
+ * <b>quatre à cinq fois moins de mémoire allouée</b>, et <b>zéro ramassage</b> contre trois. Sur la
+ * machine visée — un cœur, où le ramasse-miettes ne tourne pas à côté du tick mais le lui prend —
+ * c'est le bon côté.
+ *
+ * <p>Le profileur dit la même chose sous un autre angle : sur la nappe qui bat, le serveur dort
+ * <b>84 %</b> du temps avec le module et 54 % sans, sur la même charge. Il fait donc nettement moins
+ * de travail, sans que le temps de tick médian en profite — ce qui reste à expliquer, et qui est
+ * écrit ici plutôt que passé sous silence.
+ *
+ * <h2>Ce que ce module règle du plan d'absorption</h2>
+ *
+ * <p>C'est la réponse à <b>AlternateCurrent</b>, la plus grosse pièce de la vague serveur : son
+ * algorithme est dans le jeu depuis que Mojang l'a écrit, et il suffit de cinq lignes pour l'allumer.
+ * Il reste éteint par défaut pour la raison ci-dessus, qui n'a rien à voir avec la vitesse.
  */
 @Mixin(RedStoneWireBlock.class)
 public abstract class RedstoneEvaluatorMixin {

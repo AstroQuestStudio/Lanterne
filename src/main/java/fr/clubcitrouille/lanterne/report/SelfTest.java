@@ -135,6 +135,9 @@ public final class SelfTest {
     /** Vrai si l'on éprouve la pose d'un gabarit de structure à cheval sur un chunk. */
     private static boolean mason;
 
+    /** Vrai si l'on éprouve le temps que met une couronne de feuillage à tomber. */
+    private static boolean grove;
+
     /**
      * À quelle distance du troupeau on plante l'observateur.
      *
@@ -160,6 +163,13 @@ public final class SelfTest {
     }
 
     public static void arm() {
+        if ("1".equals(System.getenv("LANTERNE_GROVE"))) {
+            grove = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du bosquet armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_MASON"))) {
             mason = true;
             step = Step.SETTLING;
@@ -293,7 +303,7 @@ public final class SelfTest {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
-                    && !wits && !reap && !surge && !mason)) {
+                    && !wits && !reap && !surge && !mason && !grove)) {
             return;
         }
         if (!Conformance.running() && !Kitchen.running()
@@ -306,7 +316,27 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Wits.running()
                 && !fr.clubcitrouille.lanterne.lab.Reap.running()
                 && !fr.clubcitrouille.lanterne.lab.Mason.running()
+                && !fr.clubcitrouille.lanterne.lab.Grove.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
+            return;
+        }
+
+        if (grove) {
+            // Une doublure, comme partout ailleurs : sans joueur, le chunk de l'origine n'est pas
+            // simulé, et ni le tick programmé ni le tick aléatoire ne s'y exécutent. Les deux
+            // fenêtres rendraient alors « rien n'est tombé », ce qui est le piège exact dans lequel
+            // l'épreuve de cuisson est déjà tombée une fois.
+            if (fr.clubcitrouille.lanterne.lab.Grove.running()) {
+                fr.clubcitrouille.lanterne.lab.Grove.tick(server);
+            } else if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                Herd.sweepEntities(server.overworld());
+                fr.clubcitrouille.lanterne.lab.Grove.begin(server);
+                step = Step.LAUNCHED;
+            }
             return;
         }
 
