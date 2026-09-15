@@ -1,5 +1,8 @@
 package fr.clubcitrouille.lanterne.report;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 import com.mojang.brigadier.CommandDispatcher;
@@ -9,12 +12,15 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.phys.Vec3;
 
+import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.Census;
 import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.core.TickBudget;
@@ -38,6 +44,62 @@ public final class LanterneCommand {
 
     private LanterneCommand() {}
 
+    /**
+     * Le relevé des recettes du mod réellement chargées par le serveur.
+     *
+     * <h2>La question qu'il fallait pouvoir poser</h2>
+     *
+     * <blockquote>« Sur JEI ça me montre pas de craft pour tes items et blocs ! »</blockquote>
+     *
+     * <p>Toutes les vérifications sur fichiers avaient répondu « tout est en ordre » : les recettes
+     * sont dans le bon dossier, leurs ingrédients existent, leurs résultats sont enregistrés, et le
+     * journal ne signale aucune erreur. Un défaut qui survit à cela ne se cherche plus dans les
+     * fichiers : il se cherche <b>à l'exécution</b>.
+     *
+     * <p>Or entre « le serveur n'a pas chargé nos recettes » et « il les a chargées, et c'est
+     * l'afficheur qui ne les voit pas », il y a deux corrections entièrement différentes — et rien,
+     * dans le jeu, ne permettait de trancher. D'où cette commande : elle compte, elle nomme, et elle
+     * ne raisonne pas.
+     *
+     * <p>Elle est ouverte à tous, sans droit particulier : un joueur qui se demande pourquoi un
+     * objet n'a pas de recette doit pouvoir répondre lui-même, et le relevé ne révèle rien qu'un
+     * fichier de mod ne dise déjà.
+     */
+    private static int recipes(CommandSourceStack source) {
+        var manager = source.getServer().getRecipeManager();
+        int total = 0;
+        List<String> ours = new ArrayList<>();
+        for (RecipeHolder<?> holder : manager.getRecipes()) {
+            total++;
+            Identifier id = holder.id().identifier();
+            if (Lanterne.ID.equals(id.getNamespace())) {
+                ours.add(id.getPath());
+            }
+        }
+        Collections.sort(ours);
+
+        final int loaded = total;
+        source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+                "Recettes chargées par le serveur : %d au total, dont %d à nous.",
+                loaded, ours.size())).withStyle(ChatFormatting.GOLD), false);
+
+        if (ours.isEmpty()) {
+            // Le cas où la cause est chez nous, et où il ne sert à rien de chercher chez l'afficheur.
+            source.sendSuccess(() -> Component.literal(
+                    "Aucune. Le serveur n'a pas chargé nos recettes du tout : le défaut est chez "
+                    + "nous, pas chez l'afficheur. Regarder le dossier data/lanterne/recipe et le "
+                    + "journal du chargement des données.")
+                    .withStyle(ChatFormatting.RED), false);
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(String.join(", ", ours))
+                .withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> Component.literal(
+                "Elles sont chargées. Si l'afficheur n'en montre aucune, c'est lui qui ne les voit "
+                + "pas — pas elles qui manquent.").withStyle(ChatFormatting.GREEN), false);
+        return ours.size();
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("lanterne")
                 .executes(context -> {
@@ -50,6 +112,10 @@ public final class LanterneCommand {
                         .executes(context -> Guide.show(context.getSource())))
                 .then(Commands.literal("aide")
                         .executes(context -> Guide.show(context.getSource())))
+                // Le relevé des recettes : la seule façon de trancher entre « elles ne sont pas
+                // chargées » et « elles le sont, et c'est l'afficheur qui ne les voit pas ».
+                .then(Commands.literal("recettes")
+                        .executes(context -> recipes(context.getSource())))
                 .then(Commands.literal("demo")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .then(Commands.argument("charge",

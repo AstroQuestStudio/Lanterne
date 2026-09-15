@@ -110,6 +110,8 @@ public final class Guide {
         // OPTIONAL — on l'annonce là où elle existe, et nulle part ailleurs.
         optionalLine(source, "/lanterne guide", "Le guide illustré : les mécanismes du mod, en "
                 + "animation. Ou garde W enfoncé sur un objet, dans l'inventaire comme dans JEI.");
+        line(source, "/lanterne recettes", "Les recettes du mod que le serveur a vraiment chargées. "
+                + "À demander quand un afficheur prétend qu'un objet n'a pas de fabrication.");
         if (admin) {
             line(source, "/lanterne on", "Rallume toutes les optimisations.");
             line(source, "/lanterne off", "Éteint tout — utile pour comparer à vue d'œil.");
