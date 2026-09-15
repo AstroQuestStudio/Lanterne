@@ -59,6 +59,7 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `content/disc/*` — le Sillon, les disques | **Rien.** Écrit pour ce projet. | — |
 | `assets/lanterne/shaders/post/fsr_easu.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (EASU)**, [AMD](https://github.com/GPUOpen-Effects/FidelityFX-FSR) — `ffx_fsr1.h` | MIT |
 | `assets/lanterne/shaders/post/fsr_rcas.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (RCAS)**, *idem* | MIT |
+| `client/ponder/*` — le guide illustré | **Rien.** Idée, vocabulaire et disposition d'écran de [Ponder](https://github.com/Creators-of-Create/Ponder) (Creators of Create), extrait de [Create](https://github.com/Creators-of-Create/Create) — voir ci-dessous. | MIT (compatible) |
 
 L'ordonnanceur de tick mérite la même précision. **Immersive Optimization** est
 sous GPL-3.0, donc absorbable sans réserve, et son dépôt a été lu en entier —
@@ -159,6 +160,53 @@ mais parce qu'il vise `BakedModel` et `ItemRenderer.render`, deux interfaces que
 26.1 a supprimées au profit de l'extraction d'états et de `SubmitNodeCollector`.
 Le mécanisme retenu ici est autre : plafonner le nombre d'exemplaires que vanilla
 dessine par pile, qui va jusqu'à **cinq** pour une pile de plus de quarante-huit.
+
+Le guide illustré mérite la précision la plus longue de cette page, parce que
+c'est la dette d'idée la plus lourde du projet. **Ponder** — le système
+d'animations explicatives de **Create**, extrait depuis en bibliothèque autonome
+— est sous licence **MIT**, donc absorbable sans la moindre réserve, et son dépôt
+a été lu en entier avant qu'une ligne ne soit écrite ici : `PonderStoryBoard`,
+`SceneBuilder`, `PonderScene`, `PonderLevel`, `SceneTransform`, `Outliner`,
+`TextWindowElement`, `PonderUI`. La lecture est consignée dans
+`notes/ponder-create.md`.
+
+**Ce qui lui est repris est son idée, et elle est excellente** : montrer une
+machine au lieu de la décrire, en trois zones — chapitres, plateau, légende —,
+avec des étiquettes accrochées à un point du monde dont l'ordonnée suit le décor
+et l'abscisse reste figée. Cette dernière trouvaille est copiée sciemment : une
+colonne de texte qui se déplacerait avec la caméra serait illisible pendant
+qu'elle bouge, c'est-à-dire exactement quand on en a besoin.
+
+**Aucune de ses lignes n'a été reprise**, et il faut dire pourquoi, parce que ce
+n'est pas par scrupule :
+
+- **Son étage de rendu ne compile pas en 26.2.** Ponder vise 1.21.1
+  (`minecraft_version = 1.21.1` dans son `gradle.properties`) et repose sur
+  `MultiBufferSource`, `BakedModel`, `ModelBlockRenderer.tesselateBlock`,
+  `RenderSystem.setProjectionMatrix`, `Tesselator` — tous supprimés ou réécrits.
+  Le porter, ce serait le réécrire en entier, à l'aveugle.
+- **Son faux monde coûte cher.** Chaque section est tesselée bloc par bloc, mise
+  en cache dans un `SuperByteBuffer` qui n'est pas un tampon graphique mais un
+  gabarit de sommets en mémoire Java, **retransformé sommet par sommet sur le
+  processeur à chaque image**. Ici, un bloc est un appel à
+  `GuiGraphicsExtractor#item`, que 26.2 met en cache dans un atlas de textures :
+  cent blocs coûtent cent quads d'une seule texture. Pour un mod de performance,
+  ce n'était pas un compromis, c'était la bonne réponse.
+- **Son modèle de temps interdit le retour arrière.** Ses instructions modifient
+  un niveau tick après tick, et `PonderScene.seekToTime` commence par
+  `throw new IllegalStateException("Cannot seek backwards. Rewind first.")` :
+  reculer, chez lui, c'est restaurer un cliché NBT et rejouer toute la scène en
+  accéléré. Sa barre de progression n'accepte donc le clic que sur des repères
+  posés à la main. Ici une scène est une **fonction pure du temps** ; reculer
+  coûte ce que coûte avancer, et la barre accepte n'importe quel instant.
+- **Son branchement suppose JEI.** Lanterne n'en a pas la dépendance et n'en veut
+  pas. `RegisterClientCommandsEvent`, apparu depuis, donne une commande purement
+  cliente — sans paquet, sans permission, sans code commun qui nommerait un écran.
+
+Ce qui lui est perdu, en revanche, doit être dit aussi : le rendu d'objet impose
+l'angle de l'inventaire, donc **notre caméra ne tourne pas**. Elle se déplace et
+elle s'approche ; elle ne fait pas le tour de la scène. C'est le prix de ne pas
+avoir réécrit un moteur de rendu.
 
 Le masquage des feuilles mérite la même précision. **CullLeaves** (MIT, donc
 copiable) a été lu. Son mixin *redéfinit* `skipRendering` en entier, ce qui

@@ -109,6 +109,16 @@ public final class Settings {
     /** L'ajustement automatique des distances selon la charge. Voir Tide. */
     private static boolean tide = true;
 
+    /**
+     * Le refus des chargements de chunk synchrones. Voir {@link Digue}.
+     *
+     * <p>Seul module de ce mod qui <b>retire une information au jeu</b> plutôt que de la calculer
+     * moins cher : une carte laisse une case blanche, un villageois ne se couche pas. Chaque perte
+     * est nommée dans le mixin qui la cause, et deux points d'accroche de {@code ServerCore} ont été
+     * écartés parce que la leur se voyait.
+     */
+    private static boolean digue = true;
+
 
     /** La fusion des orbes d.expérience, débridée. Voir Clump. */
     private static boolean clump = true;
@@ -884,6 +894,11 @@ public final class Settings {
         tide = value;
     }
 
+    /** La digue. Voir {@link Digue}, et la liste des pertes assumées. */
+    public static boolean digue() {
+        return master && digue;
+    }
+
     public static boolean clump() {
         return master && clump;
     }
@@ -1157,6 +1172,10 @@ public final class Settings {
         // précisément être mesuré sur six cents villageois — où la fuite, elle, aurait compté.
         mind = wanted.contains("mind") || wanted.contains("esprit") || wanted.contains("composite");
         tide = wanted.contains("maree") || wanted.contains("tide");
+        // Surtout pas « chunk » ni « chargement » : ces deux mots apparaissent déjà dans les
+        // relevés du recensement et dans le nom d'autres épreuves. Un mot-clé qui ressemble à un
+        // autre est ce qui a fait mesurer deux modules pour un, trois fois dans ce dépôt.
+        digue = wanted.contains("digue");
         boxes = wanted.contains("boites") || wanted.contains("boxes");
         clump = wanted.contains("clump") || wanted.contains("orbes");
         vigil = wanted.contains("vigil") || wanted.contains("garde");
@@ -1386,6 +1405,9 @@ public final class Settings {
         }
         if (scratchPos) {
             text.append("positions ");
+        }
+        if (digue) {
+            text.append("digue ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

@@ -143,6 +143,9 @@ public final class Lanterne {
         TickBudget.beginTick();
         fr.clubcitrouille.lanterne.core.Rationing.beginTick();
         Bench.beginTick();
+        // L'épreuve de la digue compte des à-coups, donc des ticks entiers : son chronomètre doit
+        // s'ouvrir ici et se fermer dans Post, comme celui du banc.
+        fr.clubcitrouille.lanterne.lab.Levee.beginTick();
         Census.resetCounters();
         // Une fois par tick SERVEUR, et non par monde. LevelTickEvent.Pre se déclenche pour chacun
         // des trois mondes ; basculer le recensement à chaque fois faisait écraser celui de

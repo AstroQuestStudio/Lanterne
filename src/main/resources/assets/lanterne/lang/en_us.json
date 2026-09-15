@@ -16,5 +16,33 @@
   "item.lanterne.graveur": "Vinyl Engraver",
   "block.lanterne.coeur_de_repere": "Waypoint Heart",
   "item.lanterne.coeur_de_repere": "Waypoint Heart",
-  "block.lanterne.portail_repere": "Waypoint Portal"
+  "block.lanterne.portail_repere": "Waypoint Portal",
+
+  "lanterne.guide.titre": "Illustrated guide",
+  "lanterne.guide.enseigne": "guide",
+  "lanterne.guide.aide": "space: play or stop · ← → : chapter · wheel: scrub · R: restart · Esc: close",
+  "lanterne.guide.bouton": "Illustrated guide »",
+
+  "lanterne.guide.portail.titre": "Waypoint portals",
+  "lanterne.guide.portail.sol": "A waypoint portal is built exactly like a Nether one, and at the same point in the game.",
+  "lanterne.guide.portail.cadre": "An obsidian frame, two blocks wide by three tall at the very least. The size you already know.",
+  "lanterne.guide.portail.coeur": "Swap one frame block for a Waypoint Heart. Only one, and never in a corner.",
+  "lanterne.guide.portail.coeur.note": "The heart counts as obsidian: an existing Nether portal only needs one block changed.",
+  "lanterne.guide.portail.allumer": "Light it with flint and steel, on the heart or inside the frame. The sheet takes the colour you give it.",
+  "lanterne.guide.portail.relier": "Click the heart bare-handed: name it, tint it, open it to others, and choose where it leads.",
+  "lanterne.guide.portail.relier.note": "The way back installs itself if the destination led nowhere.",
+  "lanterne.guide.portail.traverser": "Walk through. Breaking the heart erases the portal — and the destinations others wrote down.",
+
+  "lanterne.guide.graveur.titre": "Vinyl engraver",
+  "lanterne.guide.graveur.poser": "The engraver is a machine: you craft it, you place it, it works.",
+  "lanterne.guide.graveur.charger": "Slide a blank disc in, by clicking the block with the blank in hand.",
+  "lanterne.guide.graveur.graver": "Click bare-handed: give it a link or a file, and the engraving starts.",
+  "lanterne.guide.graveur.graver.note": "Six seconds. If anything fails, the blank comes back — always.",
+  "lanterne.guide.graveur.prendre": "Click again to take the disc. It plays in any jukebox.",
+
+  "lanterne.guide.tableau.titre": "Paintings",
+  "lanterne.guide.tableau.mur": "A painting goes on a wall, just like in real life.",
+  "lanterne.guide.tableau.pinceau": "Click the wall with the brush: a blank canvas hangs right away.",
+  "lanterne.guide.tableau.toile.note": "No screen gets in the way: you see its footprint first, you fill it afterwards.",
+  "lanterne.guide.tableau.image": "Click the canvas to open the studio, then pick the image by link, by file, or from the server library."
 }

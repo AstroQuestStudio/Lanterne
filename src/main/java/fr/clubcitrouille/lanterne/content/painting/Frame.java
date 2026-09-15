@@ -5,7 +5,10 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+
+import fr.clubcitrouille.lanterne.client.Fit;
 
 /**
  * Le cadre : l'écran où l'on remplit une toile.
@@ -128,6 +131,15 @@ public final class Frame extends Screen {
     /** Vrai pendant qu'une course est en cours : on n'en lance pas deux. */
     private boolean busy;
 
+    /**
+     * L'ajusteur, et c'est ici qu'il compte le plus.
+     *
+     * <p>620 × 312 est la plus grande demande du mod. En échelle d'interface automatique, une
+     * fenêtre de 1920 × 1080 n'offre que 480 × 270 points : cet écran débordait des deux côtés
+     * <em>et</em> par le bas. Voir {@link Fit} pour le raisonnement complet.
+     */
+    private final Fit fit = new Fit();
+
     public Frame(int entityId, String hash, int blocksWide, int blocksHigh, int trim,
             PaintingRoll.Rules rules) {
         super(Component.literal("Atelier"));
@@ -143,8 +155,11 @@ public final class Frame extends Screen {
 
     @Override
     protected void init() {
-        this.panelX = (this.width - WIDTH) / 2;
-        this.panelY = (this.height - HEIGHT) / 2;
+        this.fit.measure(this.width, this.height, WIDTH, HEIGHT);
+        // La place disponible APRÈS réduction, et non la largeur réelle : centrer sur cette
+        // dernière décalerait le panneau de tout le facteur de réduction.
+        this.panelX = (this.fit.viewWidth() - WIDTH) / 2;
+        this.panelY = Math.max(4, (this.fit.viewHeight() - HEIGHT) / 2);
         int right = this.panelX + 14 + WELL_W + 14;
         int columnWidth = WIDTH - (right - this.panelX) - 14;
         int y = this.panelY + HEADER + 22;
@@ -350,12 +365,18 @@ public final class Frame extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY,
             float partial) {
+        this.fit.open(graphics);
+        // Rétrécir le dessin ne rétrécit pas la souris : sans cette conversion, les boutons du haut
+        // répondent et ceux du bas ne répondent plus.
+        mouseX = (int) this.fit.x(mouseX);
+        mouseY = (int) this.fit.y(mouseY);
+
         final int x = this.panelX;
         final int y = this.panelY;
         final int right = x + WIDTH;
         final int bottom = y + HEIGHT;
 
-        graphics.fill(0, 0, this.width, this.height, SCRIM);
+        graphics.fill(0, 0, this.fit.viewWidth(), this.fit.viewHeight(), SCRIM);
         graphics.fill(x - 1, y - 1, right + 1, bottom + 1, EDGE);
         graphics.fill(x, y, right, bottom, PANEL);
         graphics.fill(x, y, right, y + 2, AMBER);
@@ -387,6 +408,39 @@ public final class Frame extends Screen {
 
         // Les widgets en dernier : ils doivent se poser SUR le panneau, pas dessous.
         super.extractRenderState(graphics, mouseX, mouseY, partial);
+        this.fit.close(graphics);
+    }
+
+    // --- Les entrées -------------------------------------------------------
+    //
+    // Toutes ramènent la souris dans l'espace du panneau, y compris celles qui ne font que passer
+    // l'évènement aux composants de vanilla : ils sont POSÉS dans cet espace, il faut donc les
+    // CLIQUER dans cet espace.
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        return super.mouseClicked(this.fit.event(event), doubleClick);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        return super.mouseReleased(this.fit.event(event));
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        return super.mouseDragged(this.fit.event(event),
+                dragX / this.fit.factor(), dragY / this.fit.factor());
+    }
+
+    @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        super.mouseMoved(this.fit.x(mouseX), this.fit.y(mouseY));
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        return super.mouseScrolled(this.fit.x(mouseX), this.fit.y(mouseY), scrollX, scrollY);
     }
 
     /**

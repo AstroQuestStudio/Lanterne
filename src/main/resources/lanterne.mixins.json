@@ -50,7 +50,13 @@
     "MemoryPulseMixin",
     "BehaviorMemoryMixin",
     "PlayerSensorMixin",
-    "TemplateStencilMixin"
+    "TemplateStencilMixin",
+    "BeeHiveMixin",
+    "BeeHomingMixin",
+    "MapChunkMixin",
+    "GameEventChunkMixin",
+    "SleepBedMixin",
+    "RemoveBlockMixin"
   ],
   "client": [
     "EntityCullMixin",

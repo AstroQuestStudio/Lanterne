@@ -123,6 +123,15 @@ public final class SelfTest {
      */
     private static boolean duel;
 
+    /**
+     * Vrai si l'on éprouve la digue — le refus des chargements de chunk synchrones.
+     *
+     * <p>La seule épreuve du dépôt qui publie un <b>pire tick</b> plutôt qu'une médiane, parce que
+     * c'est la seule dont le module supprime un événement rare et énorme au lieu d'alléger un
+     * travail répété. Voir {@code lab.Levee}.
+     */
+    private static boolean levee;
+
     /** Vrai si l'on eprouve que la maree descend puis remonte. */
     private static boolean surge;
 
@@ -294,6 +303,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de duel armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_LEVEE"))) {
+            levee = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de la digue armée.");
+            return;
+        }
 
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
@@ -319,7 +335,7 @@ public final class SelfTest {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
-                    && !wits && !reap && !surge && !mason && !grove && !duel)) {
+                    && !wits && !reap && !surge && !mason && !grove && !duel && !levee)) {
             return;
         }
         if (!Conformance.running() && !Kitchen.running()
@@ -334,7 +350,21 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Mason.running()
                 && !fr.clubcitrouille.lanterne.lab.Grove.running()
                 && !fr.clubcitrouille.lanterne.lab.Duel.running()
+                && !fr.clubcitrouille.lanterne.lab.Levee.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
+            return;
+        }
+
+        if (levee) {
+            // Aucune doublure : l'épreuve force elle-même ses chunks, et une doublure poserait un
+            // observateur à zéro bloc des abeilles — donc dans la zone franche, et l'on mesurerait
+            // une scène qu'on aurait soi-même faussée. Voir Duel.build, qui raconte la même chose.
+            if (fr.clubcitrouille.lanterne.lab.Levee.running()) {
+                fr.clubcitrouille.lanterne.lab.Levee.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Levee.begin(server);
+                step = Step.LAUNCHED;
+            }
             return;
         }
 
