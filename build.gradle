@@ -44,6 +44,21 @@ neoForge {
         server {
             server()
             programArgument '--nogui'
+            // <h2>Un dossier par banc, pour que deux mesures ne se marchent pas dessus</h2>
+            //
+            // Le serveur de developpement tourne dans « run/ », et y verrouille son monde et son
+            // journal. Deux epreuves lancees en meme temps — ce qui arrive des qu'on travaille a
+            // plusieurs sur ce depot — echouent alors sur « le processus ne peut pas acceder au
+            // fichier », et le message ne dit rien de la cause.
+            //
+            //   ./gradlew runServer -Pbanc=duel
+            //
+            // Chacun a son « run-duel/ », son monde et son verrou. Sans la propriete, rien ne
+            // change : c'est bien « run/ » qui sert, avec le monde de developpement habituel.
+            if (project.hasProperty('banc')) {
+                gameDirectory = project.file("run-${project.property('banc')}")
+                systemProperty 'lanterne.banc', project.property('banc').toString()
+            }
             // <h2>Choisir le ramasse-miettes depuis la ligne de commande</h2>
             //
             // La machine visee n'a qu'un coeur. Sur un coeur, les fils concurrents de G1 ne

@@ -38,12 +38,12 @@ import fr.clubcitrouille.lanterne.content.painting.Studio;
  *
  * <h2>Ce que le client fait, et que le serveur ne fait jamais</h2>
  *
- * <p>Le téléchargement et la conversion en Vorbis se passent <b>ici</b>. Le serveur ne voit jamais
- * une adresse, pour la même raison que pour les images : lui faire suivre un lien fourni par un
- * joueur, c'est lui faire sonder son propre réseau. Voir {@code content.painting.Reach}.
+ * <p>Le téléchargement et la mesure du morceau se passent <b>ici</b>. Le serveur ne voit jamais une
+ * adresse, pour la même raison que pour les images : lui faire suivre un lien fourni par un joueur,
+ * c'est lui faire sonder son propre réseau. Voir {@code content.painting.Reach}.
  */
 public final class Wheel {
-    /** Le fil qui convertit et qui lit. Un seul, en démon, de priorité basse. */
+    /** Le fil qui mesure et qui lit. Un seul, en démon, de priorité basse. */
     private static final ExecutorService LATHE = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "Lanterne-plateau");
         thread.setDaemon(true);
@@ -71,17 +71,22 @@ public final class Wheel {
     // --- Ce que le joueur apporte -----------------------------------------
 
     /**
-     * Prépare un morceau : conversion, mesure, empreinte, cache.
+     * Prépare un morceau : reconnaissance du format, mesure, empreinte, cache.
      *
-     * <p>Tout se passe sur le fil de fond, y compris l'appel à {@code ffmpeg} qui peut durer
-     * plusieurs secondes sur un long morceau. Le retour se fait par les deux consommateurs, qui sont
-     * appelés depuis ce même fil : c'est à l'écran de revenir au fil du client s'il touche à
-     * l'interface.
+     * <p>Plus rien n'est réencodé : les octets gardés sont ceux que le joueur a apportés, étiquetés
+     * du format reconnu dans leur signature. Voir {@link Press}, qui explique pourquoi décoder à la
+     * lecture vaut mieux que convertir à l'import.
+     *
+     * <p>Tout se passe quand même sur le fil de fond. Mesurer un MP3 à débit variable sans entête
+     * Xing demande de parcourir toutes ses trames, et un détour par {@code ffmpeg} — le seul qui
+     * reste, pour les formats exotiques — peut durer plusieurs secondes. Le retour se fait par les
+     * deux consommateurs, appelés depuis ce même fil : c'est à l'écran de revenir au fil du client
+     * s'il touche à l'interface.
      */
     public static void prepare(byte[] raw, Consumer<Post.Vinyl> ready, Consumer<String> failed) {
         LATHE.submit(() -> {
-            // L'empreinte de la SOURCE, avant toute conversion : c'est la seule qui soit stable pour
-            // un même fichier. Voir « remember » pour ce qu'elle permet d'éviter.
+            // L'empreinte de la SOURCE : elle ne sert qu'au détour par ffmpeg, seul cas où les octets
+            // gardés diffèrent de ceux qu'on a reçus. Voir « remember ».
             String source = Mill.fingerprint(raw);
             Press.Cut cut = recall(source);
             if (cut == null) {
@@ -96,19 +101,21 @@ public final class Wheel {
                     return;
                 }
             }
-            String hash = Mill.fingerprint(cut.ogg());
+            String hash = Mill.fingerprint(cut.data());
             try {
-                Path target = Groove.cachedFile(hash);
+                Path target = Groove.cachedFile(hash, cut.grain());
                 Files.createDirectories(target.getParent());
                 if (!Files.isRegularFile(target)) {
-                    Files.write(target, cut.ogg());
+                    Files.write(target, cut.data());
                 }
-                remember(source, hash);
+                if (cut.converted()) {
+                    remember(source, hash);
+                }
             } catch (IOException problem) {
                 Lanterne.LOG.warn("[ATELIER] morceau non mis en cache : {}", problem.getMessage());
             }
             OFFERS.clear();
-            OFFERS.put(hash, cut.ogg());
+            OFFERS.put(hash, cut.data());
             ready.accept(new Post.Vinyl(-1, hash, "", cut.seconds()));
         });
     }
@@ -116,23 +123,23 @@ public final class Wheel {
     /**
      * Le morceau déjà converti à partir de cette source, s'il est encore là.
      *
-     * <h2>Pourquoi convertir deux fois le même fichier donnait deux disques différents</h2>
+     * <h2>Ce que cette table sert encore, et ce qu'elle a cessé de servir</h2>
      *
-     * <p>Un conteneur Ogg porte, dans l'entête de <b>chaque</b> page, un « numéro de série de flux »
-     * que {@code ffmpeg} tire au hasard à chaque encodage. Deux conversions du même MP3 produisent
-     * donc deux fichiers de taille identique et d'octets différents — donc deux empreintes
-     * différentes, donc deux sillons consommés pour le même morceau, et une retransmission complète
-     * à tout le serveur. Le journal du commanditaire montre exactement cela : {@code 4 504 492}
-     * octets les deux fois, deux empreintes, les sillons 45 puis 46.
+     * <p>Tant que <b>tout</b> passait par {@code ffmpeg}, cette table était indispensable, et pour une
+     * raison instructive : un conteneur Ogg porte, dans l'entête de chaque page, un « numéro de série
+     * de flux » qu'un encodeur tire au hasard. Deux conversions du même MP3 produisaient donc deux
+     * fichiers de taille identique et d'octets différents — donc deux empreintes, donc deux sillons
+     * consommés pour un seul morceau, et une retransmission complète à tout le serveur. Le journal du
+     * commanditaire porte exactement cela : {@code 4 504 492} octets les deux fois, deux empreintes,
+     * les sillons 45 puis 46.
      *
-     * <p>On pourrait réécrire le numéro de série à une valeur fixe. Il faudrait alors recalculer la
-     * somme de contrôle de chaque page — trente lignes d'un algorithme à polynôme particulier, pour
-     * un résultat fragile si le format évolue.
+     * <p>Ce problème a disparu tout seul le jour où plus rien n'a été réencodé : les octets gardés
+     * sont ceux du fichier, donc l'empreinte du morceau <em>est</em> celle de la source, et importer
+     * deux fois le même fichier retombe sur le même sillon par construction.
      *
-     * <p>Il est plus simple et plus sûr de <b>se souvenir</b> : une table
-     * {@code empreinte-source → empreinte-morceau}, écrite à côté du cache. Le même fichier choisi
-     * deux fois rend alors le même morceau au bit près, et la conversion elle-même — plusieurs
-     * secondes de {@code ffmpeg} — est économisée par la même occasion.
+     * <p>La table reste pour le seul cas où des octets sont encore fabriqués : le détour par
+     * {@code ffmpeg} pour les formats exotiques. Elle y rend le même service qu'avant — même sillon,
+     * et plusieurs secondes de conversion économisées.
      */
     private static Press.@Nullable Cut recall(String source) {
         java.util.Properties index = index();
@@ -145,10 +152,10 @@ public final class Wheel {
             return null;
         }
         try {
-            byte[] ogg = Files.readAllBytes(file);
+            byte[] data = Files.readAllBytes(file);
             Press.Reading reading = Press.read(file);
             Lanterne.LOG.info("[ATELIER] morceau déjà converti — conversion évitée.");
-            return new Press.Cut(ogg, reading.seconds());
+            return new Press.Cut(data, Press.grain(file), reading.seconds(), true);
         } catch (IOException stale) {
             return null;
         }
@@ -295,18 +302,27 @@ public final class Wheel {
 
         BUILDING.remove(hash);
         FILLED.remove(hash);
-        byte[] ogg = buffer;
+        byte[] music = buffer;
         LATHE.submit(() -> {
-            if (!Mill.fingerprint(ogg).equals(hash)) {
+            if (!Mill.fingerprint(music).equals(hash)) {
                 Lanterne.LOG.warn("[ATELIER] morceau « {} » reçu abîmé.", hash);
                 ASKED.remove(hash);
                 return;
             }
+            // Le format est relu sur les octets reçus : le serveur ne l'annonce pas, et il n'aurait
+            // servi à rien qu'il l'annonce puisqu'on peut le voir.
+            Press.Grain grain = Press.grain(music);
+            if (!grain.playable()) {
+                Lanterne.LOG.warn("[ATELIER] morceau « {} » reçu dans un format illisible.", hash);
+                ASKED.remove(hash);
+                return;
+            }
             try {
-                Path target = Groove.cachedFile(hash);
+                Path target = Groove.cachedFile(hash, grain);
                 Files.createDirectories(target.getParent());
-                Files.write(target, ogg);
-                Lanterne.LOG.info("[ATELIER] morceau « {} » reçu ({} Kio).", hash, ogg.length / 1024);
+                Files.write(target, music);
+                Lanterne.LOG.info("[ATELIER] morceau « {} » reçu ({} Kio, {}).", hash,
+                        music.length / 1024, grain.label());
             } catch (IOException problem) {
                 Lanterne.LOG.warn("[ATELIER] morceau « {} » non écrit : {}", hash, problem.getMessage());
                 ASKED.remove(hash);

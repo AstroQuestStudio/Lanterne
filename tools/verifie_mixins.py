@@ -189,67 +189,119 @@ def cibles_invoke(texte):
 _cache = {}
 
 
-def lit_une_classe(classe, chemin):
-    """Ce que « javap » sait d'une classe : ses méthodes, et sa parenté."""
-    issue = subprocess.run(["javap", "-p", "-s", "-cp", chemin, classe],
-                           capture_output=True, text=True, errors="replace")
-    if issue.returncode != 0:
-        return None
-    noms, signatures, parents = set(), set(), []
+_lues = {}
+
+# Ce qui ne se trouve pas dans le chemin de classes du mod, et qu'il est inutile
+# d'interroger. Aucun mixin de ce depot ne vise la bibliotheque standard.
+HORS_PORTEE = ("java.", "javax.", "jdk.", "sun.", "com.google.", "org.slf4j.",
+               "it.unimi.", "org.joml.")
+
+
+def analyse(sortie):
+    """Decoupe une sortie de « javap » multi-classes, et en tire ce qui nous interesse."""
+    resultats = {}
+    courant = None
     dernier = None
-    for ligne in issue.stdout.splitlines():
+    for ligne in sortie.splitlines():
         nue = ligne.strip()
-        if " extends " in nue or " implements " in nue:
-            for mot in re.findall(r"(?:extends|implements)\s+([\w.$,<>\s]+?)\s*\{", nue):
-                for nom in mot.split(","):
+        entete = re.match(r"^(?:public |protected |private |abstract |final |static |sealed |non-sealed )*"
+                          r"(?:class|interface|enum|record|@interface)\s+([\w.$]+)", nue)
+        if entete:
+            courant = entete.group(1)
+            resultats[courant] = [set(), set(), []]
+            dernier = None
+            if nue.endswith("{") and (" extends " in nue or " implements " in nue):
+                # « extends A implements B, C » : deux clauses, et « implements » ne
+                # contient que des caracteres de mot — une seule expression les
+                # avalerait ensemble et rendrait « A implements B » comme nom de classe.
+                corps = nue.rstrip("{").strip()
+                clauses = re.split(r"\bimplements\b", corps)
+                candidats = []
+                apres = re.search(r"\bextends\b(.*)", clauses[0])
+                if apres:
+                    candidats.extend(apres.group(1).split(","))
+                for clause in clauses[1:]:
+                    candidats.extend(clause.split(","))
+                for nom in candidats:
                     nom = re.sub(r"<.*?>", "", nom).strip()
-                    if nom and nom != "java.lang.Object":
-                        parents.append(nom)
+                    if nom and nom != "java.lang.Object" and re.fullmatch(r"[\w.$]+", nom):
+                        resultats[courant][2].append(nom)
+            continue
+        if courant is None:
+            continue
+        if nue.startswith("descriptor:"):
+            if dernier:
+                resultats[courant][1].add((dernier, nue.split(":", 1)[1].strip()))
+            continue
         forme = re.search(r"([\w<>$]+)\s*\([^)]*\)\s*;?\s*$", nue)
-        if forme and not nue.startswith("descriptor:"):
+        if forme:
             dernier = forme.group(1)
-            noms.add(dernier)
-        elif nue.startswith("descriptor:") and dernier:
-            signatures.add((dernier, nue.split(":", 1)[1].strip()))
-    return noms, signatures, parents
+            resultats[courant][0].add(dernier)
+    return resultats
+
+
+def charge(noms, chemin):
+    """Lit plusieurs classes en UN SEUL appel a « javap ».
+
+    Cette methode existe pour une raison mesuree : un appel par classe mettait
+    quatre minutes, parce que « Entity » et ses aieux etaient relus pour chacun
+    des cinquante mixins. Regroupes, les memes lectures prennent quelques
+    secondes. Une verification qu'on n'a pas le temps d'attendre ne se lance pas,
+    et un garde-fou qu'on ne lance pas ne garde rien.
+    """
+    a_lire = [nom for nom in dict.fromkeys(noms)
+              if nom not in _lues and not nom.startswith(HORS_PORTEE)]
+    for nom in noms:
+        if nom.startswith(HORS_PORTEE):
+            _lues.setdefault(nom, None)
+    if not a_lire:
+        return
+    issue = subprocess.run(["javap", "-p", "-s", "-cp", chemin] + a_lire,
+                           capture_output=True, text=True, errors="replace")
+    trouvees = analyse(issue.stdout)
+    for nom in a_lire:
+        _lues[nom] = tuple(trouvees[nom]) if nom in trouvees else None
 
 
 def membres(classe, chemin):
-    """Les méthodes d'une classe ET de tout ce dont elle hérite.
+    """Les methodes d'une classe ET de tout ce dont elle herite.
 
-    Remonter la parenté n'est pas un raffinement, c'est une nécessité. « javap »
-    ne montre que les membres déclarés ; or un mixin vise très légitimement une
-    méthode héritée. « LivingEntityMixin » vise ainsi « isEffectiveAi », qui est
-    déclarée dans « Entity ». Sans cette remontée, l'outil rendrait « n'existe
-    plus » sur un mixin parfaitement sain — et un contrôleur qui crie au loup se
-    fait débrancher au bout de deux fois.
+    Remonter la parente n'est pas un raffinement, c'est une necessite. « javap »
+    ne montre que les membres declares ; or un mixin vise tres legitimement une
+    methode heritee. « LivingEntityMixin » vise ainsi « isEffectiveAi », qui est
+    declaree dans « Entity ». Sans cette remontee, l'outil rendrait « n'existe
+    plus » sur un mixin parfaitement sain — et un controleur qui crie au loup se
+    fait debrancher au bout de deux fois.
 
-    Rend None si la classe elle-même est introuvable ; les parents introuvables,
-    eux, sont ignorés en silence (le JDK n'est pas dans le chemin de classes, et
-    « java.lang.Object » n'apprendrait rien).
+    Rend None si la classe elle-meme est introuvable ; les parents introuvables,
+    eux, sont ignores en silence.
     """
-    if classe in _cache:
-        return _cache[classe]
-    lu = lit_une_classe(classe, chemin)
+    charge([classe], chemin)
+    lu = _lues.get(classe)
     if lu is None:
-        _cache[classe] = None
         return None
-    noms, signatures, parents = lu
+    noms, signatures, parents = set(lu[0]), set(lu[1]), list(lu[2])
     vus = {classe}
-    a_voir = list(parents)
-    while a_voir:
-        parent = a_voir.pop()
-        if parent in vus:
-            continue
-        vus.add(parent)
-        herite = lit_une_classe(parent, chemin)
-        if herite is None:
-            continue
-        noms |= herite[0]
-        signatures |= herite[1]
-        a_voir.extend(herite[2])
-    _cache[classe] = (noms, signatures)
-    return _cache[classe]
+    # Une profondeur bornee. La parente d'une classe de Minecraft se ramifie a
+    # travers ses interfaces, et le graphe complet compte des centaines de noeuds
+    # pour un gain nul : une methode visee par un mixin est declaree a deux ou
+    # trois crans, jamais a douze.
+    for _ in range(4):
+        a_voir = [nom for nom in parents if nom not in vus]
+        if not a_voir:
+            break
+        charge(a_voir, chemin)
+        suivants = []
+        for nom in a_voir:
+            vus.add(nom)
+            herite = _lues.get(nom)
+            if herite is None:
+                continue
+            noms |= herite[0]
+            signatures |= herite[1]
+            suivants.extend(herite[2])
+        parents = suivants
+    return noms, signatures
 
 
 def main():
@@ -310,6 +362,12 @@ def main():
 
         # 3 : les appels enveloppés ou redirigés, avec leur signature entière.
         for classe, methode, signature in cibles_invoke(texte):
+            # Un mixin peut parfaitement envelopper un appel a la bibliotheque
+            # standard — « List.iterator », « ThreadLocal.get ». Le JDK n'est pas
+            # dans le chemin de classes du mod, et le signaler introuvable serait
+            # une fausse alerte de plus.
+            if classe.startswith(HORS_PORTEE):
+                continue
             lu = membres(classe, jar)
             if lu is None:
                 plaintes.append(f"{fichier.name} : target vise « {classe} », "

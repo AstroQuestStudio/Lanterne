@@ -34,6 +34,7 @@
     "ThreadCountMixin",
     "ExperienceOrbAccessor",
     "RegionFileVersionMixin",
+    "HopperMixin",
     "HopperBulkMixin",
     "ItemMergeMixin",
     "SpawnGuardMixin",
@@ -60,6 +61,8 @@
     "ParticleVeilMixin",
     "BlockEntityVeilMixin",
     "SoundLimitMixin",
+    "SoundDecodeMixin",
+    "UpscaleGameRendererMixin",
     "VideoOptionsMixin"
   ]
 }

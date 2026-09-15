@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "OAO",
+    "PEP",
+    "OGO"
+  ],
+  "key": {
+    "O": "minecraft:obsidian",
+    "A": "minecraft:amethyst_shard",
+    "P": "minecraft:ender_pearl",
+    "E": "minecraft:ender_eye",
+    "G": "minecraft:gold_ingot"
+  },
+  "result": {
+    "id": "lanterne:coeur_de_repere",
+    "count": 1
+  }
+}

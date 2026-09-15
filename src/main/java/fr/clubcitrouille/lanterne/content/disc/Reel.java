@@ -43,7 +43,7 @@ import fr.clubcitrouille.lanterne.content.painting.Studio;
  * <ol>
  *   <li>une entrée dans {@code sounds.json}, côté ressources client, qui dit où est le fichier et
  *       qu'il faut le lire en flux ;</li>
- *   <li>un fichier {@code .ogg} au chemin que cette entrée indique ;</li>
+ *   <li>un fichier au chemin que cette entrée indique ;</li>
  *   <li>une entrée {@code jukebox_song}, côté données, qui donne le titre, la durée et le son.</li>
  * </ol>
  *
@@ -52,10 +52,21 @@ import fr.clubcitrouille.lanterne.content.painting.Studio;
  * qu'on écrirait sur le disque, mais un objet qui répond aux questions du gestionnaire de ressources
  * comme le ferait une archive, en lisant le dossier du joueur et en composant le JSON à la volée.
  *
- * <p>C'est ce que {@code AddPackFindersEvent} rend possible, et c'est bien plus propre que les deux
- * alternatives : écrire un vrai zip dans {@code resourcepacks/} (qu'il faudrait activer à la main,
- * nettoyer, et qui vieillirait mal) ou intercepter le chargement des sons par un mixin (qui
- * toucherait au cœur du moteur pour ajouter du confort, et qui casserait à la première mise à jour).
+ * <p>C'est ce que {@code AddPackFindersEvent} rend possible, et c'est bien plus propre que d'écrire
+ * un vrai zip dans {@code resourcepacks/} — qu'il faudrait activer à la main, nettoyer, et qui
+ * vieillirait mal.
+ *
+ * <h2>Le « .ogg » du chemin est un nom, pas une promesse</h2>
+ *
+ * <p>Toutes les ressources servies ici se terminent par {@code .ogg}, et ce n'est pas nous qui le
+ * décidons : {@code Sound.getPath} colle cette extension au nom déclaré dans {@code sounds.json},
+ * sans que rien ne puisse s'y opposer. Les octets, eux, sont ceux du fichier du joueur — souvent du
+ * MP3.
+ *
+ * <p>Cela ne gêne personne parce que <b>personne ne lit cette extension</b> : {@code
+ * mixin.SoundDecodeMixin} intercepte la construction du flux audio et choisit le décodeur sur la
+ * signature réelle des octets. Voir {@code Press} pour le raisonnement complet, et {@code Needle}
+ * pour les décodeurs.
  *
  * <h2>Pourquoi le son n'est pas déclaré dans un registre</h2>
  *
@@ -267,15 +278,19 @@ public final class Reel implements PackResources {
      * morceau gravé s'entend immédiatement — sans rechargement de ressources, ce qui était tout
      * l'intérêt du mécanisme.
      *
-     * <h2>Pourquoi cela suffit, et pourquoi aucun mixin n'est nécessaire</h2>
+     * <h2>Pourquoi aucun mixin n'est nécessaire POUR CELA</h2>
      *
      * <p>Le moteur sonore met bien en cache les sons <em>courts</em> :
      * {@code SoundBufferLibrary.getCompleteBuffer} garde une table de tampons décodés. Mais il ne
      * prend ce chemin que pour les sons non diffusés en flux. Les nôtres déclarent
      * {@code "stream": true}, et {@code SoundEngine} les envoie alors vers
      * {@code SoundBufferLibrary.getStream}, qui <b>n'a aucun cache</b> : il rouvre la ressource à
-     * chaque lecture. Vérifié dans {@code SoundEngine} (ligne 433, le test {@code if (!isStreaming)})
-     * et dans {@code SoundBufferLibrary}, où seul {@code getCompleteBuffer} porte une table.
+     * chaque lecture. Vérifié dans {@code SoundEngine} et dans {@code SoundBufferLibrary}, où seul
+     * {@code getCompleteBuffer} porte une table.
+     *
+     * <p>Il existe bien un mixin sur cette classe — {@code mixin.SoundDecodeMixin} — mais il répond à
+     * une autre question : <em>quel décodeur</em>, et non <em>quels octets</em>. La fraîcheur des
+     * octets tient au fournisseur paresseux ci-dessous, et à rien d'autre.
      *
      * <h2>Un sillon vide rend du silence, et il le FAUT</h2>
      *
@@ -328,10 +343,10 @@ public final class Reel implements PackResources {
     /**
      * Le silence embarqué, lu depuis l'archive du mod.
      *
-     * <p>Produit une fois par {@code ffmpeg} et versionné avec le code : trois kibioctets de Vorbis
-     * valide. L'écrire à la main aurait supposé d'encoder les livres de codes Vorbis, ce qui n'est
-     * pas raisonnable ; le générer au démarrage aurait supposé un encodeur, que le mod n'embarque
-     * précisément pas.
+     * <p>Encodé une fois pour toutes et versionné avec le code : trois kibioctets de Vorbis valide.
+     * L'écrire à la main aurait supposé d'encoder les livres de codes Vorbis, ce qui n'est pas
+     * raisonnable ; le générer au démarrage aurait supposé un encodeur, et le mod n'en embarque
+     * aucun — il décode, il n'encode jamais.
      */
     private static InputStream silence() throws IOException {
         InputStream in = Reel.class.getResourceAsStream("/assets/lanterne/sounds/silence.ogg");

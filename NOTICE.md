@@ -42,6 +42,8 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 
 | Module Lanterne | Repris de | Licence d'origine |
 |---|---|---|
+| `core/{EntityThrottle,Cadence,Census}.java` — l'ordonnanceur de tick | **Rien.** Même idée que [Immersive Optimization](https://github.com/Luke100000/ImmersiveOptimization) (Luke100000), mécanique différente — voir ci-dessous. | GPL-3.0 (compatible) |
+| `lab/Duel.java` — l'épreuve du duel | **Rien.** Écrite pour ce projet. | — |
 | `core/Shroud.java` — le Voile | **Rien.** Écrit pour ce projet. | — |
 | `mixin/StaticChestRendererMixin.java` | [Faster Block Entities](https://github.com/0x1bd/Faster-Block-Entities) (kvxd) | GPL-3.0-or-later |
 | `mixin/StaticChestShapeMixin.java` | *idem* | GPL-3.0-or-later |
@@ -55,6 +57,39 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `core/Moulds.java` + `mixin/StateCacheDedupMixin.java` | Idée de [FerriteCore](https://github.com/malte0811/FerriteCore) (malte0811) | MIT |
 | `content/painting/*` — l'Atelier, les tableaux | **Rien.** Idée de [Immersive Paintings](https://github.com/Luke100000/ImmersivePaintings) (Luke100000), architecture entièrement différente. | GPL-3.0 (compatible) |
 | `content/disc/*` — le Sillon, les disques | **Rien.** Écrit pour ce projet. | — |
+| `assets/lanterne/shaders/post/fsr_easu.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (EASU)**, [AMD](https://github.com/GPUOpen-Effects/FidelityFX-FSR) — `ffx_fsr1.h` | MIT |
+| `assets/lanterne/shaders/post/fsr_rcas.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (RCAS)**, *idem* | MIT |
+
+L'ordonnanceur de tick mérite la même précision. **Immersive Optimization** est
+sous GPL-3.0, donc absorbable sans réserve, et son dépôt a été lu en entier —
+`TickScheduler`, `ServerLevelMixin`, `Config` — avant d'écrire cette ligne. Rien
+n'en a été repris, pour quatre raisons qui se vérifient dans son code :
+
+- **Il calcule la distance entité par entité**, en parcourant la liste des
+  joueurs pour chacune, sur un **fil d'arrière-plan** réveillé toutes les
+  500 ms. Lanterne recense des *chunks* : quatre cent quarante et un au lieu de
+  cent mille entités. Et un fil d'arrière-plan est précisément ce qu'il ne faut
+  pas sur la cible de ce projet — **un VPS à un seul cœur**, où ce fil vole le
+  tick qu'il prétend soulager.
+- **Son gradient est plus grossier** : un cran tous les 64 blocs, zone franche de
+  6 blocs. Ici, un cran tous les 16 blocs et une zone franche de 24 — dégradation
+  plus fine, garantie plus large.
+- **Il n'a aucune compensation de production.** Une poule tickée une fois sur
+  sept pond sept fois moins d'œufs, et rien ne le signale. Voir `core/Produce.java`,
+  qui tient les horloges à la main pendant le sommeil.
+- **Il ignore la densité.** Cinquante vaches dans un enclos à vingt blocs sont
+  toutes « proches » chez lui, et ce sont elles qui coûtent le plus cher.
+
+La comparaison a tout de même rendu quelque chose, et il faut le dire :
+**Immersive Optimization exempte les chunks maintenus chargés de force**, ce que
+Lanterne ne fait pas. Chez lui, `getPriority` commence par
+`if (data.forcedChunks.contains(entity.chunkPosition().pack())) return 0;`. Ici,
+un chunk sous `/forceload` sans joueur à proximité est classé « inconnu », donc
+dégradé au plafond de son espèce — alors qu'un `/forceload` est le seul geste par
+lequel un joueur dit explicitement « continue de simuler ceci pendant mon
+absence ». `ServerLevel#getForceLoadedChunks()` est public en 26.2 et rend
+directement le jeu de chunks concernés ; le correctif tient en quelques lignes
+dans le recensement. **Constat ouvert, non corrigé à ce jour.**
 
 Les tableaux méritent le même genre de précision que le Voile. **Immersive
 Paintings** est sous GPL-3.0, donc parfaitement absorbable ; son code n'a pourtant
@@ -75,6 +110,25 @@ Ce qui lui est repris, en revanche, est son **idée**, qui est bonne : nommer un
 image par l'empreinte de son contenu, annoncer un catalogue, et ne transmettre
 que ce qui manque. La reprise s'arrête là, et le chemin de migration depuis son
 format est décrit dans `content/painting/Relic.java`.
+
+La mise à l'échelle mérite une précision, parce qu'elle touche à du code de
+constructeur. **FSR 1.0** est publié par AMD sous licence **MIT**, que la GPL-3.0
+absorbe sans difficulté. Les deux nuanceurs de `shaders/post/` sont écrits
+**d'après l'algorithme publié** — la disposition des douze échantillons, le noyau
+de Lanczos étiré le long du contour, la limite de 0,1875 de RCAS — et non copiés
+ligne à ligne depuis `ffx_fsr1.h`. Les constantes n'ont pas été confrontées au
+fichier d'origine ; le garde-fou de voisinage placé en fin de passe EASU borne
+l'effet d'une erreur éventuelle à un peu plus ou un peu moins de douceur.
+
+[Vitrail Shaders](https://github.com/avpbynf/Vitrail-Shaders) (LGPL-3.0) a été
+lu pour vérifier qu'un portage GLSL de ces noyaux se pratique et sous quelle
+licence ; aucune de ses lignes n'a été reprise, et Lanterne ne dépend ni de lui
+ni de Vulkan.
+
+Quatre fichiers de nuanceur portant l'en-tête d'un mod tiers (« Salt's Anti
+Aliasing ») avaient été déposés dans `assets/lanterne/shaders/post/` sans figurer
+dans cette table, et sans que ce projet puisse établir leur origine ni leur
+licence. Ils ont été **supprimés** et remplacés par les deux fichiers ci-dessus.
 
 Les ressources de shulker fournies par Faster Block Entities n'ont pas été
 reprises : leur couvercle qui s'ouvre est un retour d'information utile, et le

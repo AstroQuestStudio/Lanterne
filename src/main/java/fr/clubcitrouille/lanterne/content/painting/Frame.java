@@ -7,9 +7,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-
 /**
  * Le cadre : l'écran où l'on remplit une toile.
  *
@@ -57,7 +54,25 @@ import net.neoforged.api.distmarker.OnlyIn;
  * téléchargement lancé puis abandonné écrirait son résultat dans un écran fermé — au mieux sans
  * effet, au pire en posant une image que le joueur ne voulait plus.
  */
-@OnlyIn(Dist.CLIENT)
+/*
+ * Cette classe ne vit que du cote client.
+ *
+ * Elle ne porte PLUS « @OnlyIn(Dist.CLIENT) », et ce n'est pas un oubli. Depuis la
+ * 26.1, cette annotation ne retire plus rien a l'execution : NeoForge le signale
+ * lui-meme, et au niveau ERREUR, sept fois de suite au demarrage de chaque serveur
+ * dedie. Sept fausses erreurs dans un journal, c'est sept lignes qui masquent la
+ * vraie le jour ou elle arrive.
+ *
+ * Ce qui garde reellement cette classe hors du serveur n'a jamais ete l'annotation :
+ * c'est qu'aucun chemin commun ne la nomme. Le code commun ne connait que des
+ * interfaces, implementees du seul cote client — lecon apprise a la dure, par un
+ * plantage de serveur dedie sur « ClassNotFoundException: Screen », parce qu'un
+ * corps de lambda est compile dans une methode de sa classe englobante et charge
+ * avec elle.
+ *
+ * L'annotation documentait donc une garantie qu'elle ne tenait pas. Le commentaire,
+ * lui, ne pretend rien tenir.
+ */
 public final class Frame extends Screen {
     private static final int SCRIM = 0xC8000000;
     private static final int PANEL = 0xF2141418;

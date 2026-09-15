@@ -87,8 +87,7 @@ public final class EntityThrottle {
         // et lente, et celle du tick en cours, immédiate. La seconde n'existe chez personne — le
         // seul mod qui l'ait tentée l'a retirée — et c'est elle qui freine un pic avant qu'il ne
         // devienne un à-coup.
-        double pressure = Math.max(TickBudget.pressure(),
-                Settings.rationing() ? Rationing.pressure() : 0d);
+        double pressure = Pressure.now();
         int period = Cadence.forEntity(entity, Census.distanceOf(entity), pressure);
 
         // La zone franche prime sur la foule. Voir Cadence.untouched : la garantie « rien n'est
@@ -150,6 +149,14 @@ public final class EntityThrottle {
      */
     private static boolean mustNeverSkip(Entity entity) {
         if (entity instanceof Player) {
+            return true;
+        }
+        // <h2>Ce qu'on est en train de frapper</h2>
+        //
+        // Voir {@link #inCombat}. Placé juste après le joueur, parce que c'est le test qui rachète
+        // toutes les erreurs de distance : quoi qu'il arrive en amont, une créature qu'on frappe
+        // tourne à plein régime.
+        if (inCombat(entity)) {
             return true;
         }
         // Une échéance de production qui arrive : la poule doit pondre dans le vrai code, au tick
@@ -228,6 +235,79 @@ public final class EntityThrottle {
         return !entity.onGround()
                 && entity.getDeltaMovement().y < 0d
                 && Crowd.neighbours(entity) < 6;
+    }
+
+    /**
+     * Retire l'exemption de combat, exprès, pour vérifier que l'épreuve sait la voir.
+     *
+     * <p>Même principe que {@code Produce.BROKEN_ON_PURPOSE}, et pour la même raison : une épreuve
+     * qui ne peut pas échouer ne prouve rien. {@code LANTERNE_BREAK_MELEE=1} rend la créature
+     * frappée à la cadence ordinaire ; {@code Duel} <b>doit</b> alors annoncer qu'elle lévite.
+     */
+    private static final boolean BROKEN_ON_PURPOSE =
+            "1".equals(System.getenv("LANTERNE_BREAK_MELEE"));
+
+    /**
+     * Cette créature est-elle engagée dans un combat ?
+     *
+     * <h2>Le défaut rapporté depuis une vraie partie</h2>
+     *
+     * <p>Un joueur au Nether : <em>« je tape un squelette, il prend dix ans, et surtout dix ans
+     * avant de retaper, et il lévite au sol quand il prend des dégâts »</em>. Trois symptômes, une
+     * seule cause — le tick de la créature était annulé — et les trois se lisent dans le code du jeu.
+     *
+     * <pre>
+     * LivingEntity.baseTick : if (this.hurtTime &gt; 0) this.hurtTime--;
+     *                         if (this.invulnerableTime &gt; 0 &amp;&amp; !(this instanceof ServerPlayer))
+     *                             this.invulnerableTime--;
+     * LivingEntity.hurtServer : if (this.invulnerableTime &gt; 10.0F &amp;&amp; !bypasses) {
+     *                               if (damage &lt;= this.lastHurt) return false;   // ← le coup est refusé
+     * </pre>
+     *
+     * <p><b>La lévitation.</b> La gravité ne s'applique que dans le tick. Une créature dont le tick
+     * est annulé ne tombe pas : elle reste où le recul l'a laissée.
+     *
+     * <p><b>Les coups qui ne portent plus.</b> Un coup pose {@code invulnerableTime = 20}, et ce
+     * compteur ne redescend que dans le tick de la victime. Tickée une fois sur soixante-douze, elle
+     * reste au-dessus de dix pendant des secondes — et <b>chaque coup suivant est purement refusé</b>.
+     * Le joueur frappe dans le vide sans comprendre pourquoi.
+     *
+     * <p><b>La riposte qui n'arrive jamais.</b> L'intelligence vit dans le tick, elle aussi.
+     *
+     * <h2>Pourquoi cette garde existe alors que le recensement est réparé</h2>
+     *
+     * <p>La cause première était un recensement par monde qui n'en était pas un ; elle est corrigée.
+     * Cette garde ne la corrige pas une seconde fois, elle répond à autre chose : <b>une garantie de
+     * distance ne vaut que ce que vaut la distance qui l'alimente</b>. La promesse « rien n'est
+     * dégradé à moins de vingt-quatre blocs » était exacte, et elle a produit des squelettes
+     * flottants pendant des mois parce que personne n'avait éprouvé son entrée hors de l'Overworld.
+     *
+     * <p>Le combat, lui, ne se déduit d'aucune distance : il se lit sur la créature elle-même, dans
+     * des champs que le jeu vient d'écrire. Deux lectures d'entier, aucun cache, aucune table — donc
+     * rien qui puisse être périmé, et rien qui puisse mentir. Et le cas reste réel même avec un
+     * recensement juste : on frappe depuis l'intérieur de la zone franche une créature qui se tient
+     * au-dehors.
+     *
+     * <h2>Ce que cela ne coûte pas</h2>
+     *
+     * <p>Une créature n'est en combat que quelques secondes dans sa vie, et seulement si un joueur
+     * s'en occupe. Sur un élevage de mille bêtes, ce test rend faux mille fois et ne change rien.
+     * La cible n'est retenue que si c'est un <b>joueur</b> : sans cela, une ferme à monstres dont
+     * les occupants se visent entre eux perdrait toute sa cadence, ce qui est exactement ce qu'on
+     * cherche à éviter ailleurs.
+     */
+    private static boolean inCombat(Entity entity) {
+        if (BROKEN_ON_PURPOSE || !(entity instanceof net.minecraft.world.entity.LivingEntity body)) {
+            return false;
+        }
+        // L'animation de dégât en cours, et les images d'invulnérabilité qui la suivent. La seconde
+        // est la plus importante des deux : c'est elle qui, restée haute, fait refuser les coups.
+        if (body.hurtTime > 0 || body.invulnerableTime > 0) {
+            return true;
+        }
+        // Une créature qui poursuit un joueur doit pouvoir le rejoindre et le frapper. Poursuivre
+        // une autre créature ne donne droit à rien : c'est le cas des fermes, et il est innombrable.
+        return body instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() instanceof Player;
     }
 
     /** Un véhicule qui porte un joueur : le saccader, c'est saccader le joueur lui-même. */

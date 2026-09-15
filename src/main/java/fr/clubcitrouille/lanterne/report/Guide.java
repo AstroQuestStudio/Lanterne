@@ -71,10 +71,24 @@ public final class Guide {
         }
 
         heading(source, "Les repères");
-        line(source, "/lanterne wp liste", "Tes repères posés.");
+        // « /lanterne wp » tout court LISTE ; il n'y a pas de sous-commande « liste », et l'aide en
+        // annonçait une. Une aide cliquable qui écrit une commande refusée est pire que pas d'aide.
+        line(source, "/lanterne wp", "Tes repères posés.");
         line(source, "/lanterne wp add", "Pose un repère ici, sous le nom que tu donnes.");
         line(source, "/lanterne wp remove", "Retire un repère.");
         line(source, "/lanterne wp share", "Partage un repère avec les autres joueurs.");
+
+        heading(source, "Les portails");
+        line(source, "/lanterne portail", "Tes portails et les portails publics : où ils sont, où "
+                + "ils mènent.");
+        line(source, "/lanterne portail lier", "Relie un de tes portails à une destination. "
+                + "« <portail> <destination> », les noms entre guillemets s'ils ont un espace.");
+        line(source, "/lanterne portail delier", "Ce portail ne mène plus nulle part.");
+        line(source, "/lanterne portail public", "Ouvre un portail à tous, ou le referme.");
+        line(source, "/lanterne portail oublier", "Éteint un portail et efface sa fiche.");
+        say(source, Component.literal("  Un cadre d'obsidienne, un Cœur de repère à la place d'un "
+                        + "de ses blocs, un briquet — et clic droit sur le cœur pour le régler.")
+                .withStyle(ChatFormatting.DARK_GRAY));
 
         heading(source, "La boutique");
         line(source, "/boutique", "Ouvre l'écran : acheter, vendre.");

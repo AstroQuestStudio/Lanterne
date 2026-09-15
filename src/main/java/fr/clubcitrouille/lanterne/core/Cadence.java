@@ -75,6 +75,26 @@ public final class Cadence {
     }
 
     /**
+     * Le plancher que la pression ne franchit jamais, en blocs.
+     *
+     * <h2>Un réglage pouvait passer sous la portée du bras</h2>
+     *
+     * <p>La pression rétrécit la zone franche jusqu'à la moitié. C'est sain tant que le rayon de
+     * départ est celui d'usine — vingt-quatre blocs deviennent douze, et l'on frappe toujours à
+     * pleine cadence. Mais le rayon est réglable, et un administrateur qui le descend à quatre pour
+     * privilégier les ticks obtient <b>deux blocs</b> sous charge.
+     *
+     * <p>Deux blocs, c'est moins que la portée d'un coup d'épée : {@code DEFAULT_ENTITY_INTERACTION_RANGE}
+     * vaut trois, et cinq en créatif. La créature qu'on frappe se retrouverait donc dégradée, et le
+     * recul l'éloignerait encore. C'est précisément le défaut que ce projet vient de corriger
+     * ailleurs — il n'a aucune raison de pouvoir revenir par un réglage.
+     *
+     * <p>Huit blocs : la portée maximale, plus la marge d'un recul. En deçà, la garantie qui rend
+     * tout le reste acceptable cesserait d'en être une.
+     */
+    private static final double MELEE_FLOOR = 8d;
+
+    /**
      * Blocs par cran de ralentissement.
      *
      * <p>Un tick de plus entre deux réveils tous les seize blocs — soit un chunk. La valeur vient
@@ -130,13 +150,29 @@ public final class Cadence {
      * un gain, c'était une dette.</b>
      */
     public static boolean untouched(double distance, double pressure) {
-        return distance <= untouchedRadius() * (1d - 0.5d * clamp(pressure));
+        return distance <= freeRadius(pressure);
+    }
+
+    /**
+     * Le rayon de la zone franche sous cette pression.
+     *
+     * <p>La formule vivait en deux exemplaires, ici et dans {@link #forEntity}. Deux copies d'une
+     * garantie finissent toujours par diverger — et une garantie qui diverge n'en est plus une.
+     *
+     * <p>La pression rapproche la dégradation du joueur quand le serveur souffre, et l'en éloigne
+     * quand il respire. Un serveur au repos ne dégrade presque rien. Mais jamais en deçà de
+     * {@link #MELEE_FLOOR}.
+     */
+    public static double freeRadius(double pressure) {
+        double plafond = untouchedRadius();
+        double reduit = plafond * (1d - 0.5d * clamp(pressure));
+        // Le minimum, et non le plancher seul : un administrateur qui demande trois blocs obtient
+        // trois blocs. Le plancher protege la reduction automatique, pas le choix explicite.
+        return Math.max(Math.min(plafond, MELEE_FLOOR), reduit);
     }
 
     public static int forEntity(Entity entity, double distance, double pressure) {
-        // La pression rapproche la dégradation du joueur quand le serveur souffre, et l'en éloigne
-        // quand il respire. Un serveur au repos ne dégrade presque rien.
-        double free = untouchedRadius() * (1d - 0.5d * clamp(pressure));
+        double free = freeRadius(pressure);
         if (distance <= free) {
             return 1;
         }

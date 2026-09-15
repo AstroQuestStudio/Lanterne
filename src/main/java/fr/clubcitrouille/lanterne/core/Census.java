@@ -160,6 +160,36 @@ public final class Census {
     private static boolean stale = true;
 
     /**
+     * Les chunks forcés valent-ils un joueur ?
+     *
+     * <h2>Une échappatoire réservée au laboratoire, et pourquoi elle est nécessaire</h2>
+     *
+     * <p>En jeu, forcer un chunk est un geste délibéré du joueur : il dit « continue de simuler
+     * ceci ». Le recensement le traite donc comme une présence, et c'est le bon comportement.
+     *
+     * <p>Mais une épreuve du laboratoire force ses chunks pour une tout autre raison : sans joueur,
+     * rien ne tourne, et il faut bien que la scène s'anime. Le forçage y est un <b>échafaudage</b>,
+     * pas une intention. Depuis que le recensement l'honore, l'épreuve du duel refuse de conclure —
+     * à juste titre : sa victime était devenue « à zéro bloc d'un joueur », donc dans la zone
+     * franche, donc sans rien à démontrer.
+     *
+     * <p>Le laboratoire peut donc dire que son forçage ne compte pas. C'est la seule façon de
+     * mesurer ce qui arrive à une créature <em>loin</em> de tout joueur, sur un serveur où il n'y a
+     * personne. Rien dans le jeu ne touche à ce drapeau.
+     */
+    private static boolean honourForced = true;
+
+    /**
+     * Le laboratoire déclare que ses chunks forcés sont un échafaudage.
+     *
+     * <p>Voir {@link #honourForced}. À n'appeler que depuis {@code lab}.
+     */
+    public static void countForcedChunks(boolean honour) {
+        honourForced = honour;
+        stale = true; // la carte en cours porte l'ancienne regle : elle doit etre refaite
+    }
+
+    /**
      * Observateurs d'essai, en coordonnées à plat : x, z, x, z…
      *
      * <p>Alimentés par le laboratoire. Ils comptent exactement comme des joueurs pour le
@@ -224,6 +254,23 @@ public final class Census {
         if (level.dimension() == Level.OVERWORLD) {
             for (int i = 0; i < probeCount; i++) {
                 markAt(table, probes[i * 2], probes[i * 2 + 1], radius);
+            }
+        }
+
+        // <h2>Les chunks forcés comptent comme un joueur</h2>
+        //
+        // Poser un ticket de chargement permanent — par « /forceload », par un bloc chargeur de
+        // chunk, par un mod — est le seul geste par lequel un joueur dit explicitement : « continue
+        // de simuler ceci, même quand je n'y suis pas ». Les traiter comme un endroit inconnu
+        // revenait à dégrader à la cadence plafond très exactement ce qu'on a demandé de garder
+        // vivant : une ferme à villageois tournait à un tick sur quatre, le reste à un sur
+        // soixante-douze, et le joueur l'aurait attribué à autre chose.
+        //
+        // La distance retenue est zéro, c'est-à-dire la pleine simulation. Le coût est borné par le
+        // nombre de chunks que l'administrateur a lui-même décidé de forcer.
+        if (honourForced) {
+            for (long forced : level.getForceLoadedChunks()) {
+                table.put(forced, (short) 0);
             }
         }
 

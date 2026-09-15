@@ -18,9 +18,6 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.tinyfd.TinyFileDialogs;
 
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-
 import fr.clubcitrouille.lanterne.Lanterne;
 
 /**
@@ -65,7 +62,25 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * eux, et le résultat revient à l'écran par {@code Minecraft.execute}. L'écran reste peint, la
  * touche d'échappement répond, et l'opération s'annule.
  */
-@OnlyIn(Dist.CLIENT)
+/*
+ * Cette classe ne vit que du cote client.
+ *
+ * Elle ne porte PLUS « @OnlyIn(Dist.CLIENT) », et ce n'est pas un oubli. Depuis la
+ * 26.1, cette annotation ne retire plus rien a l'execution : NeoForge le signale
+ * lui-meme, et au niveau ERREUR, sept fois de suite au demarrage de chaque serveur
+ * dedie. Sept fausses erreurs dans un journal, c'est sept lignes qui masquent la
+ * vraie le jour ou elle arrive.
+ *
+ * Ce qui garde reellement cette classe hors du serveur n'a jamais ete l'annotation :
+ * c'est qu'aucun chemin commun ne la nomme. Le code commun ne connait que des
+ * interfaces, implementees du seul cote client — lecon apprise a la dure, par un
+ * plantage de serveur dedie sur « ClassNotFoundException: Screen », parce qu'un
+ * corps de lambda est compile dans une methode de sa classe englobante et charge
+ * avec elle.
+ *
+ * L'annotation documentait donc une garantie qu'elle ne tenait pas. Le commentaire,
+ * lui, ne pretend rien tenir.
+ */
 public final class Reach {
     /**
      * Le fil qui va chercher.
@@ -123,9 +138,10 @@ public final class Reach {
      * Les morceaux.
      *
      * <p>Le test d'acceptation est <b>volontairement large</b> — on refuse seulement ce qui est
-     * manifestement du texte. La vraie vérification se fait plus tard, à la conversion : c'est
-     * {@code ffmpeg} qui sait reconnaître un format audio, et refuser ici sur une signature aurait
-     * rejeté des fichiers parfaitement valides que lui aurait su lire.
+     * manifestement du texte. La vraie vérification se fait plus tard, dans {@code content.disc.Press},
+     * qui reconnaît le format sur la signature et sait dire précisément ce qu'il refuse. Trancher ici
+     * aurait voulu dire écrire deux fois la même reconnaissance, et se tromper à l'un des deux
+     * endroits.
      */
     public static final Kind AUDIO = new Kind(
             "Choisis un morceau à graver",

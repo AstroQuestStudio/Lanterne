@@ -54,7 +54,7 @@ public final class Studio {
     public static final ModConfigSpec.IntValue DISC_MAX_MIB;
     public static final ModConfigSpec.IntValue DISC_MAX_SECONDS;
     public static final ModConfigSpec.IntValue DISC_QUOTA;
-    public static final ModConfigSpec.BooleanValue DISC_CONVERT;
+    public static final ModConfigSpec.BooleanValue DISC_DECODE;
     public static final ModConfigSpec.IntValue DISC_SLOTS;
     public static final ModConfigSpec.IntValue DISC_BURN;
 
@@ -105,8 +105,8 @@ public final class Studio {
     /** Nombre maximal de disques importés. */
     private static int discQuota = 64;
 
-    /** Tenter la conversion des formats non-OGG par ffmpeg, s'il est installé. */
-    private static boolean discConvert = true;
+    /** Accepter les formats exotiques quand un convertisseur extérieur se trouve installé. */
+    private static boolean discDecode = true;
 
     /** Nombre de sillons gravables. Voir {@code content.disc.Slots}. */
     private static int discSlots = 64;
@@ -221,7 +221,7 @@ public final class Studio {
 
         DISC_MAX_MIB = BUILDER.comment(
                 "Poids maximal, en mebioctets, d'un fichier audio accepte.",
-                "24 Mio en Vorbis correspondent a environ une heure de musique de qualite correcte.",
+                "24 Mio en Vorbis ou en MP3 font environ une heure de musique de qualite correcte.",
                 "Le fichier n'est JAMAIS charge entier en memoire : il est lu en flux depuis le",
                 "disque pendant la lecture. Cette limite protege le dossier, pas la memoire.")
                 .defineInRange("poids_max_mio", 24, 1, 256);
@@ -233,21 +233,22 @@ public final class Studio {
         DISC_QUOTA = BUILDER.comment(
                 "Nombre maximal de disques importes.")
                 .defineInRange("quota", 64, 1, 512);
-        DISC_CONVERT = BUILDER.comment(
-                "Tenter de convertir les fichiers non-OGG (mp3, wav, flac...) vers OGG/Vorbis.",
+        DISC_DECODE = BUILDER.comment(
+                "Accepter aussi les formats que Lanterne ne sait pas decoder (m4a, aac, opus, wma),",
+                "quand un ffmpeg se trouve installe sur la machine du joueur.",
                 "",
-                "POURQUOI OGG/VORBIS ET RIEN D'AUTRE : le moteur sonore de Minecraft ne sait lire",
-                "que cela. Il n'y a pas de decodeur mp3 dans le jeu, et en ajouter un supposerait de",
-                "doubler tout le chemin de lecture - pour un resultat plus lourd, moins teste, et",
-                "incompatible avec le mode flux qui evite justement de charger le morceau entier.",
+                "CE REGLAGE NE CONCERNE PAS LES FORMATS COURANTS. L'OGG, le MP3 et le WAV sont lus",
+                "par Lanterne lui-meme, sur toutes les machines, et rien ne peut les desactiver.",
                 "",
-                "La conversion est deleguee a ffmpeg s'il est installe et joignable depuis le PATH.",
-                "Lanterne n'embarque PAS d'encodeur Vorbis : il n'en existe pas en Java pur qui",
-                "vaille la peine d'etre distribue, et en embarquer un natif pour trois plateformes",
-                "alourdirait le mod de plusieurs mebioctets pour une commodite.",
-                "Sans ffmpeg, les fichiers non-OGG sont ignores avec un message clair disant quoi",
-                "faire - ce qui vaut mieux qu'un silence.")
-                .define("convertir", true);
+                "Le moteur sonore de Minecraft ne sait decoder que du Vorbis, c'est vrai - mais il",
+                "choisit son decodeur SANS REGARDER le fichier. Lanterne intercepte ce choix cote",
+                "client et fournit le decodeur qui correspond aux octets reels : rien n'est converti,",
+                "rien n'est reencode, et le mode flux qui evite de charger le morceau entier en",
+                "memoire est conserve tel quel.",
+                "",
+                "A faux : un fichier exotique est refuse avec un message disant quoi faire, meme si",
+                "ffmpeg est installe.")
+                .define("formats_exotiques", true);
         DISC_SLOTS = BUILDER.comment(
                 "Nombre de SILLONS gravables en cours de partie.",
                 "",
@@ -303,7 +304,7 @@ public final class Studio {
         discMaxMib = DISC_MAX_MIB.get();
         discMaxSeconds = DISC_MAX_SECONDS.get();
         discQuota = DISC_QUOTA.get();
-        discConvert = DISC_CONVERT.get();
+        discDecode = DISC_DECODE.get();
         discSlots = DISC_SLOTS.get();
         discBurn = DISC_BURN.get();
     }
@@ -375,8 +376,8 @@ public final class Studio {
         return discQuota;
     }
 
-    public static boolean discConvert() {
-        return discConvert;
+    public static boolean discDecode() {
+        return discDecode;
     }
 
     public static int discSlots() {

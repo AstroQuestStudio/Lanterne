@@ -18,8 +18,13 @@ import fr.clubcitrouille.lanterne.content.waypoint.WaypointAsk;
  *
  * <h2>Ce que cette interface montre, et ce qu'elle refuse de montrer</h2>
  *
- * <p>Pas de bouton de téléportation. C'est le point de départ du système entier : un repère dit
- * <em>où c'est</em> et <em>à quelle distance</em>, le chemin reste à faire.
+ * <p>Pas de bouton de téléportation, et il n'y en aura pas. Un repère est gratuit : lui donner le
+ * pouvoir de déplacer reviendrait à offrir la distance. Il dit <em>où c'est</em> et <em>à quelle
+ * distance</em> ; le chemin reste à faire.
+ *
+ * <p>Ce qui déplace, c'est un portail — voir {@link Gateway} et
+ * {@link fr.clubcitrouille.lanterne.content.waypoint.Gate}. Il se bâtit, il coûte, et il ne relie que
+ * des endroits où l'on est déjà allé. C'est une autre affaire, et un autre écran.
  *
  * <p>Chaque ligne porte une pastille de couleur, le nom, la distance <b>horizontale</b> — l'altitude
  * fausserait la lecture dans une mine — et une flèche qui pointe vers le repère <em>relativement au
@@ -190,7 +195,7 @@ public class Board extends Screen {
             }
         }
 
-        graphics.text(this.font, "Aucune téléportation : un repère dit où, pas comment.",
+        graphics.text(this.font, "Un repère dit où. Pour y aller vite, bâtis un portail de repère.",
                 left + 10, bottom - 46, DIM, false);
     }
 

@@ -42,8 +42,8 @@ import org.jspecify.annotations.Nullable;
  * écrire un fichier. Trois raisons de ne pas le faire :
  *
  * <ol>
- *   <li><b>Le travail n'est pas instantané de toute façon.</b> Télécharger, convertir en Vorbis et
- *       remonter plusieurs mébioctets au serveur prend des secondes. Sans rien à l'écran, le joueur
+ *   <li><b>Le travail n'est pas instantané de toute façon.</b> Télécharger, mesurer et remonter
+ *       plusieurs mébioctets au serveur prend des secondes. Sans rien à l'écran, le joueur
  *       croit à un blocage ; avec un bloc qui tourne, il attend.</li>
  *   <li><b>Un retour d'information gratuit.</b> L'état {@link #WORKING} allume le bloc et fait grincer
  *       le son : on voit de loin qu'une gravure est en cours, et on voit quand elle finit.</li>
@@ -53,8 +53,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <h2>Ce qui arrive quand ça rate</h2>
  *
- * <p>Le disque vierge <b>revient toujours</b>. Lien mort, format refusé, ffmpeg absent, serveur qui
- * n'a plus de sillon libre : dans tous les cas la gravure s'annule et le vierge reste dans le bloc,
+ * <p>Le disque vierge <b>revient toujours</b>. Lien mort, format refusé, fichier illisible, serveur
+ * qui n'a plus de sillon libre : dans tous les cas la gravure s'annule et le vierge reste dans le bloc,
  * récupérable au clic. Un objet perdu par un mod est impardonnable, et c'est la seule règle de ce
  * fichier qui n'admet aucune exception — voir {@link BurnerEntity#abandon}.
  */

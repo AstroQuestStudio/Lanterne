@@ -15,15 +15,24 @@ import net.minecraft.resources.Identifier;
 /**
  * Un repère : un nom, un lieu, une couleur, et la décision de le partager ou non.
  *
- * <h2>Ce que ce système refuse de faire, et c'est son point de départ</h2>
+ * <h2>Un repère ne téléporte pas — et ce n'est plus la fin de l'histoire</h2>
  *
  * <p>Les mods de carte offrent presque tous la téléportation vers un repère. C'est commode pour un
- * opérateur, et cela <b>détruit la survie</b> : plus rien ne coûte de distance, donc plus rien ne
- * coûte de temps, donc le monde cesse d'être grand.
+ * opérateur, et cela <b>détruit la survie</b> : un repère est gratuit, on l'écrit et il existe ; lui
+ * donner le pouvoir de déplacer reviendrait à offrir la distance, donc le temps, donc la taille du
+ * monde.
  *
- * <p>Ce système ne téléporte pas. Il ne le fera pas. Un repère dit <em>où c'est</em> et <em>à quelle
- * distance</em> ; le chemin reste à faire. C'est la seule façon qu'un outil de repérage soit utile en
- * survie plutôt que de la remplacer.
+ * <p>Un repère, donc, dit <em>où c'est</em> et <em>à quelle distance</em> ; le chemin reste à faire.
+ * Cette page-là n'a pas changé.
+ *
+ * <p>Ce qui a changé, c'est qu'on peut désormais <b>bâtir</b> la route : un cadre d'obsidienne, un
+ * {@linkplain Gates#HEART Cœur de repère} dans ce cadre, un briquet — et un {@link Gate} relie deux
+ * endroits. La différence avec une commande de téléportation tient en une phrase : un portail ne relie
+ * que des lieux où <em>quelqu'un est déjà allé à pied</em>, et il coûte dix blocs d'obsidienne à chaque
+ * bout. La distance n'est pas supprimée, elle est <b>payée une fois</b>.
+ *
+ * <p>Le carnet reste donc ce qu'il a toujours été — une indication —, et il n'a pas de bouton pour
+ * voyager. Voyager se construit.
  *
  * <h2>Pourquoi un nombre limité</h2>
  *

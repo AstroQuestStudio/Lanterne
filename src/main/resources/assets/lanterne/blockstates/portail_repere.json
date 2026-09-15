@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "axis=x": { "model": "lanterne:block/portail_repere_ns" },
+    "axis=z": { "model": "lanterne:block/portail_repere_ew" }
+  }
+}

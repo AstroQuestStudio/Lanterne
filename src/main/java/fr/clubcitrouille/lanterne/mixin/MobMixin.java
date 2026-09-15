@@ -9,6 +9,7 @@ import net.minecraft.world.entity.Mob;
 
 import fr.clubcitrouille.lanterne.core.Cadence;
 import fr.clubcitrouille.lanterne.core.Census;
+import fr.clubcitrouille.lanterne.core.Pressure;
 import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.core.TickBudget;
 
@@ -54,7 +55,10 @@ public abstract class MobMixin {
             return;
         }
         Mob self = (Mob) (Object) this;
-        int period = Cadence.forEntity(self, Census.distanceOf(self), TickBudget.pressure());
+        // La MEME pression qu'EntityThrottle, et non celle du seul budget de tick. Les deux
+        // lisaient des nombres differents, si bien que la zone franche n'avait pas le meme rayon
+        // selon qui la consultait — une garantie en deux exemplaires n'en est pas une.
+        int period = Cadence.forEntity(self, Census.distanceOf(self), Pressure.now());
         if (!Cadence.actsOn(period, self.level().getGameTime(), self.getId())) {
             callback.cancel();
         }

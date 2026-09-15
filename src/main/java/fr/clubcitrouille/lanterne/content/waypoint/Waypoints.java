@@ -20,15 +20,23 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * propriétaire ne vient jamais du paquet : il est lu dans la connexion. C'est la seule façon qu'un
  * client modifié ne puisse pas effacer le repère d'un autre joueur — et c'est une différence de
  * nature, pas de degré, avec un système où l'auteur s'annonce.
+ *
+ * <p>Les portails ({@link Gates}) entrent par le même canal et suivent la même règle. Elle y compte
+ * davantage encore : un repère volé coûte une ligne dans un carnet, un portail volé coûte une porte
+ * ouverte au milieu d'une base.
  */
 public final class Waypoints {
     /** Version du protocole. Un client d'une autre version se verra refuser la connexion au canal. */
-    private static final String PROTOCOL = "1";
+    private static final String PROTOCOL = "2";
 
     private Waypoints() {}
 
     public static void register(IEventBus modBus) {
         modBus.addListener(Waypoints::onRegisterPayloads);
+        // Les portails sont la suite des repères, pas un second mod : ils s'enregistrent depuis ici
+        // plutôt que depuis la classe principale, pour que tout ce qui les concerne tienne dans un
+        // seul paquet et se lise d'un seul tenant.
+        Gates.register(modBus);
     }
 
     private static void onRegisterPayloads(RegisterPayloadHandlersEvent event) {
@@ -37,6 +45,10 @@ public final class Waypoints {
                 (payload, context) -> context.enqueueWork(
                         () -> fr.clubcitrouille.lanterne.client.waypoint.Marks.accept(payload.marks())));
         registrar.playToServer(WaypointAsk.TYPE, WaypointAsk.STREAM_CODEC, Waypoints::onAsk);
+        registrar.playToClient(GateSync.TYPE, GateSync.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> fr.clubcitrouille.lanterne.client.waypoint.Portals.accept(payload.gates())));
+        registrar.playToServer(GateAsk.TYPE, GateAsk.STREAM_CODEC, Gates::onAsk);
     }
 
     /**

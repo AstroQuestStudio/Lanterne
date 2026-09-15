@@ -32,6 +32,20 @@ import java.io.InputStream;
  * variable, la taille divisée par le débit de la première trame donne n'importe quoi — souvent le
  * double ou la moitié. Le jukebox se serait arrêté au milieu, ou aurait tourné dans le vide.
  *
+ * <h2>Ce qu'on annonce de trop, et pourquoi c'est le bon côté de l'erreur</h2>
+ *
+ * <p>Comparées à {@code ffprobe}, les durées rendues ici sont plus longues de trente à soixante-dix
+ * millisecondes sur les fichiers encodés par LAME. L'écart n'est pas une approximation : c'est le
+ * <b>retard d'encodeur</b> et le <b>remplissage de fin</b>, deux ou trois trames de silence que
+ * l'encodeur ajoute pour des raisons internes et qu'il déclare dans une extension de l'entête Xing.
+ * Les lire coûterait une vingtaine de lignes de plus.
+ *
+ * <p>On ne les lit pas, et c'est délibéré. Ce que la durée décide, c'est le moment où le jukebox
+ * s'arrête : trop courte, elle coupe la dernière note ; trop longue, elle laisse quelques
+ * centièmes de silence que personne n'entend. Entre les deux erreurs, il n'y a pas à hésiter — et le
+ * mécanisme des sillons arrondit déjà de plusieurs pour cent dans le même sens. Mesuré sur quatre
+ * fichiers réels : 269,009 s contre 268,957 s, 16,896 s contre 16,830 s.
+ *
  * <h2>Les étiquettes en tête de fichier</h2>
  *
  * <p>Un MP3 commence rarement par de l'audio : il commence par une étiquette ID3v2, qui porte le

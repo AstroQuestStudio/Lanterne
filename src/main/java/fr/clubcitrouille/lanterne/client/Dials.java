@@ -14,7 +14,10 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import fr.clubcitrouille.lanterne.client.upscale.Deep;
+import fr.clubcitrouille.lanterne.client.upscale.Upscale;
 import fr.clubcitrouille.lanterne.core.ClientConfig;
+import fr.clubcitrouille.lanterne.core.Lens;
 import fr.clubcitrouille.lanterne.core.Settings;
 
 /**
@@ -121,10 +124,33 @@ public final class Dials extends Screen {
         this.families.add(world);
 
         Family image = new Family("L'image", "échelle de rendu et mesure");
-        image.add(Dial.cycle("Mise à l'échelle", () -> "en chantier", () -> FAINT, step -> { },
-                "Rendre le monde plus petit que l'écran, puis l'y étaler.",
-                "La première version le dessinait dans un coin : blitToScreen n'étire pas.",
-                "Repris sur une cible de scène séparée — l'interface restera nette."));
+        image.add(Dial.cycle("Mise à l'échelle", Dials::scaleLabel,
+                () -> Upscale.broken() ? FAINT : Upscale.active() ? AMBER : DIM,
+                Dials::cycleScale,
+                "Le monde est rendu plus petit, puis remonté par FSR 1.0. L'interface reste native.",
+                "67 % par dimension, c'est 45 % de pixels en moins — et 45 % de travail en moins.",
+                "Effet immédiat. Se juge à l'œil, pas au compteur."));
+        image.add(Dial.cycle("Netteté", () -> Upscale.edge().label(),
+                () -> Upscale.active() ? AMBER : FAINT,
+                step -> Upscale.cycleEdge(step),
+                "La passe RCAS d'AMD rend aux contours le mordant que l'agrandissement enlève.",
+                "Trop forte, elle fait scintiller le ciel et le sable. Le défaut est « moyenne ».",
+                "Ce réglage ne survit pas au redémarrage."));
+        image.add(Dial.cycle("Houle (adaptatif)", () -> Upscale.swell() ? "active" : "arrêtée",
+                () -> Upscale.swell() ? AMBER : DIM,
+                step -> Upscale.toggleSwell(),
+                "L'échelle suit le taux d'images au lieu d'être choisie une fois pour toutes.",
+                "Le préréglage ci-dessus devient le PLANCHER : la houle ne descend jamais plus bas.",
+                "Dix secondes de grâce, puis un palier toutes les quatre secondes au plus."));
+        // Le relevé se fait à l'ouverture de l'écran plutôt qu'au démarrage : il demande un
+        // périphérique graphique construit, et il est sans objet tant que personne ne le regarde.
+        image.add(Dial.cycle("DLSS", () -> {
+            Deep.probe();
+            return Deep.describe();
+        }, () -> FAINT, step -> { },
+                "NON DISPONIBLE. DLSS est une bibliothèque C++ de NVIDIA : il lui faut un pont natif,",
+                "que ce mod n'embarque pas, plus Vulkan (expérimental en 26.2) et une carte RTX.",
+                "FSR 1.0 ci-dessus n'exige rien de tout cela et sert sur n'importe quelle carte."));
         image.add(Dial.toggle("Jauge de performance", Settings::gauge, ClientConfig.GAUGE,
                 "Images/s, centile le plus lent et créatures voilées, dans un coin de l'écran.",
                 "F3 donne une moyenne arrondie ; la jauge donne les à-coups.",
@@ -157,6 +183,42 @@ public final class Dials extends Screen {
         }
         ClientConfig.ITEM_COPIES.set(next);
         Settings.applyFromClientConfig();
+    }
+
+    /**
+     * Fait tourner le préréglage d'échelle, « désactivée » comprise.
+     *
+     * <p>Le premier cran est {@code NATIF}, et c'est lui qui porte l'extinction : un interrupteur
+     * séparé aurait obligé à deux gestes pour couper, et laissé l'écran afficher un pourcentage
+     * pendant que rien ne se passe.
+     */
+    private static void cycleScale(int step) {
+        Lens.Preset[] all = Lens.Preset.values();
+        int from = Settings.lens() ? Lens.preset().ordinal() : 0;
+        int next = Math.floorMod(from + step, all.length);
+        ClientConfig.LENS.set(next != 0);
+        ClientConfig.LENS_PRESET.set(all[next]);
+        Settings.applyFromClientConfig();
+        Upscale.retune();
+    }
+
+    private static String scaleLabel() {
+        if (Upscale.broken()) {
+            return "en panne";
+        }
+        if (!Settings.lens() || Lens.preset() == Lens.Preset.NATIF) {
+            return "désactivée";
+        }
+        Lens.Preset preset = Lens.preset();
+        int perSide = (int) Math.round(100d / preset.divisor());
+        return switch (preset) {
+            case NATIF -> "désactivée";
+            case ULTRA_QUALITE -> "Ultra qual. " + perSide + " %";
+            case QUALITE -> "Qualité " + perSide + " %";
+            case EQUILIBRE -> "Équilibré " + perSide + " %";
+            case PERFORMANCE -> "Perf. " + perSide + " %";
+            case ULTRA_PERFORMANCE -> "Ultra perf. " + perSide + " %";
+        };
     }
 
     private static String leafLabel(ClientConfig.LeafCulling mode) {

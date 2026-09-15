@@ -13,5 +13,8 @@
   "key.lanterne.boutique": "Boutique",
   "item.lanterne.disque_vierge": "Disque vierge",
   "block.lanterne.graveur": "Graveur de vinyle",
-  "item.lanterne.graveur": "Graveur de vinyle"
+  "item.lanterne.graveur": "Graveur de vinyle",
+  "block.lanterne.coeur_de_repere": "Cœur de repère",
+  "item.lanterne.coeur_de_repere": "Cœur de repère",
+  "block.lanterne.portail_repere": "Portail de repère"
 }

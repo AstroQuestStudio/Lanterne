@@ -27,9 +27,10 @@ import fr.clubcitrouille.lanterne.content.painting.Reach;
  *
  * <h2>Ce que l'écran ne fait pas</h2>
  *
- * <p>Il ne convertit rien et ne mesure rien : {@link Wheel#prepare} s'en charge sur un fil de fond,
- * parce qu'appeler {@code ffmpeg} depuis le fil de rendu figerait le jeu pendant plusieurs secondes.
- * L'écran ne fait qu'afficher où en est le travail et refuser qu'on en lance deux.
+ * <p>Il ne reconnaît rien et ne mesure rien : {@link Wheel#prepare} s'en charge sur un fil de fond.
+ * Mesurer un MP3 à débit variable sans entête Xing demande de parcourir toutes ses trames, et le
+ * faire depuis le fil de rendu figerait le jeu le temps d'un fichier de vingt mébioctets. L'écran ne
+ * fait qu'afficher où en est le travail et refuser qu'on en lance deux.
  */
 public final class Lathe extends Screen {
     private static final int SCRIM = 0xC8000000;
@@ -195,7 +196,7 @@ public final class Lathe extends Screen {
 
             @Override
             public void done(Reach.Haul haul) {
-                Lathe.this.later(() -> Lathe.this.say("Conversion en Vorbis…", false));
+                Lathe.this.later(() -> Lathe.this.say("Lecture du morceau…", false));
                 Wheel.prepare(haul.raw(),
                         vinyl -> Lathe.this.later(() -> Lathe.this.accept(vinyl, haul.name())),
                         reason -> Lathe.this.later(() -> {
@@ -273,7 +274,7 @@ public final class Lathe extends Screen {
         int noteY = this.panelY + HEIGHT - 48;
         graphics.fill(left, noteY - 4, right - 14, noteY + 12, WELL);
         String text = this.note.isEmpty()
-                ? "OGG, ou tout format si ffmpeg est installé · max "
+                ? "OGG, MP3 ou WAV · max "
                         + (fr.clubcitrouille.lanterne.content.painting.Studio.discMaxBytes() / 1048576L)
                         + " Mio"
                 : this.note;

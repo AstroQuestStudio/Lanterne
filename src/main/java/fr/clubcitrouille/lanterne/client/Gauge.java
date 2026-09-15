@@ -12,7 +12,7 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 
 import fr.clubcitrouille.lanterne.Lanterne;
-import fr.clubcitrouille.lanterne.core.Lens;
+import fr.clubcitrouille.lanterne.client.upscale.Upscale;
 import fr.clubcitrouille.lanterne.core.Settings;
 import fr.clubcitrouille.lanterne.core.Shroud;
 
@@ -99,8 +99,8 @@ public final class Gauge {
 
         String line1 = String.format(Locale.ROOT, "%.0f im/s", rate);
         String line2 = String.format(Locale.ROOT, "1 %% lent  %.1f ms", slowest);
-        String line3 = Lens.active()
-                ? "échelle  " + Lens.preset().pixelPercent() + " %"
+        String line3 = Upscale.active()
+                ? "échelle  " + Upscale.pixelPercent() + " %" + (Upscale.swell() ? "  houle" : "")
                 : "échelle  native";
         // Par IMAGE, jamais cumulé : voir Shroud.veiledThisFrame pour ce que le cumul donnait.
         int veiled = Shroud.veiledPerFrame();
@@ -119,7 +119,7 @@ public final class Gauge {
         int rateColour = rate >= 100d ? GOOD : rate >= 55d ? WARN : BAD;
         graphics.text(client.font, line1, x + 6, y + 5, rateColour, false);
         graphics.text(client.font, line2, x + 6, y + 15, slowest > 50d ? BAD : DIM, false);
-        graphics.text(client.font, line3, x + 6, y + 25, Lens.active() ? AMBER : DIM, false);
+        graphics.text(client.font, line3, x + 6, y + 25, Upscale.active() ? AMBER : DIM, false);
         if (line4 != null) {
             graphics.text(client.font, line4, x + 6, y + 35, TEXT, false);
         }

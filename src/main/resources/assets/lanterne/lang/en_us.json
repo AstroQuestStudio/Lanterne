@@ -13,5 +13,8 @@
   "key.lanterne.boutique": "Shop",
   "item.lanterne.disque_vierge": "Blank Disc",
   "block.lanterne.graveur": "Vinyl Engraver",
-  "item.lanterne.graveur": "Vinyl Engraver"
+  "item.lanterne.graveur": "Vinyl Engraver",
+  "block.lanterne.coeur_de_repere": "Waypoint Heart",
+  "item.lanterne.coeur_de_repere": "Waypoint Heart",
+  "block.lanterne.portail_repere": "Waypoint Portal"
 }

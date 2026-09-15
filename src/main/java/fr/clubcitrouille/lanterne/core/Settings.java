@@ -1255,8 +1255,11 @@ public final class Settings {
         if (din) {
             text.append("vacarme ");
         }
-        if (Lens.active()) {
-            text.append("lentille-").append(Lens.preset().name().toLowerCase(Locale.ROOT)).append(' ');
+        // Upscale ne nomme AUCUNE classe de net.minecraft.client : c'est ce qui autorise cette
+        // classe-ci, chargée sur un serveur dédié, à l'appeler. Voir son en-tête.
+        String scale = fr.clubcitrouille.lanterne.client.upscale.Upscale.describe();
+        if (!scale.isEmpty()) {
+            text.append(scale).append(' ');
         }
         return text.isEmpty() ? "aucun" : text.toString().trim();
     }

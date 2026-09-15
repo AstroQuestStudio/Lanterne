@@ -65,6 +65,26 @@ public final class Compass {
     public static void register(IEventBus modBus) {
         modBus.addListener(Compass::onRegisterKeys);
         modBus.addListener(Compass::onRegisterLayers);
+        modBus.addListener(Compass::onRegisterTints);
+        // <h2>Le seul endroit d'où un bloc commun peut ouvrir une fenêtre</h2>
+        //
+        // « Heart » est un bloc : il vit des deux côtés. L'écran du portail, non. Plutôt que de le
+        // nommer depuis le bloc — ce qui obligerait un serveur dédié à charger une classe cliente pour
+        // ne jamais l'exécuter —, le client DÉPOSE ici de quoi l'ouvrir. Sur un serveur, le champ
+        // reste la lambda vide qu'il était, et rien du paquet client n'est touché.
+        fr.clubcitrouille.lanterne.content.waypoint.Gates.OPENER = Gateway::open;
+    }
+
+    /**
+     * La teinte des nappes de portail.
+     *
+     * <p>L'indice zéro, parce que le modèle du bloc ne déclare qu'un {@code tintindex}. Voir {@link Hue}
+     * pour la raison qui fait lire la couleur à la position plutôt que dans l'état du bloc.
+     */
+    private static void onRegisterTints(
+            net.neoforged.neoforge.client.event.RegisterColorHandlersEvent.BlockTintSources event) {
+        event.register(List.of(new Hue()),
+                fr.clubcitrouille.lanterne.content.waypoint.Gates.GATE.get());
     }
 
     private static void onRegisterKeys(RegisterKeyMappingsEvent event) {

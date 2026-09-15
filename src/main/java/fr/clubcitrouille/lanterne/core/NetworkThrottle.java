@@ -74,7 +74,10 @@ public final class NetworkThrottle {
         if (simulation == 0) {
             // L'entité n'est pas passée par le tour de simulation à ce tick — cas d'une entité que le
             // jeu diffuse sans la ticker. On calcule alors, comme avant.
-            simulation = Cadence.forEntity(entity, Census.distanceOf(entity), TickBudget.pressure());
+            // La meme pression que partout ailleurs. Voir Pressure : trois endroits lisaient trois
+            // nombres differents, et la zone franche n'avait donc pas le meme rayon selon qui la
+            // consultait.
+            simulation = Cadence.forEntity(entity, Census.distanceOf(entity), Pressure.now());
         }
         if (simulation <= 2) {
             return true; // à portée de vue utile, on n'économise rien sur le dos du joueur

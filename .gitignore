@@ -10,3 +10,4 @@ run/
 
 # Sources de la mine clonees pour lecture (tools/clone.py) - jamais versionnees
 /Lanterne-mine/
+run-*/

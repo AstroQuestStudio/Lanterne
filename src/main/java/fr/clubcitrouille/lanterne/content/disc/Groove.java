@@ -256,8 +256,37 @@ public final class Groove {
         return folder().resolve(".cache");
     }
 
+    /**
+     * Le fichier du cache qui porte cette empreinte, quel que soit son format.
+     *
+     * <h2>Pourquoi l'extension change et pourquoi il faut la chercher</h2>
+     *
+     * <p>Le cache est nommé par l'empreinte du contenu : c'est ce qui fait qu'un morceau n'y est
+     * jamais écrit deux fois et qu'on ne le retransmet jamais à qui l'a déjà. Ce qui a changé, c'est
+     * que le contenu n'est plus toujours de l'Ogg — un MP3 est gardé tel qu'il est arrivé, parce que
+     * le convertir n'aurait servi qu'à l'alourdir. Voir {@link Press}.
+     *
+     * <p>Écrire tout de même {@code .ogg} aurait marché : rien ici ne lit l'extension, tout renifle
+     * la signature. Mais un dossier rempli de fichiers {@code .ogg} qui sont des MP3 est un piège
+     * posé pour la personne qui l'ouvrira dans deux ans, et il ne coûte rien de ne pas le poser.
+     *
+     * <p>Rendre le chemin par défaut quand rien n'existe est voulu : les appelants s'en servent pour
+     * tester l'absence, et une valeur nulle les aurait tous obligés à se protéger.
+     */
     public static Path cachedFile(String hash) {
-        return cacheFolder().resolve(hash + ".ogg");
+        Path folder = cacheFolder();
+        for (Press.Grain grain : Press.KEPT) {
+            Path candidate = folder.resolve(hash + grain.extension());
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        return folder.resolve(hash + Press.Grain.OGG.extension());
+    }
+
+    /** Où écrire un morceau dont on connaît le format. */
+    public static Path cachedFile(String hash, Press.Grain grain) {
+        return cacheFolder().resolve(hash + grain.extension());
     }
 
     // --- Le catalogue du dossier ------------------------------------------
@@ -316,15 +345,17 @@ public final class Groove {
                 Lanterne.LOG.warn("[ATELIER] quota de {} disques atteint.", Studio.discQuota());
                 break;
             }
-            if (!Press.isOgg(file)) {
-                // Le dossier ne sert plus qu'à préparer une discothèque, et un administrateur qui le
-                // remplit sait convertir. La conversion en jeu passe désormais par le graveur, où
-                // elle a une barre de progression pour l'accompagner.
-                if (Press.isConvertible(file)) {
-                    Lanterne.LOG.warn("[ATELIER] « {} » ignoré : convertis-le en OGG, ou grave-le"
-                            + " au graveur qui le fera pour toi.", file.getFileName());
-                    refused++;
-                }
+            // Le format se lit dans les octets, jamais dans le nom : un morceau téléchargé arrive
+            // souvent avec une extension qui ment. Le nom ne sert qu'à écarter d'emblée ce qui n'a
+            // jamais prétendu être de la musique — un README, une image de pochette.
+            if (!Press.audioName(file)) {
+                continue;
+            }
+            Press.Grain grain = Press.grain(file);
+            if (!grain.playable()) {
+                Lanterne.LOG.warn("[ATELIER] « {} » ignoré : {}", file.getFileName(),
+                        Press.refusal(grain));
+                refused++;
                 continue;
             }
             try {
@@ -601,19 +632,27 @@ public final class Groove {
                 return;
             }
 
-            byte[] ogg = lift.buffer;
+            byte[] music = lift.buffer;
             lift.buffer = null;
             lift.hash = null;
-            if (!Mill.fingerprint(ogg).equals(gift.hash())) {
+            if (!Mill.fingerprint(music).equals(gift.hash())) {
                 tell(player, "Morceau abîmé en route — réessaie.");
+                return;
+            }
+            // Le format est reconnu sur les octets reçus, et la durée relue sur eux. Le serveur ne
+            // croit rien de ce que le client annonce : il a les octets, il peut vérifier lui-même, et
+            // ce qu'on peut vérifier ne se suppose pas.
+            Press.Grain grain = Press.grain(music);
+            if (!grain.playable()) {
+                tell(player, "Le serveur n'accepte que l'OGG, le MP3 et le WAV.");
                 return;
             }
             float seconds;
             try {
-                Path target = cachedFile(gift.hash());
+                seconds = Press.read(music).seconds();
+                Path target = cachedFile(gift.hash(), grain);
                 Files.createDirectories(target.getParent());
-                Files.write(target, ogg);
-                seconds = Press.read(target).seconds();
+                Files.write(target, music);
             } catch (IOException problem) {
                 Lanterne.LOG.warn("[ATELIER] morceau apporté refusé : {}", problem.getMessage());
                 tell(player, "Le serveur n'a pas su lire ce morceau.");
@@ -803,8 +842,10 @@ public final class Groove {
                         }))
                 .then(Commands.literal("etat")
                         .executes(context -> {
-                            reply(context.getSource(), "ffmpeg : "
-                                    + (Press.ffmpegAvailable() ? "présent" : "absent"));
+                            reply(context.getSource(), "Formats lus : OGG, MP3, WAV"
+                                    + (Detour.available()
+                                            ? " — et le reste, via le ffmpeg installé ici"
+                                            : ""));
                             reply(context.getSource(), "Sillons : " + Slots.used() + " / "
                                     + Studio.discSlots());
                             reply(context.getSource(), "Dossier : " + folder());

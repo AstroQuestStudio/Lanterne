@@ -1,50 +1,74 @@
 package fr.clubcitrouille.lanterne.content.disc;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Locale;
-import java.util.concurrent.TimeUnit;
 
-import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.content.painting.Studio;
 
 /**
- * La presse : elle vérifie un fichier audio, en lit la durée, et le convertit s'il le faut.
+ * La presse : elle reconnaît un fichier audio, en lit la durée, et le garde tel quel.
  *
- * <h2>Pourquoi OGG/Vorbis, et pourquoi il n'y a pas de choix</h2>
+ * <h2>On ne convertit plus : on décode</h2>
  *
- * <p>Le moteur sonore de Minecraft ne sait décoder <b>qu'un seul format</b> : Vorbis dans un
- * conteneur Ogg. Ce n'est pas une préférence, c'est tout le décodeur qu'il embarque — la classe
- * {@code JOrbisAudioStream}, construite sur la bibliothèque jorbis, et rien d'autre à côté.
- * {@code SoundBufferLibrary.getStream} l'instancie sans jamais regarder le contenu du fichier :
- * donner autre chose produit un flux de bruit ou une exception, selon la chance.
+ * <p>La version précédente de ce fichier raisonnait ainsi : le moteur sonore de Minecraft ne sait
+ * décoder que du Vorbis, donc il faut convertir, donc il faut {@code ffmpeg}. La première prémisse
+ * est vraie du <b>chemin de vanilla</b> ; les deux conclusions ne l'étaient pas, et le prix en a été
+ * lourd — {@code ffmpeg} n'est installé chez presque personne, et la fonction ne marchait donc chez
+ * presque personne.
  *
- * <p>Ajouter un décodeur MP3 serait possible et ce serait une mauvaise idée : il faudrait doubler le
- * chemin de lecture depuis la lecture du fichier jusqu'au tampon OpenAL, embarquer une bibliothèque
- * de plus, et surtout refaire le mode <b>flux</b> — celui qui permet de jouer un morceau de vingt
- * minutes sans le charger en mémoire. Convertir une fois vaut mieux que décoder à chaque lecture.
+ * <p>Le chemin de vanilla se détourne. {@code SoundBufferLibrary} construit un {@code
+ * JOrbisAudioStream} sans jamais regarder le contenu du fichier : c'est une décision prise à
+ * l'aveugle, et il suffit de la prendre à sa place. Un mixin côté client — {@code
+ * mixin.SoundDecodeMixin} — intercepte la construction du flux et rend, pour nos ressources et pour
+ * elles seules, le décodeur qui correspond aux octets réellement présents. Voir {@link Needle}.
  *
- * <h2>La conversion est déléguée, et c'est assumé</h2>
+ * <p>La presse ne touche donc plus aux octets du joueur. Un MP3 est stocké tel qu'il est arrivé,
+ * étiqueté MP3 ; il est même <b>plus léger</b> qu'un Vorbis ré-encodé à partir de lui, et il n'a pas
+ * subi la double perte d'une transcodification.
  *
- * <p>Lanterne n'embarque pas d'encodeur Vorbis. Il n'en existe pas en Java pur qui soit à la fois
- * correct, maintenu et raisonnablement rapide ; en embarquer un natif supposerait de livrer trois
- * binaires — Windows, Linux, macOS — pour quelques mébioctets, afin d'automatiser une opération que
- * le joueur fait une fois.
+ * <h2>Ce que coûte un décodage en Java pur</h2>
  *
- * <p>La presse cherche donc {@code ffmpeg} dans le chemin du système. S'il est là, elle s'en sert ;
- * s'il n'y est pas, elle le <b>dit</b>, avec la ligne de commande exacte à taper. Un message précis
- * vaut mieux qu'une dépendance de trois mébioctets, et infiniment mieux qu'un silence.
+ * <p>C'était l'objection sérieuse, et elle ne tient pas au calcul. Un décodeur MP3 en Java pur tourne
+ * à plusieurs dizaines de fois le temps réel sur une machine de 2010 : décoder une seconde de musique
+ * coûte quelques dizaines de millisecondes de <em>fil de fond</em>. Or le moteur sonore demande, par
+ * source et par seconde, exactement une seconde de musique — {@code Channel.attachBufferStream}
+ * dimensionne ses tampons ainsi — et il la demande depuis {@code Util.nonCriticalIoPool}, jamais
+ * depuis le fil de rendu. Le budget est dépassé d'un facteur cinquante ; il n'y a pas de sujet.
+ *
+ * <p>Ce qui aurait coûté, en revanche, c'est l'ancienne solution : {@code ffmpeg} décodait <b>et</b>
+ * ré-encodait le morceau entier avant la première note, ce qui prenait plusieurs secondes et un
+ * fichier temporaire.
+ *
+ * <h2>Ce que la presse sait lire, et ce qu'elle refuse en le disant</h2>
+ *
+ * <ul>
+ *   <li><b>OGG/Vorbis</b> — le chemin de vanilla, inchangé. Le mixin s'écarte.</li>
+ *   <li><b>MP3</b> — JLayer, embarqué dans l'archive du mod par jarJar.</li>
+ *   <li><b>WAV</b> — {@link Riff}, écrit ici : l'entête RIFF est trivial et n'a pas de décodeur.</li>
+ *   <li><b>FLAC</b> — <b>refusé</b>, avec un message qui dit quoi faire. Écrire un décodeur FLAC à la
+ *       main donnerait quelque chose d'à moitié juste, et un décodeur à moitié juste est pire qu'un
+ *       refus : il produit du bruit au lieu d'une phrase.</li>
+ *   <li><b>Le reste</b> — m4a, aac, opus, wma : refusé de la même façon, sauf si {@code ffmpeg} se
+ *       trouve être installé, auquel cas {@link Detour} s'en sert. C'est une porte de sortie, pas une
+ *       dépendance : aucun des formats courants n'y passe.</li>
+ * </ul>
  *
  * <h2>Lire la durée sans décoder le fichier</h2>
  *
- * <p>La durée est obligatoire : {@code JukeboxSong} en a besoin pour savoir quand arrêter le
- * disque, et une valeur fausse laisse le jukebox tourner dans le vide ou couper au milieu.
+ * <p>La durée est obligatoire : {@code JukeboxSong} en a besoin pour savoir quand arrêter le disque,
+ * et une valeur fausse laisse le jukebox tourner dans le vide ou couper au milieu. Elle doit de plus
+ * être lisible <b>côté serveur</b>, qui n'a aucun décodeur — d'où trois lecteurs d'entêtes en Java
+ * pur, sans la moindre classe cliente : celui-ci pour l'Ogg, {@link Layer} pour le MP3, {@link Riff}
+ * pour le WAV.
  *
- * <p>La décoder en lisant le fichier entier prendrait une seconde par morceau. Ce n'est pas
- * nécessaire : un fichier Ogg est une suite de <em>pages</em>, et chaque page porte une « position
+ * <p>Pour l'Ogg : un fichier est une suite de <em>pages</em>, et chaque page porte une « position
  * granulaire » qui est, pour du Vorbis, le numéro du dernier échantillon qu'elle contient. La
  * dernière page du fichier porte donc le nombre total d'échantillons. Il suffit de la trouver — elle
  * est dans les derniers kilo-octets — et de diviser par la fréquence d'échantillonnage, qui est dans
@@ -57,24 +81,120 @@ public final class Press {
     /** Fenêtre de recherche de la dernière page, en octets. Une page Ogg dépasse rarement 64 Kio. */
     private static final int TAIL = 65536;
 
-    /** Extensions que la presse accepte de convertir. */
-    private static final String[] CONVERTIBLE = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".opus", ".wma"};
+    /** De quoi reconnaître n'importe lequel des formats connus. */
+    private static final int SNIFF = 16;
 
-    /** Mémorisé une fois : chercher ffmpeg coûte la création d'un processus. */
-    private static Boolean ffmpegPresent;
+    /** Extensions qu'un joueur a le droit de déposer ou de choisir. */
+    private static final String[] AUDIO =
+            {".ogg", ".mp3", ".wav", ".flac", ".m4a", ".aac", ".opus", ".wma"};
 
     private Press() {}
+
+    /**
+     * L'étiquette d'un format : ce qu'on a reconnu dans les octets.
+     *
+     * <p>L'extension n'est pas décorative. Les morceaux vivent dans un cache nommé par l'empreinte de
+     * leur contenu — {@code Groove.cachedFile} — et un fichier {@code a1b2c3.ogg} qui contiendrait du
+     * MP3 serait un mensonge sur le disque du joueur, de ceux qui coûtent une demi-journée à
+     * quelqu'un dans deux ans. L'étiquette voyage donc avec les octets, dans le nom du fichier.
+     */
+    public enum Grain {
+        OGG(".ogg", "OGG/Vorbis"),
+        MP3(".mp3", "MP3"),
+        WAV(".wav", "WAV"),
+        FLAC(".flac", "FLAC"),
+        OTHER("", "format inconnu");
+
+        private final String extension;
+        private final String label;
+
+        Grain(String extension, String label) {
+            this.extension = extension;
+            this.label = label;
+        }
+
+        public String extension() {
+            return this.extension;
+        }
+
+        public String label() {
+            return this.label;
+        }
+
+        /** Le mod sait-il jouer ce format sans aide extérieure ? */
+        public boolean playable() {
+            return this == OGG || this == MP3 || this == WAV;
+        }
+    }
+
+    /** Les formats qu'un fichier du cache peut porter. Sert à retrouver un morceau par empreinte. */
+    public static final Grain[] KEPT = {Grain.OGG, Grain.MP3, Grain.WAV};
 
     /** Ce que la presse a compris d'un fichier. */
     public record Reading(int sampleRate, int channels, float seconds) {}
 
-    public static boolean isOgg(Path file) {
-        return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".ogg");
+    /**
+     * Ce qu'on rapporte d'un morceau apporté par le joueur.
+     *
+     * @param data les octets à garder — ceux de la source, sauf détour par {@code ffmpeg}.
+     * @param grain leur format.
+     * @param seconds la durée mesurée sur ces octets-là.
+     * @param converted vrai si {@link Detour} est passé par là. C'est la seule situation où les
+     *     octets gardés diffèrent de ceux qu'on a reçus, et donc la seule où il faille se souvenir de
+     *     la correspondance. Voir {@code Wheel.remember}.
+     */
+    public record Cut(byte[] data, Grain grain, float seconds, boolean converted) {}
+
+    // --- Reconnaissance ----------------------------------------------------
+
+    /**
+     * Le format que ces premiers octets annoncent.
+     *
+     * <p>On lit la signature et jamais l'extension. Un fichier renommé {@code .ogg} qui contiendrait
+     * du MP3 doit se jouer quand même — c'est la situation la plus courante du monde chez un joueur
+     * qui a téléchargé sa musique — et un fichier {@code .mp3} qui contiendrait du texte doit être
+     * refusé tout de suite, pas trois écrans plus loin.
+     *
+     * <p>Le MP3 est le seul à ne pas avoir de signature propre : il commence soit par une étiquette
+     * ID3v2, soit directement par une synchronisation de trame, c'est-à-dire onze bits à un. Les deux
+     * sont acceptés ; {@link Layer} confirmera ou infirmera en cherchant une vraie trame.
+     */
+    public static Grain grain(byte[] head) {
+        if (head.length >= 4) {
+            if (head[0] == 'O' && head[1] == 'g' && head[2] == 'g' && head[3] == 'S') {
+                return Grain.OGG;
+            }
+            if (head[0] == 'f' && head[1] == 'L' && head[2] == 'a' && head[3] == 'C') {
+                return Grain.FLAC;
+            }
+            if (head[0] == 'I' && head[1] == 'D' && head[2] == '3') {
+                return Grain.MP3;
+            }
+            if ((head[0] & 0xFF) == 0xFF && (head[1] & 0xE0) == 0xE0) {
+                return Grain.MP3;
+            }
+        }
+        if (head.length >= 12 && head[0] == 'R' && head[1] == 'I' && head[2] == 'F' && head[3] == 'F'
+                && head[8] == 'W' && head[9] == 'A' && head[10] == 'V' && head[11] == 'E') {
+            return Grain.WAV;
+        }
+        return Grain.OTHER;
     }
 
-    public static boolean isConvertible(Path file) {
+    /** Le format d'un fichier, lu dans ses premiers octets. */
+    public static Grain grain(Path file) {
+        try (InputStream in = Files.newInputStream(file)) {
+            byte[] head = in.readNBytes(SNIFF);
+            return grain(head);
+        } catch (IOException unreadable) {
+            return Grain.OTHER;
+        }
+    }
+
+    /** Ce nom de fichier ressemble-t-il à celui d'un morceau ? */
+    public static boolean audioName(Path file) {
         String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
-        for (String extension : CONVERTIBLE) {
+        for (String extension : AUDIO) {
             if (name.endsWith(extension)) {
                 return true;
             }
@@ -82,47 +202,104 @@ public final class Press {
         return false;
     }
 
+    // --- Mesure -------------------------------------------------------------
+
     /**
-     * Lit les entêtes d'un fichier Ogg/Vorbis.
+     * Lit les entêtes d'un fichier audio et en tire la durée.
      *
-     * @throws IOException si le fichier n'est pas un Ogg/Vorbis exploitable. Le message est destiné
-     *     à un humain.
+     * @throws IOException si le fichier n'est pas exploitable. Le message est destiné à un humain.
      */
     public static Reading read(Path file) throws IOException {
         long weight = Files.size(file);
         if (weight < 64L) {
-            throw new IOException("fichier trop court pour être un OGG");
+            throw new IOException("fichier trop court pour porter de la musique");
         }
-        try (RandomAccessFile handle = new RandomAccessFile(file.toFile(), "r")) {
-            byte[] head = new byte[Math.min(4096, (int) Math.min(weight, 4096L))];
-            handle.readFully(head);
-            if (!matches(head, 0)) {
-                throw new IOException("ce n'est pas un conteneur OGG (signature « OggS » absente)");
+        Grain grain = grain(file);
+        if (grain == Grain.OGG) {
+            try (RandomAccessFile handle = new RandomAccessFile(file.toFile(), "r")) {
+                byte[] head = new byte[(int) Math.min(weight, 4096L)];
+                handle.readFully(head);
+                int window = (int) Math.min(TAIL, weight);
+                byte[] tail = new byte[window];
+                handle.seek(weight - window);
+                handle.readFully(tail);
+                return ogg(head, tail);
             }
-            // L'entête d'identification Vorbis est le tout premier paquet : 0x01 puis « vorbis ».
-            int identity = indexOf(head, new byte[] {1, 'v', 'o', 'r', 'b', 'i', 's'});
-            if (identity < 0) {
-                throw new IOException("conteneur OGG sans flux Vorbis — Minecraft ne saurait pas le lire");
-            }
-            // Après la signature de sept octets : version (4), canaux (1), fréquence (4), tous en
-            // petit-boutien.
-            int at = identity + 7;
-            if (at + 9 > head.length) {
-                throw new IOException("entête Vorbis tronqué");
-            }
-            int channels = head[at + 4] & 0xFF;
-            int sampleRate = littleInt(head, at + 5);
-            if (sampleRate <= 0 || channels <= 0) {
-                throw new IOException("entête Vorbis incohérent");
-            }
+        }
+        try (InputStream in = new BufferedInputStream(Files.newInputStream(file), 65536)) {
+            return read(in, grain, weight);
+        }
+    }
 
-            long granule = lastGranule(handle, weight);
-            if (granule <= 0L) {
-                throw new IOException("durée introuvable : aucune page finale exploitable");
-            }
-            float seconds = (float) granule / (float) sampleRate;
-            return new Reading(sampleRate, channels, seconds);
+    /** La même mesure, sur des octets déjà en mémoire. */
+    public static Reading read(byte[] raw) throws IOException {
+        if (raw.length < 64) {
+            throw new IOException("fichier trop court pour porter de la musique");
         }
+        Grain grain = grain(raw);
+        if (grain == Grain.OGG) {
+            byte[] head = Arrays.copyOf(raw, Math.min(raw.length, 4096));
+            int window = Math.min(TAIL, raw.length);
+            byte[] tail = Arrays.copyOfRange(raw, raw.length - window, raw.length);
+            return ogg(head, tail);
+        }
+        return read(new ByteArrayInputStream(raw), grain, raw.length);
+    }
+
+    private static Reading read(InputStream source, Grain grain, long weight) throws IOException {
+        return switch (grain) {
+            case MP3 -> Layer.measure(source, weight);
+            case WAV -> {
+                Riff.Head head = Riff.read(source, weight);
+                yield new Reading(head.sampleRate(), head.channels(), head.seconds());
+            }
+            case FLAC -> throw new IOException(refusal(Grain.FLAC));
+            default -> throw new IOException(refusal(grain));
+        };
+    }
+
+    /** Le message qu'on donne au joueur quand on ne sait pas lire son fichier. */
+    public static String refusal(Grain grain) {
+        String what = grain == Grain.FLAC
+                ? "le FLAC n'est pas décodé par Lanterne"
+                : "format audio non reconnu";
+        return what + ". Formats lus : OGG, MP3, WAV"
+                + (Detour.available() ? " — ou n'importe lequel, via le ffmpeg installé ici" : "");
+    }
+
+    /**
+     * Les entêtes d'un Ogg/Vorbis, à partir de son début et de sa fin.
+     *
+     * <p>Deux tranches suffisent, et c'est tout l'intérêt : la fréquence est dans la première page,
+     * le nombre total d'échantillons dans la dernière, et rien de ce qu'il y a entre les deux ne sert
+     * à mesurer un morceau.
+     */
+    private static Reading ogg(byte[] head, byte[] tail) throws IOException {
+        if (!matches(head, 0)) {
+            throw new IOException("ce n'est pas un conteneur OGG (signature « OggS » absente)");
+        }
+        // L'entête d'identification Vorbis est le tout premier paquet : 0x01 puis « vorbis ».
+        int identity = indexOf(head, new byte[] {1, 'v', 'o', 'r', 'b', 'i', 's'});
+        if (identity < 0) {
+            throw new IOException("conteneur OGG sans flux Vorbis — Minecraft ne saurait pas le lire");
+        }
+        // Après la signature de sept octets : version (4), canaux (1), fréquence (4), tous en
+        // petit-boutien.
+        int at = identity + 7;
+        if (at + 9 > head.length) {
+            throw new IOException("entête Vorbis tronqué");
+        }
+        int channels = head[at + 4] & 0xFF;
+        int sampleRate = littleInt(head, at + 5);
+        if (sampleRate <= 0 || channels <= 0) {
+            throw new IOException("entête Vorbis incohérent");
+        }
+
+        long granule = lastGranule(tail);
+        if (granule <= 0L) {
+            throw new IOException("durée introuvable : aucune page finale exploitable");
+        }
+        return new Reading(sampleRate, channels, (float) granule / (float) sampleRate);
     }
 
     /**
@@ -134,12 +311,8 @@ public final class Press {
      * soixante-quatre kilo-octets de la fin est pathologique, et l'échec est alors annoncé plutôt
      * que corrigé au jugé.
      */
-    private static long lastGranule(RandomAccessFile handle, long weight) throws IOException {
-        int window = (int) Math.min(TAIL, weight);
-        byte[] tail = new byte[window];
-        handle.seek(weight - window);
-        handle.readFully(tail);
-        for (int at = window - 27; at >= 0; at--) {
+    private static long lastGranule(byte[] tail) {
+        for (int at = tail.length - 27; at >= 0; at--) {
             if (!matches(tail, at)) {
                 continue;
             }
@@ -194,26 +367,19 @@ public final class Press {
                 | ((data[at + 3] & 0xFF) << 24);
     }
 
-    /** Ce qu'on rapporte d'un morceau apporté par le joueur : des octets OGG, et sa durée. */
-    public record Cut(byte[] ogg, float seconds) {}
+    // --- Ce que le joueur apporte ------------------------------------------
 
     /**
-     * Prend des octets quelconques et en fait un OGG/Vorbis mesuré.
+     * Prend des octets quelconques et en fait un morceau étiqueté et mesuré.
      *
-     * <h2>Pourquoi passer par des fichiers temporaires</h2>
-     *
-     * <p>{@code ffmpeg} est un programme séparé : il lit un fichier et en écrit un autre. Lui parler
-     * par tubes serait possible et fragile — certains formats exigent de pouvoir revenir en arrière
-     * dans le flux d'entrée, ce qu'un tube ne permet pas, et {@code ffmpeg} échoue alors avec un
-     * message obscur. Deux fichiers temporaires coûtent quelques millisecondes et marchent avec tout.
-     *
-     * <p>Ils sont effacés dans tous les cas, y compris en cas d'échec. Un dossier temporaire qui
-     * enfle à chaque tentative ratée est le genre de fuite qu'on ne remarque qu'au bout de six mois.
+     * <p>Rien n'est réencodé. La seule exception est le détour par {@code ffmpeg}, qui ne sert qu'aux
+     * formats dont personne ici n'a de décodeur, et seulement s'il se trouve installé.
      *
      * @param raw les octets du fichier, tels qu'ils sont arrivés.
+     * @param maxBytes poids au-delà duquel on refuse.
      * @param maxSeconds durée au-delà de laquelle on refuse.
-     * @throws IOException si le format est refusé ou la conversion impossible. Le message est écrit
-     *     pour un humain, et dit quoi faire.
+     * @throws IOException si le format est refusé ou le fichier illisible. Le message est écrit pour
+     *     un humain, et dit quoi faire.
      */
     public static Cut grind(byte[] raw, long maxBytes, int maxSeconds) throws IOException {
         if (raw.length == 0) {
@@ -224,117 +390,31 @@ public final class Press {
                     + (maxBytes / 1048576L) + " Mio");
         }
 
-        Path work = Files.createTempFile("lanterne-", ".src");
-        Path target = null;
-        try {
-            Files.write(work, raw);
-            Path playable = work;
-            if (!oggBytes(raw)) {
-                if (!Studio.discConvert()) {
-                    throw new IOException("ce n'est pas un OGG, et la conversion est désactivée");
-                }
-                if (!ffmpegAvailable()) {
-                    throw new IOException("ce n'est pas un OGG/Vorbis, et ffmpeg est introuvable."
-                            + " Installe ffmpeg, ou convertis le fichier toi-même");
-                }
-                target = Files.createTempFile("lanterne-", ".ogg");
-                // Le fichier temporaire existe déjà et ffmpeg refuserait d'écrire par-dessus sans
-                // le « -y » qu'il porte déjà. On le supprime quand même : certaines versions
-                // s'arrêtent sur un fichier de taille nulle qu'elles prennent pour un flux cassé.
-                Files.deleteIfExists(target);
-                if (convert(work, target) == null) {
-                    throw new IOException("ffmpeg n'a pas su convertir ce fichier");
-                }
-                playable = target;
+        Grain grain = grain(raw);
+        byte[] kept = raw;
+        boolean converted = false;
+        if (!grain.playable()) {
+            if (!Studio.discDecode()) {
+                throw new IOException("ce format n'est pas lu, et l'ouverture aux autres formats est"
+                        + " désactivée sur ce serveur");
             }
-
-            Reading reading = read(playable);
-            if (reading.seconds() > maxSeconds) {
-                throw new IOException("trop long : " + Math.round(reading.seconds())
-                        + " s pour une limite de " + maxSeconds + " s");
+            if (!Detour.available()) {
+                throw new IOException(refusal(grain));
             }
-            byte[] ogg = Files.readAllBytes(playable);
-            if (ogg.length > maxBytes) {
-                throw new IOException("trop lourd après conversion : " + (ogg.length / 1048576L) + " Mio");
-            }
-            return new Cut(ogg, reading.seconds());
-        } finally {
-            Files.deleteIfExists(work);
-            if (target != null) {
-                Files.deleteIfExists(target);
+            kept = Detour.toVorbis(raw);
+            grain = Grain.OGG;
+            converted = true;
+            if (kept.length > maxBytes) {
+                throw new IOException("trop lourd après conversion : " + (kept.length / 1048576L)
+                        + " Mio");
             }
         }
-    }
 
-    /** Ces octets commencent-ils par la signature d'un conteneur Ogg ? */
-    public static boolean oggBytes(byte[] raw) {
-        return raw.length >= 4 && raw[0] == 'O' && raw[1] == 'g' && raw[2] == 'g' && raw[3] == 'S';
-    }
-
-    // --- Conversion --------------------------------------------------------
-
-    /** ffmpeg est-il joignable ? Testé une seule fois. */
-    public static boolean ffmpegAvailable() {
-        if (ffmpegPresent == null) {
-            ffmpegPresent = run(List.of("ffmpeg", "-version"), 10);
+        Reading reading = read(kept);
+        if (reading.seconds() > maxSeconds) {
+            throw new IOException("trop long : " + Math.round(reading.seconds())
+                    + " s pour une limite de " + maxSeconds + " s");
         }
-        return ffmpegPresent;
-    }
-
-    /**
-     * Convertit un fichier quelconque en OGG/Vorbis à côté de lui.
-     *
-     * <p>{@code -q:a 5} vise environ 160 kbit/s en débit variable : au-dessus, la différence ne
-     * s'entend plus à travers le moteur sonore de Minecraft, qui rééchantillonne et applique son
-     * atténuation ; en dessous, les cymbales sifflent. {@code -vn} jette la pochette d'album qu'un
-     * MP3 transporte souvent, et qui n'aurait aucun sens dans un flux audio.
-     *
-     * @return le fichier produit, ou {@code null} si la conversion a échoué.
-     */
-    public static Path convert(Path source, Path target) {
-        if (!ffmpegAvailable()) {
-            return null;
-        }
-        boolean ok = run(List.of("ffmpeg", "-y", "-loglevel", "error",
-                "-i", source.toAbsolutePath().toString(),
-                "-vn", "-c:a", "libvorbis", "-q:a", "5",
-                target.toAbsolutePath().toString()), 600);
-        if (!ok || !Files.isRegularFile(target)) {
-            Lanterne.LOG.warn("[ATELIER] conversion de « {} » échouée.", source.getFileName());
-            return null;
-        }
-        return target;
-    }
-
-    /**
-     * Lance un processus et attend sa fin.
-     *
-     * <p>La sortie est redirigée vers le néant : ffmpeg est bavard, et recopier son journal dans
-     * celui du jeu noierait tout le reste. En cas d'échec, c'est le code de retour qui parle.
-     *
-     * <p>Le délai n'est pas une politesse : un processus qui ne rend jamais la main bloquerait le fil
-     * qui attend, et ce fil est celui qui prépare les ressources. Au-delà du délai, on tue.
-     */
-    private static boolean run(List<String> command, int seconds) {
-        Process process = null;
-        try {
-            process = new ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                    .start();
-            if (!process.waitFor(seconds, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                return false;
-            }
-            return process.exitValue() == 0;
-        } catch (IOException missing) {
-            return false;
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            if (process != null) {
-                process.destroyForcibly();
-            }
-            return false;
-        }
+        return new Cut(kept, grain, reading.seconds(), converted);
     }
 }
