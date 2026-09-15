@@ -1,6 +1,5 @@
 package fr.clubcitrouille.lanterne.core;
 
-import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -356,7 +355,10 @@ public final class ClientConfig {
 
     /** Applique le fichier client aux réglages, sauf si l'environnement a déjà parlé. */
     public static void apply(ModConfigEvent event) {
-        if (event.getConfig().getType() != ModConfig.Type.CLIENT) {
+        // La spec, et non le type — voir {@link Config#apply}, qui souffrait du meme defaut. Il y a
+        // DEUX fichiers de type CLIENT, celui-ci et « lanterne-projecteur-client.toml », si bien que
+        // ce gestionnaire s'executait deux fois par demarrage du jeu.
+        if (event.getConfig().getSpec() != SPEC) {
             return;
         }
         if (!(event instanceof ModConfigEvent.Loading) && !(event instanceof ModConfigEvent.Reloading)) {

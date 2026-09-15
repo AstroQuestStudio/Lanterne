@@ -1,6 +1,5 @@
 package fr.clubcitrouille.lanterne.core;
 
-import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -627,7 +626,18 @@ public final class Config {
      * autres, et mesurerait le mod entier en croyant mesurer une pièce.
      */
     public static void apply(ModConfigEvent event) {
-        if (event.getConfig().getType() != ModConfig.Type.SERVER) {
+        // La spec, et non le type. Le mod enregistre TROIS fichiers de type SERVER —
+        // « lanterne-server.toml », « lanterne-boutique.toml » et « lanterne-projecteur.toml ». Un
+        // filtre sur le type les laisse donc passer tous les trois, et ce gestionnaire s'exécutait
+        // trois fois par démarrage, en annonçant trois fois la même chose à six millisecondes
+        // d'intervalle. C'est ce que l'utilisateur voyait « en triple » dans le journal de son
+        // hébergeur, et il avait raison de trouver cela suspect : le message décrivait un évènement
+        // qui n'avait eu lieu qu'une fois.
+        //
+        // Le filtre par type était juste le jour où il n'existait qu'un seul fichier par type. Il
+        // est devenu faux en silence, sans qu'aucune ligne de ce fichier ne change — le genre de
+        // régression qu'un ajout parfaitement innocent provoque ailleurs.
+        if (event.getConfig().getSpec() != SPEC) {
             return;
         }
         // Au DÉCHARGEMENT, les valeurs n.existent plus : les lire lève « Cannot get config value
