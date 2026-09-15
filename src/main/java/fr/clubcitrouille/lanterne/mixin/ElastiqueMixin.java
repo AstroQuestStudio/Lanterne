@@ -78,6 +78,21 @@ public abstract class ElastiqueMixin {
     }
 
     /**
+     * Depuis combien de temps la position de référence est-elle figée ?
+     *
+     * <p>L'horloge est lue ici, et non dans {@link Elastique}, pour que la loi elle-même reste une
+     * fonction pure de cette durée : c'est ce qui rend l'épreuve {@code Amarre} capable de la
+     * balayer borne par borne sans dépendre d'un aléa de planification.
+     *
+     * <p>Zéro tant qu'aucune référence n'a été figée — le retard vaut alors un, et rien n'est
+     * élargi. On n'accorde pas de tolérance sur une mesure qu'on n'a pas prise.
+     */
+    @Unique
+    private long lanterne$frozenNanos() {
+        return this.lanterne$anchorNanos == 0L ? 0L : System.nanoTime() - this.lanterne$anchorNanos;
+    }
+
+    /**
      * Le contrôle de vitesse, pour un joueur au sol.
      *
      * <p>Rendu tel quel quand le module est éteint : pas une multiplication par un, la valeur
@@ -86,13 +101,13 @@ public abstract class ElastiqueMixin {
      */
     @ModifyConstant(method = "handleMovePlayer", constant = @Constant(floatValue = 100.0F))
     private float lanterne$walkingAllowance(float vanilla) {
-        return Settings.elastique() ? Elastique.widenSpeed(vanilla, this.lanterne$anchorNanos) : vanilla;
+        return Settings.elastique() ? Elastique.widenSpeed(vanilla, this.lanterne$frozenNanos()) : vanilla;
     }
 
     /** Le même contrôle, pour un joueur en élytres — le jeu lui accorde déjà le triple. */
     @ModifyConstant(method = "handleMovePlayer", constant = @Constant(floatValue = 300.0F))
     private float lanterne$flyingAllowance(float vanilla) {
-        return Settings.elastique() ? Elastique.widenSpeed(vanilla, this.lanterne$anchorNanos) : vanilla;
+        return Settings.elastique() ? Elastique.widenSpeed(vanilla, this.lanterne$frozenNanos()) : vanilla;
     }
 
     /**
@@ -106,7 +121,7 @@ public abstract class ElastiqueMixin {
     @ModifyConstant(method = "handleMovePlayer", constant = @Constant(doubleValue = 0.0625D))
     private double lanterne$coherenceAllowance(double vanilla) {
         return Settings.elastique()
-                ? Elastique.widenResidual(vanilla, this.lanterne$anchorNanos)
+                ? Elastique.widenResidual(vanilla, this.lanterne$frozenNanos())
                 : vanilla;
     }
 

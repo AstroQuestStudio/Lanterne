@@ -209,6 +209,27 @@ public final class Understudy {
         return CAST.size();
     }
 
+    /**
+     * La doublure numéro {@code index}, ou {@code null} s'il n'y en a pas tant que ça.
+     *
+     * <p>Utile à toute épreuve qui doit faire <b>parler</b> une doublure plutôt que seulement
+     * l'exhiber : une doublure ordinaire ne bouge pas, mais {@code Amarre} lui pousse de vrais
+     * paquets de mouvement pour éprouver ce que le serveur en fait.
+     */
+    public static ServerPlayer actor(int index) {
+        return index >= 0 && index < CAST.size() ? CAST.get(index) : null;
+    }
+
+    /**
+     * La ligne de la doublure numéro {@code index}, ou {@code null}.
+     *
+     * <p>C'est par elle qu'on relève ce que le serveur a voulu lui dire — en particulier le numéro
+     * d'une téléportation à accuser. Voir {@link SilentConnection#lastTeleportId()}.
+     */
+    public static SilentConnection line(int index) {
+        return index >= 0 && index < LINES.size() ? LINES.get(index) : null;
+    }
+
     /** Vrai le temps d'une inscription. */
     public static boolean entering() {
         return entering;

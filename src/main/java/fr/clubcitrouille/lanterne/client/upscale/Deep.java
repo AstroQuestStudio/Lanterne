@@ -55,29 +55,38 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * CMake. La preuve se relance : {@code tools/EssaiNgx.java}. Le relevé complet est dans
  * {@code notes/dlss-panama.md}.
  *
- * <p>Il reste trois obstacles, et ce sont d'autres que celui qu'on croyait :
+ * <p>Il reste quatre obstacles, et ce sont d'autres que celui qu'on croyait — dont un qui n'est
+ * pas technique et qu'aucun code ne lèvera jamais :
  *
  * <ol>
- *   <li><b>Les paramètres NGX ne sont pas du C.</b> {@code NVSDK_NGX_VULKAN_AllocateParameters}
- *       rend un objet dont les {@code Set} et {@code Get} sont des méthodes <b>virtuelles C++</b> :
- *       aucun {@code NVSDK_NGX_Parameter_SetI} n'est exporté, et c'est vérifié — l'épreuve le teste
- *       comme contrôle négatif. Panama doit donc parcourir une <b>table virtuelle</b> à la main.
- *       C'est possible, et c'est la seule partie du montage qui ne repose sur aucun contrat public :
- *       l'ordre des méthodes est celui d'un en-tête que NVIDIA peut réordonner, et un mauvais index
- *       n'échoue pas proprement — il appelle autre chose, avec les mauvais arguments, chez le
- *       joueur. Rien ne doit être écrit là-dessus avant d'avoir les en-têtes du SDK sous les yeux.</li>
+ *   <li><b>La licence de NVIDIA interdit ce mod nommément.</b> Sa clause 4.e — « you may not use
+ *       the SDK in any manner that would cause it to become subject to an open source software
+ *       license », suivie de trois exemples qui décrivent mot pour mot la GPL — est une clause
+ *       <b>anticopyleft explicite</b>. S'y ajoutent l'obligation de notifier NVIDIA avant toute
+ *       diffusion, l'interdiction de rétroingénierie et l'attribution soumise à approbation
+ *       préalable : autant de « restrictions supplémentaires » que l'article 7 de la GPL-3.0
+ *       n'autorise pas. {@code nvngx_dlss.dll} ne peut donc <b>pas</b> être placé dans l'archive
+ *       de ce mod, et ce n'est pas une prudence — c'est une lecture du texte.
+ *       <p>Ce qui reste défendable : ne rien redistribuer, et charger le fichier <b>s'il est déjà
+ *       là</b>, déposé par le joueur. C'est ce que {@link #libraryPresent()} regarde, à
+ *       {@code config/lanterne/nvngx_dlss.dll}. Un téléchargement automatique, même sur
+ *       consentement, replacerait ce mod dans le rôle du distributeur — c'est-à-dire exactement
+ *       dans celui que la clause 4.e interdit.</li>
  *   <li><b>{@code nvngx_dlss.dll} n'est pas sur la machine du joueur.</b> Ce n'est pas une
  *       supposition : un balayage complet de {@code System32}, {@code Program Files} et
  *       {@code ProgramData} sur une machine RTX 3080 à pilote à jour n'en trouve <b>aucune</b> copie
  *       venue du pilote. Le pilote installe le chargeur et {@code nvngx_dlssg.dll} — la génération
- *       d'images — mais pas le modèle de super-résolution. Et il ne peut pas être embarqué dans
- *       l'archive : la licence de NVIDIA l'encadre, et la GPL-3.0 de ce mod l'interdirait de toute
- *       façon. La seule voie propre est le téléchargement à l'exécution, <b>sur consentement
- *       explicite</b>, avec vérification d'empreinte — la mécanique que {@code client/screen/Fetch}
- *       écrit déjà pour FFmpeg. Le chemin attendu est {@code config/lanterne/nvngx_dlss.dll} ;
- *       {@link #libraryPresent()} se contente de regarder s'il est là. Le téléchargement n'est pas
- *       écrit tant que rien ne consomme le fichier : un téléchargeur sans utilisateur, c'est une
- *       surface réseau pour zéro fonction.</li>
+ *       d'images — mais pas le modèle de super-résolution. Combiné au point précédent, cela veut
+ *       dire que le cas nominal est l'absence, et que le mod ne peut rien y faire.</li>
+ *   <li><b>Les paramètres NGX ne sont pas du C.</b> {@code NVSDK_NGX_VULKAN_AllocateParameters}
+ *       rend un objet dont les {@code Set} et {@code Get} sont des méthodes <b>virtuelles C++</b> :
+ *       aucun {@code NVSDK_NGX_Parameter_SetI} n'est exporté, et c'est vérifié — l'épreuve le teste
+ *       comme contrôle négatif. Panama doit donc parcourir une <b>table virtuelle</b> à la main, et
+ *       MSVC y <b>inverse</b> les surcharges par rapport à l'ordre de déclaration : lire l'en-tête
+ *       donne la mauvaise réponse. S'ajoute que la signature exportée par le pilote <b>diffère</b>
+ *       de celle publiée dans le SDK — NVIDIA le dit elle-même — l'argument de version et celui des
+ *       chemins y étant permutés. Un mauvais index ou un mauvais ordre n'échoue pas proprement : il
+ *       appelle autre chose, avec les mauvais arguments, chez le joueur.</li>
  *   <li><b>Les vecteurs de mouvement.</b> Un remonteur temporel en exige. Minecraft n'en produit
  *       aucun, et le tampon de profondeur — samplable en {@code D32_FLOAT}, en Z <em>inversé</em>
  *       depuis 26.2 — est effacé juste après le monde, dans {@code GameRenderer.render}, avant que
@@ -90,6 +99,33 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *       donc pas écrit non plus, parce qu'il <b>dégraderait</b> l'image tant qu'aucun remonteur
  *       temporel ne l'exploite — un tremblement d'un demi-pixel, visible et sans contrepartie.</li>
  * </ol>
+ *
+ * <h2>L'accès natif : un avertissement aujourd'hui, un refus demain</h2>
+ *
+ * <p>{@code SymbolLookup.libraryLookup} et {@code Linker.downcallHandle} sont des <b>méthodes
+ * restreintes</b>, au même titre que le {@code System.load} du projecteur. Trois faits, tous
+ * mesurés sur le JDK exact du projet et non déduits :
+ *
+ * <ul>
+ *   <li>En Java 25, c'est un <b>avertissement</b>, pas une erreur : l'appel réussit.</li>
+ *   <li>L'avertissement est émis <b>une fois par module</b>, pas une fois par appel. Cinq
+ *       ouvertures successives n'en produisent qu'un, et les {@code reinterpret} qui suivent n'en
+ *       produisent aucun. Le journal ne se remplit donc pas à soixante lignes par seconde.</li>
+ *   <li>Le mode strict existe déjà et <b>refuse</b> : {@code --illegal-native-access=deny} lève
+ *       {@code IllegalCallerException}. La formule de la machine virtuelle — « will be blocked in
+ *       a future release » — annonce que ce mode <b>deviendra le défaut</b>.</li>
+ * </ul>
+ *
+ * <p>Or <b>un mod ne peut pas ajouter d'argument à la machine virtuelle du joueur</b>. Le jour où
+ * le défaut basculera, ce chemin s'éteindra tout seul, chez tout le monde, à une mise à jour de
+ * Java que personne n'aura demandée. Il n'y a rien à faire contre cela — sinon que l'extinction
+ * soit <b>propre</b> : toute liaison native de ce module doit être enfermée dans un
+ * {@code try/catch Throwable}, écrire une ligne au journal, et rendre la main à l'échelon
+ * inférieur. C'est le contrat que {@code Scene.give()} tient déjà.
+ *
+ * <p>Et c'est un argument de plus, indépendant de tous les autres, en faveur d'un remonteur qui
+ * soit un <b>pur nuanceur</b> : FSR 2 ne demande aucune permission native, aucune licence
+ * propriétaire, aucun fichier à télécharger, et aucune mise à jour du JDK ne pourra le couper.
  *
  * <h2>Les trois échelons, et pourquoi le dernier est le rendu de vanilla</h2>
  *

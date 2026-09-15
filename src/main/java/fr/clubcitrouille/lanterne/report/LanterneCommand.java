@@ -225,6 +225,17 @@ public final class LanterneCommand {
                                             .withStyle(ChatFormatting.GRAY), false);
                                     return 1;
                                 })))
+                // En lecture seule, et délibérément. Ce module élargit des seuils anti-triche :
+                // pouvoir l'allumer depuis le tchat mettrait cette décision à portée d'un opérateur
+                // pressé, alors qu'elle appartient au fichier de configuration — c'est-à-dire à
+                // quelqu'un qui a lu pourquoi elle est éteinte par défaut.
+                .then(Commands.literal("elastique")
+                        .executes(context -> {
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "Élastique — " + fr.clubcitrouille.lanterne.core.Elastique.describe())
+                                    .withStyle(ChatFormatting.AQUA), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("maree")
                         .executes(context -> {
                             context.getSource().sendSuccess(() -> Component.literal(
@@ -258,6 +269,16 @@ public final class LanterneCommand {
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> {
                             Weave.survey(context.getSource());
+                            return 1;
+                        }))
+                // L'inventaire déclenche un ramassage complet du tas — une pause bien réelle. Il
+                // reste donc une commande d'administration, jamais un relevé périodique.
+                .then(Commands.literal("memoire")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
+                            CommandSourceStack source = context.getSource();
+                            fr.clubcitrouille.lanterne.core.Inventaire.survey(source.getServer(),
+                                    line -> source.sendSuccess(() -> Component.literal(line), false));
                             return 1;
                         }))
                 .then(Commands.literal("pregen-stop")

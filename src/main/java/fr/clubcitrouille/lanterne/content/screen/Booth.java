@@ -149,7 +149,7 @@ public final class Booth {
             // quelques millisecondes ou la configuration n'est pas encore lue.
             return Sieve.admits(source, java.util.List.of(), false);
         }
-        return Sieve.admits(source, DOMAINS.get(), FILTER.get());
+        return Sieve.admits(source, DOMAINS.get(), filtering());
     }
 
     /** La liste telle qu'on l'annonce aux clients, pour qu'ils appliquent le même tamis. */
@@ -160,8 +160,31 @@ public final class Booth {
         return DOMAINS.get().stream().map(String::valueOf).toList();
     }
 
+    /**
+     * Le tamis par domaine s'applique-t-il ?
+     *
+     * <h2>Une liste active et vide n'est pas une décision, c'est un oubli</h2>
+     *
+     * <p>Une liste blanche <b>active mais vide</b> refuse absolument tout, et c'est très exactement
+     * ce qui s'est produit : l'utilisateur a vu son mod lui répondre « l'administrateur doit en
+     * inscrire » alors qu'il <em>était</em> l'administrateur et n'avait jamais rien demandé de tel.
+     * Le réglage venait d'un défaut désormais abandonné, que son fichier avait conservé — un fichier
+     * de configuration n'est jamais réécrit quand un défaut change.
+     *
+     * <p>Or cette combinaison n'a <b>aucune valeur</b>. Un administrateur qui veut réellement fermer
+     * inscrit des domaines ; un administrateur qui ne veut aucune vidéo éteint la projection
+     * elle-même. Personne ne choisit « accepter uniquement les domaines de la liste » puis « aucun
+     * domaine » — c'est la signature d'un réglage qu'on n'a pas touché.
+     *
+     * <p>Une liste vide ne filtre donc plus rien. La friction disparaît, et il ne se perd aucune
+     * protection : il n'y en avait pas, il n'y avait qu'un refus.
+     *
+     * <p><b>Ce qui ne change pas</b> : les adresses de réseau privé restent refusées, liste ou pas.
+     * Voir {@link Sieve} — un administrateur peut ouvrir <em>son</em> serveur à l'internet, il ne
+     * peut pas ouvrir le réseau domestique de ses joueurs.
+     */
     public static boolean filtering() {
-        return loaded() && FILTER.get();
+        return loaded() && FILTER.get() && !DOMAINS.get().isEmpty();
     }
 
     public static boolean active() {
@@ -204,8 +227,10 @@ public final class Booth {
                     + "refermer : « /projection domaine ajouter <domaine> », puis "
                     + "liste_blanche.active = true.");
         } else if (DOMAINS.get().isEmpty()) {
-            Lanterne.LOG.warn("[PROJECTION] Liste blanche ACTIVE et VIDE : aucune source ne sera "
-                    + "acceptée. Inscris des domaines, ou remets liste_blanche.active à false.");
+            Lanterne.LOG.info("[PROJECTION] Liste blanche demandée mais VIDE — elle ne filtre donc "
+                    + "rien, et tout lien public est accepté. Une liste active et vide refuserait "
+                    + "tout sans que personne ne l'ait voulu : inscris des domaines si tu veux "
+                    + "réellement fermer.");
         } else {
             Lanterne.LOG.info("[PROJECTION] Liste blanche active — {} domaine(s).",
                     DOMAINS.get().size());

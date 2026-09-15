@@ -104,9 +104,31 @@ lus. Deux différences de conception :
 | Projet | Licence | Pourquoi non |
 |---|---|---|
 | [krypton-fnp](https://github.com/404Setup/KryptonReno) — `ServerCullingManager` | LGPL-3.0 (absorbable) | Son propre auteur le limite à `Display` et `HangingEntity` — *« Only entities whose purpose is visual decoration are safe to remove from a vanilla client »*. Les créatures, qui sont le poste de paquets, sont exclues par conception. Et le mécanisme **ajoute** jusqu'à seize `level.clip` par tick sur le fil du serveur pour économiser de la bande passante : sur un VPS à un cœur, c'est échanger la ressource rare contre l'abondante. `core/NetworkThrottle.java` espace déjà ces envois sans jamais faire disparaître l'entité. |
-| [structure-layout-optimizer](https://github.com/TelepathicGrunt/StructureLayoutOptimizer) — moitié Jigsaw | MIT (absorbable) | Non repris **faute de mesure**, pas faute de valeur : le gisement est réel et intact en 26.2. Voir `core/Stencil.java` pour la moitié déjà reprise, et la réserve qui la concerne désormais. |
+| [structure-layout-optimizer](https://github.com/TelepathicGrunt/StructureLayoutOptimizer) — son `TrojanVoxelShape` | MIT (absorbable) | **L'idée est reprise, le code ne l'est pas** — voir `core/Cadastre.java` et le paragraphe ci-dessous. |
 | `ServerCore` — le régulateur de distances | MIT | Doublon de `core/Tide.java`. Deux boucles d'asservissement sur la même grandeur oscillent. |
 | `client/ponder/*` — le guide illustré | **Rien.** Idée, vocabulaire et disposition d'écran de [Ponder](https://github.com/Creators-of-Create/Ponder) (Creators of Create), extrait de [Create](https://github.com/Creators-of-Create/Create) — voir ci-dessous. | MIT (compatible) |
+
+Le placement des structures à jigsaw demande une précision de plus, parce que la distinction entre
+« reprendre une idée » et « reprendre du code » y est tout le sujet.
+**StructureLayoutOptimizer** (TelepathicGrunt, **MIT**) a trouvé le défaut et la bonne réponse : la
+région libre du placeur Jigsaw est une région de départ moins un ensemble de boîtes, et la tenir dans
+un index de boîtes remplace un coût en N⁴ par un coût quasi linéaire. **Cette idée est la sienne, et
+elle est excellente.** `core/Cadastre.java` en découle.
+
+**Ce qui n'a PAS été repris, et c'est délibéré** : sa classe `TrojanVoxelShape`. Elle range l'index
+dans une sous-classe de `VoxelShape` qu'elle glisse à la place de celle de vanilla, rend `null` sur
+`getCoords()` et porte une grille discrète `0×0×0` — si bien que `isEmpty()` y répond **vrai**.
+N'importe quel autre mod qui lit cette forme reçoit soit un `NullPointerException` au fond de son
+propre code, soit — bien pire — une réponse fausse et silencieuse : `Shapes.joinUnoptimized` y
+rendrait `empty()` sans rien signaler. Lanterne **n'ajoute aucun type à la hiérarchie de
+`VoxelShape`** : la case de vanilla continue de contenir une forme de vanilla, et le registre vit à
+côté. Le prix de ce choix est nommé dans le javadoc de `Cadastre` — cette forme est *datée*, pas
+fausse — et `Cadastre.Region.materialise()` la remet à jour à l'identique pour qui en aurait besoin.
+
+Ne sont pas repris non plus ses trois autres mixins : `SinglePoolElementMixin`,
+`StructureTemplateMixin` et `StructureTemplatePaletteMixin` visaient la **pose** des gabarits, que la
+26.2 patchée NeoForge a rendue inutile — voir `notes/pochoir-retire.md`. Sa déduplication des listes
+de pièces mélangées (`TrojanArrayList`) n'a pas été mesurée ici, et un module non mesuré n'existe pas.
 
 L'ordonnanceur de tick mérite la même précision. **Immersive Optimization** est
 sous GPL-3.0, donc absorbable sans réserve, et son dépôt a été lu en entier —

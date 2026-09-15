@@ -255,6 +255,15 @@ public final class Quarry {
     private static final long[] loadOn = new long[MEASURED];
     private static final long[] loadOff = new long[MEASURED];
 
+    /** Octets alloués, tous fils confondus, au moment où la génération commence. Voir {@code cps}. */
+    private static long allocationMark;
+    /** Chunks réellement générés, chauffe comprise : le dénominateur des octets par chunk. */
+    private static int genChunksDone;
+    /** Les trois relevés figés à la fin de la génération appariée — voir {@code measurePairedChunk}. */
+    private static long allocatedDuringGeneration;
+    private static int genChunksCounted;
+    private static String genStages = "";
+
     private Quarry() {}
 
     public static boolean running() {
@@ -293,6 +302,13 @@ public final class Quarry {
         settleLeft = 0;
         loadOnAvailable = true;
         loadOffAvailable = true;
+        genChunksDone = 0;
+        // Le relevé d'allocation et celui des étapes sont pris ICI et non au démarrage du serveur :
+        // charger un monde alloue des centaines de mégaoctets, et les compter dans le coût d'un chunk
+        // rendrait le chiffre faux d'un ordre de grandeur. C'est la troisième règle d'instrument de ce
+        // dépôt — un pourcentage n'a de sens que rapporté à ce qui a été totalisé.
+        allocationMark = allocatedByAllThreads();
+        fr.clubcitrouille.lanterne.core.Forge.reset();
         Settings.setEnabled(true);
 
         Lanterne.LOG.info(
@@ -381,6 +397,7 @@ public final class Quarry {
         long start = System.nanoTime();
         chunkSource.getChunk(pos.x(), pos.z(), ChunkStatus.FULL, true);
         long elapsed = System.nanoTime() - start;
+        genChunksDone++;
 
         if (shot >= WARMUP_CHUNKS) {
             if (active) {
@@ -396,6 +413,13 @@ public final class Quarry {
         if (shot >= GRID_CHUNKS) {
             shot = 0;
             Settings.setEnabled(true);
+            // Les deux relevés du débit sont figés ICI, et non au rapport : ce qui suit — amorçage
+            // puis relecture de la région de chargement — est de la GÉNÉRATION et de la LECTURE qui
+            // n'ont rien à faire dans un bilan de génération pure. Les laisser s'y ajouter aurait
+            // gonflé les octets par chunk et noyé la ventilation par étape.
+            allocatedDuringGeneration = allocatedByAllThreads() - allocationMark;
+            genChunksCounted = genChunksDone;
+            genStages = fr.clubcitrouille.lanterne.core.Forge.describe();
             Lanterne.LOG.info("[CARRIÈRE] Génération appariée terminée — {} mesures avec le mod, {} sans, "
                     + "sur la même grille. Amorçage, hors mesure, de la région de chargement.",
                     genOnFilled, genOffFilled);
@@ -625,6 +649,8 @@ public final class Quarry {
             }
         }
 
+        cps(genOnMedian, genOffMedian, genOnSuspect + genOffSuspect);
+
         if (loadOnMedian != null) {
             double crossRatio = loadOnMedian <= 0d ? 0d : genOnMedian / loadOnMedian;
             Lanterne.LOG.info("[CARRIÈRE] ── Le point du banc : génération contre chargement (mod "
@@ -636,6 +662,102 @@ public final class Quarry {
                             + "domine le coût réel d'un serveur en production, pas le premier.",
                     crossRatio, genOnMedian / 1e6, loadOnMedian / 1e6));
         }
+    }
+
+    /**
+     * Le débit en chunks par seconde, et les quatre choses sans lesquelles il ne veut rien dire.
+     *
+     * <h2>Pourquoi ce chiffre a besoin d'autant de précautions</h2>
+     *
+     * <p>Un débit de génération est la grandeur la plus facile à falsifier de tout ce dépôt, et ce
+     * banc s'est déjà fait prendre : une exécution qui rejouait les coordonnées de la précédente a
+     * annoncé <b>209 chunks par seconde</b> au lieu de 13,7 — quinze fois, pour la seule raison
+     * qu'elle relisait le disque au lieu de générer. Voir {@code lab/Swarm}, qui porte le récit.
+     *
+     * <p>D'où le refus qui ouvre cette méthode. Un chunk « généré » en moins d'une demi-milliseconde
+     * n'a pas été généré : il existait. S'il y en a plus d'un sur dix, la région n'était pas vierge et
+     * <b>aucun débit n'est publié</b> — pas un débit prudent, pas un débit annoté : aucun.
+     *
+     * <p>Les trois autres précautions sont des <em>conditions</em> qu'il faut lire à côté du chiffre,
+     * parce qu'un débit sans elles n'est comparable à rien :
+     *
+     * <ul>
+     *   <li><b>Le nombre de fils.</b> La cible de ce projet est un cœur unique. Un débit relevé sur
+     *       huit cœurs n'y sera pas reproduit, et c'est le cas mono-fil qui décide.</li>
+     *   <li><b>Les octets alloués par chunk.</b> Sur quatre gigaoctets et un cœur, le ramasse-miettes
+     *       ne travaille pas <em>à côté</em> du tick : il le lui prend. Un débit payé en allocations
+     *       n'est pas un débit.</li>
+     *   <li><b>La ventilation par étape.</b> Un débit dit <em>combien</em>, jamais <em>où</em>. C'est
+     *       la seule ligne de ce rapport qui dise par quel bout prendre le problème.</li>
+     * </ul>
+     */
+    private static void cps(double genOnMedian, double genOffMedian, int suspect) {
+        Lanterne.LOG.info("[CPS] ── Débit de génération pure ──");
+
+        int cpus = Runtime.getRuntime().availableProcessors();
+        Lanterne.LOG.info("[CPS] Conditions : {} processeur(s) annoncé(s) à la machine virtuelle. {}",
+                cpus, fr.clubcitrouille.lanterne.core.Threads.explain(
+                        Math.max(1, Math.min(cpus - 1, 255))));
+
+        if (allocatedDuringGeneration > 0L && genChunksCounted > 0) {
+            Lanterne.LOG.info(String.format(Locale.ROOT,
+                    "[CPS] Mémoire allouée pendant la génération : %.1f Mo pour %d chunk(s), soit "
+                            + "%.2f Mo par chunk, tous fils confondus.",
+                    allocatedDuringGeneration / 1048576d, genChunksCounted,
+                    allocatedDuringGeneration / 1048576d / genChunksCounted));
+        } else {
+            Lanterne.LOG.info("[CPS] Mémoire allouée : NON MESURÉE — cette machine virtuelle "
+                    + "n'expose pas le compteur d'allocation par fil.");
+        }
+
+        if (suspect > GRID_CHUNKS / 10) {
+            Lanterne.LOG.error(String.format(Locale.ROOT,
+                    "[CPS] REFUS DE PUBLIER UN DÉBIT : %d chunk(s) sur %d ont été « générés » en "
+                            + "moins de %.1f ms. La région n'était pas vierge — ce banc a déjà "
+                            + "annoncé 209 chunks/s au lieu de 13,7 pour cette raison exacte. "
+                            + "Efface le monde de ce banc et relance.",
+                    suspect, GRID_CHUNKS, GEN_SUSPECT_MS));
+            return;
+        }
+
+        if (genOnMedian <= 0d || genOffMedian <= 0d) {
+            Lanterne.LOG.warn("[CPS] REFUS DE PUBLIER UN DÉBIT : médiane nulle d'un côté.");
+            return;
+        }
+
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[CPS] Mod actif  : %.2f chunk(s) par seconde  (médiane %.3f ms/chunk)",
+                1000d / (genOnMedian / 1e6), genOnMedian / 1e6));
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[CPS] Mod éteint : %.2f chunk(s) par seconde  (médiane %.3f ms/chunk)",
+                1000d / (genOffMedian / 1e6), genOffMedian / 1e6));
+        Lanterne.LOG.info("[CPS] Ce débit est celui d'un chunk demandé SEUL et attendu : c'est le "
+                + "régime d'un joueur qui explore, et le seul qui ait un sens sur un cœur unique. "
+                + "Un pré-générateur qui sature le bassin de fils obtient davantage sur une machine "
+                + "qui a les cœurs — voir lab/Swarm, qui mesure cet autre régime.");
+
+        Lanterne.LOG.info("[CPS] ── Où va le temps d'un chunk, étape par étape ──{}", genStages);
+    }
+
+    /**
+     * Octets alloués par <b>tous</b> les fils depuis le démarrage.
+     *
+     * <p>Et non par le fil courant, contrairement à {@code report/Bench} : la génération de terrain
+     * s'exécute sur le pool de travail, et un compteur de fil courant y rendrait presque zéro tout en
+     * ayant l'air de fonctionner. C'est le genre de mesure juste appliquée au mauvais objet qui a
+     * déjà coûté deux verdicts à ce dépôt.
+     */
+    private static long allocatedByAllThreads() {
+        try {
+            java.lang.management.ThreadMXBean bean =
+                    java.lang.management.ManagementFactory.getThreadMXBean();
+            if (bean instanceof com.sun.management.ThreadMXBean sun) {
+                return sun.getTotalThreadAllocatedBytes();
+            }
+        } catch (Throwable unsupported) {
+            // Machine virtuelle sans cette extension : on renonce à la mesure, pas au banc.
+        }
+        return 0L;
     }
 
     /** Même seuil et même formulation que {@code Boom.report} : un écart sous cinq pour cent n'est

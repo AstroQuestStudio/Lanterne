@@ -83,17 +83,53 @@ public final class SilentConnection extends Connection {
 
     @Override
     public void send(Packet<?> packet) {
-        absorbed++;
+        absorb(packet);
     }
 
     @Override
     public void send(Packet<?> packet, ChannelFutureListener listener) {
-        absorbed++;
+        absorb(packet);
     }
 
     @Override
     public void send(Packet<?> packet, ChannelFutureListener listener, boolean flush) {
+        absorb(packet);
+    }
+
+    /**
+     * Avale le paquet, mais retient ce qu'une doublure ne peut pas ignorer sans mentir.
+     *
+     * <h2>Le seul paquet qu'on ne peut pas se contenter de jeter</h2>
+     *
+     * <p>Une doublure ordinaire n'a rien à répondre : elle encaisse ses chunks et ses positions
+     * d'entités sans qu'il en résulte quoi que ce soit. Une téléportation est différente, parce que
+     * le serveur <b>attend un accusé de réception</b> : tant qu'il ne l'a pas, {@code
+     * updateAwaitingTeleport()} fait ignorer toute position annoncée par ce joueur — seule la
+     * rotation passe.
+     *
+     * <p>Une épreuve qui pousse des paquets de mouvement dans une doublure jamais accusée mesurerait
+     * donc <b>zéro</b>, sans rien signaler : le serveur jetterait chaque paquet en silence, et le
+     * relevé annoncerait fièrement qu'aucun retour en arrière n'a eu lieu. C'est exactement la
+     * catégorie de banc que ce dépôt a déjà rendue « conforme » sur une scène vide, cinq fois.
+     *
+     * <p>On retient donc le numéro, et l'épreuve qui en a besoin y répond comme le ferait un vrai
+     * client. Les doublures qui ne bougent pas ne s'en servent jamais et n'en souffrent pas.
+     */
+    private void absorb(Packet<?> packet) {
         absorbed++;
+        if (packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket move) {
+            lastTeleportId = move.id();
+        }
+    }
+
+    /**
+     * Numéro de la dernière téléportation que le serveur a voulu imposer, ou -1.
+     *
+     * <p>Voir {@link #absorb} : c'est ce à quoi un vrai client répondrait, et sans quoi le serveur
+     * n'écoute plus ce joueur.
+     */
+    public int lastTeleportId() {
+        return lastTeleportId;
     }
 
     /**
@@ -111,6 +147,9 @@ public final class SilentConnection extends Connection {
     public void tick() {
         drain(); // ce qu'on n'envoie à personne ne doit pas s'accumuler
     }
+
+    /** Voir {@link #lastTeleportId()}. Moins un tant que le serveur n'en a imposé aucune. */
+    private int lastTeleportId = -1;
 
     /** Nombre de paquets que le serveur a voulu envoyer à ce joueur. */
     public long absorbed() {

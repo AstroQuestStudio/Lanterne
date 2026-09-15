@@ -117,6 +117,8 @@ public final class Guide {
 
         heading(source, "Le monde");
         line(source, "/lanterne maree", "Distances de vue et de simulation : où elles en sont.");
+        line(source, "/lanterne elastique", "Les retours en arrière du joueur : combien ont été "
+                + "évités, et quel retard le serveur a pris. Éteint par défaut.");
         if (admin) {
             line(source, "/lanterne maree on", "La marée suit à nouveau la charge.");
             line(source, "/lanterne maree off", "Fige les distances où elles sont.");
@@ -192,6 +194,8 @@ public final class Guide {
             line(source, "/lanterne demo", "Une démonstration sur une charge donnée.");
             line(source, "/lanterne test", "Un troupeau d'épreuve.");
             line(source, "/lanterne palette", "Relève la largeur des palettes de terrain.");
+            line(source, "/lanterne memoire", "Inventaire de la mémoire RETENUE : histogramme du "
+                    + "tas après ramassage complet, puis le détail par poste de jeu.");
             line(source, "/lanterne nbt", "Inspecte les données d'un bloc-entité.");
         }
 

@@ -1,0 +1,622 @@
+package fr.clubcitrouille.lanterne.lab;
+
+import java.util.Locale;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
+
+import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.core.Elastique;
+import fr.clubcitrouille.lanterne.core.Settings;
+import fr.clubcitrouille.lanterne.core.TickBudget;
+
+/**
+ * L'amarre : ce qui retient le joueur quand le serveur voudrait le renvoyer en arrière.
+ *
+ * <h2>Ce que cette épreuve doit prouver, et dans quel ordre</h2>
+ *
+ * <p>Le module {@link Elastique} élargit trois seuils anti-triche du jeu. Deux affirmations le
+ * rendent acceptable, et aucune des deux ne se croit sur parole :
+ *
+ * <ol>
+ *   <li><b>Un serveur sain se comporte exactement comme sans le mod.</b> Pas « à peu près » : le
+ *       même {@code float}, le même {@code double}, le même bit. Tableau 1.</li>
+ *   <li><b>La tolérance ne s'élargit que proportionnellement au retard constaté</b>, et jamais
+ *       au-delà de ses plafonds. Tableau 2.</li>
+ * </ol>
+ *
+ * <p>Puis, seulement ensuite, la question qui a motivé le module : <b>est-ce que cela sert à quelque
+ * chose ?</b> Tableau 3, et c'est le seul des trois qui puisse refuser de conclure.
+ *
+ * <h2>Pourquoi les deux premiers tableaux ne touchent pas au monde</h2>
+ *
+ * <p>La loi du module est une fonction pure de la durée écoulée — c'est pour cela qu'elle a été
+ * écrite ainsi, et non par goût. On peut donc la <b>balayer</b> : dix-sept durées choisies de part
+ * et d'autre de chaque borne, et la valeur attendue calculée à la main. Aucun aléa, aucune charge,
+ * aucun tick — une épreuve qui ne peut pas être « flottante » un jour et « conforme » le lendemain.
+ *
+ * <p>C'est délibérément l'inverse du troisième tableau, qui lui dépend d'une scène, et qui en porte
+ * toute la fragilité.
+ *
+ * <h2>Le troisième tableau, et les deux pièges qu'il a fallu désamorcer</h2>
+ *
+ * <p>Il faut un joueur qui bouge. Une doublure ordinaire n'envoie jamais rien : on lui pousse donc de
+ * vrais {@code ServerboundMovePlayerPacket} dans sa vraie connexion, au rythme réel de vingt par
+ * seconde — ce qu'un client fait quoi qu'il arrive, y compris pendant que le serveur rame.
+ *
+ * <p><b>Premier piège : le serveur n'écoutait pas.</b> Après l'inscription d'un joueur, le jeu attend
+ * un accusé de réception de téléportation ; tant qu'il ne l'a pas, {@code updateAwaitingTeleport()}
+ * <em>ignore</em> toute position annoncée et ne retient que la rotation. Une épreuve qui n'accuse pas
+ * réception mesure donc zéro retour en arrière — et conclut triomphalement que tout va bien. On
+ * accuse donc, comme un vrai client, à partir du numéro relevé sur la ligne.
+ *
+ * <p><b>Second piège : un client qui triche ne prouve rien.</b> Si la doublure annonçait une position
+ * que la géométrie interdit, le serveur la refuserait — à juste titre, par
+ * {@code isEntityCollidingWithAnythingNew}, que ce module ne touche pas. Les deux bras compteraient
+ * le même nombre de refus, tous légitimes, et le tableau serait du bruit.
+ *
+ * <p>La doublure avance donc <b>par petits pas</b>, un par tick de client, chacun validé contre les
+ * collisions du monde et glissant axe par axe — exactement comme le fait la physique d'un vrai
+ * client. Sa position annoncée est donc toujours atteignable, et toujours libre. Ce que le serveur
+ * en fera, lui, dépend de sa capacité à refaire le même chemin <b>d'un seul grand pas</b> : c'est
+ * précisément là que naît l'élastique, et c'est donc précisément cela qu'on mesure.
+ *
+ * <h2>Ce que l'épreuve refuse de faire</h2>
+ *
+ * <p>Elle ne publie pas le tableau 3 si la scène n'a pas reproduit le symptôme. Deux conditions :
+ * le bras sans protection doit avoir subi au moins {@value #ROLLBACKS_NEEDED} retour(s) en arrière,
+ * et la charge doit avoir réellement mis le serveur en retard. Faute de quoi les deux bras ont
+ * mesuré le même code sur une scène tranquille, et l'écart annoncé ne serait que du bruit.
+ *
+ * <p>Elle ne conclut pas non plus si l'on ne lui a pas laissé les deux bras : les compteurs sont
+ * remis à zéro entre eux, et un module resté allumé pendant le bras témoin fausserait tout.
+ *
+ * <h2>L'interrupteur qui doit la faire échouer</h2>
+ *
+ * <p>{@code LANTERNE_BREAK_ELASTIQUE=1} laisse le module branché, compté et journalisé, mais lui fait
+ * rendre un retard de un en toutes circonstances. Le tableau 1 passe alors <b>toujours</b> — c'est
+ * normal, un module sans dents est trivialement identique à vanilla — et le <b>tableau 2 doit
+ * échouer</b> : la loi ne s'applique plus nulle part.
+ *
+ * <p>Si le tableau 2 réussit avec cet interrupteur posé, ce n'est pas le module qui est bon : c'est
+ * cette épreuve qui ne mesure rien, et c'est elle qu'il faut réparer.
+ */
+public final class Amarre {
+    private enum Step { OFF, SETTLING, LOADING, CALM, CHARGING, STORM_BARE, STORM_GUARDED, DONE }
+
+    /** Durée nominale d'un tick, en nanosecondes. */
+    private static final long NOMINAL_NANOS = 50_000_000L;
+
+    /** Ticks de repos avant de faire entrer la doublure. */
+    private static final int SETTLE = 60;
+
+    /** Ticks laissés aux chunks pour arriver autour d'elle. */
+    private static final int LOAD = 120;
+
+    /** Ticks de relevé pour la phase au repos. */
+    private static final int CALM_TICKS = 100;
+
+    /** Ticks laissés à la charge pour s'installer avant qu'on relève quoi que ce soit. */
+    private static final int CHARGE_SETTLE = 100;
+
+    /** Ticks de relevé pour chacun des deux bras en charge. */
+    private static final int STORM_TICKS = 300;
+
+    /** Créatures de la charge. Des villageois : leurs cerveaux sont ce qui coûte le plus cher. */
+    private static final int CROWD = 700;
+
+    /**
+     * Retours en arrière qu'il faut avoir subis, sans protection, pour que le tableau veuille dire
+     * quelque chose.
+     *
+     * <p>Un seul suffirait à prouver que le mécanisme existe, mais pas à le distinguer d'un hasard de
+     * chargement de chunk. Cinq, sur trois cents ticks, c'est un symptôme.
+     */
+    private static final int ROLLBACKS_NEEDED = 5;
+
+    /**
+     * Vitesse d'un pas de client, en blocs par tick de client.
+     *
+     * <p>Celle d'un joueur qui sprinte, à peu près. La valeur exacte importe peu ; ce qui importe,
+     * c'est qu'elle soit la même dans les deux bras, et elle l'est.
+     */
+    private static final double STEP = 0.22d;
+
+    /** Demi-côté du terrain où la doublure fait les cent pas, en blocs. */
+    private static final double PADDOCK = 24d;
+
+    /** Pas de client qu'on refuse de rejouer d'un coup, quoi qu'il se soit passé. */
+    private static final int MAX_BURST = 80;
+
+    private static Step step = Step.OFF;
+    private static int waiting;
+    private static MinecraftServer host;
+    private static boolean anyFailure;
+
+    /** La position que le client virtuel croit occuper, et sa direction. */
+    private static double clientX;
+    private static double clientY;
+    private static double clientZ;
+    private static double headingX = 0.78d;
+    private static double headingZ = 0.62d;
+
+    /** Instant du dernier pas rejoué, pour tenir le rythme de vingt par seconde en temps réel. */
+    private static long lastStepNanos;
+
+    /** Pas de client réellement poussés dans la connexion, par bras. */
+    private static long bareSteps;
+    private static long guardedSteps;
+
+    /** Retours en arrière relevés, par bras. */
+    private static long bareRollbacks;
+    private static long guardedRollbacks;
+
+    /** Pire retard constaté, par bras. */
+    private static double bareLateness;
+    private static double guardedLateness;
+
+    /** Ticks passés au-dessus de cinquante millisecondes, par bras. */
+    private static int bareOverruns;
+    private static int guardedOverruns;
+
+    /** Ce que la phase au repos a constaté. */
+    private static long calmSteps;
+    private static long calmWidened;
+    private static double calmLateness;
+
+    /** Verdicts des deux tableaux déterministes. */
+    private static boolean deadBandOk;
+    private static boolean lawOk;
+
+    private static long tickStarted;
+
+    private Amarre() {}
+
+    public static boolean running() {
+        return step != Step.OFF && step != Step.DONE;
+    }
+
+    /** Chronomètre le tick entier. Appelé depuis {@code ServerTickEvent.Pre}. */
+    public static void beginTick() {
+        if (running()) {
+            tickStarted = System.nanoTime();
+        }
+    }
+
+    public static void begin(MinecraftServer server) {
+        host = server;
+        Settings.setEnabled(true);
+        // La marée changerait les distances sous les pieds de la doublure au milieu d'un bras, et
+        // l'écart entre les deux bras porterait alors aussi sa signature. Voir Duel et Levee, qui
+        // la figent pour la même raison.
+        Settings.setTide(false);
+        anyFailure = false;
+
+        Lanterne.LOG.info("[AMARRE] Épreuve de l'élastique armée.{}",
+                Elastique.toothless()
+                        ? " LANTERNE_BREAK_ELASTIQUE=1 est posé : le tableau 2 DOIT échouer."
+                        : "");
+
+        // Les deux tableaux déterministes ne demandent ni monde ni charge : on les passe tout de
+        // suite, pour que le relevé soit lisible même si la scène tourne mal ensuite.
+        deadBandOk = sweepDeadBand();
+        lawOk = sweepLaw();
+
+        step = Step.SETTLING;
+        waiting = SETTLE;
+    }
+
+    public static void tick(MinecraftServer server) {
+        if (!running()) {
+            return;
+        }
+        switch (step) {
+            case SETTLING -> {
+                if (--waiting > 0) {
+                    return;
+                }
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = LOAD;
+            }
+            case LOADING -> {
+                if (--waiting > 0) {
+                    return;
+                }
+                if (!openScene(server)) {
+                    finish();
+                    return;
+                }
+                Settings.setElastique(true);
+                Elastique.reset();
+                step = Step.CALM;
+                waiting = CALM_TICKS;
+            }
+            case CALM -> {
+                drive(server);
+                if (--waiting > 0) {
+                    return;
+                }
+                calmSteps = Elastique.samples();
+                calmWidened = Elastique.widened();
+                calmLateness = Elastique.worstLateness();
+                buildCharge(server);
+                step = Step.CHARGING;
+                waiting = CHARGE_SETTLE;
+            }
+            case CHARGING -> {
+                drive(server);
+                if (--waiting > 0) {
+                    return;
+                }
+                // Le bras témoin : le module éteint, tout le reste identique.
+                Settings.setElastique(false);
+                Elastique.reset();
+                bareOverruns = 0;
+                step = Step.STORM_BARE;
+                waiting = STORM_TICKS;
+            }
+            case STORM_BARE -> {
+                drive(server);
+                if (tickStarted != 0L && System.nanoTime() - tickStarted > NOMINAL_NANOS) {
+                    bareOverruns++;
+                }
+                if (--waiting > 0) {
+                    return;
+                }
+                bareSteps = Elastique.samples();
+                bareRollbacks = Elastique.rollbacks();
+                bareLateness = Elastique.worstLateness();
+
+                Settings.setElastique(true);
+                Elastique.reset();
+                guardedOverruns = 0;
+                step = Step.STORM_GUARDED;
+                waiting = STORM_TICKS;
+            }
+            case STORM_GUARDED -> {
+                drive(server);
+                if (tickStarted != 0L && System.nanoTime() - tickStarted > NOMINAL_NANOS) {
+                    guardedOverruns++;
+                }
+                if (--waiting > 0) {
+                    return;
+                }
+                guardedSteps = Elastique.samples();
+                guardedRollbacks = Elastique.rollbacks();
+                guardedLateness = Elastique.worstLateness();
+                verdict();
+                finish();
+            }
+            default -> { }
+        }
+    }
+
+    // ------------------------------------------------------------------ tableau 1 : la bande morte
+
+    /**
+     * Le module rend-il les constantes du jeu <b>au bit près</b> tant que le serveur tient ?
+     *
+     * <p>On compare les motifs binaires, et non les nombres. {@code 100.0f == 100.0f} serait vrai
+     * pour une valeur issue d'un {@code × 1.0} comme pour la constante d'origine ; les bits, eux, ne
+     * laissent pas cette ambiguïté, et c'est toute la différence entre « équivalent » et
+     * « identique ».
+     */
+    private static boolean sweepDeadBand() {
+        long[] durations = {0L, 1L, 10L, 25L, 40L, 49L, 50L, 60L, 70L, 74L};
+        boolean ok = true;
+        for (long ms : durations) {
+            long nanos = ms * 1_000_000L;
+            float walk = Elastique.widenSpeed(100.0F, nanos);
+            float fly = Elastique.widenSpeed(300.0F, nanos);
+            double coherence = Elastique.widenResidual(0.0625D, nanos);
+            boolean line = Float.floatToRawIntBits(walk) == Float.floatToRawIntBits(100.0F)
+                    && Float.floatToRawIntBits(fly) == Float.floatToRawIntBits(300.0F)
+                    && Double.doubleToRawLongBits(coherence) == Double.doubleToRawLongBits(0.0625D);
+            if (!line) {
+                ok = false;
+                Lanterne.LOG.error(String.format(Locale.ROOT,
+                        "[AMARRE] NON CONFORME : à %d ms de retard, les seuils ne sont plus ceux du "
+                        + "jeu — %s / %s / %s au lieu de 100.0 / 300.0 / 0.0625.",
+                        ms, Float.toString(walk), Float.toString(fly), Double.toString(coherence)));
+            }
+        }
+        // Les compteurs viennent d'être pollués par le balayage : ils appartiennent au monde réel,
+        // pas à une épreuve algébrique. Sans cette remise à zéro, la phase au repos hériterait de
+        // dix échantillons qu'aucun joueur n'a produits.
+        Elastique.reset();
+        Lanterne.LOG.info("[AMARRE] ── Tableau 1 · la bande morte ──");
+        Lanterne.LOG.info("[AMARRE] {} : de 0 à 74 ms de retard, les trois seuils sont rendus au bit "
+                + "près ({} durées éprouvées).", ok ? "CONFORME" : "NON CONFORME", durations.length);
+        if (!ok) {
+            anyFailure = true;
+        }
+        return ok;
+    }
+
+    // ------------------------------------------------------------------ tableau 2 : la loi
+
+    /**
+     * Au-delà de la bande morte, l'élargissement suit-il le carré du retard, et s'arrête-t-il aux
+     * plafonds ?
+     *
+     * <p>La valeur attendue est recalculée ici, à la main, à partir de la règle énoncée — et non
+     * reprise du module. Une épreuve qui redemanderait au module ce qu'il pense faire ne vérifierait
+     * que sa constance.
+     */
+    private static boolean sweepLaw() {
+        long[] durations = {75L, 100L, 150L, 200L, 400L, 800L, 1600L, 5000L};
+        boolean ok = true;
+        StringBuilder relevé = new StringBuilder();
+        for (long ms : durations) {
+            long nanos = ms * 1_000_000L;
+            double late = (double) ms / 50d;
+            double wantedSpeed = Math.min(late, 16d) * Math.min(late, 16d);
+            double wantedResidual = Math.min(late, 4d) * Math.min(late, 4d);
+
+            float walk = Elastique.widenSpeed(100.0F, nanos);
+            double coherence = Elastique.widenResidual(0.0625D, nanos);
+
+            boolean speedOk = close(walk, 100.0D * wantedSpeed);
+            boolean residualOk = close(coherence, 0.0625D * wantedResidual);
+            if (!speedOk || !residualOk) {
+                ok = false;
+                Lanterne.LOG.error(String.format(Locale.ROOT,
+                        "[AMARRE] NON CONFORME : à %d ms (retard ×%.1f), attendu vitesse %.1f et "
+                        + "cohérence %.4f ; obtenu %.1f et %.4f.",
+                        ms, late, 100.0D * wantedSpeed, 0.0625D * wantedResidual, walk, coherence));
+            }
+            relevé.append(String.format(Locale.ROOT, "%dms→×%.0f/×%.0f ",
+                    ms, wantedSpeed, wantedResidual));
+        }
+        Elastique.reset();
+        Lanterne.LOG.info("[AMARRE] ── Tableau 2 · la loi, et ses deux plafonds ──");
+        Lanterne.LOG.info("[AMARRE] Facteurs attendus (vitesse / cohérence) : {}", relevé.toString().trim());
+        Lanterne.LOG.info("[AMARRE] {} : l'élargissement suit le carré du retard et s'arrête à ×256 "
+                + "(vitesse) et ×16 (cohérence).", ok ? "CONFORME" : "NON CONFORME");
+        if (!ok) {
+            anyFailure = true;
+            if (Elastique.toothless()) {
+                Lanterne.LOG.info("[AMARRE] (LANTERNE_BREAK_ELASTIQUE=1 était posé : ce tableau "
+                        + "DEVAIT annoncer NON CONFORME.)");
+            }
+        } else if (Elastique.toothless()) {
+            Lanterne.LOG.error("[AMARRE] LANTERNE_BREAK_ELASTIQUE=1 était posé et le tableau 2 a "
+                    + "réussi quand même. C'est l'ÉPREUVE qu'il faut réparer, pas le module : elle "
+                    + "ne mesure pas la loi qu'elle prétend mesurer.");
+            anyFailure = true;
+        }
+        return ok;
+    }
+
+    private static boolean close(double got, double wanted) {
+        return Math.abs(got - wanted) <= Math.abs(wanted) * 1e-6d + 1e-9d;
+    }
+
+    // ------------------------------------------------------------------ la scène
+
+    /**
+     * Pose le terrain et le client virtuel. Rend faux si la scène n'est pas utilisable.
+     *
+     * <p>Des piliers, et non un mur : c'est une géométrie à <b>coins</b>, et le coin est exactement
+     * ce qu'un grand pas heurte alors que plusieurs petits le contournent. Un mur droit ne
+     * produirait rien — la doublure glisserait le long dans les deux cas.
+     */
+    private static boolean openScene(MinecraftServer server) {
+        ServerLevel level = server.overworld();
+        ServerPlayer actor = Understudy.actor(0);
+        if (actor == null) {
+            Lanterne.LOG.error("[AMARRE] ÉPREUVE INVALIDE : aucune doublure n'est entrée en scène. "
+                    + "Rien à faire bouger, donc rien à mesurer.");
+            anyFailure = true;
+            return false;
+        }
+
+        int ground = Scene.groundLevel(level);
+        clientX = actor.getX();
+        clientY = ground + 1d;
+        clientZ = actor.getZ();
+        actor.snapTo(clientX, clientY, clientZ, 0f, 0f);
+
+        int posts = 0;
+        for (int dx = -24; dx <= 24; dx += 4) {
+            for (int dz = -24; dz <= 24; dz += 4) {
+                // Une trouée au centre, pour que la doublure ne démarre pas dans un pilier.
+                if (Math.abs(dx) <= 2 && Math.abs(dz) <= 2) {
+                    continue;
+                }
+                BlockPos foot = BlockPos.containing(clientX + dx, ground + 1d, clientZ + dz);
+                level.setBlockAndUpdate(foot, Blocks.STONE.defaultBlockState());
+                level.setBlockAndUpdate(foot.above(), Blocks.STONE.defaultBlockState());
+                posts++;
+            }
+        }
+
+        lastStepNanos = System.nanoTime();
+        Lanterne.LOG.info("[AMARRE] Scène ouverte : {} pilier(s) autour de la doublure, sol à {}.",
+                posts, ground);
+        return posts > 0;
+    }
+
+    private static void buildCharge(MinecraftServer server) {
+        int born = Scene.build(server.overworld(), Scene.Kind.VILLAGERS, CROWD, 64);
+        Lanterne.LOG.info("[AMARRE] Charge posée : {} villageois. Leur cerveau est ce qui coûte le "
+                + "plus cher dans un tick, et c'est le retard qu'on cherche à produire.", born);
+    }
+
+    // ------------------------------------------------------------------ le client virtuel
+
+    /**
+     * Rejoue ce qu'un vrai client aurait envoyé depuis le dernier passage.
+     *
+     * <p>Le compte de pas est tiré du <b>temps réel écoulé</b>, jamais du nombre de ticks serveur :
+     * c'est toute la question. Un client ne ralentit pas parce que le serveur ralentit, et si cette
+     * épreuve le faisait, elle supprimerait d'elle-même le phénomène qu'elle vient mesurer.
+     */
+    private static void drive(MinecraftServer server) {
+        ServerPlayer actor = Understudy.actor(0);
+        SilentConnection line = Understudy.line(0);
+        if (actor == null || line == null || actor.connection == null) {
+            return;
+        }
+
+        // Accuser réception, comme un vrai client. Sans cela le serveur ignore toute position
+        // annoncée par ce joueur, et l'épreuve mesurerait zéro sans rien signaler.
+        int teleport = line.lastTeleportId();
+        if (teleport >= 0) {
+            actor.connection.handleAcceptTeleportPacket(
+                    new ServerboundAcceptTeleportationPacket(teleport));
+        }
+        actor.connection.markClientLoaded();
+
+        long now = System.nanoTime();
+        long due = (now - lastStepNanos) / NOMINAL_NANOS;
+        if (due <= 0L) {
+            return;
+        }
+        int steps = (int) Math.min(due, MAX_BURST);
+        lastStepNanos += (long) steps * NOMINAL_NANOS;
+
+        ServerLevel level = actor.level();
+        for (int i = 0; i < steps; i++) {
+            advanceOneClientTick(level, actor);
+            actor.connection.handleMovePlayer(
+                    new ServerboundMovePlayerPacket.Pos(clientX, clientY, clientZ, true, false));
+        }
+
+        // Un vrai client accepte la correction du serveur au lieu de s'entêter. Sans cela, le client
+        // virtuel divergerait sans fin après le premier retour en arrière et déclencherait ensuite
+        // des refus parfaitement légitimes — qui n'ont rien à voir avec ce qu'on mesure.
+        clientX = actor.getX();
+        clientY = actor.getY();
+        clientZ = actor.getZ();
+    }
+
+    /**
+     * Un pas de client : glissement axe par axe, chaque axe validé contre les collisions du monde.
+     *
+     * <p>C'est ce que fait la physique d'un vrai client, et c'est ce qui rend l'épreuve honnête : la
+     * position annoncée est toujours atteignable par petits pas et toujours libre. Si le serveur la
+     * refuse malgré tout, ce n'est pas parce que le client a menti — c'est parce que le serveur n'a
+     * pas su refaire le chemin d'un seul grand pas.
+     */
+    private static void advanceOneClientTick(ServerLevel level, ServerPlayer actor) {
+        if (Math.abs(clientX) > PADDOCK * 4d || Math.abs(clientZ) > PADDOCK * 4d) {
+            headingX = -headingX;
+            headingZ = -headingZ;
+        }
+        double tryX = clientX + headingX * STEP;
+        if (free(level, actor, tryX, clientY, clientZ)) {
+            clientX = tryX;
+        } else {
+            headingX = -headingX;
+        }
+        double tryZ = clientZ + headingZ * STEP;
+        if (free(level, actor, clientX, clientY, tryZ)) {
+            clientZ = tryZ;
+        } else {
+            headingZ = -headingZ;
+        }
+    }
+
+    private static boolean free(ServerLevel level, ServerPlayer actor, double x, double y, double z) {
+        AABB box = actor.getBoundingBox()
+                .move(x - actor.getX(), y - actor.getY(), z - actor.getZ());
+        return level.noCollision(actor, box);
+    }
+
+    // ------------------------------------------------------------------ le verdict
+
+    private static void verdict() {
+        Lanterne.LOG.info("[AMARRE] ── Tableau 3 · le monde réel ──");
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[AMARRE] Au repos (module armé)  : %d pas · %d élargissement(s) · pire retard ×%.2f",
+                calmSteps, calmWidened, calmLateness));
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[AMARRE] En charge, SANS le module : %d pas · %d retour(s) en arrière · pire retard "
+                        + "×%.2f · %d tick(s) > 50 ms",
+                bareSteps, bareRollbacks, bareLateness, bareOverruns));
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[AMARRE] En charge, AVEC le module : %d pas · %d retour(s) en arrière · pire retard "
+                        + "×%.2f · %d tick(s) > 50 ms",
+                guardedSteps, guardedRollbacks, guardedLateness, guardedOverruns));
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[AMARRE] Tick moyen en fin d'épreuve : %.1f ms · pire %.1f ms",
+                TickBudget.averageMillis(), TickBudget.worstMillis()));
+
+        Lanterne.LOG.info("[AMARRE] ── Verdict ──");
+
+        // Le repos d'abord : c'est la garantie, et elle prime sur l'utilité.
+        if (calmSteps == 0L) {
+            Lanterne.LOG.error("[AMARRE] ÉPREUVE INVALIDE : aucun pas n'a été jugé au repos. Le "
+                    + "serveur n'a pas écouté la doublure — accusé de réception manquant, ou joueur "
+                    + "non chargé. Rien de ce qui suit ne veut dire quoi que ce soit.");
+            anyFailure = true;
+            return;
+        }
+        if (calmWidened > 0L) {
+            Lanterne.LOG.error(String.format(Locale.ROOT,
+                    "[AMARRE] NON CONFORME : %d pas sur %d ont été élargis alors que le serveur était "
+                    + "au repos (pire retard ×%.2f). La promesse « un serveur sain se comporte comme "
+                    + "sans le mod » est fausse.", calmWidened, calmSteps, calmLateness));
+            anyFailure = true;
+        } else {
+            Lanterne.LOG.info(String.format(Locale.ROOT,
+                    "[AMARRE] CONFORME : au repos, %d pas jugés, zéro élargissement. Le serveur sain "
+                    + "se comporte exactement comme sans le mod.", calmSteps));
+        }
+
+        // Puis l'utilité, qui a le droit de ne rien pouvoir dire.
+        if (bareLateness < 1.5d) {
+            Lanterne.LOG.error(String.format(Locale.ROOT,
+                    "[AMARRE] REFUS DE CONCLURE : la charge n'a jamais mis le serveur en retard "
+                    + "(pire ×%.2f, il en faut 1,5). Les deux bras ont donc tourné dans la bande "
+                    + "morte, c'est-à-dire sur le MÊME code. Ne rien publier de ce tableau — "
+                    + "augmenter la charge et recommencer.", bareLateness));
+            return;
+        }
+        if (bareRollbacks < ROLLBACKS_NEEDED) {
+            Lanterne.LOG.error(String.format(Locale.ROOT,
+                    "[AMARRE] REFUS DE CONCLURE : seulement %d retour(s) en arrière dans le bras sans "
+                    + "protection, il en faut %d. La scène n'a pas reproduit le symptôme : l'écart "
+                    + "ci-dessus est du bruit, et un zéro dans le bras protégé ne prouverait rien.",
+                    bareRollbacks, ROLLBACKS_NEEDED));
+            return;
+        }
+        if (guardedRollbacks >= bareRollbacks) {
+            Lanterne.LOG.error(String.format(Locale.ROOT,
+                    "[AMARRE] NON CONFORME : %d retour(s) en arrière avec le module contre %d sans. "
+                    + "Le module ne tient pas sa seule promesse utile.",
+                    guardedRollbacks, bareRollbacks));
+            anyFailure = true;
+            return;
+        }
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[AMARRE] CONFORME : %d retour(s) en arrière sans le module, %d avec — soit %.0f %% "
+                + "de moins, à charge et à trajet identiques.",
+                bareRollbacks, guardedRollbacks,
+                100d * (bareRollbacks - guardedRollbacks) / bareRollbacks));
+    }
+
+    private static void finish() {
+        if (anyFailure) {
+            Lanterne.LOG.error("[AMARRE] Au moins un tableau a échoué. Rappel : "
+                    + "LANTERNE_BREAK_ELASTIQUE=1 doit faire échouer le tableau 2 — si "
+                    + "l'interrupteur n'était PAS posé, c'est le module qu'il faut réparer.");
+        } else {
+            Lanterne.LOG.info("[AMARRE] Tous les tableaux conclus sont conformes. Rappel : "
+                    + "LANTERNE_BREAK_ELASTIQUE=1 retire les dents du module — le tableau 2 DOIT "
+                    + "alors échouer, sans quoi c'est cette épreuve qu'il faut réparer.");
+        }
+        step = Step.DONE;
+        if (host != null) {
+            host.halt(false);
+        }
+    }
+}

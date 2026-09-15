@@ -385,10 +385,10 @@ public final class Cadastre {
                     + "verdict de génération ne dit quoi que ce soit de lui";
         }
         return String.format(Locale.ROOT,
-                "%d région(s) prise(s) en charge, %d laissée(s) à vanilla · %d question(s) de "
-                        + "placement · %d boîte(s) inscrite(s) · la région la plus chargée en a "
-                        + "porté %d",
-                regions, declined.sum(), asked.sum(), filed.sum(), busiest.sum());
+                "%d région(s) prise(s) en charge · %d question(s) répondues par le registre, %d "
+                        + "laissées à vanilla · %d boîte(s) inscrite(s) · la région la plus chargée "
+                        + "en a porté %d",
+                regions, asked.sum(), declined.sum(), filed.sum(), busiest.sum());
     }
 
     public static long taken() {

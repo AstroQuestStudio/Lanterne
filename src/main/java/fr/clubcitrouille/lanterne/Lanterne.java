@@ -166,6 +166,9 @@ public final class Lanterne {
         // L'épreuve de la digue compte des à-coups, donc des ticks entiers : son chronomètre doit
         // s'ouvrir ici et se fermer dans Post, comme celui du banc.
         fr.clubcitrouille.lanterne.lab.Levee.beginTick();
+        // L'épreuve de l'élastique compte elle aussi des ticks entiers : c'est le dépassement des
+        // cinquante millisecondes qui donne au tableau son échelle de retard.
+        fr.clubcitrouille.lanterne.lab.Amarre.beginTick();
         Census.resetCounters();
         // Une fois par tick SERVEUR, et non par monde. LevelTickEvent.Pre se déclenche pour chacun
         // des trois mondes ; basculer le recensement à chaque fois faisait écraser celui de

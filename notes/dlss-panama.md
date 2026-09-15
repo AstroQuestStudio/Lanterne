@@ -105,9 +105,23 @@ downcallHandle NVSDK_NGX_VULKAN_Shutdown1 : MethodHandle(MemorySegment)int
 problème du magasin de pilotes : on n'a pas besoin que le dossier soit dans le chemin de
 recherche du système, il suffit de le trouver. **VÉRIFIÉ.**
 
-La bibliothèque statique `nvsdk_ngx_s.lib` du SDK n'est donc **pas** un obstacle : elle n'est
-qu'un enrobage qui fait `LoadLibrary` + `GetProcAddress` sur cette même DLL. Panama fait le même
-travail, en Java.
+La bibliothèque statique `nvsdk_ngx_s.lib` du SDK n'est donc **pas** un obstacle. C'est bien une
+bibliothèque **statique** et non une bibliothèque d'importation — elle a été téléchargée et
+disséquée : archive `!<arch>` de 12 membres, 542 symboles, **zéro `__IMPORT_DESCRIPTOR`**, du vrai
+code x64 en `.text$mn`, et jusqu'aux chemins de compilation de NVIDIA laissés dans les
+informations de débogage. Mais son contenu est un enrobage qui fait `LoadLibrary` +
+`GetProcAddress` sur `_nvngx.dll` : on y retrouve, en UTF-16, les chaînes `\_nvngx.dll`,
+`\nvngx.dll`, `NGXCore\NGXPath`, et en ASCII les noms exacts passés à `GetProcAddress`. Panama
+fait le même travail, en Java. Les suffixes `_s` / `_d` ne désignent d'ailleurs pas statique /
+dynamique mais le choix de la bibliothèque d'exécution C de MSVC (`/MT` contre `/MD`).
+
+**Et il y a mieux que balayer le magasin de pilotes.** L'en-tête `nvsdk_ngx_loader.h` publie
+l'ordre de découverte officiel : à côté de l'exécutable, puis `D3DKMTQueryAdapterInfo`, puis la
+base de registre — `HKLM\System\CurrentControlSet\Services\nvlddmkm\NGXCore` → `NGXPath`. Sur
+cette machine, cette clé et la clé héritée `HKLM\SOFTWARE\NVIDIA Corporation\Global\NGXCore`
+pointent vers **deux condensats différents** : la seconde est périmée. Le balayage retenu dans
+`Deep.loader()` prend le fichier le plus récemment déposé, ce qui donne le même résultat sans
+dépendre d'une clé de registre.
 
 ### 1.d — L'os : `NVSDK_NGX_Parameter` est du C++, pas du C
 
@@ -128,9 +142,43 @@ méthodes virtuelles est celui de leur déclaration dans un en-tête que NVIDIA 
 et une erreur d'index n'échoue pas proprement : elle appelle la mauvaise fonction avec les
 mauvais arguments, c'est-à-dire qu'elle plante le jeu du joueur.
 
-**VÉRIFIÉ** : l'absence des symboles. **SUPPOSÉ, avec une confiance élevée** : que c'est bien une
-vtable C++ et non un autre encodage — l'absence totale de symbole d'accès à des paramètres que la
-documentation de NVIDIA décrit comme obligatoires ne laisse pas d'autre explication.
+**VÉRIFIÉ**, et pas seulement déduit : la bibliothèque statique `nvsdk_ngx_s.lib` du SDK a été
+disséquée. Ses seize enrobages commencent tous par `48 8B 01` — `mov rax,[rcx]`, c'est-à-dire le
+chargement du pointeur de table virtuelle depuis `this` — suivi de `48 8B 58 xx`, l'indexation.
+Les emplacements relevés :
+
+| indice | décalage | méthode |
+|---:|---:|---|
+| 0 | 0x00 | `Set(const char*, void*)` |
+| 1 | 0x08 | `Set(const char*, ID3D12Resource*)` |
+| 2 | 0x10 | `Set(const char*, ID3D11Resource*)` |
+| **3** | **0x18** | **`Set(const char*, int)`** |
+| **4** | **0x20** | **`Set(const char*, unsigned int)`** |
+| 5 | 0x28 | `Set(const char*, double)` |
+| **6** | **0x30** | **`Set(const char*, float)`** |
+| 7 | 0x38 | `Set(const char*, unsigned long long)` |
+| 8–15 | 0x40–0x78 | les huit `Get`, dans le même ordre inversé |
+| 16 | 0x80 | `Reset()` — *supposé, non mesuré* |
+
+> **Le détail qui piège.** L'ordre de déclaration dans l'en-tête de NVIDIA est
+> `ULL, float, double, uint, int, D3D11, D3D12, void*`. **La table est exactement l'inverse** :
+> MSVC retourne les surcharges d'un même nom. Lire l'en-tête et en déduire les indices donne la
+> mauvaise réponse — pour chacun des seize.
+
+**Et ce n'est pas le seul écart.** `nvsdk_ngx.h` prévient lui-même :
+
+> *Functions under the same name and different function signatures exist between the NGX SDK,
+> NGX Core (driver), and NGX Snippets.*
+
+La pierre de Rosette est `nvsdk_ngx_standalone_cuda.h` — l'implémentation par `GetProcAddress`
+que NVIDIA publie elle-même — et elle montre que, entre le nom du SDK et le nom exporté par le
+pilote, **l'argument de version et le pointeur `FeatureCommonInfo*` sont permutés**, et que
+`Shutdown1` côté pilote prend un paramètre de sortie supplémentaire qui n'existe pas dans l'en-tête
+du SDK. NVIDIA ne publie cette correspondance **que pour CUDA** : pour Vulkan, il faut la déduire
+et la valider au premier appel réel.
+
+C'est le **risque numéro un** de tout portage Panama, et il ne se lève pas en lisant : il se lève
+en appelant, sur une machine, et en regardant le code de retour.
 
 ---
 
@@ -156,23 +204,51 @@ NVSDK_NGX_VULKAN_Shutdown1(vkDevice)
 Les structures qui franchissent la frontière ABI, et qu'il faudrait décrire au `MemoryLayout`
 près :
 
-| structure | rôle | difficulté Panama |
+| structure | rôle | taille (x64) |
 |---|---|---|
-| `NVSDK_NGX_FeatureCommonInfo` | où chercher les DLL de fonctionnalité | contient un `NVSDK_NGX_PathListInfo` : tableau de `wchar_t*` + compte |
-| `NVSDK_NGX_PathListInfo` | la liste de chemins elle-même | chaînes **UTF-16** sous Windows, pas UTF-8 |
-| `NVSDK_NGX_Resource_VK` | une image Vulkan décrite à NGX | **union** de deux variantes + discriminant ; ~10 champs dont `VkImageView`, `VkImage`, `VkImageSubresourceRange` (5 champs), `VkFormat`, dimensions, `ReadWrite` |
-| `NVSDK_NGX_VK_DLSS_Eval_Params` | les entrées d'une image | encapsule un `NVSDK_NGX_VK_Feature_Eval_Params` puis ~30 champs (couleur, profondeur, vecteurs, exposition, jitter, reset, matrices…) |
-| `NVSDK_NGX_DLSS_Create_Params` | la création de la fonctionnalité | ~8 champs, dont un `NVSDK_NGX_DLSS_Feature_Flags` en bitmask |
+| `NVSDK_NGX_PathListInfo` | la liste des dossiers où chercher les modèles | **16** — chaînes **UTF-16**, pas UTF-8 |
+| `NVSDK_NGX_LoggingInfo` | rappel de journal | **16** |
+| `NVSDK_NGX_FeatureCommonInfo` | ce qu'on passe à `Init_Ext2` | **40** |
+| `NVSDK_NGX_Resource_VK` | une image Vulkan décrite à NGX | **56** — union de 48 + discriminant + `bool` |
+| `NVSDK_NGX_DLSS_Create_Params` | la création de la fonctionnalité | **28** |
+| `NVSDK_NGX_VK_DLSS_Eval_Params` | les entrées d'une image | **368** |
 
-`NVSDK_NGX_Resource_VK` doit être rempli **par image et par ressource** : au moins la couleur, la
-profondeur, les vecteurs de mouvement et la sortie, soit quatre structures à union reconstruites
-soixante fois par seconde, chacune avec son alignement exact. C'est là qu'est le travail, et c'est
-là qu'est le risque : une erreur de remplissage d'un octet ne se voit pas à la compilation, ne se
-voit pas au journal, et se voit à l'écran — ou fait tomber le pilote.
+Les sept premières tailles ne sont pas calculées mais **relevées dans les enregistrements
+`LF_STRUCTURE` des informations de débogage CodeView** de `nvsdk_ngx_s.lib`, et elles concordent
+avec le calcul d'alignement naturel — ce qui valide la méthode pour les structures Vulkan, dont
+le débogage ne porte pas trace puisqu'elles sont construites côté application.
 
-**SUPPOSÉ** pour le détail champ par champ : les en-têtes exacts n'ont pas été lus dans ce dépôt,
-ils ne sont pas sur la machine. Aucune ligne de liaison ne doit être écrite avant de les avoir
-sous les yeux.
+**Une bonne nouvelle, qui réduit beaucoup le travail :** `NVSDK_NGX_VK_DLSS_Eval_Params` et
+`NVSDK_NGX_DLSS_Create_Params` **ne franchissent jamais la frontière ABI**. Les macros
+`NGX_VULKAN_CREATE_DLSS_EXT` et `NGX_VULKAN_EVALUATE_DLSS_EXT` ne sont pas des macros mais des
+fonctions `static inline` qui se contentent de décomposer ces structures en une cinquantaine
+d'appels `Set` nommés (`"Width"`, `"Jitter.Offset.X"`, `"MV.Scale.X"`, `"DLSS.Pre.Exposure"`…). En
+Java, on les réécrit : il n'y a rien à disposer en mémoire.
+
+**La seule structure à construire réellement est `NVSDK_NGX_Resource_VK`**, et elle l'est quatre
+fois par image — couleur, profondeur, vecteurs, sortie :
+
+```
+NVSDK_NGX_Resource_VK                       taille 56, alignement 8
+   0..47  union Resource          (48 = max(ImageViewInfo 48, BufferInfo 16))
+            0  ImageView   JAVA_LONG     (handle Vulkan non distribuable = uint64)
+            8  Image       JAVA_LONG
+           16  SubresourceRange : aspectMask, baseMipLevel, levelCount,
+               baseArrayLayer, layerCount            (5 × JAVA_INT)
+           36  Format      JAVA_INT
+           40  Width       JAVA_INT
+           44  Height      JAVA_INT
+  48       Type        JAVA_INT        (0 = vue d'image, 1 = tampon)
+  52       ReadWrite   JAVA_BOOLEAN    (1 octet)
+  53..55   remplissage
+```
+
+Une erreur d'un octet ici ne se voit pas à la compilation, n'écrit rien au journal, et se voit à
+l'écran — ou fait tomber le pilote.
+
+Constantes utiles, relevées dans `nvsdk_ngx_defs.h` : `NVSDK_NGX_Version_API = 0x0000015`,
+`Result_Success = 0x1`, `Result_Fail = 0xBAD00000`, `Feature_SuperSampling = 1`, et le drapeau
+`DepthInverted = 1 << 3` — **dont la 26.2 a besoin**, puisque sa profondeur est inversée.
 
 ---
 
@@ -223,27 +299,100 @@ l'échec retombe proprement sur FSR, ce que l'architecture de `Scene.give()` sai
 
 ---
 
-## 4. Licence et redistribution
+## 4. Licence — le vrai mur, et il n'est pas technique
 
-`nvngx_dlss.dll` n'est **pas** installé par le pilote (§1.a, vérifié). Il faut donc soit
-l'embarquer, soit le télécharger.
+`nvngx_dlss.dll` n'est **pas** installé par le pilote (§1.a, vérifié). Il faudrait donc soit
+l'embarquer, soit le télécharger. **Les deux sont fermés**, et le texte est sans ambiguïté.
 
-- **L'embarquer est exclu deux fois.** La licence de NVIDIA encadre sa redistribution, et ce mod
-  est en **GPL-3.0-only** : embarquer un binaire propriétaire sous conditions dans une œuvre GPL
-  est une contradiction de licence, indépendamment de ce que NVIDIA autorise.
-- **Le télécharger à la demande, sur consentement explicite** est la seule voie propre. Le dépôt
-  est justement en train d'écrire ce mécanisme pour FFmpeg (`client/screen/Fetch.java`) : même
-  problème, même forme — consentement, téléchargement, vérification d'empreinte avant chargement.
-  **Il est réutilisable en l'état** et ne doit surtout pas être réécrit.
+Le `LICENSE.txt` du dépôt `NVIDIA/DLSS` est la *NVIDIA RTX SDKs License*. Sa **clause 4.e** :
 
-Reste une piste qui n'a pas été explorée et qui mérite de l'être : les six exports
-`NVSDK_NGX_OTA_UPDATES_*` de `_nvngx.dll`, et l'arbre
-`C:\ProgramData\NVIDIA\NGX\models\dlss_override\` qui contient déjà des versions de modèles sur
-cette machine. `C:\ProgramData\NVIDIA\NGX\models\nvngx_config.txt` liste des versions DLSS par
-identifiant d'application, dont `app_E658700 = 310.9.0`. Le chargeur sait donc aller **chercher
-lui-même** le modèle. Si c'est le cas, la question de la redistribution disparaît : ce n'est plus
-le mod qui distribue, c'est le pilote qui met à jour. **SUPPOSÉ, non vérifié** — ces exports ne
-sont pas documentés publiquement.
+> **You may not use the SDK in any manner that would cause it to become subject to an open source
+> software license.** As examples, licenses that require as a condition of use, modification,
+> and/or distribution that the SDK be: (i) disclosed or distributed in source code form;
+> (ii) licensed for the purpose of making derivative works; or (iii) redistributable at no charge.
+
+C'est une **clause anticopyleft explicite**, et ses trois exemples décrivent mot pour mot les
+articles 6, 5 et 4 de la GPL-3.0. **VÉRIFIÉ** (texte du dépôt).
+
+Trois blocages indépendants, chacun suffisant à lui seul :
+
+1. **GPL article 7.** La liste des restrictions supplémentaires tolérées y est *limitative*.
+   Interdiction de rétroingénierie (4.a), interdiction de modification (4.b), interdiction de
+   sous-licencier, restriction d'usage aux GPU NVIDIA, **notification écrite obligatoire à NVIDIA
+   avant toute diffusion** (§ 4, y compris pour « a plug-in to a commercial application »),
+   attribution soumise à **approbation écrite préalable** : rien de tout cela n'est autorisé.
+2. **GPL article 6.** Obligation de fournir la source correspondante. Elle n'existe pas, et NVIDIA
+   en interdit la divulgation. L'exception « System Libraries » ne s'applique pas : le guide de
+   programmation demande de poser la DLL **à côté de l'exécutable**, ce n'est donc pas un
+   composant du système.
+3. **Clause 4.e + résiliation automatique (§ 12).** Le seul fait de placer le binaire dans une
+   archive GPL viole la licence et met fin au droit de redistribution.
+
+> L'agrégation simple (GPL article 5) ne sauve pas le montage : une DLL chargée dans le même
+> processus, sans laquelle la fonctionnalité annoncée n'existe pas, ne remplit pas le critère
+> « not combined with it such as to form a larger program ».
+
+**Conséquence pratique, et elle change la conception :** le téléchargement à la demande **n'est
+pas** la sortie qu'on croyait. Télécharger, c'est distribuer — cela replace le mod exactement dans
+le rôle que 4.e interdit. `client/screen/Fetch.java` reste un excellent mécanisme, mais **le
+problème de DLSS n'est pas celui de FFmpeg** : FFmpeg est sous une licence qui autorise la
+redistribution, pas NVIDIA.
+
+La seule posture défendable est donc : **ne rien redistribuer, ne rien télécharger, et charger le
+fichier s'il est déjà là**, déposé par le joueur — ce que `Deep.libraryPresent()` fait déjà, et
+qui suffit. C'est aussi la moins satisfaisante, puisqu'elle suppose un joueur qui sache d'où sortir
+un fichier de 59 Mio.
+
+> *Ceci est une lecture de textes de licence, pas un avis juridique.*
+
+**Une piste écartée après vérification.** Les six exports `NVSDK_NGX_OTA_UPDATES_*` et l'arbre
+`C:\ProgramData\NVIDIA\NGX\models\` laissaient espérer que le pilote aille chercher le modèle
+lui-même — auquel cas la question de la redistribution disparaissait. Le modèle DLSS y est bien
+livré en blocs `.bin` indexés par `nvngx_config.txt` (`app_<identifiant> = <version>`), **mais
+l'index est trié par identifiant d'application enregistré chez NVIDIA**. Sans identifiant — et un
+mod n'en a pas — la voie OTA n'est pas fiable. **SUPPOSÉ, forte confiance** : ces exports ne sont
+documentés nulle part.
+
+---
+
+## 4 bis. FSR 2 — licence, et un piège à ne pas manquer
+
+**Le bon dépôt est `GPUOpen-Effects/FidelityFX-FSR2`**, sous **MIT** sans clause additionnelle
+(`LICENSE.txt`, « Copyright (c) 2022-2023 Advanced Micro Devices, Inc. »). MIT entre sans
+difficulté dans la GPL-3.0 : sa seule obligation, la préservation des notices, relève de
+l'article **7(b)** de la GPL, qui l'autorise nommément. **VÉRIFIÉ.**
+
+> **Piège.** Le dépôt successeur `GPUOpen-LibrariesAndSDKs/FidelityFX-SDK` **n'est plus MIT à
+> partir de la version 2.1.0** : son `docs/license.md` dit « distribute copies of the Software,
+> **in binary form only** » et « **No reverse engineering, decompilation, or disassembly** ». Seuls
+> les dossiers d'exemples restent MIT, et le README entretient la confusion en annonçant que « AMD
+> FSR Samples are open source ». **Ne jamais partir de `FidelityFX-SDK/main`** ; partir de
+> `GPUOpen-Effects/FidelityFX-FSR2@master`, ou au pire des tags `v2.0.0` / `fsr3-v3.0.4`.
+
+**Le portage en GLSL pur est établi, pas espéré.** Le dépôt d'AMD contient déjà un backend Vulkan
+**en GLSL** (`src/ffx-fsr2-api/vk/`, compilé par `glslang` avec `-DFFX_GLSL=1`), et le cœur
+`ffx_fsr2.cpp` ne touche jamais à une API graphique — tout passe par des rappels. Deux précédents
+lisibles : **Godot** (`thirdparty/amd-fsr2`, qui inclut les `.glsl` d'AMD depuis ses propres
+nuanceurs et documente scrupuleusement version, commit, licence et correctifs — modèle à copier)
+et **JuanDiegoMontoya/FidelityFX-FSR2-OpenGL**, un backend **OpenGL** d'environ 1 200 lignes, avec
+un compte rendu écrit du portage.
+
+L'ordre réel d'exécution des passes, lu dans `fsr2Dispatch()` et **différent de l'ordre de
+l'énumération** — c'est le genre de détail qui coûte une journée :
+
+```
+0. (option) TCR_AUTOGENERATE -> GENERATE_REACTIVE
+1. COMPUTE_LUMINANCE_PYRAMID        (SPD)
+2. RECONSTRUCT_PREVIOUS_DEPTH       (résolution de rendu)
+3. DEPTH_CLIP                       (résolution de rendu)
+4. LOCK                             (résolution de rendu)
+5. ACCUMULATE  ou  ACCUMULATE_SHARPEN   (résolution d'affichage)
+6. RCAS                             (résolution d'affichage, si raffermissement)
+```
+
+Frictions connues pour un portage vers OpenGL : les `layout(set = …)` n'ont pas d'équivalent,
+textures et échantillonneurs séparés doivent être refondus en `sampler2D`, et
+`GL_EXT_samplerless_texture_functions` n'existe pas. Le repli `FFX_HALF=0` évite la demi-précision.
 
 ---
 
@@ -297,16 +446,35 @@ accesseur de mixin. Repris du relevé de `Deep.java`, **non revérifié dans cet
 
 ## 6. Recommandation
 
-**Ne pas écrire la liaison NGX maintenant.** Non parce qu'elle est impossible — elle ne l'est pas,
-et c'est l'apport de cette enquête — mais parce que trois choses lui manquent qu'aucun code ne
-remplace : le modèle `nvngx_dlss.dll`, les en-têtes du SDK pour les dispositions mémoire, et un
-œil sur une image. Une liaison Panama vers une vtable C++, écrite sans les en-têtes et jamais
-exécutée, n'est pas une fonctionnalité : c'est une hypothèse qui plante le pilote du joueur.
+**Ne pas écrire la liaison NGX.** Pas « pas maintenant » : **pas**, tant que la licence est celle-là.
 
-**Écrire d'abord ce qui sert dans les deux cas** — le décalage de projection et la copie de
-profondeur — puis FSR 2, qui est un pur nuanceur, qui tourne sur OpenGL, et dont le public n'est
-pas plafonné.
+L'enquête renverse le diagnostic technique — NGX est joignable, aucun C++ n'est nécessaire — et le
+remplace par un diagnostic **juridique** que le code ne peut pas contourner. La clause 4.e vise
+nommément les licences copyleft. Un mod GPL-3.0-only ne peut ni embarquer `nvngx_dlss.dll`, ni le
+télécharger pour le joueur. Reste le chargement d'un fichier déjà déposé — ce que `Deep` fait
+déjà, et qui ne justifie pas, à soi seul, d'écrire une liaison Panama vers une table virtuelle
+C++ dont l'ABI diverge de la documentation et qu'on ne peut pas exécuter ici.
 
-Et **d'abord avant tout** : rendre le basculement sur Vulkan atteignable en un clic. Un verrou
-qu'on annonce sans donner la clé n'est que de la décoration. C'est fait, voir
-`client/upscale/Pivot.java`.
+Les cinq raisons, empilées, disent toutes la même chose :
+
+1. la licence interdit la redistribution dans une œuvre GPL ;
+2. le modèle n'est sur aucune machine par défaut ;
+3. l'ABI réelle du pilote diffère de l'ABI publiée, et n'est documentée que pour CUDA ;
+4. l'accès natif deviendra refusé par défaut dans un JDK futur, sans qu'un mod puisse y répondre ;
+5. le public est plafonné à Vulkan, marqué expérimental.
+
+**Ce qu'il faut écrire à la place, dans cet ordre :**
+
+1. ~~Rendre le basculement sur Vulkan atteignable en un clic.~~ **Fait** — `client/upscale/Pivot.java`.
+   Un verrou qu'on annonce sans donner la clé n'est que de la décoration.
+2. ~~Le décalage de projection.~~ **Fait et éprouvé** — `client/upscale/Jitter.java`,
+   `tools/EssaiJitter.java`. Non branché, et c'est volontaire : un décalage sans remonteur
+   temporel dégrade l'image au lieu de l'améliorer.
+3. **La copie de profondeur**, à prendre sur `RenderLevelStageEvent.AfterLevel` — voir §5, aucun
+   mixin nécessaire.
+4. **FSR 2**, depuis `GPUOpen-Effects/FidelityFX-FSR2` (MIT, *et non* le SDK successeur, voir
+   §4 bis). Pur nuanceur : pas de licence propriétaire, pas de fichier à télécharger, pas de
+   permission native qu'une mise à jour de Java puisse retirer, et il tourne sur OpenGL — donc
+   pour tout le monde, et non pour les seuls possesseurs de RTX sous Vulkan expérimental.
+
+Ce n'est pas un lot de consolation. C'est le seul des deux chemins qui aille jusqu'au joueur.

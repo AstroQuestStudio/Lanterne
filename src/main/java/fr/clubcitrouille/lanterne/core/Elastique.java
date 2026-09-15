@@ -202,22 +202,31 @@ public final class Elastique {
     }
 
     /**
-     * Le retard de la fenêtre en cours, en multiples d'un tick nominal.
+     * Le retard d'une fenêtre, en multiples d'un tick nominal.
      *
      * <p>Rend exactement {@code 1.0} quand le serveur tient sa cadence — plancher inclus, de sorte
      * que ce module n'ait jamais l'occasion de resserrer ce que le jeu accorde.
      *
-     * @param anchorNanos instant du dernier {@code resetPosition()}, en nanosecondes
+     * <h2>Pourquoi cette classe ne lit pas l'horloge</h2>
+     *
+     * <p>La première version prenait l'instant du gel et appelait {@code System.nanoTime()}
+     * elle-même. C'était plus court à écrire, et cela rendait le module <b>impossible à éprouver</b> :
+     * entre le moment où le banc calcule la valeur qu'il attend et celui où la fonction lit
+     * l'horloge, le temps passe. Une épreuve de la bande morte posée à soixante-quatorze
+     * millisecondes aurait échoué au hasard des pauses du ramasse-miettes — et une épreuve qui
+     * échoue au hasard ne prouve rien, elle finit par être désarmée.
+     *
+     * <p>L'horloge est donc lue par {@code ElastiqueMixin}, là où vit l'ancre, et tout ce qui est ici
+     * est une <b>fonction pure de la durée écoulée</b>. Le banc peut alors balayer la loi entière,
+     * borne par borne, sans dépendre d'aucun aléa.
+     *
+     * @param frozenNanos durée depuis le gel de la position de référence, en nanosecondes
      */
-    public static double lateness(long anchorNanos) {
-        if (TOOTHLESS || anchorNanos == 0L) {
+    public static double lateness(long frozenNanos) {
+        if (TOOTHLESS || frozenNanos <= NOMINAL_NANOS) {
             return 1d;
         }
-        long frozen = System.nanoTime() - anchorNanos;
-        if (frozen <= NOMINAL_NANOS) {
-            return 1d;
-        }
-        return (double) frozen / NOMINAL_NANOS;
+        return (double) frozenNanos / NOMINAL_NANOS;
     }
 
     /**
@@ -226,8 +235,8 @@ public final class Elastique {
      * <p>Rend la valeur reçue <b>à l'identique</b> tant qu'on est en bande morte : c'est ce qui rend
      * la promesse « vanilla au bit près » vérifiable plutôt que plausible.
      */
-    public static float widenSpeed(float vanilla, long anchorNanos) {
-        double factor = factor(anchorNanos, CEILING_SPEED);
+    public static float widenSpeed(float vanilla, long frozenNanos) {
+        double factor = factor(frozenNanos, CEILING_SPEED);
         return factor == 1d ? vanilla : (float) (vanilla * factor);
     }
 
@@ -256,8 +265,8 @@ public final class Elastique {
      * <p>Le seuil de cohérence, lui, est atteint par tout mouvement qui va jusqu'au bout de son
      * traitement, sur le fil du serveur, une fois. Le compteur mesure donc ce que son nom dit.
      */
-    public static double widenResidual(double vanilla, long anchorNanos) {
-        double late = lateness(anchorNanos);
+    public static double widenResidual(double vanilla, long frozenNanos) {
+        double late = lateness(frozenNanos);
         samples++;
         if (late > worstLateness) {
             worstLateness = late;
@@ -265,13 +274,13 @@ public final class Elastique {
         if (late >= DEAD_BAND) {
             widened++;
         }
-        double factor = factor(anchorNanos, CEILING_RESIDUAL);
+        double factor = factor(frozenNanos, CEILING_RESIDUAL);
         return factor == 1d ? vanilla : vanilla * factor;
     }
 
     /** Le multiplicateur à appliquer : le carré du retard, borné, et exactement un en bande morte. */
-    private static double factor(long anchorNanos, double ceiling) {
-        double late = lateness(anchorNanos);
+    private static double factor(long frozenNanos, double ceiling) {
+        double late = lateness(frozenNanos);
         if (late < DEAD_BAND) {
             return 1d;
         }

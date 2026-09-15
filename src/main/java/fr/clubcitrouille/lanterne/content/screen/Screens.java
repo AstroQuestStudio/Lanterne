@@ -307,10 +307,12 @@ public final class Screens {
                 Sieve.Verdict verdict = Booth.admits(wanted.source());
                 if (!verdict.ok()) {
                     tell(player, "Source refusée : " + verdict.label() + ".");
+                    // Une liste vide ne filtre plus rien (voir Booth.filtering), donc ce verdict
+                    // implique desormais une liste REELLEMENT garnie. La branche « aucun —
+                    // l'administrateur doit en inscrire » etait le message qu'un joueur voyait
+                    // alors qu'il ETAIT l'administrateur et n'avait rien demande de tel.
                     if (verdict == Sieve.Verdict.HORS_LISTE) {
-                        tell(player, "Domaines autorisés : " + (Booth.domains().isEmpty()
-                                ? "aucun — l'administrateur doit en inscrire."
-                                : String.join(", ", Booth.domains())));
+                        tell(player, "Domaines autorisés : " + String.join(", ", Booth.domains()));
                     }
                     return;
                 }

@@ -125,6 +125,15 @@ public final class SelfTest {
     private static boolean aide;
 
     /**
+     * Vrai si l'on éprouve l'élastique — les seuils de mouvement mesurés à l'horloge.
+     *
+     * <p>La seule épreuve du dépôt qui doit d'abord prouver que son module <b>ne fait rien</b> :
+     * la garantie « un serveur sain se comporte comme sans le mod » prime sur l'utilité, et elle se
+     * vérifie au bit près. Voir {@code lab.Amarre}.
+     */
+    private static boolean amarre;
+
+    /**
      * Vrai si l'on éprouve la digue — le refus des chargements de chunk synchrones.
      *
      * <p>La seule épreuve du dépôt qui publie un <b>pire tick</b> plutôt qu'une médiane, parce que
@@ -159,6 +168,9 @@ public final class SelfTest {
 
     /** Vrai si l'on relève la largeur des palettes de terrain. */
     private static boolean palette;
+
+    /** Vrai si l'on dresse l'inventaire de la mémoire retenue. */
+    private static boolean inventaire;
 
     /** Vrai si l'on éprouve le placement des pièces d'une structure à jigsaw. */
     private static boolean bourg;
@@ -203,6 +215,13 @@ public final class SelfTest {
             step = Step.SETTLING;
             waiting = SETTLE;
             Lanterne.LOG.info("Épreuve du bourg armée.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_INVENTAIRE"))) {
+            inventaire = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Inventaire de la mémoire retenue armé.");
             return;
         }
         if ("1".equals(System.getenv("LANTERNE_PALETTE"))) {
@@ -320,6 +339,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de duel armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_AMARRE"))) {
+            amarre = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de l'élastique armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_SOMMAIRE"))) {
             sommaire = true;
             step = Step.SETTLING;
@@ -359,8 +385,9 @@ public final class SelfTest {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
+                    && !inventaire
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
-                    && !sommaire && !aide)) {
+                    && !sommaire && !aide && !amarre)) {
             return;
         }
 
@@ -387,10 +414,22 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Grove.running()
                 && !fr.clubcitrouille.lanterne.lab.Duel.running()
                 && !fr.clubcitrouille.lanterne.lab.Levee.running()
+                && !fr.clubcitrouille.lanterne.lab.Amarre.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
             return;
         }
 
+        if (amarre) {
+            // L'épreuve fait entrer sa propre doublure, et à un moment précis : ses deux premiers
+            // tableaux sont algébriques et doivent être publiés même si la scène tourne mal ensuite.
+            if (fr.clubcitrouille.lanterne.lab.Amarre.running()) {
+                fr.clubcitrouille.lanterne.lab.Amarre.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Amarre.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
         if (levee) {
             // Aucune doublure : l'épreuve force elle-même ses chunks, et une doublure poserait un
             // observateur à zéro bloc des abeilles — donc dans la zone franche, et l'on mesurerait
@@ -458,6 +497,29 @@ public final class SelfTest {
             } else if (step == Step.SETTLING) {
                 fr.clubcitrouille.lanterne.lab.Bourg.begin(server);
                 step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (inventaire) {
+            // Une doublure est indispensable, et pour une raison propre à cette mesure : un serveur
+            // sans joueur ne retient que les chunks d'apparition. Le premier relevé pris ainsi a
+            // trouvé quatre-vingt-un chunks et trois mégaoctets de terrain — un chiffre exact et
+            // parfaitement trompeur, puisqu'il décrivait un serveur que personne n'utilise.
+            //
+            // Ce qu'on veut inventorier, c'est le tas d'un serveur qui SERT : distance de vue
+            // entière, lumière calculée, chunks tenus par un ticket de joueur.
+            if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                // L'inventaire déclenche un ramassage complet : c'est ce qui en fait une mesure de
+                // mémoire RETENUE et non de déchets en attente. On le paie une fois, à l'arrêt.
+                fr.clubcitrouille.lanterne.core.Inventaire.survey(server,
+                        line -> Lanterne.LOG.info("[INVENTAIRE] {}", line));
+                step = Step.LAUNCHED;
+                server.halt(false);
             }
             return;
         }
