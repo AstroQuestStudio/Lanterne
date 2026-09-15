@@ -142,6 +142,12 @@ public final class Inventaire {
      */
     public static void survey(MinecraftServer server, Consumer<String> say) {
         say.accept("── Inventaire de la mémoire RETENUE ──");
+        // Le ramasseur d'abord : c'est la ligne que core/Creuset.java promet à l'administrateur
+        // quand il l'avertit au démarrage. Une aide qui renvoie vers un chiffre absent est pire
+        // qu'une aide muette — c'est la règle que report/Guide.java fait respecter aux commandes,
+        // et elle vaut aussi pour les renvois d'un module à l'autre.
+        say.accept(Creuset.ledger());
+        say.accept("");
         heap(say);
         say.accept("");
         domains(server, say);

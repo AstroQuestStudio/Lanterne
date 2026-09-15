@@ -132,6 +132,19 @@ public interface Engine {
          */
         boolean ready();
 
+        /**
+         * La lecture a-t-elle échoué pour de bon ?
+         *
+         * <p>Distinct de {@code !ready()} : une bobine qui n'est pas encore prête est en train de
+         * s'ouvrir, une bobine cassée ne s'ouvrira jamais. L'écran doit dire deux choses
+         * différentes — « ouverture… » et « flux illisible » — et sans cette distinction il les
+         * confondait, ce qui laissait « ouverture… » à l'écran pour toujours.
+         */
+        boolean broken();
+
+        /** Ce que le décodeur a répondu, en clair, ou une chaîne vide. */
+        String trouble();
+
         /** Largeur de décodage réelle, en pixels. N'a de sens qu'une fois {@link #ready()} vrai. */
         int width();
 

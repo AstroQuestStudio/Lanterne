@@ -79,6 +79,35 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * sujet et un tout autre risque : décharger trop tôt, c.est recharger, et recharger coûte plus cher
  * que garder. Les postes 1 à 4 sont donc clos sur un constat, et non sur un module.
  */
+
+/**
+ * SECOND ADDENDUM — l'histogramme ci-dessus ne décrivait pas un serveur.
+ *
+ * <p>Les chiffres de l'addendum précédent — 242 Mo de {@code long[]}, 212 Mo de {@code byte[]} — ont
+ * été relevés à la main, hors du mod, avec un outil du JDK. {@link Inventaire} prend désormais la
+ * même mesure <b>de l'intérieur</b>, sur un serveur dédié, et elle ne leur ressemble pas :
+ *
+ * <pre>
+ * serveur 26.2, une doublure, 625 chunks, après ramassage complet
+ *   tas retenu   220,0 Mo
+ *   [B            55,3 Mo
+ *   [J            19,9 Mo
+ * </pre>
+ *
+ * <p>Un facteur douze d'écart sur les {@code long[]}. L'ancien relevé décrivait donc autre chose
+ * qu'un serveur — un client, ou un monde bien plus grand — et la conclusion qu'il portait, « la
+ * mémoire retenue d'un serveur Minecraft, c'est le terrain lui-même », était juste par accident.
+ *
+ * <p>Sur un serveur, le terrain ne pèse que <b>25,3 Mo sur 220</b>, soit onze et demi pour cent. Le
+ * premier poste réel est un socle d'environ quarante-sept mégaoctets de tableaux d'octets qui est
+ * <b>déjà là avant le premier chunk</b> et ne bouge plus ensuite. Ce que ce socle contient n'est pas
+ * établi : un histogramme de classes ne donne pas les chemins de références.
+ *
+ * <p>Le raisonnement de cette classe reste entier — allouée et retenue sont deux grandeurs, et c'est
+ * la seconde qui fixe la limite d'un modpack. Seul le classement des postes était faux, et il l'était
+ * parce qu'un chiffre pris à la main n'avait pas dit sur quoi il avait été pris. Voir
+ * {@code notes/memoire-retenue.md} pour l'inventaire complet.
+ */
 public final class Ballast {
     /** En-tête d'un tableau Java, et taille d'une référence compressée. */
     private static final int ARRAY_HEADER = 16;

@@ -509,9 +509,13 @@ public final class Amarre {
         // dix échantillons qu'aucun joueur n'a produits.
         Elastique.reset();
         Lanterne.LOG.info("[AMARRE] ── Tableau 1 · la bande morte ──");
-        Lanterne.LOG.info("[AMARRE] {} : de 0 à 74 ms de retard, les trois seuils sont rendus au bit "
-                + "près ({} durées éprouvées).", ok ? "CONFORME" : "NON CONFORME", durations.length);
-        if (!ok) {
+        if (ok) {
+            Lanterne.LOG.info("[AMARRE] CONFORME : de 0 à 74 ms de retard, les trois seuils sont "
+                    + "rendus au bit près ({} durées éprouvées).", durations.length);
+        } else {
+            Lanterne.LOG.error("[AMARRE] NON CONFORME : sous la bande morte, au moins un seuil n'est "
+                    + "plus celui du jeu. La promesse « vanilla au bit près » est fausse — voir les "
+                    + "lignes ci-dessus pour la durée fautive.");
             anyFailure = true;
         }
         return ok;
@@ -555,8 +559,14 @@ public final class Amarre {
         Elastique.reset();
         Lanterne.LOG.info("[AMARRE] ── Tableau 2 · la loi, et ses deux plafonds ──");
         Lanterne.LOG.info("[AMARRE] Facteurs attendus (vitesse / cohérence) : {}", relevé.toString().trim());
-        Lanterne.LOG.info("[AMARRE] {} : l'élargissement suit le carré du retard et s'arrête à ×256 "
-                + "(vitesse) et ×16 (cohérence).", ok ? "CONFORME" : "NON CONFORME");
+        if (ok) {
+            Lanterne.LOG.info("[AMARRE] CONFORME : l'élargissement suit le carré du retard et "
+                    + "s'arrête à ×256 (vitesse) et ×16 (cohérence).");
+        } else {
+            Lanterne.LOG.error("[AMARRE] NON CONFORME : l'élargissement ne suit PAS le carré du "
+                    + "retard, ou ne s'arrête pas à ses plafonds. Voir les lignes ci-dessus pour les "
+                    + "durées fautives.");
+        }
         if (!ok) {
             anyFailure = true;
             if (Elastique.toothless()) {
@@ -852,6 +862,11 @@ public final class Amarre {
                     + "(pire ×%.2f, il en faut 1,5). Les deux bras ont donc tourné dans la bande "
                     + "morte, c'est-à-dire sur le MÊME code. Ne rien publier de ce tableau — "
                     + "augmenter la charge et recommencer.", bareLateness));
+            if (Elastique.toothless()) {
+                Lanterne.LOG.info("[AMARRE] (LANTERNE_BREAK_ELASTIQUE=1 était posé : le module rend "
+                        + "un retard de un en toutes circonstances, donc l'épreuve ne PEUT pas "
+                        + "attester de la scène. C'est attendu, et le tableau 2 a déjà échoué.)");
+            }
             return;
         }
         if (bareRollbacks < ROLLBACKS_NEEDED) {

@@ -69,8 +69,28 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
      */
     private static final float LIP = 0.0005f;
 
-    /** L'ardoise : un gris très sombre, mais pas noir — un noir pur passerait pour un trou. */
-    private static final int SLATE = 0xFF14141A;
+    /**
+     * L'ardoise, et pourquoi elle a été éclaircie.
+     *
+     * <p>Elle valait {@code 0xFF14141A} — vingt sur vingt-six — et elle était <b>éclairée par la
+     * pièce</b>. De nuit, elle valait donc zéro : un joueur a posé un mur de huit sur cinq et n'a
+     * rien vu du tout. L'ardoise avait exactement la couleur de ce qu'elle devait remplacer.
+     *
+     * <p>Deux corrections, et il fallait les deux. La couleur monte à un bleu ardoise franchement
+     * visible ; et surtout, tout ce qui appartient à l'ardoise est peint à <b>pleine lumière</b>,
+     * donc identique à midi et à minuit. Une surface qui sert à dire « je n'ai pas d'image » ne peut
+     * pas dépendre de la lumière ambiante pour se faire lire.
+     */
+    private static final int SLATE = 0xFF2A3040;
+
+    /** Le liseré : la preuve, sans savoir lire, que le bloc est vivant et qu'il a quelque chose à dire. */
+    private static final int EDGE = 0xFFFFC857;
+
+    /** La seconde ligne, plus discrète que la première : elle dit quoi faire, pas ce qui se passe. */
+    private static final int HINT = 0xFFBFC6D4;
+
+    /** Épaisseur du liseré, en fraction de bloc. */
+    private static final float BAND = 0.06f;
 
     /**
      * La texture unie qui sert d'ardoise et de bandes noires.
@@ -106,7 +126,10 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
         public @Nullable Identifier film;
         public float aspect = 16f / 9f;
         public Feed.Shape shape = Feed.Shape.ENTIER;
-        public String slate = "";
+        public fr.clubcitrouille.lanterne.content.screen.Sight sight =
+                fr.clubcitrouille.lanterne.content.screen.Sight.PLUMB;
+        public String what = "";
+        public String todo = "";
     }
 
     @Override
@@ -141,14 +164,21 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
                 Vec3.atCenterOf(panel.getBlockPos())));
         Gaze.notice(panel.getBlockPos(), distance, panel.wallWidth());
 
+        state.sight = feed.sight();
+
         Film film = Gaze.film(panel.getBlockPos());
         if (film != null) {
             state.film = film.id();
             state.aspect = (float) film.width() / Math.max(1, film.height());
-            state.slate = "";
+            state.what = "";
+            state.todo = "";
         } else {
             state.film = null;
-            state.slate = feed.idle() ? "" : Still.slate();
+            // Toujours quelque chose. C'est Gaze qui connaît la vraie raison — le rendu ne la
+            // devine plus, il la peint.
+            Slate slate = Gaze.slate(panel.getBlockPos(), feed);
+            state.what = slate.what();
+            state.todo = slate.todo();
         }
     }
 
@@ -176,25 +206,19 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
         float high = state.high;
 
         if (state.film == null) {
-            // L'ardoise occupe le mur entier : une ardoise rétrécie laisserait une bordure de bloc
-            // visible et l'on croirait à un défaut d'assemblage.
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(SLATE_TEXTURE),
-                    (pose, buffer) -> quad(pose, buffer, origin, right, up, wide, high,
-                            0f, 0f, 1f, 1f, state.light, SLATE, normal));
-            if (!state.slate.isEmpty()) {
-                caption(state, poseStack, collector, origin, right, up, wide, high);
-            }
+            slate(state, poseStack, collector, origin, right, up, wide, high, normal);
             return;
         }
 
         // Le cadrage décide de la portion d'image qu'on montre et de la portion de mur qu'on couvre.
         float[] box = frame(state, wide, high);
         Identifier texture = state.film;
+        int turns = state.sight.spin() / 90;
         collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(texture),
                 (pose, buffer) -> quad(pose, buffer,
                         new Vector3f(origin).fma(box[0], right).fma(box[1], up),
                         right, up, box[2], box[3],
-                        box[4], box[5], box[6], box[7], state.light, -1, normal));
+                        box[4], box[5], box[6], box[7], state.light, -1, normal, turns));
 
         // « Entier » laisse des bandes : elles sont peintes, et non laissées en trou. Un trou
         // montrerait le bloc derrière, dont la texture n'a rien à faire dans l'image.
@@ -213,8 +237,26 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
      * et trois occasions d'en corriger un et pas les autres.
      */
     private static float[] frame(State state, float wide, float high) {
+        float[] box = fit(state, wide, high);
+        // Le calage s'applique APRÈS le cadrage, et c'est le bon ordre : le cadrage décide de la
+        // forme que l'image doit avoir dans ce mur, le calage la déplace et la redimensionne à
+        // partir de là. L'inverse aurait fait recalculer le cadrage sur une image déjà décalée, et
+        // le zoom aurait changé le sens des bandes noires.
+        float scale = state.sight.scale();
+        float grownW = box[2] * scale;
+        float grownH = box[3] * scale;
+        box[0] += (box[2] - grownW) / 2f + state.sight.blocksX();
+        box[1] += (box[3] - grownH) / 2f + state.sight.blocksY();
+        box[2] = grownW;
+        box[3] = grownH;
+        return box;
+    }
+
+    private static float[] fit(State state, float wide, float high) {
         float wall = wide / high;
-        float video = state.aspect;
+        // Un quart de tour échange largeur et hauteur : c'est l'image tournée qu'il faut faire
+        // tenir, pas l'image d'origine.
+        float video = state.sight.quarterTurned() ? 1f / state.aspect : state.aspect;
         return switch (state.shape) {
             // Étiré : l'image entière sur le mur entier, tant pis pour les proportions.
             case ETIRE -> new float[] {0f, 0f, wide, high, 0f, 0f, 1f, 1f};
@@ -266,27 +308,85 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
     }
 
     /**
-     * La ligne de l'ardoise, posée au milieu du mur.
+     * L'ardoise entière : un fond, un liseré, et deux lignes.
      *
-     * <p>La rotation amène le repère local du texte dans le plan de l'écran : {@code -toYRot} envoie
-     * le {@code +Z} local sur la normale du mur, et le {@code +X} local sur la droite du spectateur.
-     * L'échelle négative en Y retourne l'axe vertical, parce qu'une police compte ses lignes vers le
-     * bas et que le monde compte sa hauteur vers le haut.
+     * <h2>Pourquoi un liseré, alors qu'il ne dit rien</h2>
+     *
+     * <p>Il dit une chose, et c'est la plus importante : <b>ce bloc fonctionne</b>. Un rectangle uni
+     * est indiscernable d'un bloc mal texturé, d'un mod qui n'a pas chargé, ou d'un écran éteint. Un
+     * cadre ambre franc ne peut être que délibéré.
+     *
+     * <p>Et il se voit de plus loin que le texte. Sur un mur qu'on aperçoit à trente blocs, la ligne
+     * est illisible mais le cadre se lit tout de suite : « il y a quelque chose à aller voir ».
+     *
+     * <h2>Tout à pleine lumière</h2>
+     *
+     * <p>Fond, liseré et texte : {@code FULL_BRIGHT}. L'ardoise est le repli, elle doit se lire dans
+     * une cave à minuit exactement comme en plein jour. C'est la correction du défaut qui a rendu un
+     * mur entier invisible de nuit.
      */
-    private void caption(State state, PoseStack poseStack, SubmitNodeCollector collector,
-            Vector3f origin, Vector3f right, Vector3f up, float wide, float high) {
-        // Une taille qui suit le mur, bornée : sur un mur d'un bloc la ligne doit rester lisible,
-        // sur un mur de seize elle ne doit pas devenir une enseigne.
-        float scale = Math.min(0.06f, 0.012f * Math.max(1f, wide));
-        Vector3f centre = new Vector3f(origin).fma(wide / 2f, right).fma(high / 2f, up);
-        var text = Component.literal(state.slate).getVisualOrderText();
+    private void slate(State state, PoseStack poseStack, SubmitNodeCollector collector,
+            Vector3f origin, Vector3f right, Vector3f up, float wide, float high, Vector3f normal) {
+        int lit = LightCoordsUtil.FULL_BRIGHT;
+        collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(SLATE_TEXTURE),
+                (pose, buffer) -> {
+                    quad(pose, buffer, origin, right, up, wide, high, 0f, 0f, 1f, 1f,
+                            lit, SLATE, normal);
+                    float band = Math.min(BAND, Math.min(wide, high) / 8f);
+                    // Les quatre bandes du liseré, très légèrement en avant du fond pour que le
+                    // tampon de profondeur n'ait pas à départager deux plans confondus.
+                    Vector3f front = new Vector3f(origin).fma(LIP, normal);
+                    quad(pose, buffer, front, right, up, wide, band, 0f, 0f, 1f, 1f, lit, EDGE, normal);
+                    quad(pose, buffer, new Vector3f(front).fma(high - band, up), right, up,
+                            wide, band, 0f, 0f, 1f, 1f, lit, EDGE, normal);
+                    quad(pose, buffer, new Vector3f(front).fma(band, up), right, up,
+                            band, high - 2f * band, 0f, 0f, 1f, 1f, lit, EDGE, normal);
+                    quad(pose, buffer, new Vector3f(front).fma(wide - band, right).fma(band, up),
+                            right, up, band, high - 2f * band, 0f, 0f, 1f, 1f, lit, EDGE, normal);
+                });
+        if (state.what.isEmpty()) {
+            return;
+        }
+        // Le texte nettement en avant du fond : un centième de bloc. La police est dessinée en
+        // « POLYGON_OFFSET », qui suffit d'ordinaire ; sur une surface qu'on peut regarder très en
+        // biais, un écart réel coûte moins cher qu'un texte qui clignote.
+        Vector3f face = new Vector3f(origin).fma(0.01f, normal);
+        Vector3f centre = new Vector3f(face).fma(wide / 2f, right).fma(high / 2f, up);
 
         poseStack.pushPose();
         poseStack.translate(centre.x(), centre.y(), centre.z());
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.facing.toYRot()));
+        line(poseStack, collector, state.what, wide, -10f, EDGE, lit);
+        if (!state.todo.isEmpty()) {
+            line(poseStack, collector, state.todo, wide, 2f, HINT, lit);
+        }
+        poseStack.popPose();
+    }
+
+    /**
+     * Une ligne, mise à l'échelle pour <b>tenir dans le mur</b>.
+     *
+     * <h2>La taille se déduit du texte, et non l'inverse</h2>
+     *
+     * <p>La version précédente choisissait l'échelle d'après la largeur du mur seule. Sur un mur de
+     * huit blocs elle donnait 0,06, et une phrase de deux cent cinquante unités de police occupait
+     * alors quinze blocs — presque le double du mur. La ligne débordait des deux côtés et flottait
+     * dans le vide, ce qui est une façon très efficace de rendre un message illisible.
+     *
+     * <p>On part donc de la <b>largeur du texte</b> : l'échelle est celle qui le fait tenir dans
+     * quatre-vingt-cinq pour cent du mur, plafonnée pour qu'un mot court sur un grand mur ne devienne
+     * pas une enseigne. Une phrase longue rapetisse au lieu de déborder — c'est le même arbitrage que
+     * {@code client.Fit} fait pour les panneaux d'interface, et pour la même raison.
+     */
+    private void line(PoseStack poseStack, SubmitNodeCollector collector, String text, float wide,
+            float y, int colour, int lit) {
+        var ordered = Component.literal(text).getVisualOrderText();
+        int width = Math.max(1, this.font.width(ordered));
+        float scale = Math.min(0.045f, wide * 0.85f / width);
+        poseStack.pushPose();
         poseStack.scale(scale, -scale, scale);
-        collector.submitText(poseStack, -this.font.width(text) / 2f, -4f, text, false,
-                Font.DisplayMode.POLYGON_OFFSET, LightCoordsUtil.FULL_BRIGHT, 0xFFFFC857, 0, 0);
+        collector.submitText(poseStack, -width / 2f, y, ordered, false,
+                Font.DisplayMode.POLYGON_OFFSET, lit, colour, 0, 0);
         poseStack.popPose();
     }
 
@@ -294,13 +394,37 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
     private static void quad(PoseStack.Pose pose, VertexConsumer buffer, Vector3f corner,
             Vector3f right, Vector3f up, float w, float h,
             float u0, float v0, float u1, float v1, int light, int colour, Vector3f normal) {
+        quad(pose, buffer, corner, right, up, w, h, u0, v0, u1, v1, light, colour, normal, 0);
+    }
+
+    /**
+     * Le même rectangle, l'image tournée de {@code turns} quarts de tour.
+     *
+     * <h2>On tourne les coordonnées de texture, pas la géométrie</h2>
+     *
+     * <p>Faire pivoter les quatre sommets autour du centre marcherait et coûterait plus cher :
+     * il faudrait recalculer le cadrage, décider ce que deviennent les coins qui sortent du mur, et
+     * refaire la boîte englobante. Permuter les quatre coins de texture donne exactement le même
+     * résultat à l'écran pour quatre affectations, et la géométrie reste un rectangle droit — ce
+     * qui est justement la raison pour laquelle la rotation est limitée aux quarts de tour.
+     */
+    private static void quad(PoseStack.Pose pose, VertexConsumer buffer, Vector3f corner,
+            Vector3f right, Vector3f up, float w, float h,
+            float u0, float v0, float u1, float v1, int light, int colour, Vector3f normal,
+            int turns) {
         // Les coordonnées de texture descendent quand on monte : une image a son origine en haut à
         // gauche, un mur a la sienne en bas à gauche. L'oublier retourne l'image, ce qui ne se voit
         // que le jour où un texte apparaît dedans.
-        vertex(pose, buffer, corner, 0f, 0f, right, up, u0, v1, light, colour, normal);
-        vertex(pose, buffer, corner, w, 0f, right, up, u1, v1, light, colour, normal);
-        vertex(pose, buffer, corner, w, h, right, up, u1, v0, light, colour, normal);
-        vertex(pose, buffer, corner, 0f, h, right, up, u0, v0, light, colour, normal);
+        float[][] uv = {{u0, v1}, {u1, v1}, {u1, v0}, {u0, v0}};
+        int step = Math.floorMod(turns, 4);
+        vertex(pose, buffer, corner, 0f, 0f, right, up,
+                uv[step][0], uv[step][1], light, colour, normal);
+        vertex(pose, buffer, corner, w, 0f, right, up,
+                uv[(step + 1) % 4][0], uv[(step + 1) % 4][1], light, colour, normal);
+        vertex(pose, buffer, corner, w, h, right, up,
+                uv[(step + 2) % 4][0], uv[(step + 2) % 4][1], light, colour, normal);
+        vertex(pose, buffer, corner, 0f, h, right, up,
+                uv[(step + 3) % 4][0], uv[(step + 3) % 4][1], light, colour, normal);
     }
 
     private static void vertex(PoseStack.Pose pose, VertexConsumer buffer, Vector3f corner,

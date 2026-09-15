@@ -170,19 +170,60 @@ public final class Fetch {
     /**
      * Arme le chemin si les bibliothèques sont déjà là, sans rien télécharger.
      *
-     * <p>Appelée au démarrage du client. Elle ne fait rien d'autre que de regarder si un dossier
-     * existe et de poser trois propriétés système — assez pour qu'un joueur qui a déjà téléchargé
-     * retrouve son décodeur sans redemander son consentement.
+     * <p>Appelée à chaque tick client. Elle ne fait rien d'autre que de regarder si un dossier existe
+     * et de poser quatre propriétés système — assez pour qu'un joueur qui a déjà téléchargé retrouve
+     * son décodeur sans redemander son consentement.
+     *
+     * <p><b>Le consentement est exigé ici aussi, et c'est un ajout réfléchi.</b> Cette méthode
+     * n'ouvre aucune connexion, ce qui l'a longtemps dispensée de la garde. Mais elle fait quelque
+     * chose qui n'est pas anodin : elle désigne au chargeur de natifs un dossier de bibliothèques, et
+     * elle bascule l'état à {@link State#PRET}, ce qui autorise {@link Pump} à charger du code machine
+     * dans le processus du joueur. Un joueur qui a <em>révoqué</em> son consentement se retrouvait
+     * donc avec le chemin natif armé jusqu'au prochain lancement du jeu. Ce n'est pas ce que veut dire
+     * « non ». Refuser tôt coûte une comparaison de booléen, et ferme proprement la question.
+     *
+     * <p>Effet de bord heureux : pour l'immense majorité des joueurs — ceux qui n'ont jamais consenti,
+     * le défaut étant « non » — cette méthode rend la main immédiatement, au lieu d'interroger le
+     * disque vingt fois par seconde pour toujours.
      */
     public static void arm() {
-        if (state.get() == State.PRET || platform() == null) {
+        if (!Consent.remoteAllowed() || state.get() == State.PRET || platform() == null) {
             return;
         }
         Path marker = home().resolve("pret.txt");
         if (Files.isRegularFile(marker)) {
+            scrub(home());
             point(home());
             state.set(State.PRET);
             Lanterne.LOG.info("[PROJECTION] décodeur présent dans {}", home());
+        }
+    }
+
+    /**
+     * Efface les bibliothèques système qu'une version antérieure du mod avait extraites.
+     *
+     * <p>Jusqu'à la 4.0.0, {@link #library(String)} acceptait tout fichier terminé par {@code .dll} :
+     * les joueurs qui avaient déjà installé le décodeur ont donc sur leur disque les quarante-deux
+     * fichiers que {@link #system(String)} refuse désormais — dont {@code ucrtbase.dll}. Corriger le
+     * filtre ne les enlève pas de leur machine : ils sont déjà posés, et le marqueur
+     * {@code pret.txt} fait qu'on ne réinstallera jamais par-dessus.
+     *
+     * <p>D'où ce balayage, au moment où l'on retrouve une installation existante. Il ne retélécharge
+     * rien — les trente mébioctets de FFmpeg restent en place et valides — et se contente de retirer
+     * ce qui n'aurait jamais dû être écrit. Un échec d'effacement n'est pas une raison d'empêcher le
+     * décodeur de fonctionner : on note, et on continue.
+     */
+    private static void scrub(Path home) {
+        try (var entries = Files.newDirectoryStream(home)) {
+            for (Path entry : entries) {
+                String leaf = entry.getFileName().toString();
+                if (system(leaf.toLowerCase(Locale.ROOT)) && Files.deleteIfExists(entry)) {
+                    Lanterne.LOG.info("[PROJECTION] retiré du dossier du jeu : {}", leaf);
+                }
+            }
+        } catch (IOException soucis) {
+            Lanterne.LOG.warn("[PROJECTION] balayage des bibliothèques système impossible : {}",
+                    soucis.getMessage());
         }
     }
 
@@ -320,9 +361,56 @@ public final class Fetch {
         }
     }
 
-    /** Est-ce une bibliothèque partagée ? Le reste de l'archive ne nous intéresse pas. */
+    /**
+     * Est-ce une bibliothèque partagée <em>qui nous appartienne</em> ? Le reste est laissé dans
+     * l'archive.
+     *
+     * <h2>Pourquoi les bibliothèques système de Windows sont refusées</h2>
+     *
+     * <p>C'est la correction qui a fait passer le mod d'« archive signalée comme un virus » à
+     * « archive ordinaire », et elle mérite d'être expliquée en entier.
+     *
+     * <p>Le jar de natifs de bytedeco pour Windows ne contient pas que FFmpeg. Il embarque aussi, par
+     * souci de compatibilité avec Windows 7, <b>quarante et un fichiers {@code api-ms-win-*.dll}</b>,
+     * {@code ucrtbase.dll}, et la bibliothèque d'exécution de Visual C++. Les extraire tous donnait
+     * soixante-sept bibliothèques, dont <b>cinquante et une signées par Microsoft</b> — c'est-à-dire
+     * appartenant à Windows, et non à FFmpeg.
+     *
+     * <p>Or écrire {@code ucrtbase.dll} ou {@code api-ms-win-core-processthreads-l1-1-0.dll} dans un
+     * dossier où le joueur peut écrire, puis désigner ce dossier au chargeur de natifs, <b>est très
+     * exactement le geste du détournement de DLL</b> — la technique par laquelle un logiciel
+     * malveillant fait charger son code par un programme honnête. Un antivirus n'a aucun moyen de
+     * distinguer notre intention de celle d'un attaquant : il voit un processus Java télécharger sur
+     * Internet des fichiers portant des noms de composants de Windows, les poser à côté du jeu, et les
+     * charger. Il signale, et il a raison de signaler.
+     *
+     * <p>Ces fichiers ne servent par ailleurs à rien ici :
+     *
+     * <ul>
+     *   <li>Les {@code api-ms-win-*.dll} ne sont <b>jamais lus depuis le disque</b> sur Windows 10 et
+     *       au-delà. Ce ne sont pas des bibliothèques mais des <i>ensembles d'API</i>, que le chargeur
+     *       du système résout depuis une table tenue par le noyau. La preuve tient en une ligne :
+     *       aucun de ces fichiers n'existe dans {@code System32} sur une machine saine, et pourtant
+     *       tout s'y charge. Les poser sur le disque n'a donc aucun effet, sinon celui d'alarmer.
+     *   <li>{@code ucrtbase.dll} est un <b>composant du système d'exploitation</b> depuis Windows 10.
+     *       Minecraft 26.2 sur Java 25 ne tourne nulle part où il manquerait.
+     * </ul>
+     *
+     * <p>Ce qui reste extrait : les sept bibliothèques de FFmpeg, les huit liaisons {@code jni*} de
+     * JavaCPP, {@code libwinpthread-1}, et la bibliothèque d'exécution de Visual C++
+     * ({@code msvcp140}, {@code vcruntime140}, {@code concrt140}, {@code vcomp140},
+     * {@code libomp140}). Cette dernière est <b>gardée volontairement</b> : elle n'est pas un
+     * composant du système, elle n'est pas garantie présente, et la déposer à côté du programme qui en
+     * a besoin est un usage documenté et prévu par Microsoft. <b>Vingt-cinq fichiers sur
+     * soixante-sept</b>, et plus un seul qui usurpe un nom de Windows.
+     *
+     * @param leaf le nom du fichier, sans son chemin dans l'archive.
+     */
     private static boolean library(String leaf) {
         String lower = leaf.toLowerCase(Locale.ROOT);
+        if (system(lower)) {
+            return false;
+        }
         if (lower.endsWith(".dll") || lower.endsWith(".dylib")) {
             return true;
         }
@@ -330,6 +418,20 @@ public final class Fetch {
         // laisserait passer les premières et rejetterait les secondes, qui sont justement celles
         // que le chargeur de natifs cherche.
         return lower.contains(".so.") || lower.endsWith(".so");
+    }
+
+    /**
+     * Ce nom est-il celui d'un composant de Windows, qu'on refuse de recopier ?
+     *
+     * <p>Le test porte sur le nom et non sur le contenu, et c'est voulu : ce qu'un antivirus reproche
+     * n'est pas ce que le fichier contient — ces DLL sont authentiques et signées par Microsoft — mais
+     * <b>l'endroit où on le pose</b>. Un {@code ucrtbase.dll} parfaitement légitime devient suspect à
+     * la seconde où il apparaît ailleurs que dans {@code System32}.
+     *
+     * @param lower le nom du fichier, déjà en minuscules.
+     */
+    private static boolean system(String lower) {
+        return lower.startsWith("api-ms-win-") || lower.equals("ucrtbase.dll");
     }
 
     /**

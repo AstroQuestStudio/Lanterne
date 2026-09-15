@@ -73,6 +73,36 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `core/Digue.java` + `mixin/{BeeHive,BeeHoming,MapChunk,GameEventChunk,SleepBed,RemoveBlock}Mixin.java` — la digue | Idée et points d'accroche de [ServerCore](https://github.com/Wesley1808/ServerCore) (Wesley1808), paquet `optimizations/sync_loads` | MIT |
 | `core/Sommaire.java` + `mixin/PackIndexMixin.java` — le sommaire des zip | Idée de [quick-pack](https://github.com/DrexHD/quick-pack) (DrexHD) | **GPL-3.0-only** |
 | `client/Tampon.java` + `mixin/BufferStorageMixin.java` — le tampon mutable | Idée de [framepace](https://github.com/lap2ka/framepace) (Lap2ka), lui-même rétroportage du correctif **Mojang MC-307596** livré en 26.3 | MIT |
+| `core/Elastique.java` + `mixin/ElastiqueMixin.java` — l'élastique | **Rien n'est repris de TT20, et rien ne pouvait l'être** : voir ci-dessous. Écrit depuis les sources décompilées de 26.2 seules. | — |
+
+**L'élastique** demande une précision de licence, parce que le mod auquel on pense
+d'abord est justement celui dont on ne peut rien prendre :
+
+- **TT20 est sous `PolyForm Shield License 1.0.0`.** Vérifié dans son
+  `gradle.properties` (`mod_license=PolyForm Shield License 1.0.0`), qui alimente
+  les trois fichiers de métadonnées du mod. À noter : le dépôt ne contient
+  **aucun fichier `LICENSE`**, alors que son `build.gradle` en référence un
+  (`from(rootProject.file('LICENSE'))`). La seule déclaration de licence est donc
+  cette ligne de propriétés.
+- PolyForm Shield **n'est pas une licence libre** et n'est pas approuvée par l'OSI :
+  sa clause de non-concurrence interdit de s'en servir pour bâtir un produit
+  concurrent, ce qui est inconciliable avec la GPL-3.0. **Son code ne peut pas
+  entrer ici**, et n'y est pas entré.
+- Le dépôt de TT20 a donc été cloné pour lire son `LICENSE`, puis **supprimé sans
+  qu'aucun de ses fichiers source n'ait été ouvert**. Ce qui a servi de point de
+  départ tient dans son `README` public : la formule `ticks × tps / 20`, et l'aveu
+  — le sien — qu'elle traite le symptôme et non la cause.
+- Ce module ne reprend d'ailleurs pas cette formule. Il ne touche ni aux durées de
+  jeu ni aux compteurs de ticks : il corrige trois seuils **anti-triche** de
+  `ServerGamePacketListenerImpl.handleMovePlayer`, ce que TT20 ne fait pas.
+- L'idée qu'il faille pouvoir desserrer ces seuils-là n'est pas neuve, et elle n'est
+  de personne : **Spigot** expose depuis des années `moved-too-quickly-multiplier`
+  et `moved-wrongly-threshold` dans son `spigot.yml`. Leur seule existence établit
+  que le faux positif est réel et connu. Aucune ligne n'en est reprise — ce sont
+  des réglages fixes, là où ce module indexe la tolérance sur le retard mesuré.
+- Le temps de cassage d'un bloc, seul point où Lanterne rejoint vraiment le
+  domaine de TT20, était déjà traité avant ce module par `mixin/MiningMixin.java`,
+  et par une autre voie : l'horloge réelle plutôt qu'un facteur de TPS.
 
 **La digue** mérite une précision, parce qu'elle s'écarte de sa source sur trois points et
 qu'un lecteur pressé croirait à une copie :

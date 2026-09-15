@@ -105,6 +105,7 @@ public final class Pump implements Engine.Reel {
     private volatile int height;
     private volatile boolean ready;
     private volatile boolean broken;
+    private volatile String trouble = "";
     private volatile float gain = 1f;
 
     /**
@@ -160,6 +161,17 @@ public final class Pump implements Engine.Reel {
     @Override
     public boolean ready() {
         return this.ready && !this.broken;
+    }
+
+    @Override
+    public boolean broken() {
+        return this.broken;
+    }
+
+    /** Ce que le décodeur a répondu, en clair. Voir {@link Slate}, qui le met sur l'écran. */
+    @Override
+    public String trouble() {
+        return this.trouble;
     }
 
     @Override
@@ -298,7 +310,7 @@ public final class Pump implements Engine.Reel {
             int rc = avformat_open_input(format, this.source, (AVInputFormat) null, options);
             av_dict_free(options);
             if (rc < 0) {
-                throw new IllegalStateException("ouverture refusée : " + error(rc));
+                throw new IllegalStateException(error(rc));
             }
             if (avformat_find_stream_info(format, (AVDictionary) null) < 0) {
                 throw new IllegalStateException("flux illisible");
@@ -378,9 +390,13 @@ public final class Pump implements Engine.Reel {
             pumpLoop(format, codec, scaler, frame, rgba, packet, index, timeBase,
                     sourceHeight, targetWidth, targetHeight);
         } catch (Throwable problem) {
+            this.trouble = problem.getMessage() == null
+                    ? problem.getClass().getSimpleName() : problem.getMessage();
             this.broken = true;
-            Lanterne.LOG.warn("[PROJECTION] lecture interrompue : {}",
-                    problem.getMessage() == null ? problem.toString() : problem.getMessage());
+            // La source n'est PAS journalisée : c'est une adresse que le joueur a tapée, elle est
+            // déjà dans le monde, et la répéter à chaque échec remplit le journal d'une information
+            // qu'on n'a pas besoin de dupliquer.
+            Lanterne.LOG.warn("[PROJECTION] lecture impossible : {}", this.trouble);
         } finally {
             // L'ordre compte : le contexte de codec tient des références vers le format. L'inverse
             // laisserait une poignée pendante, et une poignée pendante dans une bibliothèque native
@@ -632,11 +648,32 @@ public final class Pump implements Engine.Reel {
         }
     }
 
+    /**
+     * Le message de FFmpeg, et rien d'autre.
+     *
+     * <h2>Ce que « getString » faisait à la place</h2>
+     *
+     * <p>{@code av_strerror} écrit une chaîne terminée par un zéro dans un tampon de 512 octets
+     * qu'il ne remplit pas. {@code BytePointer.getString()} a lu la <b>capacité entière</b>, et le
+     * journal du joueur a reçu « Invalid data found when processing input » suivi de quatre cents
+     * octets de mémoire non initialisée — dont, au passage, l'adresse qu'il venait de taper.
+     *
+     * <p>On s'arrête donc au premier zéro, à la main. C'est trois lignes, et cela rend un journal
+     * lisible au lieu d'un journal qu'on renonce à lire.
+     */
     private static String error(int code) {
-        BytePointer message = new BytePointer(512);
-        av_strerror(code, message, 512);
-        String text = message.getString();
-        message.deallocate();
-        return text;
+        byte[] raw = new byte[512];
+        BytePointer message = new BytePointer(raw.length);
+        try {
+            av_strerror(code, message, raw.length);
+            message.get(raw);
+            int end = 0;
+            while (end < raw.length && raw[end] != 0) {
+                end++;
+            }
+            return new String(raw, 0, end, java.nio.charset.StandardCharsets.UTF_8);
+        } finally {
+            message.deallocate();
+        }
     }
 }

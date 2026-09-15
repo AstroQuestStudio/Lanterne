@@ -1441,6 +1441,97 @@ phases entrelacées comprises. Ses 17,99 Go de total ne sont pas le travail d'un
 
 ---
 
+## 🛡️ « Mon antivirus dit que Lanterne est un virus »
+
+**Ce n'en est pas un, et voici de quoi le vérifier toi-même plutôt que de nous croire sur parole.**
+
+### Vérifie d'abord que tu as bien notre fichier
+
+Chaque version publie l'empreinte SHA-256 de son archive. Si la tienne ne correspond pas, **ne
+l'installe pas** : ce n'est pas le fichier que nous avons construit.
+
+| Version | Taille | SHA-256 |
+|---|---|---|
+| `lanterne-4.0.0.jar` | 2 125 963 o | `d993d361ccc6ca06e8d27d522709aa6e61c7ce31afe35187e7cdc52b25f41c76` |
+
+> ⚠️ **À refaire à chaque publication.** L'empreinte ne vaut que pour l'archive exacte qui a été
+> téléversée : toute reconstruction, même sans changer une ligne, en produit une autre. Une empreinte
+> périmée dans ce tableau est pire que pas d'empreinte du tout — elle ferait rejeter un fichier sain.
+
+Pour la calculer, dans PowerShell :
+
+```powershell
+Get-FileHash .\lanterne-4.0.0.jar -Algorithm SHA256
+```
+
+Sous Linux ou macOS : `sha256sum lanterne-4.0.0.jar` (ou `shasum -a 256`).
+
+### Ce que l'archive contient, et ce qu'elle ne contient pas
+
+`lanterne-4.0.0.jar`, c'est **602 entrées** : 426 classes Java, 93 fichiers JSON, 24 textures PNG,
+2 nuanciers, 2 sons, et trois bibliothèques Java embarquées (JavaCPP, les liaisons FFmpeg, JLayer).
+
+**Aucun `.exe`, aucun `.dll`, aucun `.so`, aucun script.** Pas une seule instruction machine. Tu peux
+l'ouvrir toi-même : un `.jar` est une archive ZIP ordinaire, renomme-la en `.zip` et regarde.
+
+### Alors pourquoi ça sonne ?
+
+Trois raisons, et aucune n'est un logiciel malveillant :
+
+1. **L'archive n'est pas signée numériquement.** La signature de code coûte plusieurs centaines
+   d'euros par an et **n'est la norme pour aucun mod Minecraft**. Un binaire non signé et peu répandu
+   est jugé suspect *par nouveauté* : les détections dont le nom se termine par **`!ml`** —
+   `Trojan:Win32/Wacatac.B!ml`, `Program:Win32/Wacapew.C!ml` — sont des verdicts d'apprentissage
+   automatique, pas des signatures de virus connus.
+2. **Le module vidéo télécharge FFmpeg**, une fois, **et seulement si tu l'as autorisé** (le réglage
+   est à « non » par défaut, et il faut cliquer « Autoriser les médias distants » dans l'écran d'un
+   projecteur). Les binaires viennent uniquement de **Maven Central en HTTPS**, leur empreinte SHA-256
+   est **inscrite dans notre code** et vérifiée avant d'être extraite, et les exécutables du paquet
+   (`ffmpeg.exe`, `ffprobe.exe`) ne sont **jamais** écrits sur ton disque. Si l'empreinte ne colle pas,
+   le fichier est effacé sans être ouvert.
+3. **Les binaires FFmpeg eux-mêmes ont un passif de faux positifs**, indépendamment de nous. Ils ne
+   sont pas signés par leur éditeur, et Defender les a déjà signalés à tort par le passé.
+
+> 📄 L'enquête complète — y compris une cause **réelle** trouvée et corrigée en 4.0.1 — est dans
+> [`notes/antivirus.md`](notes/antivirus.md).
+
+### Signaler le faux positif à Microsoft
+
+C'est **la seule action qui règle le problème pour tout le monde**, et elle est gratuite. Les
+signalements aboutissent souvent en quelques heures.
+
+1. Va sur **<https://www.microsoft.com/en-us/wdsi/filesubmission>**
+2. Choisis **« Software developer »** si tu es à l'origine d'une redistribution, sinon
+   **« Home customer »**.
+3. Téléverse le fichier signalé, coche **« I believe this file is clean »** (incorrectement détecté).
+4. Dans la description, indique : *mod Minecraft libre sous GPL-3.0, code source public, aucun binaire
+   natif dans l'archive*.
+
+Un second avis utile avant d'envoyer : dépose le fichier sur
+**[VirusTotal](https://www.virustotal.com/)**. Si seul le moteur d'apprentissage de Microsoft le
+signale et que les dizaines d'autres ne disent rien, le faux positif est établi.
+
+### Si tu veux passer outre en attendant
+
+**C'est ta machine et ta décision — nous ne la prendrons pas à ta place, et nous ne te dirons pas de
+désactiver ton antivirus.** Si tu choisis d'ajouter une exclusion, sache précisément ce que tu fais :
+une exclusion aveugle tout contrôle sur le chemin visé, y compris pour ce qui n'est pas nous.
+
+Dans ce cas, **exclus le dossier le plus étroit possible** — jamais le disque entier, jamais le dossier
+`.minecraft` complet :
+
+> Sécurité Windows → Protection contre les virus et menaces → Gérer les paramètres →
+> Ajouter ou supprimer des exclusions
+
+Le seul chemin qui puisse en avoir besoin est `…\config\lanterne\ffmpeg\`, et **uniquement si** c'est
+lui que ton antivirus nomme. Si c'est le `.jar` qui est signalé, l'exclusion n'est pas la bonne réponse :
+le signalement à Microsoft l'est.
+
+**Et si tu as le moindre doute : ne l'installe pas.** Écris-nous plutôt. Un mod ne vaut pas ta
+tranquillité.
+
+---
+
 ## ⚠️ Cohabitation
 
 > **Immersive Optimization** fait du tick scheduling par distance, **comme Lanterne**. Les deux

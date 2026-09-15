@@ -87,6 +87,8 @@ public final class Gaze {
         private int openedHeight;
         /** Le son en cours, ou {@code null} : muet, ou pas encore lancé. */
         private Blare sound;
+        /** Ce que l'écran doit dire tant qu'il n'a pas d'image. Jamais nul. */
+        private Slate slate = Slate.NONE;
         /** Largeur du mur, ou l'envergure du projecteur. Sert au mode automatique de {@link Grade}. */
         private float breadth = 1f;
     }
@@ -162,6 +164,23 @@ public final class Gaze {
         return show == null ? null : show.film;
     }
 
+    /**
+     * Ce que cet écran doit écrire, faute d'image.
+     *
+     * <p>Jamais nul, et jamais vide tant qu'il n'y a pas d'image : c'est la garantie qui remplace
+     * celle, fausse, qui prétendait qu'« aucun chemin ne mène à l'écran noir ». Le rendu ne décide
+     * plus de rien — voir {@link Slate}.
+     */
+    public static Slate slate(BlockPos pos, Feed feed) {
+        Show show = SHOWS.get(pos);
+        if (show == null) {
+            // Jamais vu par le tour de ronde : il vient d'apparaître, ou il est trop loin pour
+            // décoder. Dans les deux cas c'est l'état de la source qui parle.
+            return Slate.of(feed, false, false, null);
+        }
+        return show.slate;
+    }
+
     // --- Le tour de ronde ------------------------------------------------------
 
     /**
@@ -177,11 +196,12 @@ public final class Gaze {
             forget();
             return;
         }
-        Engine.announce();
-        // Le décodeur s'installe tout seul, une fois, dès que le joueur a consenti — et pas avant.
-        // « arm » ne fait que regarder un dossier ; « ensure » ne part que si le consentement est
-        // donné et que rien n'est déjà en route. Les deux sont sans effet le reste du temps.
+        // « arm » AVANT « announce », et l'ordre inverse a menti dans le journal du joueur.
+        // L'annonce n'a lieu qu'une fois ; faite avant que Fetch n'ait regardé le disque, elle
+        // relevait « bibliothèque absente » sur une machine où le décodeur était installé — et
+        // c'est cette ligne, unique et fausse, qui a envoyé chercher au mauvais endroit.
         Fetch.arm();
+        Engine.announce();
         if (Consent.remoteAllowed() && Fetch.state() == Fetch.State.ABSENT) {
             Fetch.ensure();
         }
@@ -213,11 +233,16 @@ public final class Gaze {
                     && serverActive && !stage.feed().idle();
             if (!worth) {
                 shut(show);
+                // L'ardoise se tient à jour MÊME quand on ne décode pas : un écran sans source, ou
+                // trop loin pour mériter une image, doit dire pourquoi. C'est l'omission exacte qui
+                // a produit un mur de huit sur cinq entièrement noir.
+                show.slate = Slate.of(stage == null ? Feed.BLANK : stage.feed(), false, false, null);
                 continue;
             }
             budget--;
             retune(entry.getKey(), stage, show);
             advance(entry.getKey(), stage, show);
+            refreshSlate(show, stage.feed());
         }
     }
 
@@ -229,6 +254,15 @@ public final class Gaze {
      * bobine au lieu de continuer à jouer un film que plus personne n'a demandé — le genre de défaut
      * qui ne se voit qu'à plusieurs, parce que celui qui change la source voit bien le bon film.
      */
+    /** Relit l'ardoise de cette séance. Une fois par tour de ronde, et jamais depuis le rendu. */
+    private static void refreshSlate(Show show, Feed feed) {
+        Engine.Reel reel = show.reel;
+        boolean playing = show.film != null && reel != null && !reel.broken();
+        boolean opening = reel != null && !reel.ready() && !reel.broken();
+        String trouble = reel == null ? null : reel.trouble();
+        show.slate = Slate.of(feed, opening, playing, trouble);
+    }
+
     private static void retune(BlockPos pos, Stage stage, Show show) {
         String wanted = stage.feed().source();
         int height = stage.feed().grade().resolve(show.breadth, show.distance, Consent.ceiling());

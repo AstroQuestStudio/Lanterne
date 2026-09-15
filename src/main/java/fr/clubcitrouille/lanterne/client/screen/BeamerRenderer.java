@@ -13,7 +13,12 @@ import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import com.mojang.math.Axis;
+
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.LightCoordsUtil;
@@ -74,9 +79,16 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
     private static final Identifier SLATE_TEXTURE =
             Identifier.fromNamespaceAndPath("lanterne", "textures/block/ardoise.png");
 
-    private static final int SLATE = 0xFF14141A;
+    /** Voir {@code PanelRenderer.SLATE} : la première version était invisible de nuit. */
+    private static final int SLATE = 0xFF2A3040;
+
+    private static final int EDGE = 0xFFFFC857;
+    private static final int HINT = 0xFFBFC6D4;
+
+    private final Font font;
 
     public BeamerRenderer(BlockEntityRendererProvider.Context context) {
+        this.font = context.font();
     }
 
     public static class State extends BlockEntityRenderState {
@@ -88,7 +100,11 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
         public @Nullable Identifier film;
         public float aspect = 16f / 9f;
         public Feed.Shape shape = Feed.Shape.ENTIER;
+        public fr.clubcitrouille.lanterne.content.screen.Sight sight =
+                fr.clubcitrouille.lanterne.content.screen.Sight.PLUMB;
         public int tint = 0xFFC857;
+        public String what = "";
+        public String todo = "";
     }
 
     @Override
@@ -114,18 +130,30 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
                 Vec3.atCenterOf(beamer.getBlockPos())));
         Gaze.notice(beamer.getBlockPos(), distance, beamer.span());
 
+        state.sight = feed.sight();
+
         Film film = Gaze.film(beamer.getBlockPos());
         state.film = film == null ? null : film.id();
         if (film != null) {
             state.aspect = (float) film.width() / Math.max(1, film.height());
+            state.what = "";
+            state.todo = "";
+        } else {
+            Slate slate = Gaze.slate(beamer.getBlockPos(), feed);
+            state.what = slate.what();
+            state.todo = slate.todo();
         }
     }
 
     @Override
     public void submit(State state, PoseStack poseStack, SubmitNodeCollector collector,
             CameraRenderState camera) {
-        if (!state.lit) {
-            return; // éteint : ni cône, ni image. Le bloc seul, comme n'importe quelle machine.
+        // Allumé dès qu'une source est posée, même si elle ne s'ouvre pas : c'est justement le
+        // cas où le joueur a besoin de voir le faisceau et de lire ce qui cloche. Un projecteur qui
+        // s'éteint sur un lien refusé ne dit rien du tout — le défaut de l'écran noir, en pire,
+        // puisqu'il n'y a même plus de surface à regarder.
+        if (!state.lit && state.what.isEmpty()) {
+            return;
         }
         Direction facing = state.facing;
         Vector3f normal = vector(facing);
@@ -137,9 +165,15 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
         Vector3f lens = new Vector3f(0.5f, 0.5f, 0.5f).fma(0.5f, normal);
         Vector3f target = new Vector3f(0.5f, 0.5f, 0.5f).fma(state.reach, normal);
 
-        float wide = state.span;
-        float high = state.shape == Feed.Shape.ETIRE ? state.span * 9f / 16f
-                : state.span / Math.max(0.1f, state.aspect);
+        float ratio = state.sight.quarterTurned()
+                ? 1f / Math.max(0.1f, state.aspect) : Math.max(0.1f, state.aspect);
+        float wide = state.span * state.sight.scale();
+        float high = (state.shape == Feed.Shape.ETIRE ? state.span * 9f / 16f
+                : state.span / ratio) * state.sight.scale();
+        // Le calage déplace l'image dans le plan visé, perpendiculairement au faisceau. Le cône,
+        // lui, ne bouge pas : il part toujours de l'objectif. C'est ce qu'on veut — un projecteur
+        // décalé garde son faisceau droit et pose l'image à côté, comme un vrai.
+        target.fma(state.sight.blocksX(), right).fma(state.sight.blocksY(), up);
 
         cone(state, poseStack, collector, lens, target, right, up, wide, high, normal);
         image(state, poseStack, collector, target, right, up, wide, high, normal);
@@ -190,7 +224,7 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
     }
 
     /** L'image, ou l'ardoise qui dit pourquoi il n'y en a pas. */
-    private static void image(State state, PoseStack poseStack, SubmitNodeCollector collector,
+    private void image(State state, PoseStack poseStack, SubmitNodeCollector collector,
             Vector3f target, Vector3f right, Vector3f up, float wide, float high, Vector3f normal) {
         float hw = wide / 2f;
         float hh = high / 2f;
@@ -198,20 +232,66 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
         boolean hasFilm = state.film != null;
         Identifier texture = hasFilm ? state.film : SLATE_TEXTURE;
         int colour = hasFilm ? -1 : SLATE;
+        int turns = state.sight.spin() / 90;
         // Émissive : l'image projetée est de la lumière, et l'éclairer par la pièce reviendrait à
         // l'éteindre dans le noir — exactement là où l'on projette.
         collector.submitCustomGeometry(poseStack,
                 RenderTypes.entityTranslucentEmissive(texture),
                 (pose, buffer) -> {
-                    vertex(pose, buffer, corner(corner, right, up, 0f, 0f), 0f, 1f,
+                    float[][] uv = {{0f, 1f}, {1f, 1f}, {1f, 0f}, {0f, 0f}};
+                    int step = Math.floorMod(turns, 4);
+                    vertex(pose, buffer, corner(corner, right, up, 0f, 0f),
+                            uv[step][0], uv[step][1], LightCoordsUtil.FULL_BRIGHT, colour, normal);
+                    vertex(pose, buffer, corner(corner, right, up, wide, 0f),
+                            uv[(step + 1) % 4][0], uv[(step + 1) % 4][1],
                             LightCoordsUtil.FULL_BRIGHT, colour, normal);
-                    vertex(pose, buffer, corner(corner, right, up, wide, 0f), 1f, 1f,
+                    vertex(pose, buffer, corner(corner, right, up, wide, high),
+                            uv[(step + 2) % 4][0], uv[(step + 2) % 4][1],
                             LightCoordsUtil.FULL_BRIGHT, colour, normal);
-                    vertex(pose, buffer, corner(corner, right, up, wide, high), 1f, 0f,
-                            LightCoordsUtil.FULL_BRIGHT, colour, normal);
-                    vertex(pose, buffer, corner(corner, right, up, 0f, high), 0f, 0f,
+                    vertex(pose, buffer, corner(corner, right, up, 0f, high),
+                            uv[(step + 3) % 4][0], uv[(step + 3) % 4][1],
                             LightCoordsUtil.FULL_BRIGHT, colour, normal);
                 });
+        if (!hasFilm && !state.what.isEmpty()) {
+            words(state, poseStack, collector, corner, right, up, wide, high, normal);
+        }
+    }
+
+    /**
+     * Les deux lignes, au milieu de l'image projetée.
+     *
+     * <p>Même dessin que celui de l'écran, et pour la même raison qu'il a fallu le refaire :
+     * l'échelle se déduit de la <b>largeur du texte</b> pour qu'il tienne dans l'image, et non de la
+     * largeur de l'image pour qu'il en déborde. Voir {@code PanelRenderer.line}.
+     */
+    private void words(State state, PoseStack poseStack, SubmitNodeCollector collector,
+            Vector3f corner, Vector3f right, Vector3f up, float wide, float high, Vector3f normal) {
+        Vector3f centre = new Vector3f(corner).fma(wide / 2f, right).fma(high / 2f, up)
+                .fma(0.01f, normal);
+        poseStack.pushPose();
+        poseStack.translate(centre.x(), centre.y(), centre.z());
+        // Le texte fait face au spectateur le long du faisceau. Pour un projecteur vertical il n'y
+        // a pas de lacet qui ait un sens : on se rabat sur le nord, ce qui laisse le texte lisible
+        // depuis la direction d'où l'on regarde d'ordinaire une image posée au sol.
+        float yaw = state.facing.getAxis().isVertical() ? 180f : -state.facing.toYRot();
+        poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
+        say(poseStack, collector, state.what, wide, -10f, EDGE);
+        if (!state.todo.isEmpty()) {
+            say(poseStack, collector, state.todo, wide, 2f, HINT);
+        }
+        poseStack.popPose();
+    }
+
+    private void say(PoseStack poseStack, SubmitNodeCollector collector, String text, float wide,
+            float y, int colour) {
+        var ordered = Component.literal(text).getVisualOrderText();
+        int width = Math.max(1, this.font.width(ordered));
+        float scale = Math.min(0.045f, wide * 0.85f / width);
+        poseStack.pushPose();
+        poseStack.scale(scale, -scale, scale);
+        collector.submitText(poseStack, -width / 2f, y, ordered, false,
+                Font.DisplayMode.POLYGON_OFFSET, LightCoordsUtil.FULL_BRIGHT, colour, 0, 0);
+        poseStack.popPose();
     }
 
     private static Vector3f corner(Vector3f centre, Vector3f right, Vector3f up, float x, float y) {

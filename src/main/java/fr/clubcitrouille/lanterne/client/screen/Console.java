@@ -19,6 +19,7 @@ import fr.clubcitrouille.lanterne.content.screen.Clock;
 import fr.clubcitrouille.lanterne.content.screen.Feed;
 import fr.clubcitrouille.lanterne.content.screen.Mail;
 import fr.clubcitrouille.lanterne.content.screen.Sieve;
+import fr.clubcitrouille.lanterne.content.screen.Sight;
 import fr.clubcitrouille.lanterne.content.screen.Stage;
 
 /**
@@ -178,7 +179,7 @@ public class Console extends Screen {
                 .build());
         addRenderableWidget(Button.builder(Component.literal(this.feed.shape().label()),
                         button -> send(this.feed.withShape(this.feed.shape().next())))
-                .bounds(left + 236, base, 74, 18)
+                .bounds(left + 236, base, 56, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Étiré : remplit, déforme.\nEntier : tout, avec des bandes.\n"
                                 + "Rempli : remplit, rogne.")))
@@ -189,6 +190,20 @@ public class Console extends Screen {
                         Component.literal("Qui règle : " + this.feed.lock().label()),
                         button -> send(this.feed.withLock(this.feed.lock().next())))
                 .bounds(left + 10, bottom - 70, 150, 18).build());
+
+        addRenderableWidget(Button.builder(
+                        Component.literal("⟳ " + this.feed.sight().spin() + "°"),
+                        button -> send(this.feed.withSight(this.feed.sight().turned())))
+                .bounds(left + WIDTH - 56, base, 24, 18)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Quart de tour. Pour un projecteur monté de travers.")))
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("⌖"),
+                        button -> send(this.feed.withSight(Sight.PLUMB)))
+                .bounds(left + WIDTH - 28, base, 18, 18)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Tout remettre d'aplomb : décalage, taille, rotation.")))
+                .build());
 
         // La qualité de décodage : le seul réglage dont le coût soit une loi du carré. Il est
         // placé à côté du plafond de cette machine, parce que c'est le minimum des deux qui
@@ -272,22 +287,62 @@ public class Console extends Screen {
     // un composant de vanilla par valeur aurait fallu être reconstruit à chaque cran, ce qui efface
     // la zone de saisie au milieu d'une frappe.
 
-    /** Une barre : son libellé, sa valeur, ses bornes, et où l'envoyer. */
-    private record Bar(String label, int value, int min, int max, String unit) {}
+    /**
+     * Une barre : son libellé, sa valeur, ses bornes, comment l'écrire, et où l'envoyer.
+     *
+     * <h2>Le réglage porte son propre effet, et ce n'est pas un détail de style</h2>
+     *
+     * <p>La version précédente rangeait les barres dans un tableau et les appliquait par un
+     * {@code switch} sur leur <b>indice</b>. Trois barres de plus pour le calage, et il aurait fallu
+     * tenir d'accord un tableau et un aiguillage qui ne se ressemblent en rien — sachant que le
+     * tableau n'a pas la même longueur selon qu'on règle un écran ou un projecteur.
+     *
+     * <p>Se tromper d'indice ne casse pas la compilation : cela écrit la portée sonore dans le
+     * volume. C'est très exactement la faute que les retouches nommées de {@code Feed} viennent
+     * d'éliminer ailleurs, et il n'y avait aucune raison de la laisser ici.
+     */
+    private record Bar(String label, int value, int min, int max,
+            java.util.function.IntFunction<String> write,
+            java.util.function.IntConsumer apply) {
+
+        Bar(String label, int value, int min, int max, String unit,
+                java.util.function.IntConsumer apply) {
+            this(label, value, min, max, v -> v + unit, apply);
+        }
+    }
 
     private Bar[] bars() {
+        java.util.List<Bar> all = new java.util.ArrayList<>();
+        all.add(new Bar("Volume", this.feed.volume(), 0, 100, " %",
+                v -> send(this.feed.withVolume(v))));
+        all.add(new Bar("Portée sonore", this.feed.range(), 1, Gaze.rangeCap(), " blocs",
+                v -> send(this.feed.withRange(v))));
+        all.add(new Bar("Luminosité", this.feed.brightness(), 0, 15, "",
+                v -> send(this.feed.withBrightness(v))));
         if (this.projector) {
-            return new Bar[] {
-                    new Bar("Volume", this.feed.volume(), 0, 100, "%"),
-                    new Bar("Portée sonore", this.feed.range(), 1, Gaze.rangeCap(), " blocs"),
-                    new Bar("Luminosité", this.feed.brightness(), 0, 15, ""),
-                    new Bar("Distance de projection", this.reach, 2, Gaze.throwCap(), " blocs"),
-                    new Bar("Largeur de l'image", this.span, 1, 32, " blocs")};
+            all.add(new Bar("Distance de projection", this.reach, 2, Gaze.throwCap(), " blocs",
+                    v -> {
+                        this.reach = v;
+                        ClientPacketDistributor.sendToServer(new Mail.Aim(this.pos, v, this.span));
+                    }));
+            all.add(new Bar("Largeur de l'image", this.span, 1, 32, " blocs",
+                    v -> {
+                        this.span = v;
+                        ClientPacketDistributor.sendToServer(new Mail.Aim(this.pos, this.reach, v));
+                    }));
         }
-        return new Bar[] {
-                new Bar("Volume", this.feed.volume(), 0, 100, "%"),
-                new Bar("Portée sonore", this.feed.range(), 1, Gaze.rangeCap(), " blocs"),
-                new Bar("Luminosité", this.feed.brightness(), 0, 15, "")};
+        // Le calage, pour les deux blocs. Sur un écran il déplace l'image dans le mur — ce qui a du
+        // sens dès que le cadrage laisse des bandes — et sur un projecteur il déplace l'image dans
+        // le monde. C'est le même réglage et il se règle pareil, ce qui fait une chose de moins à
+        // apprendre.
+        Sight sight = this.feed.sight();
+        all.add(new Bar("Décalage ◀ ▶", sight.shiftX(), -Sight.SHIFT_CAP, Sight.SHIFT_CAP,
+                Sight::blocks, v -> send(this.feed.withSight(sight.withShiftX(v)))));
+        all.add(new Bar("Décalage ▼ ▲", sight.shiftY(), -Sight.SHIFT_CAP, Sight.SHIFT_CAP,
+                Sight::blocks, v -> send(this.feed.withSight(sight.withShiftY(v)))));
+        all.add(new Bar("Taille", sight.zoom(), 10, 400, " %",
+                v -> send(this.feed.withSight(sight.withZoom(v)))));
+        return all.toArray(new Bar[0]);
     }
 
     private int barsTop() {
@@ -299,21 +354,8 @@ public class Console extends Screen {
         if (index < 0 || index >= all.length) {
             return;
         }
-        int clamped = Math.clamp(value, all[index].min(), all[index].max());
-        switch (index) {
-            case 0 -> send(this.feed.withVolume(clamped));
-            case 1 -> send(this.feed.withRange(clamped));
-            case 2 -> send(this.feed.withBrightness(clamped));
-            case 3 -> {
-                this.reach = clamped;
-                ClientPacketDistributor.sendToServer(new Mail.Aim(this.pos, clamped, this.span));
-            }
-            case 4 -> {
-                this.span = clamped;
-                ClientPacketDistributor.sendToServer(new Mail.Aim(this.pos, this.reach, clamped));
-            }
-            default -> { }
-        }
+        Bar bar = all[index];
+        bar.apply().accept(Math.clamp(value, bar.min(), bar.max()));
     }
 
     // --- Les envois ------------------------------------------------------------
@@ -376,11 +418,23 @@ public class Console extends Screen {
             return;
         }
         Sieve.Verdict verdict = Gaze.admits(typed);
-        String note = verdict.ok()
-                ? "✔ " + Sieve.domain(typed) + " — accepté"
-                : "✘ " + verdict.label();
-        graphics.text(this.font, this.font.plainSubstrByWidth(note, WIDTH - 20), left + 10, y,
-                verdict.ok() ? GOOD : BAD, false);
+        if (!verdict.ok()) {
+            graphics.text(this.font, this.font.plainSubstrByWidth("✘ " + verdict.label(), WIDTH - 20),
+                    left + 10, y, BAD, false);
+            return;
+        }
+        // Le tamis dit « accepté », ce qui ne veut pas dire « lisible ». Un lien vers une PAGE
+        // passe la liste blanche et ne donnera jamais d'image sans lecteur intégré. Le dire ici,
+        // pendant qu'il tape, plutôt que dans le fil de discussion après coup.
+        String warning = Slate.warning(typed);
+        if (warning.isEmpty()) {
+            graphics.text(this.font, this.font.plainSubstrByWidth(
+                            "✔ " + Sieve.domain(typed) + " — accepté", WIDTH - 20),
+                    left + 10, y, GOOD, false);
+        } else {
+            graphics.text(this.font, this.font.plainSubstrByWidth(warning, WIDTH - 20),
+                    left + 10, y, AMBER, false);
+        }
     }
 
     /**
@@ -430,7 +484,7 @@ public class Console extends Screen {
             graphics.fill(knob - 2, rowY + 1, knob + 2, rowY + 11,
                     over || this.dragging == index ? TEXT : DIM);
 
-            String value = bar.value() + bar.unit();
+            String value = bar.write().apply(bar.value());
             graphics.text(this.font, value, left + WIDTH - 48, rowY + 2, TEXT, false);
         }
     }

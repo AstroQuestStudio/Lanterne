@@ -42,7 +42,8 @@ public record Feed(
         int brightness,
         Shape shape,
         Lock lock,
-        Grade grade) {
+        Grade grade,
+        Sight sight) {
 
     /** Longueur maximale d'une source. Voir {@link Sieve} pour ce qui est accepté dedans. */
     public static final int SOURCE_LIMIT = 512;
@@ -144,8 +145,8 @@ public record Feed(
      * <p>{@link Grade#AUTO} et non {@link Grade#HAUTE} : un écran qu'on vient de poser n'a aucune
      * raison de décoder deux millions de pixels avant qu'on sache seulement d'où on le regardera.
      */
-    public static final Feed BLANK =
-            new Feed("", false, false, 70, 16, 15, Shape.ENTIER, Lock.POSEUR, Grade.AUTO);
+    public static final Feed BLANK = new Feed("", false, false, 70, 16, 15,
+            Shape.ENTIER, Lock.POSEUR, Grade.AUTO, Sight.PLUMB);
 
     public static final Codec<Feed> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.fieldOf("source").forGetter(Feed::source),
@@ -159,7 +160,8 @@ public record Feed(
             // « optionalFieldOf » et non « fieldOf » : les écrans posés avant l'ajout de ce champ
             // n'ont rien à ce nom dans leur sauvegarde, et un champ obligatoire absent fait échouer
             // le décodage entier — c'est-à-dire qu'un mur déjà bâti perdrait sa source.
-            Grade.CODEC.optionalFieldOf("qualite", Grade.AUTO).forGetter(Feed::grade)
+            Grade.CODEC.optionalFieldOf("qualite", Grade.AUTO).forGetter(Feed::grade),
+            Sight.CODEC.optionalFieldOf("calage", Sight.PLUMB).forGetter(Feed::sight)
     ).apply(instance, Feed::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, Feed> STREAM_CODEC =
@@ -173,6 +175,7 @@ public record Feed(
                     Shape.STREAM_CODEC, Feed::shape,
                     Lock.STREAM_CODEC, Feed::lock,
                     Grade.STREAM_CODEC, Feed::grade,
+                    Sight.STREAM_CODEC, Feed::sight,
                     Feed::new);
 
     /**
@@ -203,7 +206,8 @@ public record Feed(
                 Math.clamp(this.brightness, 0, 15),
                 this.shape == null ? Shape.ENTIER : this.shape,
                 this.lock == null ? Lock.POSEUR : this.lock,
-                this.grade == null ? Grade.AUTO : this.grade);
+                this.grade == null ? Grade.AUTO : this.grade,
+                this.sight == null ? Sight.PLUMB : this.sight.sane());
     }
 
     /** Y a-t-il seulement quelque chose à montrer ? */
@@ -225,47 +229,52 @@ public record Feed(
 
     public Feed withSource(String value) {
         return new Feed(value, this.loop, this.autoplay, this.volume, this.range, this.brightness,
-                this.shape, this.lock, this.grade).sane();
+                this.shape, this.lock, this.grade, this.sight).sane();
     }
 
     public Feed withLoop(boolean value) {
         return new Feed(this.source, value, this.autoplay, this.volume, this.range, this.brightness,
-                this.shape, this.lock, this.grade);
+                this.shape, this.lock, this.grade, this.sight);
     }
 
     public Feed withAutoplay(boolean value) {
         return new Feed(this.source, this.loop, value, this.volume, this.range, this.brightness,
-                this.shape, this.lock, this.grade);
+                this.shape, this.lock, this.grade, this.sight);
     }
 
     public Feed withVolume(int value) {
         return new Feed(this.source, this.loop, this.autoplay, value, this.range, this.brightness,
-                this.shape, this.lock, this.grade).sane();
+                this.shape, this.lock, this.grade, this.sight).sane();
     }
 
     public Feed withRange(int value) {
         return new Feed(this.source, this.loop, this.autoplay, this.volume, value, this.brightness,
-                this.shape, this.lock, this.grade).sane();
+                this.shape, this.lock, this.grade, this.sight).sane();
     }
 
     public Feed withBrightness(int value) {
         return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range, value,
-                this.shape, this.lock, this.grade).sane();
+                this.shape, this.lock, this.grade, this.sight).sane();
     }
 
     public Feed withShape(Shape value) {
         return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range,
-                this.brightness, value, this.lock, this.grade);
+                this.brightness, value, this.lock, this.grade, this.sight);
     }
 
     public Feed withLock(Lock value) {
         return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range,
-                this.brightness, this.shape, value, this.grade);
+                this.brightness, this.shape, value, this.grade, this.sight);
+    }
+
+    public Feed withSight(Sight value) {
+        return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range,
+                this.brightness, this.shape, this.lock, this.grade, value).sane();
     }
 
     public Feed withGrade(Grade value) {
         return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range,
-                this.brightness, this.shape, this.lock, value);
+                this.brightness, this.shape, this.lock, value, this.sight);
     }
 
     /**
