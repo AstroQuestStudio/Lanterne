@@ -670,6 +670,10 @@ public final class Settings {
     private static boolean emballage = true;
     /** Le cache de colonnes de bruit. Voir {@code core.Colonne}. */
     private static boolean colonne = true;
+    /** La pose et la casse en masse. Voir {@code core.Remblai}. */
+    private static boolean remblai = true;
+    /** Les termes quadratiques de la foule. Voir {@code core.Foule}. */
+    private static boolean foule = true;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -1276,6 +1280,16 @@ public final class Settings {
         return colonne;
     }
 
+    /** La pose et la casse en masse. Voir {@code core.Remblai}. */
+    public static boolean remblai() {
+        return remblai;
+    }
+
+    /** Les termes quadratiques de la foule. Voir {@code core.Foule}. */
+    public static boolean foule() {
+        return foule;
+    }
+
     /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
@@ -1461,6 +1475,8 @@ public final class Settings {
         climat = wanted.contains("climat");
         emballage = wanted.contains("emballage");
         colonne = wanted.contains("colonne");
+        remblai = wanted.contains("remblai");
+        foule = wanted.contains("foule");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -1592,6 +1608,8 @@ public final class Settings {
         climat = Config.CLIMAT.get();
         emballage = Config.EMBALLAGE.get();
         colonne = Config.COLONNE.get();
+        remblai = Config.REMBLAI.get();
+        foule = Config.FOULE.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -1713,6 +1731,12 @@ public final class Settings {
         }
         if (colonne) {
             text.append("colonne ");
+        }
+        if (remblai) {
+            text.append("remblai ");
+        }
+        if (foule) {
+            text.append("foule ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

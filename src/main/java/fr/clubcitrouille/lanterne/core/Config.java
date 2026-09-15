@@ -78,6 +78,8 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue CLIMAT;
     public static final ModConfigSpec.BooleanValue EMBALLAGE;
     public static final ModConfigSpec.BooleanValue COLONNE;
+    public static final ModConfigSpec.BooleanValue REMBLAI;
+    public static final ModConfigSpec.BooleanValue FOULE;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -559,6 +561,23 @@ public final class Config {
                 "publier le chiffre.")
                 .define("ecluse", false);
 
+        REMBLAI = BUILDER.comment(
+                "LE REMBLAI : poser ou casser beaucoup de blocs d'un coup.",
+                "",
+                "/fill, /clone, /setblock en rafale, et surtout le MINAGE INTENSIF - c'est la meme",
+                "mecanique. Poser un bloc coute bien plus que l'ecrire : notification des voisins,",
+                "recalcul de lumiere, carte des hauteurs, marquage pour le client.",
+                "",
+                "A mesurer avant de croire quoi que ce soit.")
+                .define("remblai", true);
+        FOULE = BUILDER.comment(
+                "LA FOULE : ce qui reste QUADRATIQUE quand les entites s'entassent.",
+                "",
+                "Le socle traite deja le cout par entite. Ce module vise ce qui croit avec le CARRE",
+                "de leur nombre - la ou mille betes coutent cent fois plus que cent.",
+                "",
+                "A mesurer avant de croire quoi que ce soit.")
+                .define("foule", true);
         COLONNE = BUILDER.comment(
                 "LA COLONNE : deux chunks voisins ne calculent plus deux fois le meme bruit.",
                 "",
