@@ -1224,6 +1224,11 @@ public final class Settings {
         gauge = ClientConfig.GAUGE.get();
         lens = ClientConfig.LENS.get();
         Lens.tune(ClientConfig.LENS_PRESET.get());
+        // La nettete et la houle survivent desormais au redemarrage. Sans ces deux lignes, un
+        // joueur qui regle la lentille la retrouvait a « moyenne, houle eteinte » a chaque
+        // lancement — et finissait par croire que le reglage ne servait a rien.
+        fr.clubcitrouille.lanterne.client.upscale.Upscale.restore(
+                ClientConfig.LENS_EDGE.get(), ClientConfig.LENS_SWELL.get());
         Din.tune(ClientConfig.DIN_REGION.get(), ClientConfig.DIN_ALLOWANCE.get(),
                 ClientConfig.DIN_WINDOW.get());
         Shroud.tune(ClientConfig.SHROUD_DELAY.get(), ClientConfig.SHROUD_NEAR.get(),

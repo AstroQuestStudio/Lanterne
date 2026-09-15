@@ -70,9 +70,12 @@ public class Gateway extends Screen {
         Minecraft client = Minecraft.getInstance();
         Gate gate = Portals.atHeart(heart);
         if (gate == null) {
+            // Deux causes, un seul message : ou le cadre n'a jamais brûlé, ou son propriétaire le
+            // garde privé — et dans ce second cas le serveur ne nous en a rien dit, ce qui est
+            // exactement ce qu'on lui demande. Nommer les deux évite de faire croire à une panne.
             if (client.player != null) {
                 client.player.sendOverlayMessage(Component.literal(
-                                "Ce cœur n'est pas allumé. Un briquet, et le portail s'ouvre.")
+                                "Rien à régler ici : ce cœur n'est pas allumé, ou son portail est privé.")
                         .withStyle(ChatFormatting.GRAY));
             }
             return;
@@ -246,7 +249,7 @@ public class Gateway extends Screen {
     public void tick() {
         super.tick();
         Gate fresh = Portals.atHeart(heart);
-        if (fresh == null) {
+        if (fresh == null || gate == null) {
             onClose();
             return;
         }

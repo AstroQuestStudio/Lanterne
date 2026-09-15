@@ -88,14 +88,7 @@ public final class Upscale {
 
     private static Edge edge = Edge.MOYENNE;
 
-    /**
-     * La houle : le facteur suit le taux d'images au lieu d'être choisi une fois.
-     *
-     * <p>Comme la netteté, ce réglage ne survit pas au redémarrage. {@code core.ClientConfig} est
-     * tenu par un autre chantier au moment où ce module est écrit, et lui ajouter deux lignes aurait
-     * créé un conflit d'édition. Deux entrées de configuration suffiront à le rendre persistant ;
-     * c'est signalé dans le rapport plutôt que fait à la sauvette.
-     */
+    /** La houle : le facteur suit le taux d'images au lieu d'être choisi une fois. */
     private static boolean swell;
 
     /**
@@ -150,15 +143,33 @@ public final class Upscale {
         return swell;
     }
 
+    /**
+     * Repose les deux réglages lus dans la configuration du joueur.
+     *
+     * <p>Appelé quand la configuration client est chargée ou rechargée. Sans cela, un joueur qui
+     * règle la netteté et la houle les retrouvait à leur valeur d'usine à chaque lancement — et
+     * finissait, très raisonnablement, par conclure que le réglage ne servait à rien.
+     *
+     * <p>La houle repart du natif : elle jugerait sinon son premier palier sur des durées d'image
+     * relevées dans une autre session, sur une autre scène.
+     */
+    public static void restore(Edge savedEdge, boolean savedSwell) {
+        edge = savedEdge;
+        swell = savedSwell;
+        Swell.reset();
+    }
+
     /** Fait tourner la netteté d'un cran, dans un sens ou dans l'autre. */
     public static void cycleEdge(int step) {
         Edge[] all = Edge.values();
         edge = all[Math.floorMod(edge.ordinal() + step, all.length)];
+        fr.clubcitrouille.lanterne.core.ClientConfig.LENS_EDGE.set(edge);
     }
 
     /** Allume ou éteint la houle. Repart toujours du natif, pour que l'essai soit lisible. */
     public static void toggleSwell() {
         swell = !swell;
+        fr.clubcitrouille.lanterne.core.ClientConfig.LENS_SWELL.set(swell);
         Swell.reset();
     }
 

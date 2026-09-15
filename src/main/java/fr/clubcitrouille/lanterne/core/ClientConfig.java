@@ -5,6 +5,7 @@ import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.client.upscale.Upscale;
 
 /**
  * Les réglages qui ne regardent que l'écran du joueur.
@@ -49,6 +50,8 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue GAUGE;
     public static final ModConfigSpec.BooleanValue LENS;
     public static final ModConfigSpec.EnumValue<Lens.Preset> LENS_PRESET;
+    public static final ModConfigSpec.EnumValue<Upscale.Edge> LENS_EDGE;
+    public static final ModConfigSpec.BooleanValue LENS_SWELL;
     public static final ModConfigSpec.BooleanValue DIN;
     public static final ModConfigSpec.IntValue DIN_REGION;
     public static final ModConfigSpec.IntValue DIN_ALLOWANCE;
@@ -236,6 +239,29 @@ public final class ClientConfig {
                 "PERFORMANCE       :  50 %, 25 % des pixels. Un quart du travail de rendu.",
                 "ULTRA_PERFORMANCE :  33 %, 11 % des pixels. Pour depanner une machine a bout.")
                 .defineEnum("lentille_prereglage", Lens.Preset.QUALITE);
+        LENS_EDGE = BUILDER.comment(
+                "La nettete appliquee apres la remontee d'echelle.",
+                "",
+                "Etaler une image la rend floue : c'est mecanique, pas un defaut de reglage. RCAS",
+                "raffermit les contours sans reintroduire d'escalier. Chaque cran est une chaine de",
+                "post-traitement distincte, parce qu'un uniforme de PostChain est fige a la",
+                "construction de la passe.",
+                "",
+                "AUCUNE  : EASU seul, aucun raffermissement.",
+                "DOUCE   : pour qui trouve le raffermissement voyant.",
+                "MOYENNE : le defaut.",
+                "FORTE   : la limite que RCAS s'autorise.")
+                .defineEnum("lentille_nettete", Upscale.Edge.MOYENNE);
+        LENS_SWELL = BUILDER.comment(
+                "LA HOULE : le facteur suit le taux d'images au lieu d'etre choisi une fois.",
+                "",
+                "Meme raisonnement que la maree cote serveur, applique au rendu : on vise un taux",
+                "d'images et l'on ajuste la finesse pour le tenir. Une scene chargee descend d'un",
+                "cran, une scene calme remonte.",
+                "",
+                "Le prereglage ci-dessus devient alors un PLANCHER : la houle ne descend jamais",
+                "en dessous de ce que le joueur a demande.")
+                .define("lentille_houle", false);
         DIN = BUILDER.comment(
                 "VACARME : au-dela d'un certain nombre, un meme son au meme endroit n'apporte rien.",
                 "",
