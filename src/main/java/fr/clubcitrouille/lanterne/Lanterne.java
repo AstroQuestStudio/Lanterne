@@ -115,6 +115,10 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.content.screen.Screens.register(modBus);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.screen.Screens::onRegisterCommands);
+        // La réclame de l'hébergeur s'intercepte à l'exécution de la commande, et NeoForge y publie
+        // un évènement annulable — donc aucun mixin. Elle ne pouvait PAS être traitée par Hush : la
+        // commande est écrite sur l'entrée standard par le démon et ne traverse jamais le journal.
+        NeoForge.EVENT_BUS.addListener(fr.clubcitrouille.lanterne.core.Reclame::onCommand);
         Settings.configureFromEnvironment();
         fr.clubcitrouille.lanterne.core.Hush.install();
         fr.clubcitrouille.lanterne.core.Machine.appraise();

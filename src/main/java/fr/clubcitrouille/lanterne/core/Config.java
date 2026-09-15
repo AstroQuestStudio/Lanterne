@@ -73,6 +73,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue MINING;
     public static final ModConfigSpec.BooleanValue BURIN;
     public static final ModConfigSpec.BooleanValue ECLUSE;
+    public static final ModConfigSpec.BooleanValue RECLAME;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -550,6 +551,26 @@ public final class Config {
                 "eteint. A rallumer si vous voulez l'eprouver sur VOTRE machine - et merci de",
                 "publier le chiffre.")
                 .define("ecluse", false);
+
+        RECLAME = BUILDER.comment(
+                "La RECLAME : retire les messages publicitaires que l'hebergeur injecte.",
+                "",
+                "Un hebergement gratuit se paie autrement : le demon ecrit de temps a autre une",
+                "commande sur l'entree standard du serveur, comme si un administrateur l'avait",
+                "tapee. Le message part alors a TOUS les joueurs, plusieurs fois par heure.",
+                "",
+                "Ce module ne rend RIEN en performances, et il ne pretend pas le contraire : un",
+                "tellraw toutes les deux minutes est indetectable. Ce qu'il retire est un message",
+                "que le joueur n'a pas demande, pas un cout.",
+                "",
+                "La regle est etroite : on n'annule que si la commande ne vient PAS d'un joueur ET",
+                "qu'elle nomme le site d'un hebergeur connu (liste en clair dans core/Reclame).",
+                "Un administrateur connecte en jeu qui ecrit lui-meme un tel message le verra",
+                "partir : c'est SA decision.",
+                "",
+                "ATTENTION : c'est la contrepartie d'un hebergement gratuit, et la retirer peut",
+                "contrevenir aux conditions de votre hebergeur. A vous de voir - d'ou ce reglage.")
+                .define("reclame", true);
 
         BUILDER.pop();
 

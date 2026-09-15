@@ -655,6 +655,13 @@ public final class Settings {
      * et le commentaire de {@code Config.ECLUSE} dit exactement pourquoi.
      */
     private static boolean ecluse;
+    /**
+     * Le retrait des messages publicitaires de l'hébergeur. Voir {@code core.Reclame}.
+     *
+     * <p>Ne rend rien en performances, et ce module ne prétend pas le contraire : c'est un message
+     * que le joueur n'a pas demandé, pas un coût.
+     */
+    private static boolean reclame = true;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -1236,6 +1243,11 @@ public final class Settings {
         return ecluse;
     }
 
+    /** Le retrait des réclames de l'hébergeur. Voir {@code core.Reclame}. */
+    public static boolean reclame() {
+        return reclame;
+    }
+
     /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
@@ -1416,6 +1428,7 @@ public final class Settings {
         // il ne contient aucun d'eux. C'est la condition pour qu'un banc isole réellement.
         burin = wanted.contains("burin");
         ecluse = wanted.contains("ecluse");
+        reclame = wanted.contains("reclame");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -1542,6 +1555,7 @@ public final class Settings {
         mining = Config.MINING.get();
         burin = Config.BURIN.get();
         ecluse = Config.ECLUSE.get();
+        reclame = Config.RECLAME.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -1648,6 +1662,9 @@ public final class Settings {
         }
         if (ecluse) {
             text.append("ecluse ");
+        }
+        if (reclame) {
+            text.append("reclame ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }
