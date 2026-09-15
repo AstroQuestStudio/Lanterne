@@ -122,6 +122,7 @@ public final class SelfTest {
      * tick pas est la plus rapide de toutes. Voir {@code lab/Duel}.
      */
     private static boolean duel;
+    private static boolean aide;
 
     /**
      * Vrai si l'on éprouve la digue — le refus des chargements de chunk synchrones.
@@ -305,6 +306,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de moisson armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_AIDE"))) {
+            aide = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de l'aide armée.");
+            return;
+        }
         if ("1".equals(System.getenv("LANTERNE_DUEL"))) {
             duel = true;
             step = Step.SETTLING;
@@ -352,7 +360,7 @@ public final class SelfTest {
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
                     && !wits && !reap && !surge && !mason && !grove && !duel && !levee
-                    && !sommaire)) {
+                    && !sommaire && !aide)) {
             return;
         }
 
@@ -393,6 +401,21 @@ public final class SelfTest {
                 fr.clubcitrouille.lanterne.lab.Levee.begin(server);
                 step = Step.LAUNCHED;
             }
+            return;
+        }
+
+        // L'aide se juge en un seul passage : elle n'a ni monde a dresser ni charge a poser, elle
+        // confronte une liste de chaines a un arbre de commandes. On la joue donc des le premier
+        // tour et l'on arrete le serveur — attendre n'apprendrait rien de plus.
+        if (aide) {
+            boolean ok = fr.clubcitrouille.lanterne.lab.Aide.run(server);
+            aide = false;
+            step = Step.LAUNCHED;
+            if (!ok) {
+                Lanterne.LOG.error("[AIDE] Au moins une ligne de l'aide promet une commande qui "
+                        + "n'existe pas. Chacune est un clic qui ecrit au joueur un texte refuse.");
+            }
+            server.halt(false);
             return;
         }
 

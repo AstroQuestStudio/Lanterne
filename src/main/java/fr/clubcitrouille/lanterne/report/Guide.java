@@ -14,8 +14,9 @@ import net.minecraft.network.chat.Style;
  *
  * <h2>Pourquoi ce n'est pas un luxe</h2>
  *
- * <p>Lanterne a fini par porter cinq racines de commandes — {@code /lanterne}, {@code /boutique},
- * {@code /banque}, {@code /tableau}, {@code /disque} — et plusieurs dizaines de sous-commandes. La
+ * <p>Lanterne a fini par porter six racines de commandes — {@code /lanterne}, {@code /boutique},
+ * {@code /banque}, {@code /tableau}, {@code /disque}, {@code /projection} — et plusieurs dizaines
+ * de sous-commandes. La
  * complétion de Brigadier les montre une par une, à condition de savoir par quelle lettre commencer.
  * Quand on ne le sait pas, on ne trouve rien.
  *
@@ -37,6 +38,55 @@ import net.minecraft.network.chat.Style;
  * d'administration : une aide qui promet ce qu'elle refuse ensuite est pire que pas d'aide du tout.
  */
 public final class Guide {
+    /**
+     * Les commandes que cette page a promises, à l'ordre où elle les a écrites.
+     *
+     * <h2>Pourquoi une aide doit pouvoir être éprouvée</h2>
+     *
+     * <p>Une ligne d'ici est <b>cliquable</b> : elle écrit une commande dans la zone de saisie. Si
+     * cette commande n'existe pas, le joueur obtient un refus de Brigadier sur un texte que le mod
+     * vient de lui proposer lui-même. C'est pire que pas d'aide du tout, et cela s'est produit deux
+     * fois : {@code /lanterne wp liste} n'a jamais existé, et {@code /lanterne status} vit en réalité
+     * sous {@code clear}.
+     *
+     * <p>Les deux fois, la faute était la même : l'aide était <b>relue</b> au lieu d'être
+     * <b>confrontée</b>. D'où cette liste, que {@code lab.Aide} parcourt en demandant au vrai
+     * dispatcher de résoudre chaque ligne. Une promesse non tenue fait alors échouer l'épreuve, au
+     * lieu d'attendre qu'un joueur la découvre.
+     *
+     * <p>Elle est remplie à chaque affichage et non une fois pour toutes : les lignes visibles
+     * dépendent des droits de la source, et l'épreuve passe une source d'administrateur pour les
+     * voir toutes.
+     */
+    private static final java.util.List<String> PROMISES = new java.util.ArrayList<>();
+
+    /**
+     * Les lignes dont l'absence est normale sur certains serveurs.
+     *
+     * <h2>Toutes les commandes du mod n'existent pas partout</h2>
+     *
+     * <p>{@code /lanterne guide} ouvre un écran : elle est donc enregistrée par du code client, et
+     * <b>n'existe pas sur un serveur dédié</b>. L'annoncer là-bas serait promettre ce que ce serveur
+     * ne peut pas faire ; ne jamais l'annoncer priverait de sa principale porte d'entrée le joueur
+     * en solo, chez qui elle existe.
+     *
+     * <p>Ces lignes ne sont donc affichées <b>que si le dispatcheur les reconnaît</b>. Elles restent
+     * inscrites parmi les promesses pour que {@code lab.Aide} puisse les énumérer : une ligne
+     * absente parce qu'elle est côté client et une ligne absente parce qu'on a fait une faute de
+     * frappe se ressemblent trop pour qu'on laisse la seconde passer en silence.
+     */
+    private static final java.util.Set<String> OPTIONAL = new java.util.LinkedHashSet<>();
+
+    /** Les commandes promises par le dernier affichage. Réservé au laboratoire. */
+    public static java.util.List<String> promises() {
+        return java.util.List.copyOf(PROMISES);
+    }
+
+    /** Celles dont l'absence est normale. Réservé au laboratoire. Voir {@link #OPTIONAL}. */
+    public static java.util.Set<String> optional() {
+        return java.util.Set.copyOf(OPTIONAL);
+    }
+
     private Guide() {}
 
     /** Écrit le sommaire pour cette source. */
@@ -45,6 +95,8 @@ public final class Guide {
         // 26.1 une permission n'est plus un entier mais un PermissionCheck, et Commands.hasPermission
         // en fait un predicat applicable a la source.
         boolean admin = Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(source);
+        PROMISES.clear();
+        OPTIONAL.clear();
 
         say(source, Component.literal("🎃 Lanterne")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
@@ -54,6 +106,10 @@ public final class Guide {
 
         heading(source, "Le mod");
         line(source, "/lanterne", "L'état du mod : ce qui est allumé, et ce que ça évite.");
+        // Enregistrée côté client : elle ouvre un écran, et un serveur dédié n'en a pas. Voir
+        // OPTIONAL — on l'annonce là où elle existe, et nulle part ailleurs.
+        optionalLine(source, "/lanterne guide", "Le guide illustré : les mécanismes du mod, en "
+                + "animation. Ou garde W enfoncé sur un objet, dans l'inventaire comme dans JEI.");
         if (admin) {
             line(source, "/lanterne on", "Rallume toutes les optimisations.");
             line(source, "/lanterne off", "Éteint tout — utile pour comparer à vue d'œil.");
@@ -68,6 +124,8 @@ public final class Guide {
                     + "cinq fois plus vite qu'elle ne se crée.");
             line(source, "/lanterne pregen-stop", "Interrompt la pré-génération en cours.");
             line(source, "/lanterne clear", "Le balai : efface les objets au sol. Éteint par défaut.");
+            line(source, "/lanterne clear status", "Quand le balai repasse, et ce qu'il a déjà "
+                    + "effacé depuis le démarrage.");
         }
 
         heading(source, "Les repères");
@@ -106,10 +164,25 @@ public final class Guide {
 
         heading(source, "L'atelier");
         line(source, "/tableau liste", "Les images de ta bibliothèque.");
+        line(source, "/tableau prendre", "Grave une image de la bibliothèque sur le tableau visé. "
+                + "« <image> <largeur> », la largeur en blocs.");
         line(source, "/disque liste", "Les morceaux gravés et les sillons libres.");
+        line(source, "/disque prendre", "Grave un morceau du dossier sur un disque vierge.");
+        line(source, "/disque etat", "Les formats lus et les sillons occupés.");
         if (admin) {
             line(source, "/disque liberer", "Libère un sillon. Le disque correspondant devient muet.");
+            line(source, "/disque recharger", "Relit le dossier des morceaux, à chaud.");
+            line(source, "/tableau recharger", "Relit le dossier des images, à chaud.");
             line(source, "/tableau heritage", "Reprend les tableaux d'Immersive Paintings.");
+        }
+
+        heading(source, "La projection");
+        line(source, "/projection domaines", "Les domaines d'où le serveur accepte une vidéo. "
+                + "Clic droit sur un écran ou un projecteur pour le régler.");
+        if (admin) {
+            line(source, "/projection domaine ajouter", "Ouvre un domaine. La liste est vide au "
+                    + "départ : rien ne se charge tant que tu n'as rien ouvert.");
+            line(source, "/projection domaine retirer", "Referme un domaine.");
         }
 
         if (admin) {
@@ -139,7 +212,38 @@ public final class Guide {
      * <p>{@code SuggestCommand} écrit la commande dans la zone de saisie sans la lancer. C'est
      * délibéré : voir la note de classe.
      */
+    /**
+     * Une ligne qui peut ne pas exister sur ce serveur.
+     *
+     * <p>Voir {@link #OPTIONAL}. On interroge le dispatcheur plutôt que de supposer : c'est lui qui
+     * répondra au joueur, c'est donc lui qui a raison.
+     */
+    private static void optionalLine(CommandSourceStack source, String command, String what) {
+        OPTIONAL.add(command);
+        if (!resolves(source, command)) {
+            PROMISES.add(command);
+            return;
+        }
+        line(source, command, what);
+    }
+
+    /** Ce chemin de littéraux descend-il réellement dans l'arbre des commandes ? */
+    private static boolean resolves(CommandSourceStack source, String command) {
+        com.mojang.brigadier.tree.CommandNode<CommandSourceStack> node =
+                source.getServer().getCommands().getDispatcher().getRoot();
+        for (String word : command.substring(1).split(" ")) {
+            node = node.getChild(word);
+            if (node == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static void line(CommandSourceStack source, String command, String what) {
+        // Chaque ligne est retenue au passage. Voir « promises » : c'est ce qui permet de
+        // CONFRONTER l'aide au vrai dispatcher plutôt que de la relire.
+        PROMISES.add(command);
         MutableComponent name = Component.literal("  " + command)
                 .withStyle(Style.EMPTY
                         .withColor(ChatFormatting.AQUA)
