@@ -47,5 +47,6 @@
   "block.lanterne.ecran": "Screen",
   "item.lanterne.ecran": "Screen",
   "block.lanterne.projecteur": "Projector",
-  "item.lanterne.projecteur": "Projector"
+  "item.lanterne.projecteur": "Projector",
+  "subtitles.lanterne.ecran": "Screen: playing"
 }

@@ -160,8 +160,8 @@ public final class SelfTest {
     /** Vrai si l'on relève la largeur des palettes de terrain. */
     private static boolean palette;
 
-    /** Vrai si l'on éprouve la pose d'un gabarit de structure à cheval sur un chunk. */
-    private static boolean mason;
+    /** Vrai si l'on éprouve le placement des pièces d'une structure à jigsaw. */
+    private static boolean bourg;
 
     /** Vrai si l'on éprouve le temps que met une couronne de feuillage à tomber. */
     private static boolean grove;
@@ -198,11 +198,11 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve du bosquet armée.");
             return;
         }
-        if ("1".equals(System.getenv("LANTERNE_MASON"))) {
-            mason = true;
+        if ("1".equals(System.getenv("LANTERNE_BOURG"))) {
+            bourg = true;
             step = Step.SETTLING;
             waiting = SETTLE;
-            Lanterne.LOG.info("Épreuve du maçon armée.");
+            Lanterne.LOG.info("Épreuve du bourg armée.");
             return;
         }
         if ("1".equals(System.getenv("LANTERNE_PALETTE"))) {
@@ -359,7 +359,7 @@ public final class SelfTest {
         if (step == Step.OFF
                 || (step == Step.LAUNCHED && !conformance && !kitchen && !boom && !yield && !flow
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
-                    && !wits && !reap && !surge && !mason && !grove && !duel && !levee
+                    && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
                     && !sommaire && !aide)) {
             return;
         }
@@ -383,7 +383,7 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Vault.running()
                 && !fr.clubcitrouille.lanterne.lab.Wits.running()
                 && !fr.clubcitrouille.lanterne.lab.Reap.running()
-                && !fr.clubcitrouille.lanterne.lab.Mason.running()
+                && !fr.clubcitrouille.lanterne.lab.Bourg.running()
                 && !fr.clubcitrouille.lanterne.lab.Grove.running()
                 && !fr.clubcitrouille.lanterne.lab.Duel.running()
                 && !fr.clubcitrouille.lanterne.lab.Levee.running()
@@ -448,18 +448,15 @@ public final class SelfTest {
             return;
         }
 
-        if (mason) {
-            // Une doublure, comme pour la moisson et les objets au sol : sans joueur, les chunks de
-            // l'origine ne sont pas chargés et setBlock n'écrit rien. L'épreuve poserait alors son
-            // gabarit dans le vide et mesurerait deux fois la même absence.
-            if (fr.clubcitrouille.lanterne.lab.Mason.running()) {
-                fr.clubcitrouille.lanterne.lab.Mason.tick(server);
+        if (bourg) {
+            // Aucune doublure, et c'est délibéré : cette épreuve n'écrit AUCUN bloc. Elle appelle
+            // JigsawPlacement.addPieces, qui calcule une disposition de pièces sans rien poser — le
+            // monde ne lui sert que de générateur de relief. Poser un joueur ne changerait rien au
+            // résultat et ferait tourner le reste du serveur pendant la mesure.
+            if (fr.clubcitrouille.lanterne.lab.Bourg.running()) {
+                fr.clubcitrouille.lanterne.lab.Bourg.tick(server);
             } else if (step == Step.SETTLING) {
-                Understudy.enter(server, server.overworld(), 1, 512);
-                step = Step.LOADING;
-                waiting = chunkLoadDelay();
-            } else if (step == Step.LOADING) {
-                fr.clubcitrouille.lanterne.lab.Mason.begin(server);
+                fr.clubcitrouille.lanterne.lab.Bourg.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

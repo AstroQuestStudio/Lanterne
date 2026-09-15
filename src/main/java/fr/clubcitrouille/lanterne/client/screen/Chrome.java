@@ -108,7 +108,7 @@ public final class Chrome implements Engine {
      * d'autre ne bouge dans le mod.
      */
     @Override
-    public Reel open(String source) {
+    public Reel open(String source, int wantedHeight) {
         return null;
     }
 

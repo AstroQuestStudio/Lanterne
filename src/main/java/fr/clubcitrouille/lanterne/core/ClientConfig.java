@@ -52,6 +52,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<Lens.Preset> LENS_PRESET;
     public static final ModConfigSpec.EnumValue<Upscale.Edge> LENS_EDGE;
     public static final ModConfigSpec.BooleanValue LENS_SWELL;
+    public static final ModConfigSpec.BooleanValue TAMPON;
     public static final ModConfigSpec.BooleanValue DIN;
     public static final ModConfigSpec.IntValue DIN_REGION;
     public static final ModConfigSpec.IntValue DIN_ALLOWANCE;
@@ -262,6 +263,30 @@ public final class ClientConfig {
                 "Le prereglage ci-dessus devient alors un PLANCHER : la houle ne descend jamais",
                 "en dessous de ce que le joueur a demande.")
                 .define("lentille_houle", false);
+        TAMPON = BUILDER.comment(
+                "LE TAMPON : immuable chez Mojang, mutable chez NVIDIA.",
+                "",
+                "GL_ARB_buffer_storage alloue un tampon IMMUABLE : sa taille et son emplacement ne",
+                "bougent plus. Quand le jeu reecrit dedans alors que la carte s'en sert encore, le",
+                "pilote n'a pas le droit de lui donner une autre zone memoire - il n'a que le choix",
+                "d'ATTENDRE. Sur pilote NVIDIA et sur les Intel de septieme generation, cette",
+                "attente se voit : l'image se pose, puis saute. Avec un tampon mutable, le pilote",
+                "abandonne l'ancienne zone et en prend une neuve.",
+                "",
+                "CE MODULE N'EST PAS MESURE ICI, et c'est la seule exception du mod a cette regle.",
+                "Ce n'est pas une trouvaille de ce laboratoire : c'est le correctif que Mojang a",
+                "ecrit lui-meme en 26.3, ou GlHeuristics gagne isNvidia() et couldBeIntelGen7().",
+                "La 26.2 ne l'a pas. La mesure qui le justifie est celle de Mojang, pas la notre.",
+                "",
+                "SANS EFFET SOUS VULKAN : tout com.mojang.blaze3d.opengl.* est inerte quand le",
+                "moteur Vulkan de la 26.2 est choisi. Sans effet non plus si votre carte n'est ni",
+                "NVIDIA ni Intel Gen7 : le module lit le nom du pilote et s'abstient.",
+                "",
+                "QUAND CE REGLAGE EST LU : UNE SEULE FOIS, a la creation du peripherique graphique,",
+                "c'est-a-dire au demarrage du jeu. Le changer prend effet au prochain lancement.",
+                "C'est aussi pourquoi il est range ici et non dans le fichier serveur : celui-ci",
+                "n'est lu qu'au chargement d'un monde, donc bien trop tard pour cette decision.")
+                .define("tampon_mutable", true);
         DIN = BUILDER.comment(
                 "VACARME : au-dela d'un certain nombre, un meme son au meme endroit n'apporte rien.",
                 "",

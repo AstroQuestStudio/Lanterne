@@ -120,6 +120,21 @@ public final class Settings {
     private static boolean digue = true;
 
     /**
+     * L'élastique : les seuils de mouvement mesurés à l'horloge. Voir {@link Elastique}.
+     *
+     * <h2>Le seul module livré ÉTEINT, et pourquoi</h2>
+     *
+     * <p>Tous les autres modules de ce mod font <b>moins de travail</b> pour le même résultat. Celui-ci
+     * ne fait rien gagner du tout : il cache un symptôme. Il n'a donc pas sa place dans une
+     * configuration d'usine, où il ferait croire à une optimisation et masquerait, au passage, le
+     * signal qu'un serveur va mal.
+     *
+     * <p>Un administrateur l'allume quand il a constaté que tout le reste ne suffisait pas. C'est un
+     * dernier recours, et un réglage par défaut n'est jamais un dernier recours.
+     */
+    private static boolean elastique = false;
+
+    /**
      * Le sommaire des paquets zip. Voir {@link Sommaire}.
      *
      * <p>Le seul module de ce mod qui n'agit <b>ni pendant le tick ni pendant l'image</b>, mais au
@@ -417,10 +432,36 @@ public final class Settings {
     private static boolean senses = true;
     private static boolean recall = true;
     /**
-     * Le pochoir : les blocs d'un gabarit de structure hors de la fenêtre du chunk ne sont pas
-     * préparés. Voir {@link Stencil}.
+     * Le cadastre du placement Jigsaw : la place déjà prise, tenue dans un index au lieu d'une forme
+     * de voxels qui grossit. Voir {@link Cadastre}.
      */
-    private static boolean stencil = true;
+    private static boolean cadastre = true;
+    /**
+     * Le pochoir des gabarits de structure, retiré après re-mesure — et le premier module de ce
+     * dépôt que <em>Mojang</em> ait périmé plutôt que la mesure.
+     *
+     * <h2>×1,54 en 26.1.2, ×1,06 en 26.2</h2>
+     *
+     * <p>Le module réduisait la liste des blocs d'un gabarit à ceux qui tombaient dans la fenêtre du
+     * chunk, <em>avant</em> que {@code processBlockInfos} ne les prépare un par un. En 26.1.2 la
+     * préparation — position transformée, objet neuf, copie de balise NBT, chaîne des processeurs —
+     * arrivait bel et bien avant le tri, et une maison de village à cheval sur quatre chunks était
+     * préparée quatre fois en entier.
+     *
+     * <p>La 26.2 patchée NeoForge place {@code chunkBb.isInside(blockPos)} <b>avant</b> la
+     * construction ({@code StructureTemplate.java}, lignes 445-458). Le pochoir n'épargnait donc plus
+     * que la transformation de position — et il l'ajoutait une fois de plus.
+     *
+     * <p>Re-mesuré au maçon sur 26.2 : <b>×1,07</b> gabarit nu, <b>×1,06</b> avec les deux
+     * processeurs de toute pièce à jigsaw, pour un taux d'écart toujours à 68,8 %. Les deux sont sous
+     * la dérive de ×1,08 du laboratoire. Le module ne perdait rien ; il ne justifiait plus un
+     * {@code @Redirect} sur {@code StructureTemplate$Palette.blocks()}, qui est le point d'accroche
+     * que tout mod de structures veut.
+     *
+     * <p>Le détail, la mesure des deux versions et les trois choses à ne pas réapprendre sont dans
+     * {@code notes/pochoir-retire.md}.
+     */
+    private static final boolean STENCIL_REMOVED_AFTER_REMEASUREMENT = true;
     private static boolean redstone;
     private static boolean moulds = true;
     private static boolean decay = true;
@@ -919,6 +960,28 @@ public final class Settings {
     }
 
     /**
+     * L'élastique. Voir {@link Elastique} — et l'avertissement qui l'ouvre.
+     *
+     * <p>Obéit au maître comme les autres : l'épreuve doit pouvoir mesurer le bras sans protection,
+     * et c'est ce bras-là qui donne le témoin.
+     */
+    public static boolean elastique() {
+        return master && elastique;
+    }
+
+    /**
+     * Arme ou désarme l'élastique en cours de partie.
+     *
+     * <p>Réservé à l'épreuve {@code Amarre}, qui doit relever les deux bras dans la même exécution :
+     * une comparaison entre deux lancements séparés mesurerait aussi la différence de charge entre
+     * eux, et ce dépôt a déjà publié un écart qui n'était que cela.
+     */
+    public static void setElastique(boolean value) {
+        elastique = value;
+        epoch++;
+    }
+
+    /**
      * Le sommaire ne dépend PAS de l'interrupteur général.
      *
      * <p>Il est consulté pendant le chargement des paquets, c'est-à-dire <b>avant</b> qu'un banc
@@ -1017,19 +1080,21 @@ public final class Settings {
     }
 
     /**
-     * Le pochoir suit l'interrupteur général, mais il est le premier module lu depuis un AUTRE FIL.
+     * Le cadastre suit l'interrupteur général, et il est lu depuis le POOL DE TRAVAIL.
      *
-     * <p>La génération de terrain tourne sur le pool de travail ; le banc, lui, bascule le maître
-     * depuis le fil du serveur. Une pièce de structure en cours de pose peut donc voir le drapeau
-     * changer d'avis au milieu de sa propre boucle.
+     * <p>Le placement Jigsaw tourne sur le pool de génération ; le banc, lui, bascule le maître
+     * depuis le fil du serveur. Une structure en cours de placement peut donc voir le drapeau
+     * changer d'avis au milieu de sa propre récursion — et là, contrairement au pochoir qui l'a
+     * précédé, <b>cela compterait</b> : le cadastre tient un état, et l'abandonner en cours de route
+     * laisserait la forme de voxels de vanilla périmée.
      *
-     * <p>C'est sans conséquence sur le monde bâti, et il faut dire pourquoi : les blocs que le tri
-     * écarte sont exactement ceux que {@code placeInWorld} allait jeter à la ligne suivante. Une
-     * lecture déchirée ne peut donc pas produire une structure différente, seulement une mesure un
-     * peu floue — et c'est le banc apparié, chunk par chunk, qui s'en charge.
+     * <p>C'est pourquoi {@link Cadastre} ne relit pas ce drapeau à chaque question : il le lit
+     * <b>une fois</b>, quand il prend en charge une région libre, et s'y tient jusqu'au bout de
+     * celle-ci. Une bascule en cours de placement décide donc du sort de la <em>prochaine</em>
+     * structure, jamais de celle qui est en train de se poser.
      */
-    public static boolean stencil() {
-        return master && stencil;
+    public static boolean cadastre() {
+        return master && cadastre;
     }
 
     public static int decayDelay() {
@@ -1201,10 +1266,11 @@ public final class Settings {
         redstone = wanted.contains("redstone");
         recall = wanted.contains("memoire") || wanted.contains("conditions");
         senses = wanted.contains("capteur") || wanted.contains("sens");
-        // « pochoir » et rien d'autre : « structure » aurait été tentant, mais ce mot apparaît déjà
-        // dans les notes du projet pour désigner tout autre chose, et un mot-clé qui ressemble à un
-        // autre est exactement ce qui a fait mesurer deux modules pour un, trois fois.
-        stencil = wanted.contains("pochoir") || wanted.contains("stencil");
+        // « cadastre » et rien d'autre. Surtout pas « structure » ni « jigsaw » : le premier
+        // apparaît déjà dans les notes du projet pour désigner tout autre chose, et le second est le
+        // nom d'un bloc de vanilla qu'on retrouvera dans d'autres relevés. Un mot-clé qui ressemble
+        // à un autre est exactement ce qui a fait mesurer deux modules pour un, trois fois.
+        cadastre = wanted.contains("cadastre");
         // Quatre modules manquaient à cet appel, et c'est le troisième défaut du même genre.
         //
         // Un drapeau absent d'ici ne vaut pas « éteint » : il garde sa valeur par défaut, qui est
@@ -1222,6 +1288,11 @@ public final class Settings {
         // relevés du recensement et dans le nom d'autres épreuves. Un mot-clé qui ressemble à un
         // autre est ce qui a fait mesurer deux modules pour un, trois fois dans ce dépôt.
         digue = wanted.contains("digue");
+        // Surtout pas « mouvement » ni « rollback » : le premier désigne déjà les paquets de
+        // position dans les relevés du réseau, et le second est un mot que l'utilisateur emploie
+        // pour le symptôme, pas pour ce module. Un mot-clé qui ressemble à un autre est ce qui a
+        // fait mesurer deux modules pour un, trois fois dans ce dépôt.
+        elastique = wanted.contains("elastique");
         sommaire = wanted.contains("sommaire");
         tampon = wanted.contains("tampon");
         boxes = wanted.contains("boites") || wanted.contains("boxes");
@@ -1287,6 +1358,7 @@ public final class Settings {
         itemCopies = ClientConfig.ITEM_COPIES.get();
         veilParticles = ClientConfig.VEIL_PARTICLES.get();
         veilBlockEntities = ClientConfig.VEIL_BLOCK_ENTITIES.get();
+        tampon = ClientConfig.TAMPON.get();
         din = ClientConfig.DIN.get();
         gauge = ClientConfig.GAUGE.get();
         lens = ClientConfig.LENS.get();
@@ -1364,7 +1436,10 @@ public final class Settings {
         redstone = Config.REDSTONE.get();
         recall = Config.RECALL.get();
         senses = Config.SENSES.get();
-        stencil = Config.STENCIL.get();
+        cadastre = Config.CADASTRE.get();
+        digue = Config.DIGUE.get();
+        elastique = Config.ELASTIQUE.get();
+        sommaire = Config.SOMMAIRE.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
@@ -1442,8 +1517,8 @@ public final class Settings {
         if (senses) {
             text.append("capteurs ");
         }
-        if (stencil) {
-            text.append("pochoir ");
+        if (cadastre) {
+            text.append("cadastre ");
         }
         if (decay) {
             text.append("chute-feuilles ");
@@ -1456,6 +1531,15 @@ public final class Settings {
         }
         if (digue) {
             text.append("digue ");
+        }
+        if (elastique) {
+            text.append("elastique ");
+        }
+        if (sommaire) {
+            text.append("sommaire ");
+        }
+        if (tampon) {
+            text.append("tampon ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

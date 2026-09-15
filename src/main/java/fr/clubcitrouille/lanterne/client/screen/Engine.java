@@ -50,17 +50,32 @@ public interface Engine {
      * prêt n'a pas à écrire cette méthode autrement qu'en rendant {@code null} : c'est ce que font
      * les deux qui existent ici, et c'est exactement ce qui les rend honnêtes.
      *
+     * @param wantedHeight hauteur de décodage demandée, en pixels. C'est {@code Grade} qui
+     *     l'a calculée, et c'est le seul nombre de tout le mod dont le coût aille au carré.
      * @return la bobine ouverte, ou {@code null} si l'ouverture échoue. Jamais d'exception vers
      *     l'appelant : l'appelant est le fil de rendu.
      */
-    Reel open(String source);
+    Reel open(String source, int wantedHeight);
 
     /** Ce qui manque à un moteur, dans l'ordre où la question se pose. */
     enum Verdict {
         /** Rien ne manque. Aucun moteur ne rend ceci dans l'état actuel du dépôt. */
         PRET("prêt"),
-        /** Le joueur a demandé qu'aucun média distant ne soit chargé. Voir {@link Consent}. */
-        SANS_CONSENTEMENT("refus du joueur"),
+        /**
+         * Le consentement à charger un média distant n'a pas encore été donné.
+         *
+         * <h2>Le libellé a été corrigé, et la correction valait un rapport de bogue</h2>
+         *
+         * <p>Il disait « refus du joueur ». Un joueur a lu la ligne de journal et en a conclu que
+         * <b>ffmpeg était absent</b> de sa machine — ce qui était faux, et l'a envoyé chercher au
+         * mauvais endroit.
+         *
+         * <p>Deux fautes dans trois mots. « Refus » décrit un geste que personne n'a fait : le
+         * réglage part à « non », et n'y avoir pas touché n'est pas refuser. Et la ligne ne disait
+         * <b>pas où aller</b>, ce qui est le minimum quand on annonce qu'une fonction est bloquée
+         * par un réglage.
+         */
+        SANS_CONSENTEMENT("consentement non donné — bouton « Médias distants » dans l'écran du bloc"),
         /** Le mod compagnon qui porterait le décodeur n'est pas installé. */
         SANS_MOD("mod compagnon absent"),
         /** Les bibliothèques natives ne sont pas là. */
@@ -107,6 +122,21 @@ public interface Engine {
          *     l'affichage.
          */
         boolean present(long millis, Film film);
+
+        /**
+         * Le flux est-il ouvert et ses dimensions connues ?
+         *
+         * <p>Faux au début, et ce n'est pas une erreur : ouvrir une adresse réseau est un
+         * aller-retour, et il se fait sur un fil de fond. Tant que c'est faux, l'appelant n'alloue
+         * pas de pellicule — il ne saurait pas de quelle taille.
+         */
+        boolean ready();
+
+        /** Largeur de décodage réelle, en pixels. N'a de sens qu'une fois {@link #ready()} vrai. */
+        int width();
+
+        /** Hauteur de décodage réelle. Peut être inférieure à celle demandée, si la source l'est. */
+        int height();
 
         /** Durée totale, en millisecondes, ou zéro si inconnue — un direct, par exemple. */
         long duration();

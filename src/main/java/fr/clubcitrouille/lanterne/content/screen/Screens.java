@@ -103,6 +103,30 @@ public final class Screens {
     public static final DeferredItem<net.minecraft.world.item.BlockItem> BEAMER_ITEM =
             ITEMS.registerSimpleBlockItem("projecteur", BEAMER);
 
+    public static final DeferredRegister<net.minecraft.sounds.SoundEvent> SOUNDS =
+            DeferredRegister.create(Registries.SOUND_EVENT, Lanterne.ID);
+
+    /**
+     * L'évènement sonore d'un écran.
+     *
+     * <h2>Un seul, pour tous les écrans du monde</h2>
+     *
+     * <p>La définition qu'il désigne pointe vers une seconde de silence, et ce silence n'est
+     * <b>jamais joué</b> : {@code client.screen.Blare} redéfinit {@code getStream} et fournit le flux
+     * vivant à sa place. Le fichier n'existe que pour que le chargeur de sons ne rejette pas
+     * l'évènement au démarrage — un évènement sans ressource est écarté avec un avertissement, et
+     * l'on ne pourrait plus le jouer du tout.
+     *
+     * <p>Un seul suffit parce que le routage se fait <b>par instance</b> et non par chemin de
+     * fichier. C'est ce qui évite les seize définitions et le mixin qu'aurait demandés un routage par
+     * identifiant — voir {@code client.screen.Blare} pour l'explication complète.
+     */
+    public static final DeferredHolder<net.minecraft.sounds.SoundEvent, net.minecraft.sounds.SoundEvent>
+            SCREEN_SOUND = SOUNDS.register("ecran",
+                    () -> net.minecraft.sounds.SoundEvent.createVariableRangeEvent(
+                            net.minecraft.resources.Identifier.fromNamespaceAndPath(
+                                    Lanterne.ID, "ecran")));
+
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PanelEntity>> PANEL_ENTITY =
             BLOCK_ENTITIES.register("ecran",
                     () -> new BlockEntityType<>(PanelEntity::new, PANEL.get()));
@@ -165,6 +189,7 @@ public final class Screens {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
+        SOUNDS.register(modBus);
         modBus.addListener(Screens::onBuildCreativeTab);
         modBus.addListener(Screens::onRegisterPayloads);
         NeoForge.EVENT_BUS.register(Screens.class);
@@ -271,13 +296,11 @@ public final class Screens {
             if (stage == null || !(context.player() instanceof ServerPlayer player)) {
                 return;
             }
-            Feed wanted = payload.feed().sane();
             // La portée sonore est bornée par le serveur EN PLUS de l'être par Feed.sane : le
             // plafond de l'administrateur n'est pas connu de l'enregistrement, qui ne connaît que
             // le plafond absolu.
-            wanted = new Feed(wanted.source(), wanted.loop(), wanted.autoplay(), wanted.volume(),
-                    Math.min(wanted.range(), Booth.rangeCap()), wanted.brightness(), wanted.shape(),
-                    wanted.lock());
+            Feed wanted = payload.feed().sane()
+                    .withRange(Math.min(payload.feed().range(), Booth.rangeCap()));
 
             boolean sourceChanged = !wanted.source().equals(stage.feed().source());
             if (sourceChanged && !wanted.idle()) {

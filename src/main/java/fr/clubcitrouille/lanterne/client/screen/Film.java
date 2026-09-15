@@ -8,6 +8,8 @@ import com.mojang.blaze3d.textures.AddressMode;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 
+import java.nio.ByteBuffer;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.core.BlockPos;
@@ -141,6 +143,35 @@ public final class Film extends AbstractTexture {
         } finally {
             image.close();
         }
+    }
+
+    /**
+     * Écrit une image depuis un tampon brut.
+     *
+     * <h2>Pourquoi cette variante et pas celle qui prend une {@code NativeImage}</h2>
+     *
+     * <p>Le décodeur rend des octets natifs. Les faire passer par une {@code NativeImage} imposerait
+     * une recopie de trois mébioctets et demi par image — cent mébioctets par seconde à trente
+     * images — pour ne rien gagner : la texture attend exactement la même disposition.
+     *
+     * <p>En 26.2, {@code writeToTexture} a deux familles. Celle qui prend une {@code NativeImage}
+     * écrit l'image entière à un décalage ; celle qui prend un {@code ByteBuffer} prend en plus une
+     * largeur et une hauteur explicites — huit arguments — et c'est la seule qui accepte des octets
+     * qu'on n'a pas enveloppés. Le tampon doit être <b>direct</b> : {@code Pump} les alloue ainsi.
+     */
+    public void write(ByteBuffer pixels, int sourceWidth, int sourceHeight) {
+        if (this.texture == null || this.texture.isClosed()) {
+            return;
+        }
+        if (sourceWidth != this.width || sourceHeight != this.height) {
+            // Le flux a changé de taille — un changement de qualité, ou une source qui bascule de
+            // résolution en cours de route. Écrire quand même laisserait une bande de mémoire vidéo
+            // non initialisée à l'écran. C'est à l'appelant de rendre cette pellicule et d'en
+            // réserver une autre ; voir Gaze.
+            return;
+        }
+        RenderSystem.getDevice().createCommandEncoder()
+                .writeToTexture(this.texture, pixels, 0, 0, 0, 0, this.width, this.height);
     }
 
     /**

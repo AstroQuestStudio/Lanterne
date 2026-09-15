@@ -22,22 +22,28 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * préférence d'affichage : c'est une règle que le serveur fait respecter, et un client ne doit jamais
  * pouvoir s'inventer la sienne.
  *
- * <h2>La liste blanche part vide, et c'est délibéré</h2>
+ * <h2>Le filtrage par domaine est OUVERT par défaut, et c'est une décision d'administrateur</h2>
  *
- * <p>La tentation est d'y mettre d'emblée les grands hébergeurs de vidéo pour que le bloc « marche
- * tout de suite ». Deux raisons de ne pas le faire, et la seconde suffirait.
+ * <p>La première version livrait l'inverse : liste active et vide, donc rien ne passait tant que
+ * l'administrateur n'avait pas inscrit un domaine. C'était défendable, et c'était mauvais à l'usage —
+ * un écran neuf refusait la première source qu'on lui donnait, et le joueur en concluait, non sans
+ * raison, que le bloc ne marchait pas.
  *
- * <p><b>Ce serait une promesse fausse.</b> Inscrire un hébergeur qui ne sert pas de fichier vidéo
- * directement — et aucun des grands ne le fait — donne un domaine autorisé dont rien ne sortira. Le
- * joueur conclura que le mod est cassé, ce qui est une conclusion raisonnable.
+ * <p>Le filtrage reste écrit, et disponible ; il est simplement <b>éteint</b> au départ. Un
+ * administrateur qui veut refermer met {@code active = true} et remplit la liste, par le fichier ou
+ * par {@code /projection domaine ajouter}. Rien n'a été retiré : c'est le défaut qui a changé de
+ * camp, sur décision de celui qui répond des joueurs.
  *
- * <p><b>Ce serait choisir à la place de quelqu'un dont c'est la responsabilité.</b> Autoriser un
- * domaine, c'est accepter que l'adresse IP de chaque joueur du serveur lui soit communiquée — voir
- * {@link Sieve}. Cette décision appartient à celui qui répond des joueurs, pas à l'auteur d'un mod
- * qui ne saura jamais de quel serveur il s'agit.
+ * <h2>Ce qui ne s'ouvre pas, et qui n'est pas de la politique</h2>
  *
- * <p>Le prix à payer est qu'un écran neuf refuse la première source qu'on lui donne. Il le refuse en
- * disant exactement quoi faire, et c'est la seule façon acceptable de refuser.
+ * <p><b>Les adresses de réseau privé restent refusées, liste ouverte ou fermée.</b> Une source
+ * pointant vers {@code 192.168.1.1} ne sort pas d'Internet : elle fait frapper à la porte du routeur
+ * de <em>chaque spectateur</em>, et le temps de réponse suffit à dire si la porte existe. Un
+ * administrateur peut ouvrir son serveur à tout Internet ; il ne peut pas ouvrir le réseau
+ * domestique de ses joueurs, parce que ce n'est pas le sien. Voir {@link Sieve}.
+ *
+ * <p><b>Et le joueur garde le dernier mot.</b> Son refus de charger un média distant prime sur toute
+ * liste blanche, et rien dans ce fichier ne le contourne.
  */
 public final class Booth {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
@@ -55,18 +61,21 @@ public final class Booth {
         BUILDER.comment(
                 "Lanterne - l'ecran et le projecteur.",
                 "",
-                "AVERTISSEMENT, a lire une fois :",
+                "A SAVOIR, une fois :",
                 "Quand un joueur pose un lien sur un ecran, ce n'est pas le serveur qui va le",
                 "chercher : c'est CHAQUE CLIENT qui regarde. L'hote distant recoit donc l'adresse IP",
-                "de tous vos joueurs. Un lien vers un serveur que quelqu'un controle lui donne la",
-                "liste des IP de votre communaute, sans aucune faille et sans aucun outil.",
+                "de tous vos joueurs, comme n'importe quel site qu'ils visiteraient.",
                 "",
-                "La liste blanche ci-dessous est la seule protection reelle contre cela. Elle est",
-                "active par defaut et VIDE par defaut : rien ne se chargera tant que vous n'aurez pas",
-                "inscrit vous-meme les domaines auxquels vous acceptez d'exposer vos joueurs.",
+                "Le filtrage par domaine est DESACTIVE par defaut : tout lien http(s) public est",
+                "accepte. Pour refermer, mettez liste_blanche.active a true et remplissez",
+                "liste_blanche.domaines.",
                 "",
-                "Un joueur peut de son cote refuser TOUT media distant, et son refus prime sur cette",
-                "liste. C'est dans son fichier lanterne-projecteur-client.toml.").push("projection");
+                "Deux choses ne s'ouvrent JAMAIS, et ce ne sont pas des preferences :",
+                "  - les adresses de reseau prive (127.x, 10.x, 192.168.x, 172.16-31.x, localhost,",
+                "    fe80::...) sont toujours refusees : elles feraient sonder le reseau domestique",
+                "    de vos joueurs, qui ne vous appartient pas ;",
+                "  - le refus d'un joueur de charger un media distant prime sur tout ce fichier.",
+                "    C'est dans son lanterne-projecteur-client.toml, et dans l'ecran du bloc.").push("projection");
 
         ACTIVE = BUILDER.comment(
                 "Les ecrans et les projecteurs fonctionnent-ils sur ce serveur ?",
@@ -106,9 +115,14 @@ public final class Booth {
 
         FILTER = BUILDER.comment(
                 "Appliquer la liste blanche.",
-                "A faux, n'importe quel lien http(s) public est accepte. Ne mettez faux que si vous",
-                "savez precisement a qui vous exposez les IP de vos joueurs.")
-                .define("active", true);
+                "",
+                "FAUX par defaut : n'importe quel lien http(s) public est accepte.",
+                "A VRAI, seuls les domaines ci-dessous passent.",
+                "",
+                "Dans les deux cas les adresses de reseau prive restent refusees : ce n'est pas la",
+                "liste qui les arrete mais une regle a part, et elle protege le reseau domestique de",
+                "vos joueurs plutot que votre serveur.")
+                .define("active", false);
 
         DOMAINS = BUILDER.comment("Les domaines autorises.")
                 .defineList("domaines", List.<String>of(), () -> "exemple.com",
@@ -129,10 +143,11 @@ public final class Booth {
      */
     public static Sieve.Verdict admits(String source) {
         if (!loaded()) {
-            // Avant le chargement du fichier, on refuse. Ouvrir « en attendant » ferait passer
-            // exactement la source qu'on est en train d'essayer d'arreter, et le moment ou la
-            // configuration n'est pas encore lue est le premier moment d'une partie.
-            return Sieve.Verdict.HORS_LISTE;
+            // Avant le chargement du fichier, on ne sait pas si l'administrateur a referme. On
+            // applique donc le tamis SANS liste : ce qui n'est pas de la politique — le protocole,
+            // les adresses privees — joue quand meme, et c'est tout ce qui compte dans les
+            // quelques millisecondes ou la configuration n'est pas encore lue.
+            return Sieve.admits(source, java.util.List.of(), false);
         }
         return Sieve.admits(source, DOMAINS.get(), FILTER.get());
     }
@@ -146,7 +161,7 @@ public final class Booth {
     }
 
     public static boolean filtering() {
-        return !loaded() || FILTER.get();
+        return loaded() && FILTER.get();
     }
 
     public static boolean active() {
@@ -184,13 +199,13 @@ public final class Booth {
             return;
         }
         if (!FILTER.get()) {
-            Lanterne.LOG.warn("[PROJECTION] La liste blanche est DÉSACTIVÉE. N'importe quel lien "
-                    + "public sera chargé par tous les clients, qui communiqueront donc leur adresse "
-                    + "IP à qui l'a posé. Voir config/lanterne-projecteur.toml.");
+            Lanterne.LOG.info("[PROJECTION] Filtrage par domaine désactivé : tout lien http(s) "
+                    + "public est accepté. Les adresses de réseau privé restent refusées. Pour "
+                    + "refermer : « /projection domaine ajouter <domaine> », puis "
+                    + "liste_blanche.active = true.");
         } else if (DOMAINS.get().isEmpty()) {
-            Lanterne.LOG.info("[PROJECTION] Liste blanche active et vide : aucune source ne sera "
-                    + "acceptée. Inscris les domaines dans config/lanterne-projecteur.toml, ou par "
-                    + "« /lanterne projection domaine ajouter <domaine> ».");
+            Lanterne.LOG.warn("[PROJECTION] Liste blanche ACTIVE et VIDE : aucune source ne sera "
+                    + "acceptée. Inscris des domaines, ou remets liste_blanche.active à false.");
         } else {
             Lanterne.LOG.info("[PROJECTION] Liste blanche active — {} domaine(s).",
                     DOMAINS.get().size());

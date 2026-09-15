@@ -166,24 +166,18 @@ public class Console extends Screen {
                 .build());
 
         addRenderableWidget(Button.builder(Component.literal(
-                        this.feed.loop() ? "Boucle ✔" : "Boucle ✘"), button ->
-                        send(new Feed(this.feed.source(), !this.feed.loop(), this.feed.autoplay(),
-                                this.feed.volume(), this.feed.range(), this.feed.brightness(),
-                                this.feed.shape(), this.feed.lock())))
+                        this.feed.loop() ? "Boucle ✔" : "Boucle ✘"),
+                        button -> send(this.feed.withLoop(!this.feed.loop())))
                 .bounds(left + 106, base, 64, 18).build());
         addRenderableWidget(Button.builder(Component.literal(
-                        this.feed.autoplay() ? "Auto ✔" : "Auto ✘"), button ->
-                        send(new Feed(this.feed.source(), this.feed.loop(), !this.feed.autoplay(),
-                                this.feed.volume(), this.feed.range(), this.feed.brightness(),
-                                this.feed.shape(), this.feed.lock())))
+                        this.feed.autoplay() ? "Auto ✔" : "Auto ✘"),
+                        button -> send(this.feed.withAutoplay(!this.feed.autoplay())))
                 .bounds(left + 174, base, 58, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Démarrer tout seul quand la source change")))
                 .build());
-        addRenderableWidget(Button.builder(Component.literal(this.feed.shape().label()), button ->
-                        send(new Feed(this.feed.source(), this.feed.loop(), this.feed.autoplay(),
-                                this.feed.volume(), this.feed.range(), this.feed.brightness(),
-                                this.feed.shape().next(), this.feed.lock())))
+        addRenderableWidget(Button.builder(Component.literal(this.feed.shape().label()),
+                        button -> send(this.feed.withShape(this.feed.shape().next())))
                 .bounds(left + 236, base, 74, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Étiré : remplit, déforme.\nEntier : tout, avec des bandes.\n"
@@ -191,21 +185,58 @@ public class Console extends Screen {
                 .build());
 
         int bottom = top + panelHeight();
-        addRenderableWidget(Button.builder(Component.literal("Qui règle : " + this.feed.lock().label()),
-                        button -> send(new Feed(this.feed.source(), this.feed.loop(),
-                                this.feed.autoplay(), this.feed.volume(), this.feed.range(),
-                                this.feed.brightness(), this.feed.shape(), this.feed.lock().next())))
-                .bounds(left + 10, bottom - 46, 150, 18).build());
+        addRenderableWidget(Button.builder(
+                        Component.literal("Qui règle : " + this.feed.lock().label()),
+                        button -> send(this.feed.withLock(this.feed.lock().next())))
+                .bounds(left + 10, bottom - 70, 150, 18).build());
 
-        addRenderableWidget(Button.builder(Component.literal(Consent.remoteAllowed()
-                        ? "Médias distants : oui" : "Médias distants : NON"), button -> {
-                            Consent.allowRemote(!Consent.remoteAllowed());
+        // La qualité de décodage : le seul réglage dont le coût soit une loi du carré. Il est
+        // placé à côté du plafond de cette machine, parce que c'est le minimum des deux qui
+        // s'applique et qu'on ne comprend ni l'un ni l'autre en les voyant séparément.
+        addRenderableWidget(Button.builder(
+                        Component.literal("Qualité : " + this.feed.grade().label()),
+                        button -> send(this.feed.withGrade(this.feed.grade().next())))
+                .bounds(left + 166, bottom - 70, 144, 18)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Pour cet écran, pour tout le monde.\n"
+                                + "Auto suit la taille apparente du mur.\n"
+                                + "360p coûte NEUF fois moins que 1080p.")))
+                .build());
+
+        addRenderableWidget(Button.builder(
+                        Component.literal("Ma machine : " + Consent.ceiling().label() + " max"),
+                        button -> {
+                            Consent.setCeiling(Consent.ceiling().next());
+                            rebuildWidgets();
+                        })
+                .bounds(left + 10, bottom - 46, 150, 18)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Ne vaut que pour CE client, et n'est envoy\u00e9 à personne.\n"
+                                + "C'est le plus bas des deux plafonds qui s'applique.")))
+                .build());
+
+        // Le consentement. Gros, explicite, et le libellé dit ce qu'il implique plutôt que de
+        // se contenter d'un état : un joueur a déjà lu « refus du joueur » dans son journal et en a
+        // conclu que ffmpeg manquait sur sa machine.
+        boolean yes = Consent.remoteAllowed();
+        addRenderableWidget(Button.builder(Component.literal(yes
+                        ? "Médias distants : AUTORISÉS" : "▶ Autoriser les médias distants"),
+                        button -> {
+                            Consent.allowRemote(!yes);
+                            // Dire oui doit suffire. Sans cet appel, le joueur aurait consenti puis
+                            // attendu sans rien voir jusqu'à ce qu'un écran soit regardé assez
+                            // longtemps pour que le tour de ronde s'en aperçoive.
+                            if (!yes) {
+                                Fetch.ensure();
+                            }
                             rebuildWidgets();
                         })
                 .bounds(left + 166, bottom - 46, 144, 18)
                 .tooltip(Tooltip.create(Component.literal(
-                        "Quand c'est « oui », cette machine se connecte aux adresses posées sur les"
-                                + " écrans, et l'hôte distant apprend ton adresse IP.")))
+                        "C'est TON client qui va chercher la vidéo, pas le serveur.\n"
+                                + "L'hébergeur distant verra donc ton adresse IP, comme\n"
+                                + "n'importe quel site que tu visites.\n\n"
+                                + "Tant que c'est « non », rien ne part de cette machine.")))
                 .build());
     }
 
@@ -216,7 +247,7 @@ public class Console extends Screen {
 
     private int panelHeight() {
         // Quatre barres pour un écran, six pour un projecteur, plus les bandes fixes.
-        return HEADER + 24 + 22 + 14 + bars().length * ROW + 56;
+        return HEADER + 24 + 22 + 14 + bars().length * ROW + 80;
     }
 
     @Override
@@ -270,15 +301,9 @@ public class Console extends Screen {
         }
         int clamped = Math.clamp(value, all[index].min(), all[index].max());
         switch (index) {
-            case 0 -> send(new Feed(this.feed.source(), this.feed.loop(), this.feed.autoplay(),
-                    clamped, this.feed.range(), this.feed.brightness(), this.feed.shape(),
-                    this.feed.lock()));
-            case 1 -> send(new Feed(this.feed.source(), this.feed.loop(), this.feed.autoplay(),
-                    this.feed.volume(), clamped, this.feed.brightness(), this.feed.shape(),
-                    this.feed.lock()));
-            case 2 -> send(new Feed(this.feed.source(), this.feed.loop(), this.feed.autoplay(),
-                    this.feed.volume(), this.feed.range(), clamped, this.feed.shape(),
-                    this.feed.lock()));
+            case 0 -> send(this.feed.withVolume(clamped));
+            case 1 -> send(this.feed.withRange(clamped));
+            case 2 -> send(this.feed.withBrightness(clamped));
             case 3 -> {
                 this.reach = clamped;
                 ClientPacketDistributor.sendToServer(new Mail.Aim(this.pos, clamped, this.span));
@@ -410,12 +435,45 @@ public class Console extends Screen {
         }
     }
 
-    /** Le moteur retenu, et ce qui lui manque. Jamais « bientôt » — voir {@code Engine}. */
+    /**
+     * L'état du décodeur, en une ligne qui dit quoi faire.
+     *
+     * <h2>Elle a été réécrite après un rapport de joueur</h2>
+     *
+     * <p>Elle disait « FFmpeg (bytedeco) — refus du joueur ». Un joueur en a conclu que ffmpeg
+     * manquait sur sa machine, et il est allé le chercher là où il n'était pas. Deux fautes : elle
+     * nommait un refus que personne n'avait exprimé, et elle ne disait pas où aller.
+     *
+     * <p>Elle dit maintenant l'état <b>et le geste suivant</b>, et l'avancement du téléchargement
+     * quand il tourne — trente mébioctets sans barre de progression passent pour un blocage.
+     */
     private void drawEngine(GuiGraphicsExtractor graphics, int left, int bottom) {
         Engine best = Engine.CANDIDATES.get(0);
-        String note = "Décodeur : " + best.label() + " — " + best.verdict().label();
+        boolean ready = best.verdict() == Engine.Verdict.PRET;
+        String note;
+        int colour;
+        if (!Consent.remoteAllowed()) {
+            note = "Décodeur en attente : autorise les médias distants ci-dessus →";
+            colour = AMBER;
+        } else if (ready) {
+            note = "Décodeur prêt — " + best.label();
+            colour = GOOD;
+        } else {
+            note = "Décodeur — " + Fetch.describe();
+            colour = Fetch.state() == Fetch.State.EN_COURS ? AMBER : BAD;
+        }
         graphics.text(this.font, this.font.plainSubstrByWidth(note, WIDTH - 20),
-                left + 10, bottom - 22, best.verdict() == Engine.Verdict.PRET ? GOOD : BAD, false);
+                left + 10, bottom - 22, colour, false);
+
+        // Une barre pendant le téléchargement : trente mébioctets sans rien qui bouge, c'est un
+        // joueur qui referme l'écran en concluant que c'est cassé.
+        if (Fetch.state() == Fetch.State.EN_COURS) {
+            int barLeft = left + 10;
+            int barRight = left + WIDTH - 10;
+            graphics.fill(barLeft, bottom - 11, barRight, bottom - 8, RAIL);
+            graphics.fill(barLeft, bottom - 11,
+                    barLeft + (barRight - barLeft) * Fetch.percent() / 100, bottom - 8, AMBER);
+        }
     }
 
     private long clientTime() {

@@ -45,6 +45,7 @@ public final class Consent {
     public static final ModConfigSpec.IntValue ACTIVE_CAP;
     public static final ModConfigSpec.IntValue FRAME_CAP;
     public static final ModConfigSpec.IntValue DISTANCE;
+    public static final ModConfigSpec.EnumValue<fr.clubcitrouille.lanterne.content.screen.Grade> CEILING;
 
     public static final ModConfigSpec SPEC;
 
@@ -77,6 +78,21 @@ public final class Consent {
                 "30 suffit a toute video ordinaire. Monter a 60 double le travail de decodage et de",
                 "televersement pour un gain que personne ne voit sur un mur a six blocs de distance.")
                 .defineInRange("images_par_seconde_max", 30, 1, 120);
+
+        CEILING = BUILDER.comment(
+                "Resolution de decodage maximale que cette machine accepte.",
+                "",
+                "  auto    - suit la taille apparente du mur (defaut, et le bon choix)",
+                "  basse   - 360p  : NEUF fois moins de pixels que 1080p",
+                "  moyenne - 720p",
+                "  haute   - 1080p",
+                "  source  - aucun plafond",
+                "",
+                "Chaque ecran porte AUSSI son propre reglage de qualite, choisi par celui qui l'a",
+                "pose. C'est le plus BAS des deux qui s'applique : un joueur sur petite machine peut",
+                "donc se proteger sans rien degrader pour les autres, et sans que l'administrateur",
+                "ait a trancher a sa place.")
+                .defineEnum("qualite_max", fr.clubcitrouille.lanterne.content.screen.Grade.AUTO);
 
         DISTANCE = BUILDER.comment(
                 "Distance au-dela de laquelle un ecran cesse de decoder, en blocs.",
@@ -123,6 +139,26 @@ public final class Consent {
 
     public static int distance() {
         return SPEC.isLoaded() ? DISTANCE.get() : 64;
+    }
+
+    /**
+     * Le plafond de résolution de cette machine.
+     *
+     * <p>Ne part jamais d'ici : il n'est envoyé à aucun serveur, et aucun serveur ne peut le lire.
+     * C'est ce qui le distingue du réglage porté par l'écran, qui vaut pour tout le monde.
+     */
+    public static fr.clubcitrouille.lanterne.content.screen.Grade ceiling() {
+        return SPEC.isLoaded() ? CEILING.get()
+                : fr.clubcitrouille.lanterne.content.screen.Grade.AUTO;
+    }
+
+    /** Change le plafond, et l'écrit. Appelé par le bouton de l'écran de réglages. */
+    public static void setCeiling(fr.clubcitrouille.lanterne.content.screen.Grade wanted) {
+        if (!SPEC.isLoaded()) {
+            return;
+        }
+        CEILING.set(wanted);
+        SPEC.save();
     }
 
     public static void apply(ModConfigEvent event) {

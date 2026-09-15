@@ -47,7 +47,7 @@ public final class Still implements Engine {
      * bobine muette aurait donné un écran uni sans un mot, c'est-à-dire le comportement qu'on refuse.
      */
     @Override
-    public Reel open(String source) {
+    public Reel open(String source, int wantedHeight) {
         return null;
     }
 
@@ -66,9 +66,11 @@ public final class Still implements Engine {
             }
         }
         return switch (best.verdict()) {
-            case SANS_CONSENTEMENT -> "Médias distants refusés — réglages du mod";
+            // Impératif, et non constat. « Médias distants refusés » décrivait un état ; le joueur
+            // a besoin du geste suivant, et l'ardoise est le seul endroit où il regarde.
+            case SANS_CONSENTEMENT -> "Clique ce bloc → « Médias distants » pour autoriser la lecture";
             case SANS_MOD -> "Aucun décodeur vidéo installé";
-            case SANS_BIBLIOTHEQUE -> "Décodeur présent, bibliothèque absente";
+            case SANS_BIBLIOTHEQUE -> "Décodeur à télécharger — clique ce bloc";
             default -> "Aucun décodeur vidéo — voir notes/projecteur.md";
         };
     }

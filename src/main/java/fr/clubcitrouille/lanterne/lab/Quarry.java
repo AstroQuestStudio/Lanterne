@@ -553,31 +553,20 @@ public final class Quarry {
                             + "Chiffres de génération à considérer avec prudence.",
                     genOnSuspect, genOffSuspect, GEN_SUSPECT_MS));
         }
-        // Les trois nombres du pochoir, et pas seulement le plus flatteur.
+        // Les trois nombres du cadastre, et pas seulement le plus flatteur.
         //
         // La règle que ce projet s'est donnée après la chute libre — taux, épargne, appels — vaut ici
-        // en entier : un tri qui n'écarte rien ne peut rien rapporter, et un tri qui renonce souvent
-        // non plus. Sans ces lignes, un verdict « aucun effet » serait indéchiffrable : on ne saurait
-        // pas si le module a échoué ou s'il n'a simplement jamais rencontré de structure.
-        long stencilSeen = fr.clubcitrouille.lanterne.core.Stencil.seen();
-        long stencilTrimmed = fr.clubcitrouille.lanterne.core.Stencil.trimmed();
-        long stencilDeclined = fr.clubcitrouille.lanterne.core.Stencil.declined();
-        if (stencilSeen > 0L || stencilDeclined > 0L) {
-            Lanterne.LOG.info(String.format(Locale.ROOT,
-                    "[CARRIÈRE] Pochoir : %d bloc(s) de gabarit examiné(s), %d écarté(s) avant "
-                            + "préparation (%.1f %%) · %d pose(s) où le tri a renoncé",
-                    stencilSeen, stencilTrimmed,
-                    stencilSeen == 0L ? 0d : 100d * stencilTrimmed / stencilSeen, stencilDeclined));
-        } else {
-            Lanterne.LOG.info("[CARRIÈRE] Pochoir : AUCUNE structure rencontrée dans cette grille — "
-                    + "le module n'a rien eu à trier, et le verdict de génération ne dit donc rien "
-                    + "de lui.");
-        }
+        // en entier : un index qui ne voit aucune structure ne peut rien rapporter, et un index qui
+        // renonce souvent non plus. Sans ces lignes, un verdict « aucun effet » serait
+        // indéchiffrable : on ne saurait pas si le module a échoué ou s'il n'a simplement jamais
+        // rencontré de village.
+        Lanterne.LOG.info("[CARRIÈRE] Cadastre : {}",
+                fr.clubcitrouille.lanterne.core.Cadastre.describe());
 
         Lanterne.LOG.info(
                 "[CARRIÈRE] VERDICT génération : {} — chunks appariés dans la MÊME grille, un sur deux "
                         + "de chaque côté : le relief se répartit également au lieu de s'accumuler d'un "
-                        + "seul côté. Un seul module de ce mod touche à la génération — le pochoir ; "
+                        + "seul côté. Un seul module de ce mod touche à la génération — le cadastre ; "
                         + "hors de lui, tout écart notable est un signal sur le protocole, pas sur le "
                         + "mod.",
                 verdict(genRatio));

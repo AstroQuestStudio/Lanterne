@@ -19,6 +19,7 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import fr.clubcitrouille.lanterne.client.upscale.Deep;
+import fr.clubcitrouille.lanterne.client.upscale.Pivot;
 import fr.clubcitrouille.lanterne.client.upscale.Upscale;
 import fr.clubcitrouille.lanterne.core.ClientConfig;
 import fr.clubcitrouille.lanterne.core.Config;
@@ -258,15 +259,38 @@ public final class Dials extends Screen {
                 "L'échelle suit le taux d'images au lieu d'être choisie une fois pour toutes.",
                 "Le préréglage ci-dessus devient le PLANCHER : la houle ne descend jamais plus bas.",
                 "Dix secondes de grâce, puis un palier toutes les quatre secondes au plus."));
+        // Le backend est proposé AVANT DLSS, parce que c'est lui qui conditionne l'autre : une
+        // ligne qui annonce un verrou doit être précédée de celle qui tend la clé.
+        image.add(Dial.cycle("Vulkan", () -> Pivot.state().label(), Dials::pivotColour,
+                Dials::cyclePivot,
+                "Le backend graphique du jeu. C'est la seule voie possible vers DLSS.",
+                "Mojang le marque « expérimental » et l'a rétrogradé de défaut à expérimental :"
+                        + " plus rapide sur certaines machines, plus lent sur d'autres. Aucun gain"
+                        + " n'est promis ici.",
+                "Au prochain lancement du jeu. Si Vulkan échoue, le jeu retombe DE LUI-MÊME sur"
+                        + " OpenGL, dans le même lancement — on ne peut pas se coincer, et le clic"
+                        + " se reprend au même endroit."));
         // Le relevé se fait à l'ouverture de l'écran plutôt qu'au démarrage : il demande un
         // périphérique graphique construit, et il est sans objet tant que personne ne le regarde.
         image.add(Dial.cycle("DLSS", () -> {
             Deep.probe();
             return Deep.describe();
         }, () -> FAINT, null,
-                "NON DISPONIBLE. DLSS est une bibliothèque C++ de NVIDIA : il lui faut un pont natif,",
-                "que ce mod n'embarque pas, plus Vulkan (expérimental en 26.2) et une carte RTX.",
-                "FSR 1.0 ci-dessus n'exige rien de tout cela et sert sur n'importe quelle carte."));
+                "NON DISPONIBLE. La valeur dit CE QUI manque : backend, carte, chargeur ou modèle.",
+                "Le pilote installe le chargeur NGX mais PAS nvngx_dlss.dll, le modèle de"
+                        + " super-résolution : sur une machine à jour, il est absent. Sa licence"
+                        + " interdit de l'embarquer ici.",
+                "FSR 1.0 ci-dessus n'exige ni Vulkan, ni carte NVIDIA, ni téléchargement, et sert"
+                        + " donc sur n'importe quelle machine."));
+        image.add(Dial.toggle("Tampon mutable", Settings::tampon, ClientConfig.TAMPON,
+                "Un tampon immuable oblige le pilote à ATTENDRE quand le jeu réécrit dedans pendant"
+                        + " que la carte s'en sert. Sur NVIDIA et Intel Gen7, cette attente se voit :"
+                        + " l'image se pose, puis saute.",
+                "NON MESURÉ ICI, et c'est la seule exception du mod à cette règle : c'est le"
+                        + " correctif que Mojang a écrit lui-même en 26.3, et que la 26.2 n'a pas."
+                        + " Sans effet sous Vulkan, ni sur une autre carte.",
+                "Au prochain lancement : la décision est prise une seule fois, à la création du"
+                        + " périphérique graphique."));
         image.add(Dial.toggle("Jauge de performance", Settings::gauge, ClientConfig.GAUGE,
                 "Images/s, centile le plus lent et créatures voilées, dans un coin de l'écran.",
                 "F3 donne une moyenne arrondie ; la jauge donne les à-coups, qui sont ce qu'on"
@@ -384,11 +408,12 @@ public final class Dials extends Screen {
                         + " un tuyau de mod ont des centaines d'états qui décrivent le même volume.",
                 "Tout le travail est fait au CHARGEMENT. 11 413 formes effectivement partagées, mais"
                         + " l'écart de mémoire (9,2 Mo) est du même ordre que le bruit du banc."));
-        world.add(Dial.serverFlag("Pochoir des structures", Config.STENCIL,
-                "Une maison de village qui chevauche quatre chunks était préparée quatre fois en"
-                        + " entier pour n'en écrire qu'un quart à chaque passage.",
+        world.add(Dial.serverFlag("Cadastre des structures", Config.CADASTRE,
+                "Le placeur Jigsaw teste chaque pièce contre une forme de voxels qui grossit à"
+                        + " chaque pièce posée — son coût croît comme le CUBE du nombre de pièces."
+                        + " Ici la place prise est tenue dans un index de boîtes.",
                 "N'agit QUE pendant la génération de terrain ; un monde déjà exploré n'y passe plus."
-                        + " Repris de StructureLayoutOptimizer (MIT)."));
+                        + " Idée de StructureLayoutOptimizer (MIT), implémentation différente."));
         world.add(Dial.serverFlag("Moteur de redstone", Config.REDSTONE,
                 "Celui que Mojang a écrit puis laissé éteint : il traite le réseau ENTIER et n'émet"
                         + " que les mises à jour finales, au lieu de recalculer brin par brin.",
@@ -426,6 +451,12 @@ public final class Dials extends Screen {
                 "Elle ne dépasse JAMAIS ce que server.properties demande : elle descend quand le"
                         + " serveur souffre et remonte ensuite. C'est le seul module qui change ce"
                         + " que voit le joueur."));
+        machine.add(Dial.serverFlag("Élastique", Config.ELASTIQUE,
+                "Les seuils anti-triche du mouvement mesurés à l'horloge plutôt qu'en ticks.",
+                "NE REND RIEN PLUS RAPIDE : le seul module qui cache un symptôme au lieu de traiter"
+                        + " une cause, et le seul livré ÉTEINT. Sous les 75 ms de tick, il rend les"
+                        + " constantes du jeu au bit près ; au-delà, il les élargit du carré du"
+                        + " retard. La destination reste confrontée aux collisions du monde."));
         machine.add(Dial.serverCount("Zone franche", Config.NEAR_RADIUS, " blocs",
                 "Rayon dans lequel rien n'est dégradé, ni par la distance ni par la foule.",
                 "Le seul réglage qui arbitre un COMPROMIS et non un gain. À 24, aucune saccade sous"
@@ -449,11 +480,19 @@ public final class Dials extends Screen {
         machine.add(Dial.serverFlag("Rationnement", Config.RATIONING,
                 "Réagir pendant le tick, et non au suivant.",
                 "Un serveur qui attend le tick d'après pour se défendre a déjà perdu celui-ci."));
-        machine.add(Dial.serverState("Digue", Settings::digue,
-                "Le refus des chargements de chunk synchrones.",
+        machine.add(Dial.serverFlag("Digue", Config.DIGUE,
+                "Le refus des chargements de chunk synchrones. Le fil du serveur cesse de ticker"
+                        + " pendant qu'un chunk se lit ou se génère : deux à quatre ticks perdus"
+                        + " d'un coup, et sur un cœur unique aucun autre cœur ne l'absorbe.",
                 "Seul module qui RETIRE une information au jeu plutôt que de la calculer moins cher :"
-                        + " une carte laisse une case blanche, un villageois ne se couche pas.",
-                ENV_NOTE));
+                        + " une carte laisse une case blanche, un villageois ne se couche pas."));
+        machine.add(Dial.serverFlag("Sommaire des zip", Config.SOMMAIRE,
+                "listResources balaie le zip ENTIER à chaque appel, et un rechargement de datapacks"
+                        + " l'appelle une fois par registre — quarante-sept, plus une centaine pour"
+                        + " les étiquettes.",
+                "Sans objet si vos datapacks sont des dossiers : PathPackResources n'a pas ce"
+                        + " défaut. Le gros du gain est au démarrage du CLIENT, sur les paquets de"
+                        + " ressources."));
         machine.add(Dial.serverState("Filtre du journal", Settings::hush,
                 "Écarte les avertissements dont l'innocuité est démontrée.",
                 "Éteint par défaut : sa première version a fait taire la TOTALITÉ des messages du"
@@ -556,6 +595,26 @@ public final class Dials extends Screen {
     private static void cycleEdge(int step) {
         Upscale.cycleEdge(step);
         commit();
+    }
+
+    /**
+     * Bascule le backend graphique demandé au prochain lancement.
+     *
+     * <p>Sans {@link #commit()} : ce réglage n'appartient pas au fichier du mod mais à
+     * {@code options.txt}, et {@link Pivot#toggle()} l'y écrit lui-même. Appeler {@code commit}
+     * ici réécrirait le fichier client pour rien.
+     */
+    private static void cyclePivot(int ignoredDirection) {
+        Pivot.toggle();
+    }
+
+    private static int pivotColour() {
+        return switch (Pivot.state()) {
+            case VULKAN -> ON;
+            case VULKAN_AU_RELANCEMENT, OPENGL_AU_RELANCEMENT -> AMBER;
+            case OPENGL -> DIM;
+            case VULKAN_REFUSE, INCONNU -> FAINT;
+        };
     }
 
     /** La houle n'a que deux états : le sens du clic ne lui dit rien, et c'est voulu. */

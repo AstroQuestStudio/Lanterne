@@ -63,6 +63,9 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `content/screen/*` + `client/screen/*` — l'Écran, le Projecteur | **Rien n'est copié.** Aucun décodeur n'est embarqué à ce jour. Le relevé des projets étudiés et de leurs licences est dans `notes/projecteur.md` ; les deux moteurs prévus sont branchés derrière `client/screen/Engine.java` et appelés par réflexion, jamais par incorporation de code. | voir ci-dessous |
 | `assets/lanterne/shaders/post/fsr_easu.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (EASU)**, [AMD](https://github.com/GPUOpen-Effects/FidelityFX-FSR) — `ffx_fsr1.h` | MIT |
 | `assets/lanterne/shaders/post/fsr_rcas.fsh` | Algorithme **FidelityFX Super Resolution 1.0 (RCAS)**, *idem* | MIT |
+| `client/upscale/Jitter.java` — le décalage sous-pixellaire | **Rien n'est copié.** La suite de Halton est une construction mathématique publiée en 1960, sans titulaire. Le *choix* des bases 2 et 3 et la règle de période `8 × (échelle)²` sont la convention commune à DLSS, FSR 2, Unreal et Unity ; c'est une recommandation, pas du code. | — (domaine public) |
+| `client/upscale/Pivot.java` — le basculement Vulkan | **Rien.** Écrit pour ce projet. N'appelle que des méthodes **publiques** de `net.minecraft.client.Options` (`preferredGraphicsBackend`, `isRestartRequiredToApplyVideoSettings`, `save`). | — |
+| `client/upscale/Deep.loader()` + `tools/EssaiNgx.java` — le relevé NGX | **Rien.** Les noms de fonctions `NVSDK_NGX_*` sont lus dans la **table d'export** de la DLL que le pilote installe ; aucun en-tête, aucune ligne de source du SDK de NVIDIA n'a été copiée ni même consultée. Voir `notes/dlss-panama.md`. | — |
 | `core/Digue.java` + `mixin/{BeeHive,BeeHoming,MapChunk,GameEventChunk,SleepBed,RemoveBlock}Mixin.java` — la digue | Idée et points d'accroche de [ServerCore](https://github.com/Wesley1808/ServerCore) (Wesley1808), paquet `optimizations/sync_loads` | MIT |
 | `core/Sommaire.java` + `mixin/PackIndexMixin.java` — le sommaire des zip | Idée de [quick-pack](https://github.com/DrexHD/quick-pack) (DrexHD) | **GPL-3.0-only** |
 | `client/Tampon.java` + `mixin/BufferStorageMixin.java` — le tampon mutable | Idée de [framepace](https://github.com/lap2ka/framepace) (Lap2ka), lui-même rétroportage du correctif **Mojang MC-307596** livré en 26.3 | MIT |
@@ -268,14 +271,15 @@ pas d'équivalent en amont.
 ### La projection — deux moteurs, aucun code repris
 
 Aucun décodeur vidéo n'existe dans le jeu ni dans la machine virtuelle : tout mod
-qui affiche de la vidéo appelle du natif venu d'ailleurs. Lanterne n'en embarque
-**aucun à ce jour** ; `client/screen/Engine.java` déclare l'interface, et les deux
-candidats se contentent d'un relevé de ce qui manque. Le dossier chiffré est dans
-`notes/projecteur.md`.
+qui affiche de la vidéo appelle du natif venu d'ailleurs. Lanterne appelle **FFmpeg**,
+dont il embarque les liaisons Java et télécharge les bibliothèques sur consentement.
+`client/screen/Engine.java` déclare l'interface ; le second candidat, un Chromium
+embarqué, n'est appelé que s'il est déjà installé par le joueur. Le dossier chiffré
+est dans `notes/projecteur.md`.
 
 | Candidat | Licence vérifiée | Compatible GPL-3.0-only ? | Comment il serait appelé |
 |---|---|---|---|
-| **FFmpeg via bytedeco** (`org.bytedeco:ffmpeg`) | greffon Apache-2.0 **ou** GPLv2+CE au choix ; binaires sans `--enable-gpl` en **LGPL v3** (`--enable-version3` est dans `cppbuild.sh`), avec `--enable-gpl` en **GPL v3** | **oui**, les deux variantes | dépendance déclarée, binaires téléchargés de Maven Central |
+| **FFmpeg via bytedeco** (`org.bytedeco:ffmpeg`) | greffon Apache-2.0 **ou** GPLv2+CE au choix ; binaires sans `--enable-gpl` en **LGPL v3** (`--enable-version3` est dans `cppbuild.sh`), avec `--enable-gpl` en **GPL v3** | **oui**, les deux variantes | **retenu et branché.** Liaisons Java (832 Kio) embarquées par jarJar ; binaires de la variante **LGPL v3** téléchargés une fois de Maven Central, empreintes SHA-256 pinées dans `client/screen/Fetch.java`. Aucune ligne de bytedeco n'est recopiée. |
 | **MCEF / Rinku** (Chromium embarqué) | **LGPL-2.1-or-later** — la clause « or later » est ce qui le rend compatible ; une LGPL-2.1-**only** ne le serait pas | oui, mais sans objet | mod compagnon **que le joueur installe lui-même**, appelé par réflexion. Jamais téléchargé ni redistribué par Lanterne |
 
 [Dream Displays](https://github.com/arnodoelinger/dreamdisplays) (LGPL-3.0) a été

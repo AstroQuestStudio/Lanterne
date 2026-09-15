@@ -1,5 +1,7 @@
 package fr.clubcitrouille.lanterne.client.screen;
 
+import fr.clubcitrouille.lanterne.Lanterne;
+
 /**
  * Le moteur recommandé : les bibliothèques de FFmpeg, appelées depuis Java.
  *
@@ -44,26 +46,23 @@ package fr.clubcitrouille.lanterne.client.screen;
  * éprouvée. C'est la différence entre dépendre d'un programme absent et embarquer une bibliothèque
  * présente, et elle est de nature.
  *
- * <h2>Ce qui manque, et qu'aucune astuce ne remplace</h2>
+ * <h2>Comment il s'installe</h2>
  *
- * <ol>
- *   <li><b>La dépendance n'est pas déclarée</b> dans {@code build.gradle}. Trente mébioctets ajoutés
- *       à l'archive d'un mod de performance est une décision qui appartient à l'auteur du dépôt, pas
- *       à un chantier ; et elle se prend en même temps que le choix « embarqué ou téléchargé », qui
- *       change la taille publiée d'un facteur quatre.</li>
- *   <li><b>La pompe à images n'est pas écrite.</b> Ouvrir un {@code AVFormatContext}, trouver le flux
- *       vidéo, ouvrir l'{@code AVCodecContext}, négocier le contexte matériel, lire les paquets sur
- *       un fil de fond, convertir en RGBA et téléverser vers la texture — c'est le corps de
- *       {@link Reel}, et il ne s'écrit pas sans pouvoir l'exécuter une seule fois.</li>
- *   <li><b>Le son n'a pas de chemin.</b> Le moteur sonore de Minecraft joue des ressources, pas des
- *       tampons arbitraires. Y faire entrer un flux décodé en direct demande le même détour que les
- *       disques ont pris — un décodeur branché dans {@code SoundBufferLibrary} — mais avec une
- *       contrainte que les disques n'ont pas : rester en phase avec l'image.</li>
- * </ol>
+ * <p>Les liaisons Java — 832 Kio, du Java pur — sont dans l'archive du mod. Les bibliothèques, elles,
+ * se téléchargent une fois depuis Maven Central, sur consentement, et se vérifient par empreinte
+ * SHA-256 inscrite dans le code. Voir {@link Fetch}, et l'épreuve autonome
+ * {@code tools/EssaiLav.java} qui a établi que le chargeur de natifs sait les trouver sur le disque
+ * sans chargeur de classes maison.
  *
- * <p>Le premier point est un choix à faire, les deux autres sont du travail à faire. Aucun n'est un
- * obstacle de conception : la place est ici, la signature est celle de {@link Engine.Reel}, et
- * l'horloge partagée qui commande tout cela est déjà écrite et déjà juste.
+ * <h2>Ce qui reste à voir tourner</h2>
+ *
+ * <p>Le décodage a été exécuté hors de Minecraft : un H.264 ouvert, converti en RGBA, pixels
+ * vérifiés, horodatages corrects, les bibliothèques chargées depuis un dossier et non depuis le
+ * chemin de classes. C'est la partie qui pouvait ne pas marcher du tout.
+ *
+ * <p><b>Le téléversement vers la carte graphique n'a pas pu l'être</b> : il demande un contexte
+ * graphique, donc le jeu lancé, et ce chantier n'a pas le droit de le lancer. <b>Le son non plus</b>
+ * — voir {@link Airwave} pour le chemin, qui existe et qui est celui des disques.
  */
 public final class Lav implements Engine {
     public static final Lav INSTANCE = new Lav();
@@ -78,8 +77,6 @@ public final class Lav implements Engine {
      */
     private static final String PROBE = "org.bytedeco.ffmpeg.global.avformat";
 
-    private Verdict verdict;
-
     private Lav() {}
 
     @Override
@@ -87,35 +84,59 @@ public final class Lav implements Engine {
         return "FFmpeg (bytedeco)";
     }
 
+    /**
+     * Tout est-il réuni ?
+     *
+     * <p>Rien n'est mis en cache, et c'est voulu : les trois réponses possibles changent en cours de
+     * partie. Le consentement est un interrupteur que le joueur bascule pendant qu'il regarde un
+     * écran, et l'installation des binaires se termine sur un fil de fond. Un verdict figé au
+     * démarrage ferait attendre le prochain lancement du jeu pour l'un comme pour l'autre.
+     *
+     * <p>Les trois tests coûtent une lecture de champ chacun — {@link Fetch} garde son état dans une
+     * référence atomique, et la recherche de classe, elle, est mise en cache par le chargeur.
+     */
     @Override
     public Verdict verdict() {
-        // Le consentement se relit à chaque appel : c'est un interrupteur que le joueur bascule en
-        // cours de partie, et un refus qui n'aurait d'effet qu'au prochain lancement n'est pas un
-        // refus. Le reste, lui, est mis en cache — une recherche de classe qui échoue coûte le
-        // parcours du chemin de classes entier, et on ne la fait pas soixante fois par seconde.
         if (!Consent.remoteAllowed()) {
             return Verdict.SANS_CONSENTEMENT;
         }
-        if (this.verdict == null) {
-            this.verdict = present() ? Verdict.SANS_PONT : Verdict.SANS_BIBLIOTHEQUE;
+        if (!bindings()) {
+            // Les liaisons sont embarquées : ne pas les trouver veut dire que jarJar n'a pas fait
+            // son travail, et c'est une panne d'empaquetage, pas d'installation.
+            return Verdict.SANS_PONT;
         }
-        return this.verdict;
+        return Fetch.state() == Fetch.State.PRET ? Verdict.PRET : Verdict.SANS_BIBLIOTHEQUE;
     }
 
     /**
-     * Le point de branchement.
+     * Ouvre une source.
      *
-     * <p>Rend {@code null} en toutes circonstances tant que la pompe à images n'existe pas. Ce n'est
-     * pas un bouchon : c'est la seule réponse vraie, et c'est elle qui fait tomber l'appelant sur
-     * {@link Still}, qui affichera pourquoi.
+     * <p>Aucune exception ne sort d'ici : l'appelant est le fil de rendu, et une bobine qui refuse de
+     * s'ouvrir doit donner une ardoise, pas un plantage. {@link Pump} attrape tout de son côté aussi
+     * — la double garde n'est pas de la superstition, les deux fils peuvent échouer séparément.
      */
     @Override
-    public Reel open(String source) {
-        return null;
+    public Reel open(String source, int wantedHeight) {
+        if (verdict() != Verdict.PRET) {
+            return null;
+        }
+        try {
+            return Pump.open(source, wantedHeight);
+        } catch (Throwable refused) {
+            Lanterne.LOG.warn("[PROJECTION] ouverture impossible : {}", String.valueOf(refused));
+            return null;
+        }
     }
 
-    /** Les binaires de bytedeco sont-ils sur le chemin de classes ? */
-    private static boolean present() {
+    /**
+     * Les liaisons Java sont-elles là ?
+     *
+     * <p>{@code initialize = false} est indispensable. Initialiser une classe de bytedeco ferait
+     * tourner l'initialiseur statique de {@code Loader}, qui lit les propriétés de chemin — et à ce
+     * moment-là {@link Fetch} ne les a peut-être pas encore posées. Le relevé deviendrait alors la
+     * cause de la panne qu'il est censé constater.
+     */
+    private static boolean bindings() {
         try {
             Class.forName(PROBE, false, Lav.class.getClassLoader());
             return true;

@@ -1,0 +1,12 @@
+{
+  "ecran": {
+    "category": "record",
+    "subtitle": "subtitles.lanterne.ecran",
+    "sounds": [
+      {
+        "name": "lanterne:ecran/silence",
+        "stream": true
+      }
+    ]
+  }
+}

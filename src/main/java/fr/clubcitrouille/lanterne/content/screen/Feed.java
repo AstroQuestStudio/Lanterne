@@ -41,7 +41,8 @@ public record Feed(
         int range,
         int brightness,
         Shape shape,
-        Lock lock) {
+        Lock lock,
+        Grade grade) {
 
     /** Longueur maximale d'une source. Voir {@link Sieve} pour ce qui est accepté dedans. */
     public static final int SOURCE_LIMIT = 512;
@@ -137,9 +138,14 @@ public record Feed(
     /** Portée sonore maximale, en blocs. Au-delà, un écran s'entendrait d'un autre quartier. */
     public static final int RANGE_CAP = 64;
 
-    /** Un écran neuf : muet de source, à mi-volume, réservé à son poseur. */
+    /**
+     * Un écran neuf : muet de source, à mi-volume, réservé à son poseur, en qualité automatique.
+     *
+     * <p>{@link Grade#AUTO} et non {@link Grade#HAUTE} : un écran qu'on vient de poser n'a aucune
+     * raison de décoder deux millions de pixels avant qu'on sache seulement d'où on le regardera.
+     */
     public static final Feed BLANK =
-            new Feed("", false, false, 70, 16, 15, Shape.ENTIER, Lock.POSEUR);
+            new Feed("", false, false, 70, 16, 15, Shape.ENTIER, Lock.POSEUR, Grade.AUTO);
 
     public static final Codec<Feed> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.fieldOf("source").forGetter(Feed::source),
@@ -149,7 +155,11 @@ public record Feed(
             Codec.INT.fieldOf("portee").forGetter(Feed::range),
             Codec.INT.fieldOf("luminosite").forGetter(Feed::brightness),
             Shape.CODEC.fieldOf("cadrage").forGetter(Feed::shape),
-            Lock.CODEC.fieldOf("verrou").forGetter(Feed::lock)
+            Lock.CODEC.fieldOf("verrou").forGetter(Feed::lock),
+            // « optionalFieldOf » et non « fieldOf » : les écrans posés avant l'ajout de ce champ
+            // n'ont rien à ce nom dans leur sauvegarde, et un champ obligatoire absent fait échouer
+            // le décodage entier — c'est-à-dire qu'un mur déjà bâti perdrait sa source.
+            Grade.CODEC.optionalFieldOf("qualite", Grade.AUTO).forGetter(Feed::grade)
     ).apply(instance, Feed::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, Feed> STREAM_CODEC =
@@ -162,6 +172,7 @@ public record Feed(
                     ByteBufCodecs.VAR_INT, Feed::brightness,
                     Shape.STREAM_CODEC, Feed::shape,
                     Lock.STREAM_CODEC, Feed::lock,
+                    Grade.STREAM_CODEC, Feed::grade,
                     Feed::new);
 
     /**
@@ -191,7 +202,8 @@ public record Feed(
                 Math.clamp(this.range, 1, RANGE_CAP),
                 Math.clamp(this.brightness, 0, 15),
                 this.shape == null ? Shape.ENTIER : this.shape,
-                this.lock == null ? Lock.POSEUR : this.lock);
+                this.lock == null ? Lock.POSEUR : this.lock,
+                this.grade == null ? Grade.AUTO : this.grade);
     }
 
     /** Y a-t-il seulement quelque chose à montrer ? */
@@ -199,9 +211,61 @@ public record Feed(
         return this.source == null || this.source.isBlank();
     }
 
+    // --- Les retouches --------------------------------------------------------
+    //
+    // <h2>Pourquoi ces méthodes existent, et ce qu'elles ont déjà coûté de ne pas exister</h2>
+    //
+    // L'écran de réglages appelait le constructeur complet à sept endroits, en recopiant les huit
+    // champs à chaque fois pour n'en changer qu'un. Ajouter la qualité a donc cassé les sept d'un
+    // coup — et si l'un d'eux avait par malchance continué de compiler en décalant deux champs du
+    // même type, il aurait silencieusement écrit la portée dans le volume.
+    //
+    // Un enregistrement de neuf champs veut des retouches nommées. Le dixième champ ne cassera
+    // rien : il n'y a plus qu'un seul endroit qui connaisse l'ordre des arguments.
+
     public Feed withSource(String value) {
         return new Feed(value, this.loop, this.autoplay, this.volume, this.range, this.brightness,
-                this.shape, this.lock).sane();
+                this.shape, this.lock, this.grade).sane();
+    }
+
+    public Feed withLoop(boolean value) {
+        return new Feed(this.source, value, this.autoplay, this.volume, this.range, this.brightness,
+                this.shape, this.lock, this.grade);
+    }
+
+    public Feed withAutoplay(boolean value) {
+        return new Feed(this.source, this.loop, value, this.volume, this.range, this.brightness,
+                this.shape, this.lock, this.grade);
+    }
+
+    public Feed withVolume(int value) {
+        return new Feed(this.source, this.loop, this.autoplay, value, this.range, this.brightness,
+                this.shape, this.lock, this.grade).sane();
+    }
+
+    public Feed withRange(int value) {
+        return new Feed(this.source, this.loop, this.autoplay, this.volume, value, this.brightness,
+                this.shape, this.lock, this.grade).sane();
+    }
+
+    public Feed withBrightness(int value) {
+        return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range, value,
+                this.shape, this.lock, this.grade).sane();
+    }
+
+    public Feed withShape(Shape value) {
+        return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range,
+                this.brightness, value, this.lock, this.grade);
+    }
+
+    public Feed withLock(Lock value) {
+        return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range,
+                this.brightness, this.shape, value, this.grade);
+    }
+
+    public Feed withGrade(Grade value) {
+        return new Feed(this.source, this.loop, this.autoplay, this.volume, this.range,
+                this.brightness, this.shape, this.lock, value);
     }
 
     /**

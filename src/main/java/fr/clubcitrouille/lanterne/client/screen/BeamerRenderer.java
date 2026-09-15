@@ -112,7 +112,7 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
 
         double distance = Math.sqrt(cameraPosition.distanceToSqr(
                 Vec3.atCenterOf(beamer.getBlockPos())));
-        Gaze.notice(beamer.getBlockPos(), distance);
+        Gaze.notice(beamer.getBlockPos(), distance, beamer.span());
 
         Film film = Gaze.film(beamer.getBlockPos());
         state.film = film == null ? null : film.id();

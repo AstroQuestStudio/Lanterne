@@ -139,7 +139,7 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
         // d'ouvrir, de fermer ou de ralentir appartient entièrement à Gaze.
         double distance = Math.sqrt(cameraPosition.distanceToSqr(
                 Vec3.atCenterOf(panel.getBlockPos())));
-        Gaze.notice(panel.getBlockPos(), distance);
+        Gaze.notice(panel.getBlockPos(), distance, panel.wallWidth());
 
         Film film = Gaze.film(panel.getBlockPos());
         if (film != null) {

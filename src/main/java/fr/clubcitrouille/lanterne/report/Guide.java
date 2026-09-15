@@ -177,12 +177,12 @@ public final class Guide {
         }
 
         heading(source, "La projection");
-        line(source, "/projection domaines", "Les domaines d'où le serveur accepte une vidéo. "
-                + "Clic droit sur un écran ou un projecteur pour le régler.");
+        line(source, "/projection domaines", "L'état du filtrage. Ouvert par défaut : tout lien "
+                + "http(s) public passe. Clic droit sur un écran pour le régler.");
         if (admin) {
-            line(source, "/projection domaine ajouter", "Ouvre un domaine. La liste est vide au "
-                    + "départ : rien ne se charge tant que tu n'as rien ouvert.");
-            line(source, "/projection domaine retirer", "Referme un domaine.");
+            line(source, "/projection domaine ajouter", "Inscrit un domaine. Ne mord que si tu "
+                    + "actives aussi liste_blanche.active dans la configuration.");
+            line(source, "/projection domaine retirer", "Retire un domaine de la liste.");
         }
 
         if (admin) {

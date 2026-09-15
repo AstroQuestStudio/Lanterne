@@ -143,6 +143,14 @@ Lanterne est déjà GPL-3.0 — mais l'argument ne doit pas être recopié aille
 
 ## 3. Les voies écartées, et pourquoi
 
+### Ce que la variante LGPL sait faire, vérifié à l'exécution
+
+Un point qui n'apparaît dans aucune documentation et qui a été découvert en essayant : les binaires
+**sans `--enable-gpl`** n'ont **ni libx264 ni libx265**. Ils ne savent donc pas *encoder* en H.264
+autrement que par `libopenh264`. Le **décodage** H.264/H.265, lui, est natif à FFmpeg et toujours
+présent — et c'est tout ce dont ce mod a besoin. La distinction vaut d'être écrite parce qu'un essai
+d'encodage échoue sur « Unknown encoder 'libx264' », ce qui ferait croire à un binaire incomplet.
+
 **Java pur.** `jcodec` est en BSD-2 et décode H.264 baseline/main/**high** — la lecture de
 `H264Decoder.java` (lignes 212-226) est plus généreuse que son README — mais **seulement 8 bits 4:2:0
 progressif non-MBAFF**, et le projet annonce lui-même « an order of magnitude slower than native
@@ -223,28 +231,95 @@ Dépendre d'un programme absent et embarquer une bibliothèque présente sont de
 
 ---
 
-## 5. Ce qui a été bâti, et ce qui ne l'a pas été
+## 5. Le décodeur est branché — et ce qui a été prouvé hors du jeu
 
-**Bâti et compilé** : les deux blocs, le multibloc, l'horloge partagée, les réglages, la liste
-blanche, le consentement, le gradient de performance, les deux rendus, l'interface. Voir
-`content/screen/` et `client/screen/`.
+Le moteur n'est plus un point de branchement vide. Il est écrit, il compile, et **la moitié qui
+pouvait ne pas marcher du tout a été exécutée**.
 
-**Non bâti** : le décodeur lui-même. Trois manques, nommés :
+### 5.1 Le partage : liaisons embarquées, binaires téléchargés
 
-1. **La dépendance n'est pas déclarée dans `build.gradle`.** Ajouter 29 Mio par plateforme à
-   l'archive d'un mod de performance est une décision qui appartient à l'auteur du dépôt, et elle se
-   prend en même temps que le choix « embarqué ou téléchargé », qui change la taille publiée d'un
-   facteur quatre.
-2. **La pompe à images n'est pas écrite.** `AVFormatContext`, flux vidéo, `AVCodecContext`, contexte
-   matériel, lecture des paquets sur un fil de fond, conversion RGBA, téléversement. C'est le corps
-   de `Engine.Reel`, et il ne s'écrit pas sans pouvoir l'exécuter une fois.
-3. **Le son n'a pas de chemin.** Le moteur sonore du jeu joue des ressources, pas des tampons
-   arbitraires. Y faire entrer un flux vivant demande le même détour que les disques — un décodeur
-   branché dans `SoundBufferLibrary`, cf. `content/disc/Needle.java` — avec une contrainte qu'ils
-   n'ont pas : rester en phase avec l'image.
+C'est la décision qui rendait le reste possible, et elle tient à un facteur quarante.
 
-Aucun n'est un obstacle de **conception** : la place existe, la signature est
-`client/screen/Engine.java`, et l'horloge partagée qui commande tout cela est écrite et juste.
+| | Taille | Où |
+|---|---|---|
+| `org.bytedeco:javacpp` | 543 Kio | **dans l'archive** (jarJar) — Java pur |
+| `org.bytedeco:ffmpeg` | 289 Kio | **dans l'archive** (jarJar) — Java pur |
+| `javacpp:<plateforme>` | 1,94 Mio (Windows) / 40 Kio (autres) | téléchargé |
+| `ffmpeg:<plateforme>` | 29,03 Mio (Windows) | téléchargé |
+
+**832 Kio ajoutés à l'archive publiée** — moins que le décodeur MP3 déjà présent. **~31 Mio
+téléchargés une fois**, sur consentement, et **77 Mio extraits** sur le disque (les bibliothèques
+sont compressées dans le jar ; c'est le chiffre honnête, et il est plus élevé que le téléchargement).
+
+À comparer aux **180 Mio téléchargés et 429 Mio installés** d'un Chromium embarqué.
+
+### 5.2 Pas de chargeur de classes maison — et c'est une épreuve qui l'a établi
+
+La solution évidente — un `URLClassLoader` enfant nourri des jars de natifs — est un piège sur
+NeoForge : nos propres classes vivent dans son chargeur, et un enfant devrait lire notre code depuis
+une URL `union://` que `URLClassLoader` ne sait pas ouvrir. Cela marche en développement, où le mod
+est un dossier, et casse chez le joueur, où c'est une archive.
+
+JavaCPP offre `org.bytedeco.javacpp.platform.preloadpath`. **`tools/EssaiLav.java` l'a vérifié, hors
+de Minecraft** :
+
+```
+video         : 640x360 -> 640x360 RGBA, codec h264
+duree         : 3000 ms
+images        : 40
+pts premiere  : 0 ms      pts derniere : 1560 ms
+pixels clairs : 864 sur 1024 testes
+audio         : aac, 44100 Hz, 48128 echantillons reechantillonnes, crete 0.092
+RESULTAT: OK
+```
+
+Chemin de classes : **les deux jars de liaisons uniquement**. Les bibliothèques ont été trouvées dans
+un dossier. `linesize == largeur × 4` — pas de remplissage de fin de ligne, donc le tampon part vers
+la carte graphique d'un seul bloc. Alpha à 255. Horodatages corrects.
+
+### 5.3 Le son n'a pas eu besoin de mixin
+
+C'était le manque annoncé, et il s'est révélé plus simple que prévu. Les disques passent par
+`mixin/SoundDecodeMixin` parce que leur source est un **fichier** et que `SoundBufferLibrary` choisit
+le décodeur d'après le chemin. Ici la source n'est pas un fichier — et NeoForge ajoute à
+`SoundInstance` une méthode **`getStream(SoundBufferLibrary, Sound, boolean)` qu'on a le droit de
+redéfinir**, que `SoundEngine` appelle à la place de `SoundBufferLibrary` directement.
+
+`client/screen/Blare.java` la redéfinit et fournit son flux vivant. **Aucune classe de vanilla n'est
+touchée, et le mixin d'un autre chantier n'a pas été approché.**
+
+Le son est décodé sur **le même démultiplexeur** que l'image — un seul `av_read_frame`, donc un seul
+flux réseau et aucun recalage entre les deux pistes. `client/screen/Airwave.java` implémente
+`FloatSampleSource`, comme `content/disc/Needle.java` : un anneau de deux secondes, qui **comble un
+manque par du silence plutôt que de rendre `false`** — rendre `false` voudrait dire « le morceau est
+fini », et un hoquet de réseau couperait le son pour de bon.
+
+### 5.4 Ce qui n'a toujours pas été vu tourner
+
+- **Le téléversement vers la carte graphique.** Il demande un contexte graphique, donc le jeu lancé.
+  Le code suit `CommandEncoder.writeToTexture(GpuTexture, ByteBuffer, mip, couche, x, y, l, h)` —
+  huit arguments, la variante par sous-région ayant disparu côté `NativeImage` — et le tampon est
+  direct, ce que cette variante exige.
+- **Le moteur sonore.** `Blare` et `Airwave` compilent et suivent le contrat, mais aucune note n'a
+  été entendue.
+- **Les plateformes autres que Windows x86-64.** Les empreintes des cinq sont pinées et l'extraction
+  est écrite, mais seule celle de la machine de développement a été exécutée. Sur Linux, les noms
+  versionnés (`libavcodec.so.62`) sont acceptés par le filtre, ce qui est le point le plus probable
+  d'un échec silencieux.
+- **Le décodage matériel** (D3D11VA, VAAPI, VideoToolbox) est disponible dans ces binaires mais **n'est
+  pas encore demandé** : le décodage reste logiciel. C'est le prochain gain, et il est gros.
+
+### 5.5 Un avertissement de la machine virtuelle à surveiller
+
+Sur JDK 25, le chargement d'une bibliothèque native produit :
+
+> `WARNING: java.lang.System::load has been called by org.bytedeco.javacpp.Loader in an unnamed
+> module` — *« Restricted methods will be blocked in a future release unless native access is
+> enabled »*
+
+C'est **un avertissement, pas une erreur**, et le décodage fonctionne. Mais une version future du
+JDK le transformera en refus : il faudra alors `--enable-native-access=ALL-UNNAMED`, que NeoForge
+devra passer. À suivre, et à ne pas découvrir le jour où ça casse.
 
 ---
 
@@ -263,10 +338,12 @@ suffit à dire si la porte existe.
 
 Trois barrières, dans `content/screen/Sieve.java` :
 
-1. **Le serveur refuse** à la pose — liste blanche **active et vide par défaut**. Rien ne passe tant
-   que l'administrateur n'a pas inscrit lui-même les domaines auxquels il accepte d'exposer ses
-   joueurs. Réglable par fichier **ou** par `/projection domaine ajouter <domaine>`, parce qu'un
-   administrateur sur hébergement partagé ne peut pas toujours éditer un TOML.
+1. **Le serveur filtre**, si l'administrateur le demande. Le filtrage par domaine est
+   **désactivé par défaut** — c'est la décision explicite de l'administrateur de ce serveur : *« whitelist
+   tout sans limite pour les vidéos »*. La liste, la commande `/projection domaine ajouter` et
+   l'interrupteur `liste_blanche.active` restent, pour qui voudra refermer. **La première version
+   livrait l'inverse**, et c'était mauvais à l'usage : un écran neuf refusait la première source
+   qu'on lui donnait, et le joueur en concluait, non sans raison, que le bloc ne marchait pas.
 2. **Le client refuse** avant d'aller chercher, avec la liste que le serveur lui a annoncée
    (`Mail.Rules`). Redondant sur un serveur honnête — et c'est le but : un client n'expose pas son IP
    sur la seule foi de la partie qu'il ne contrôle pas.

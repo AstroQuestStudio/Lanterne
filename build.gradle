@@ -101,10 +101,47 @@ repositories {
     mavenCentral()
 }
 
+// <h2>Le décodeur vidéo : les liaisons embarquées, les binaires téléchargés</h2>
+//
+// Le partage n'est pas arbitraire, il suit une différence de taille d'un facteur quarante.
+//
+//   org.bytedeco:javacpp        543 Kio  - Java pur, le chargeur de natifs
+//   org.bytedeco:ffmpeg         289 Kio  - Java pur, les liaisons vers libav*
+//   ---------------------------------------------------------------------------
+//   embarqué dans l'archive     832 Kio
+//
+//   ffmpeg:<plateforme>       29,03 Mio  - les vraies bibliothèques (Windows x86-64)
+//   javacpp:<plateforme>       1,94 Mio
+//   ---------------------------------------------------------------------------
+//   téléchargé une fois        30,97 Mio, et seulement sur consentement du joueur
+//
+// Embarquer les six plateformes aurait donné une archive de plus de cent quatre-vingts
+// mébioctets pour un mod dont l'identité est la légèreté. Embarquer la seule plateforme de
+// compilation aurait fait un mod qui ne marche que sous Windows.
+//
+// Les liaisons, elles, sont du Java pur et sans natif : les embarquer coûte moins que le
+// décodeur MP3 déjà présent, et cela évite un chargeur de classes maison — le genre de
+// mécanique qui marche en développement et casse chez le joueur. Voir client/screen/Fetch.java
+// pour la façon dont les binaires sont ensuite trouvés sur le disque, qui a été éprouvée hors
+// du jeu par tools/EssaiLav.java.
+//
+// Licences : le greffon de bytedeco est en Apache-2.0 OU GPLv2 avec exception de chemin de
+// classes, au choix du preneur. Les binaires publiés sans « --enable-gpl » sont en LGPL v3.
+// Les deux conviennent à la GPL-3.0-only de ce mod. Voir notes/projecteur.md.
 dependencies {
     jarJar(implementation('javazoom:jlayer:[1.0.1,1.1)')) {
         version {
             prefer '1.0.1'
+        }
+    }
+    jarJar(implementation('org.bytedeco:javacpp:[1.5.14,1.6)')) {
+        version {
+            prefer '1.5.14'
+        }
+    }
+    jarJar(implementation('org.bytedeco:ffmpeg:[8.1.2-1.5.14,8.2)')) {
+        version {
+            prefer '8.1.2-1.5.14'
         }
     }
 }

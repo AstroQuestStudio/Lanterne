@@ -1,7 +1,9 @@
 package fr.clubcitrouille.lanterne.client.upscale;
 
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Locale;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -43,21 +45,39 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *       tampon à chaque appel. Un décalage d'un sous-pixel par image s'y insère sans rien casser.</li>
  * </ul>
  *
- * <h2>Ce qui manque, et qu'aucune astuce ne remplace</h2>
+ * <h2>Ce qui manque — et le pont natif n'en fait plus partie</h2>
+ *
+ * <p><b>Cette classe a longtemps affirmé qu'il fallait un pont JNI compilé en C++. C'était faux</b>,
+ * et la correction vaut d'être écrite ici plutôt qu'effacée. Le chargeur NGX que le pilote NVIDIA
+ * installe déjà — {@code _nvngx.dll} — est une DLL ordinaire qui exporte ses 75 fonctions
+ * {@code NVSDK_NGX_*} sous leurs <b>noms C non décorés</b>. Java 25 embarque Project Panama, et
+ * {@code SymbolLookup.libraryLookup} les résout toutes, par chemin absolu, sans JNI, sans C++, sans
+ * CMake. La preuve se relance : {@code tools/EssaiNgx.java}. Le relevé complet est dans
+ * {@code notes/dlss-panama.md}.
+ *
+ * <p>Il reste trois obstacles, et ce sont d'autres que celui qu'on croyait :
  *
  * <ol>
- *   <li><b>Le pont natif.</b> DLSS est une bibliothèque C++ (NGX). L'appeler depuis Java demande un
- *       pont JNI compilé contre le SDK de NVIDIA, avec CMake et une chaîne C++, pour Windows et
- *       Linux. <b>Ce pont n'existe pas dans ce dépôt et n'a pas été écrit</b> : il ne peut pas
- *       l'être sans le SDK ni sans pouvoir l'exécuter. C'est le seul obstacle vraiment bloquant,
- *       et il est matériel, pas de conception.</li>
- *   <li><b>{@code nvngx_dlss.dll} ne peut pas être embarqué dans l'archive.</b> Sa licence
- *       l'interdit, et la GPL-3.0 de ce mod l'interdirait de toute façon. La seule voie propre est
- *       le téléchargement à l'exécution, <b>sur consentement explicite</b> du joueur, avec
- *       vérification d'empreinte avant chargement. Le chemin attendu est
- *       {@code config/lanterne/nvngx_dlss.dll} ; {@link #libraryPresent()} se contente de regarder
- *       s'il est là. Le téléchargement n'est pas écrit tant que rien ne consomme le fichier :
- *       un téléchargeur sans utilisateur, c'est une surface réseau pour zéro fonction.</li>
+ *   <li><b>Les paramètres NGX ne sont pas du C.</b> {@code NVSDK_NGX_VULKAN_AllocateParameters}
+ *       rend un objet dont les {@code Set} et {@code Get} sont des méthodes <b>virtuelles C++</b> :
+ *       aucun {@code NVSDK_NGX_Parameter_SetI} n'est exporté, et c'est vérifié — l'épreuve le teste
+ *       comme contrôle négatif. Panama doit donc parcourir une <b>table virtuelle</b> à la main.
+ *       C'est possible, et c'est la seule partie du montage qui ne repose sur aucun contrat public :
+ *       l'ordre des méthodes est celui d'un en-tête que NVIDIA peut réordonner, et un mauvais index
+ *       n'échoue pas proprement — il appelle autre chose, avec les mauvais arguments, chez le
+ *       joueur. Rien ne doit être écrit là-dessus avant d'avoir les en-têtes du SDK sous les yeux.</li>
+ *   <li><b>{@code nvngx_dlss.dll} n'est pas sur la machine du joueur.</b> Ce n'est pas une
+ *       supposition : un balayage complet de {@code System32}, {@code Program Files} et
+ *       {@code ProgramData} sur une machine RTX 3080 à pilote à jour n'en trouve <b>aucune</b> copie
+ *       venue du pilote. Le pilote installe le chargeur et {@code nvngx_dlssg.dll} — la génération
+ *       d'images — mais pas le modèle de super-résolution. Et il ne peut pas être embarqué dans
+ *       l'archive : la licence de NVIDIA l'encadre, et la GPL-3.0 de ce mod l'interdirait de toute
+ *       façon. La seule voie propre est le téléchargement à l'exécution, <b>sur consentement
+ *       explicite</b>, avec vérification d'empreinte — la mécanique que {@code client/screen/Fetch}
+ *       écrit déjà pour FFmpeg. Le chemin attendu est {@code config/lanterne/nvngx_dlss.dll} ;
+ *       {@link #libraryPresent()} se contente de regarder s'il est là. Le téléchargement n'est pas
+ *       écrit tant que rien ne consomme le fichier : un téléchargeur sans utilisateur, c'est une
+ *       surface réseau pour zéro fonction.</li>
  *   <li><b>Les vecteurs de mouvement.</b> Un remonteur temporel en exige. Minecraft n'en produit
  *       aucun, et le tampon de profondeur — samplable en {@code D32_FLOAT}, en Z <em>inversé</em>
  *       depuis 26.2 — est effacé juste après le monde, dans {@code GameRenderer.render}, avant que
@@ -79,8 +99,11 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * « expérimental » en 26.2 — obtient FSR 1.0 sans s'en apercevoir, et jamais un écran noir.
  */
 public final class Deep {
-    /** Le nom sous lequel la bibliothèque de NVIDIA est cherchée, si elle est un jour utilisée. */
+    /** Le modèle de super-résolution, que le pilote n'installe pas et que le joueur doit fournir. */
     private static final String LIBRARY = "nvngx_dlss.dll";
+
+    /** Le chargeur NGX, que le pilote installe, lui. Voir {@link #loader()}. */
+    private static final String LOADER = "_nvngx.dll";
 
     /** Ce qui empêche DLSS de tourner, dans l'ordre où la question se pose. */
     public enum Verdict {
@@ -90,10 +113,20 @@ public final class Deep {
         SANS_VULKAN("OpenGL — DLSS exige Vulkan"),
         /** Pas de carte NVIDIA compatible. */
         SANS_RTX("carte non compatible"),
-        /** Carte et backend corrects, bibliothèque absente du dossier de configuration. */
-        SANS_BIBLIOTHEQUE("bibliothèque absente"),
-        /** Tout est réuni côté machine, et le pont natif n'existe pas dans ce mod. */
-        SANS_PONT("pont natif non écrit");
+        /** Le pilote installé ne fournit pas {@code _nvngx.dll} : pilote trop ancien, ou non NVIDIA. */
+        SANS_CHARGEUR("chargeur NGX introuvable"),
+        /**
+         * Le modèle de super-résolution manque.
+         *
+         * <p>C'est le cas <b>normal</b>, et non l'exception : le pilote ne l'installe pas. Voir
+         * l'en-tête de cette classe.
+         */
+        SANS_BIBLIOTHEQUE("nvngx_dlss.dll absent — le pilote ne l'installe pas"),
+        /**
+         * Tout est réuni côté machine, et la liaison Panama vers la table virtuelle des paramètres
+         * NGX n'est pas écrite. Voir l'en-tête pour ce qu'elle exige avant de pouvoir l'être.
+         */
+        SANS_PONT("liaison NGX non écrite");
 
         private final String label;
 
@@ -153,6 +186,8 @@ public final class Deep {
                 verdict = Verdict.SANS_VULKAN;
             } else if (!looksLikeRtx(info)) {
                 verdict = Verdict.SANS_RTX;
+            } else if (loader() == null) {
+                verdict = Verdict.SANS_CHARGEUR;
             } else if (!libraryPresent()) {
                 verdict = Verdict.SANS_BIBLIOTHEQUE;
             } else {
@@ -178,8 +213,9 @@ public final class Deep {
             case INCONNU -> "non relevé";
             case SANS_VULKAN -> "OpenGL";
             case SANS_RTX -> "carte non RTX";
-            case SANS_BIBLIOTHEQUE -> "DLL absente";
-            case SANS_PONT -> "pont manquant";
+            case SANS_CHARGEUR -> "sans NGX";
+            case SANS_BIBLIOTHEQUE -> "modèle absent";
+            case SANS_PONT -> "liaison à écrire";
         };
     }
 
@@ -214,13 +250,79 @@ public final class Deep {
         }
     }
 
+    /**
+     * Où le pilote range-t-il le chargeur NGX ?
+     *
+     * <h2>Pourquoi ce n'est pas un chemin en dur</h2>
+     *
+     * <p>Les pilotes récents ne copient plus {@code _nvngx.dll} dans {@code System32} : il reste
+     * dans le magasin de pilotes, sous {@code nvaci.inf} — « NVIDIA Application Compute Interface »
+     * — dont le suffixe est un condensat qui <b>change à chaque version de pilote</b>. Un chemin
+     * écrit en dur serait faux à la prochaine mise à jour, c'est-à-dire un mois plus tard, et
+     * l'échec serait silencieux. On balaie donc, en gardant {@code System32} d'abord pour les
+     * pilotes plus anciens qui l'y déposaient encore.
+     *
+     * <p>Ce relevé n'ouvre rien et ne charge rien : il regarde. C'est ce qui permet à l'écran de
+     * réglages de dire « le chargeur est là, c'est le modèle qui manque » plutôt que de laisser le
+     * joueur deviner lequel des deux fait défaut.
+     *
+     * @return le chemin du chargeur, ou {@code null} s'il n'y en a aucun
+     */
+    public static Path loader() {
+        try {
+            Path direct = Path.of("C:", "Windows", "System32", "_nvngx.dll");
+            if (Files.isRegularFile(direct)) {
+                return direct;
+            }
+            Path store = Path.of("C:", "Windows", "System32", "DriverStore", "FileRepository");
+            if (!Files.isDirectory(store)) {
+                return null;
+            }
+            Path newest = null;
+            FileTime newestAt = null;
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(store, "nv*")) {
+                for (Path folder : stream) {
+                    Path candidate = folder.resolve(LOADER);
+                    if (!Files.isRegularFile(candidate)) {
+                        continue;
+                    }
+                    // Plusieurs pilotes cohabitent dans le magasin : celui qui compte est le
+                    // dernier posé, pas le premier trouvé.
+                    FileTime at = Files.getLastModifiedTime(candidate);
+                    if (newestAt == null || at.compareTo(newestAt) > 0) {
+                        newest = candidate;
+                        newestAt = at;
+                    }
+                }
+            }
+            return newest;
+        } catch (Throwable problem) {
+            // Un dossier du magasin peut refuser la lecture : c'est une raison de ne pas trouver,
+            // pas une raison d'emporter le relevé.
+            Lanterne.LOG.debug("[ÉCHELLE] Recherche du chargeur NGX interrompue.", problem);
+            return null;
+        }
+    }
+
     private static void announce(DeviceInfo info) {
         if (announced) {
             return;
         }
         announced = true;
-        Lanterne.LOG.info("[ÉCHELLE] DLSS indisponible — {}. Backend {}, carte « {} ». "
-                + "La mise à l'échelle se fait par FSR 1.0, qui n'exige ni Vulkan ni carte NVIDIA.",
-                verdict.label(), info.backendName(), info.name());
+        Path loader = loader();
+        Lanterne.LOG.info("[ÉCHELLE] DLSS indisponible — {}. Backend {}, carte « {} », "
+                + "chargeur NGX {}. La mise à l'échelle se fait par FSR 1.0, qui n'exige ni Vulkan "
+                + "ni carte NVIDIA.",
+                verdict.label(), info.backendName(), info.name(),
+                loader == null ? "introuvable" : loader);
+        // Le cas le plus fréquent est aussi le seul sur lequel le joueur peut agir : une carte
+        // capable, arrêtée par un réglage qu'il ignore. Le dire une fois vaut mieux que le laisser
+        // conclure que son matériel est en cause.
+        if (verdict == Verdict.SANS_VULKAN && looksLikeRtx(info)) {
+            Lanterne.LOG.info("[ÉCHELLE] Cette carte saurait faire DLSS : c'est le backend qui "
+                    + "l'en empêche. Le réglage « Vulkan » de l'écran Lanterne (famille « L'image ») "
+                    + "le bascule en un clic ; il prend effet au prochain lancement, et le jeu "
+                    + "retombe seul sur OpenGL si Vulkan échoue.");
+        }
     }
 }

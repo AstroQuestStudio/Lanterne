@@ -61,7 +61,10 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SPILL;
     public static final ModConfigSpec.BooleanValue SENSES;
     public static final ModConfigSpec.BooleanValue RECALL;
-    public static final ModConfigSpec.BooleanValue STENCIL;
+    public static final ModConfigSpec.BooleanValue CADASTRE;
+    public static final ModConfigSpec.BooleanValue DIGUE;
+    public static final ModConfigSpec.BooleanValue ELASTIQUE;
+    public static final ModConfigSpec.BooleanValue SOMMAIRE;
     public static final ModConfigSpec.BooleanValue REDSTONE;
     public static final ModConfigSpec.BooleanValue MOULDS;
     public static final ModConfigSpec.BooleanValue DECAY;
@@ -251,26 +254,129 @@ public final class Config {
                 "",
                 "Garde parce qu'il ne coute rien et va dans le bon sens. Sans chiffre de gain.")
                 .define("memoire_conditions", true);
-        STENCIL = BUILDER.comment(
-                "POCHOIR : les blocs d'une structure hors de la fenetre du chunk ne sont pas",
-                "prepares.",
+        CADASTRE = BUILDER.comment(
+                "CADASTRE DES STRUCTURES : la place deja prise, tenue dans un index de boites.",
                 "",
-                "Une structure ne se pose pas d'un coup : elle se pose CHUNK PAR CHUNK, au fur et a",
-                "mesure que la generation les atteint. Or placeInWorld prepare le gabarit ENTIER a",
-                "chaque passage - position transformee, objet neuf, copie de la balise NBT, toute la",
-                "chaine des processeurs - et ne trie qu'APRES, a la ligne suivante.",
+                "Un village, un avant-poste ou une cite ancienne se composent de PIECES que le",
+                "placeur Jigsaw ajoute une par une. Avant chaque ajout il demande : cette piece",
+                "tient-elle dans ce qui reste libre ? Vanilla repond en soustrayant chaque piece",
+                "posee d'une FORME DE VOXELS.",
                 "",
-                "Une maison de village qui chevauche quatre chunks est donc preparee quatre fois en",
-                "entier pour n'en ecrire qu'un quart a chaque fois.",
+                "Le prix de cette forme n'est pas constant. A chaque soustraction, Shapes",
+                ".joinUnoptimized fusionne les coordonnees des deux formes puis remplit une grille",
+                "de la taille du produit : apres N pieces, la grille fait environ (2N) au cube.",
+                "Le cout d'une seule soustraction croit donc comme le CUBE du nombre de pieces, et",
+                "le total comme sa PUISSANCE QUATRIEME. C'est ce qui fige un serveur quand un",
+                "joueur explore vers un village.",
                 "",
-                "Le tri porte sur X et Z SEULEMENT : GravityProcessor deplace les blocs en hauteur,",
-                "et un tri sur Y pourrait donc faire disparaitre un bloc qu'il allait remonter dans",
-                "la fenetre. Le module renonce aussi devant un processeur venu d'un mod, et devant",
-                "tout processeur qui redefinit finalizeProcessing.",
+                "Le cadastre garde la meme reponse en tenant la liste des boites occupees dans une",
+                "grille de hachage : une piece tient si elle est dans la region de depart - question",
+                "posee a vanilla, sur une forme qui ne grossit JAMAIS - et si elle ne coupe aucune",
+                "boite deja posee.",
                 "",
-                "N'agit QUE pendant la generation de terrain. Un monde deja explore n'y passe plus.",
-                "Repris de StructureLayoutOptimizer (MIT).")
-                .define("pochoir_structures", true);
+                "STRICTEMENT LE MEME RESULTAT, et c'est verifiable : les boites de structure ont des",
+                "coordonnees entieres et la boite testee est retrecie d'un quart de bloc, si bien",
+                "qu'un recouvrement vaut zero ou au moins un quart. Il n'y a pas de zone grise ou",
+                "les deux methodes pourraient diverger.",
+                "",
+                "N'agit QUE pendant la generation de terrain. Un monde deja explore n'y passe plus,",
+                "et le gain n'est pas des TPS : c'est de la latence d'exploration.",
+                "Idee de StructureLayoutOptimizer (MIT) ; l'implementation est differente - voir",
+                "NOTICE.md pour ce qui n'a PAS ete repris, et pourquoi.")
+                .define("cadastre_structures", true);
+        DIGUE = BUILDER.comment(
+                "DIGUE : le tick du serveur ne descend jamais au disque.",
+                "",
+                "Une poignee de chemins du jeu demandent un chunk TOUT DE SUITE, au milieu du tick.",
+                "Le fil du serveur cesse alors de ticker et fait tourner la file de generation",
+                "jusqu'a ce que le chunk existe : lire une region, la decompresser, ou pire la",
+                "GENERER, coute de l'ordre de la centaine de millisecondes - deux a quatre ticks",
+                "perdus d'un coup, et le joueur le voit.",
+                "",
+                "Sur un VPS a un seul coeur il n'y a aucun autre coeur pour absorber ce travail :",
+                "le chargement 'asynchrone' du jeu n'est asynchrone que sur une machine qui a de",
+                "quoi l'etre.",
+                "",
+                "CE MODULE NE REND RIEN PLUS RAPIDE : IL REFUSE. Il repond 'ce chunk n'est pas la'",
+                "au lieu d'aller le chercher, et le jeu suit sa branche 'pas la'. C'est le SEUL",
+                "module de ce mod qui retire une information au jeu plutot que de la calculer moins",
+                "cher, et le prix est visible :",
+                "  - une carte laisse une case blanche au-dela du charge ;",
+                "  - une abeille ne retrouve pas sa ruche si son chunk est parti (une garde de",
+                "    memoire l'evite ici, contrairement au mod dont l'idee vient) ;",
+                "  - un villageois ne se couche pas si son lit est hors du charge ;",
+                "  - un ecouteur d'evenement de jeu ne s'enregistre pas.",
+                "",
+                "A couper si vous preferez un gel de 200 ms a une case de carte blanche. Sur une",
+                "machine a plusieurs coeurs et un disque rapide, c'est un arbitrage defendable.")
+                .define("digue", true);
+        ELASTIQUE = BUILDER.comment(
+                "ELASTIQUE : le joueur qu'on renvoie en arriere alors qu'il n'a rien fait.",
+                "",
+                "CE MODULE NE REND RIEN PLUS RAPIDE. Il ne fait gagner aucun TPS, aucune",
+                "milliseconde. Un serveur qui rame ramera exactement autant apres qu'avant. Tout le",
+                "reste de ce mod s'attaque a la CAUSE du lag ; celui-ci cache l'un de ses",
+                "SYMPTOMES. C'est un pansement, et il est eteint par defaut : on ne le pose",
+                "qu'apres avoir constate que tout le reste ne suffisait pas.",
+                "",
+                "LE SYMPTOME. On court, et l'on se retrouve trois metres en arriere. On contourne",
+                "un angle, et l'on revient d'ou l'on vient. Le serveur REFUSE la position annoncee",
+                "et teleporte le joueur la ou lui croit qu'il est.",
+                "",
+                "LA CAUSE. handleMovePlayer juge le joueur sur trois seuils (100.0F, 300.0F et",
+                "0.0625), tous mesures ENTRE DEUX TICKS SERVEUR. Le client, lui, ne ralentit",
+                "jamais : il envoie vingt pas par seconde quoi qu'il arrive. Si un tick dure 200",
+                "ms, le joueur a legitimement fait quatre pas la ou le serveur en attendait un.",
+                "Pire : le serveur applique les quatre d'un seul coup, et un gros pas heurte le",
+                "coin que quatre petits contournaient. C'est un faux positif : le joueur n'a pas",
+                "triche, c'est la regle qui a retreci.",
+                "",
+                "CE QU'ON FAIT. Ces trois nombres sont des distances AU CARRE. Une distance",
+                "legitime croit avec le temps ; son carre croit avec le CARRE du temps. On",
+                "multiplie donc les trois seuils par le carre du retard reellement constate, mesure",
+                "entre resetPosition() et l'instant du paquet. Rien d'empirique la-dedans : c'est",
+                "la seule mise a l'echelle homogene avec ce qu'on compare.",
+                "",
+                "UN SERVEUR SAIN EST VANILLA AU BIT PRES. En dessous de 1,5 tick de retard (75",
+                "ms), la constante d'origine est rendue TELLE QUELLE, sans la moindre operation",
+                "flottante. Pas 'a peu pres vanilla' : le meme float, le meme double, le meme bit.",
+                "L'epreuve LANTERNE_AMARRE=1 le verifie et echoue sinon.",
+                "",
+                "CE N'EST PAS UNE PORTE OUVERTE AUX TRICHEURS. La destination annoncee reste",
+                "confrontee aux collisions du monde par isEntityCollidingWithAnythingNew, qui n'est",
+                "PAS touche et qui s'applique meme quand le controle de coherence passe : on ne",
+                "traverse pas un mur, on ne finit pas dans un bloc. Ce qui passe en plus, c'est une",
+                "coupe d'angle, bornee a un bloc. La tolerance est indexee sur l'horloge du",
+                "SERVEUR, jamais sur une affirmation du client, et la garde anti-inondation de",
+                "vanilla (deltaPackets ramene a 1 au-dela de cinq) est laissee intacte.",
+                "",
+                "A ALLUMER si vos joueurs se plaignent d'elastique malgre le reste du mod, et",
+                "surtout sur une machine a un seul coeur ou une pause du ramasse-miettes vole le",
+                "tick sans prevenir. A LAISSER ETEINT sur un serveur qui tient ses ticks : il n'y",
+                "aurait rien a corriger, et il masquerait le signal qu'un serveur va mal.")
+                .define("elastique", false);
+        SOMMAIRE = BUILDER.comment(
+                "SOMMAIRE DES ZIP : un paquet se lit une fois, pas deux cent cinquante fois.",
+                "",
+                "FilePackResources.getNamespaces et .listResources appellent zipFile.entries() et",
+                "balayent le fichier ENTIER a chaque appel, sans rien garder. Au-dessus, un",
+                "rechargement de datapacks appelle listResources une fois par registre dynamique",
+                "- quarante-sept - puis une fois par registre pour les etiquettes - une centaine -",
+                "plus les recettes, les avancements, les fonctions et les tables de butin.",
+                "",
+                "Le sommaire construit UNE FOIS un ensemble trie des noms d'entrees : une demande",
+                "devient une recherche dichotomique au lieu d'un balayage complet.",
+                "",
+                "OU LE GAIN SE TROUVE, ET OU IL NE SE TROUVE PAS. Un serveur dedie ne charge aucun",
+                "paquet de RESSOURCES : seul le client le fait. Cote serveur, seuls les datapacks",
+                "en .zip passent par cette classe - un datapack range en DOSSIER est servi par",
+                "PathPackResources, qui n'a pas ce defaut. Si vos datapacks sont des dossiers, ce",
+                "reglage ne changera rien chez vous, et c'est normal.",
+                "",
+                "QUAND CE REGLAGE EST LU : au chargement d'un paquet. Le fichier de configuration",
+                "est lu avant le premier /reload mais APRES le chargement initial des datapacks -",
+                "le couper ne reprend donc la main qu'au rechargement suivant.")
+                .define("sommaire_zip", true);
         REDSTONE = BUILDER.comment(
                 "MOTEUR DE REDSTONE : celui que Mojang a ecrit, puis laisse eteint.",
                 "",

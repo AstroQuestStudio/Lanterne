@@ -83,6 +83,12 @@ public final class Gaze {
         private long seenAt;
         private long framedAt;
         private boolean measured;
+        /** Hauteur de décodage demandée à l'ouverture. Voir {@link #retune}. */
+        private int openedHeight;
+        /** Le son en cours, ou {@code null} : muet, ou pas encore lancé. */
+        private Blare sound;
+        /** Largeur du mur, ou l'envergure du projecteur. Sert au mode automatique de {@link Grade}. */
+        private float breadth = 1f;
     }
 
     private static final Map<BlockPos, Show> SHOWS = new HashMap<>();
@@ -143,10 +149,11 @@ public final class Gaze {
      * qui donne gratuitement la première garantie : le jeu a déjà écarté ce qui est hors du champ,
      * hors de portée d'affichage et derrière le terrain, et l'on hérite de ce tri sans le refaire.
      */
-    public static void notice(BlockPos pos, double distance) {
+    public static void notice(BlockPos pos, double distance, float breadth) {
         Show show = SHOWS.computeIfAbsent(pos, ignored -> new Show());
         show.seenAt = tick();
         show.distance = distance;
+        show.breadth = breadth;
     }
 
     /** La pellicule d'un écran, ou {@code null} : il n'en a pas, ou pas encore. */
@@ -171,6 +178,13 @@ public final class Gaze {
             return;
         }
         Engine.announce();
+        // Le décodeur s'installe tout seul, une fois, dès que le joueur a consenti — et pas avant.
+        // « arm » ne fait que regarder un dossier ; « ensure » ne part que si le consentement est
+        // donné et que rien n'est déjà en route. Les deux sont sans effet le reste du temps.
+        Fetch.arm();
+        if (Consent.remoteAllowed() && Fetch.state() == Fetch.State.ABSENT) {
+            Fetch.ensure();
+        }
         long now = tick();
 
         // Ce qu'on n'a pas vu depuis deux secondes s'en va. En premier : les places libérées
@@ -217,11 +231,18 @@ public final class Gaze {
      */
     private static void retune(BlockPos pos, Stage stage, Show show) {
         String wanted = stage.feed().source();
-        if (wanted.equals(show.opened) && show.reel != null) {
+        int height = stage.feed().grade().resolve(show.breadth, show.distance, Consent.ceiling());
+        // Une qualité qui change rouvre le flux : la taille de décodage est figée à l'ouverture de
+        // swscale, et la pellicule est allouée à cette taille. Le seuil évite qu'un joueur qui
+        // marche fasse rouvrir le flux à chaque pas — Grade ne rend que trois paliers, mais deux
+        // écrans de tailles voisines pourraient osciller entre deux d'entre eux.
+        boolean sameSize = show.openedHeight == height;
+        if (wanted.equals(show.opened) && show.reel != null && sameSize) {
             return;
         }
         shut(show);
         show.opened = wanted;
+        show.openedHeight = height;
         show.measured = false;
         if (wanted.isBlank()) {
             return;
@@ -234,7 +255,7 @@ public final class Gaze {
         if (engine.verdict() != Engine.Verdict.PRET) {
             return;
         }
-        show.reel = engine.open(wanted);
+        show.reel = engine.open(wanted, height);
     }
 
     /**
@@ -272,9 +293,24 @@ public final class Gaze {
             }
         }
 
-        reel.volume(feed.loudness(distanceToPlayer(pos)));
+        float loudness = feed.loudness(distanceToPlayer(pos));
+        reel.volume(loudness);
+        sing(pos, show, reel, loudness);
+
+        // La pellicule est allouée ICI, sur le fil client, et jamais depuis le fil de décodage :
+        // créer une texture n'est pas sûr ailleurs. On attend que la bobine connaisse sa taille,
+        // ce qui arrive un aller-retour réseau après l'ouverture.
         if (show.film == null) {
-            return; // le moteur n'a pas encore dit la taille de son flux
+            if (!reel.ready()) {
+                return;
+            }
+            show.film = Film.reserve(pos, reel.width(), reel.height());
+            if (show.film == null) {
+                // Mémoire vidéo refusée. On ferme plutôt que de réessayer à chaque tick : réessayer
+                // sur une carte saturée est le meilleur moyen de la saturer davantage.
+                shut(show);
+                return;
+            }
         }
         reel.present(target, show.film);
 
@@ -341,7 +377,42 @@ public final class Gaze {
         return gameTime();
     }
 
+    /**
+     * Fait jouer le son de cette séance, et le suit.
+     *
+     * <h2>Le son démarre en retard, et c'est normal</h2>
+     *
+     * <p>La piste sonore n'existe qu'une fois le flux ouvert, c'est-à-dire un aller-retour réseau
+     * après {@code open}. On ne peut donc pas lancer le son au même moment que l'image : on attend
+     * que la bobine ait une onde à offrir. Un écran muet pendant une demi-seconde au démarrage vaut
+     * mieux qu'un son lancé sur une source vide, que le moteur refermerait aussitôt.
+     *
+     * <p>Le volume, lui, est reposé à chaque tour : il suit la distance du joueur. C'est
+     * {@code Blare.tick} qui le lisse, parce qu'un volume changé d'un coup à chaque pas crépite.
+     */
+    private static void sing(BlockPos pos, Show show, Engine.Reel reel, float loudness) {
+        if (!(reel instanceof Pump pump)) {
+            return;
+        }
+        if (show.sound == null) {
+            Airwave wave = pump.wave();
+            if (wave == null) {
+                return; // source muette : rien à jouer, et rien à réessayer
+            }
+            show.sound = new Blare(pos, wave);
+            Minecraft.getInstance().getSoundManager().play(show.sound);
+        }
+        show.sound.volume(loudness);
+    }
+
     private static void shut(Show show) {
+        if (show.sound != null) {
+            // « finish » plutôt que « stop » du gestionnaire : l'instance se retire d'elle-même au
+            // tick suivant, ce qui laisse au moteur le soin de fermer le canal OpenAL dans son
+            // propre ordre. L'arrêter de l'extérieur pendant qu'il lit produit un claquement.
+            show.sound.finish();
+            show.sound = null;
+        }
         if (show.reel != null) {
             show.reel.close();
             show.reel = null;
