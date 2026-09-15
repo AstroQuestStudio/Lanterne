@@ -237,13 +237,6 @@ public final class Elastique {
         return observing;
     }
 
-    private static int traceLeft = 3;
-
-    /** Diagnostic temporaire. */
-    public static boolean traceBudget() {
-        return traceLeft-- > 0;
-    }
-
     /** Réservé aux épreuves. Voir {@link #observing}. */
     public static void observe(boolean value) {
         observing = value;

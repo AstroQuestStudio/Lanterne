@@ -55,16 +55,54 @@ import fr.clubcitrouille.lanterne.report.Herd;
 public final class Fonte {
 
     /** Bêtes posées : assez pour que l'allocation soit franche, pas assez pour tuer la machine. */
-    private static final int HERD = 600;
+    private static final int HERD = readEnv("LANTERNE_FONTE_HERD", 600);
 
     /** Rayon du troupeau, en blocs. */
     private static final int SPREAD = 160;
 
-    /** Ticks mesurés. Vingt secondes de jeu : plusieurs ramassages, même sur un petit tas. */
-    private static final int TICKS = 400;
+    /** Ticks mesurés. */
+    private static final int TICKS = readEnv("LANTERNE_FONTE_TICKS", 400);
 
     /** En deçà de ce nombre de bêtes vivantes, la scène est trop maigre pour conclure. */
-    private static final int FLOOR = 100;
+    private static final int FLOOR = Math.max(1, HERD / 6);
+
+    /**
+     * En deçà de ce nombre de ramassages, on ne compare rien.
+     *
+     * <h2>La condition que la première version ne vérifiait pas</h2>
+     *
+     * <p>Le premier essai a comparé G1 et le ramasseur série sur un tas de deux gigaoctets et a
+     * rendu ceci :
+     *
+     * <pre>
+     * série : 1 et 2 ramassages, 33 et 210 ms de pause
+     * G1    : 0 et 0 ramassages,  0 et   0 ms de pause
+     * </pre>
+     *
+     * <p>Zéro ramassage. Six cents vaches pendant vingt secondes n'allouent pas assez pour remplir
+     * deux gigaoctets, et un ramasseur qui ne passe jamais ne se distingue d'aucun autre. Le banc
+     * n'avait pas mesuré que G1 était meilleur — il avait mesuré qu'il n'avait rien eu à faire, et il
+     * l'avait présenté comme un résultat.
+     *
+     * <p>C'est la faute exacte que ce dépôt s'interdit : rendre un verdict quand les conditions de la
+     * mesure ne sont pas réunies. Le banc exige donc désormais un nombre plancher de ramassages, et
+     * dit comment l'atteindre quand il ne l'atteint pas.
+     */
+    private static final int GC_FLOOR = 5;
+
+    /** Une consigne d'environnement, ou sa valeur par défaut. */
+    private static int readEnv(String name, int fallback) {
+        String raw = System.getenv(name);
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Math.max(1, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException malformed) {
+            Lanterne.LOG.warn("[FONTE] {} illisible : {} — on garde {}.", name, raw, fallback);
+            return fallback;
+        }
+    }
 
     private static boolean running;
     private static int done;
@@ -185,6 +223,20 @@ public final class Fonte {
                 "[FONTE] part du tick prise par les pauses : %.2f %%",
                 pause * 100d / Math.max(1d, wallMs)));
         Lanterne.LOG.info("[FONTE] ─────────────────────────────────────────────");
+
+        if (collections < GC_FLOOR) {
+            // Sans ramassages, il n'y a pas de ramasseur à comparer. On le dit, et on dit comment
+            // s'y prendre — un refus qui n'indique pas la sortie n'est qu'un abandon.
+            Lanterne.LOG.error("[FONTE] REFUS DE CONCLURE — {} ramassage(s) seulement, il en faut "
+                    + "au moins {}. Sur ce tas, la charge n'alloue pas assez pour faire travailler "
+                    + "le ramasseur : deux ramasseurs qui ne passent jamais se ressemblent.",
+                    collections, GC_FLOOR);
+            Lanterne.LOG.error("[FONTE] Relancez avec un tas plus petit et une charge plus lourde, "
+                    + "par exemple : -Ptas=768 et LANTERNE_FONTE_HERD=4000 LANTERNE_FONTE_TICKS=800");
+            server.halt(false);
+            return;
+        }
+
         Lanterne.LOG.info("[FONTE] Les deux chiffres comparables d'une exécution à l'autre sont les "
                 + "ramassages et la pause cumulée. Le tick, lui, varie trop.");
         server.halt(false);

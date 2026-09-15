@@ -3,6 +3,7 @@ package fr.clubcitrouille.lanterne.mixin;
 import java.util.List;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -77,28 +78,37 @@ public abstract class NoiseCalqueMixin {
             return;
         }
         Calque.serve();
-        if (Calque.broken()) {
-            // LANTERNE_BREAK_CALQUE=1 : la température et la végétation sont échangées. Le calque est
-            // toujours servi, et le monde engendré N'EST PLUS CELUI DE VANILLA — des déserts là où il
-            // devait y avoir des forêts. Une épreuve qui ne peut pas échouer ne prouve rien, et la
-            // panne à provoquer ici n'est pas une lenteur : c'est un terrain différent.
-            callback.setReturnValue(new Climate.Sampler(
-                    traced.vegetation(),
-                    traced.temperature(),
-                    traced.continents(),
-                    traced.erosion(),
-                    traced.depth(),
-                    traced.ridges(),
-                    spawnTarget));
-            return;
-        }
-        callback.setReturnValue(new Climate.Sampler(
-                traced.temperature(),
-                traced.vegetation(),
+
+        // LANTERNE_BREAK_CALQUE=1 échange la température et la végétation. Le calque est toujours
+        // servi, et le monde engendré N'EST PLUS CELUI DE VANILLA — des déserts là où il devait y
+        // avoir des forêts. Une épreuve qui ne peut pas échouer ne prouve rien, et la panne à
+        // provoquer ici n'est pas une lenteur : c'est un terrain différent.
+        boolean broken = Calque.broken();
+        Climate.Sampler served = new Climate.Sampler(
+                broken ? traced.vegetation() : traced.temperature(),
+                broken ? traced.temperature() : traced.vegetation(),
                 traced.continents(),
                 traced.erosion(),
                 traced.depth(),
                 traced.ridges(),
-                spawnTarget));
+                spawnTarget);
+
+        if (Calque.auditing()) {
+            // On refait le décalque de vanilla et l'on compare les RÉFÉRENCES de ce qu'on s'apprête
+            // RÉELLEMENT à rendre. Voir Calque.check : si ce sont les mêmes objets, aucun écart n'est
+            // possible en aucun point, pour aucune graine. Ce mode fait exactement le travail que le
+            // module évite — il sert à prouver, pas à produire.
+            Calque.check(served.temperature() == noises.temperature().mapAll(this::wrap));
+            Calque.check(served.humidity() == noises.vegetation().mapAll(this::wrap));
+            Calque.check(served.continentalness() == noises.continents().mapAll(this::wrap));
+            Calque.check(served.erosion() == noises.erosion().mapAll(this::wrap));
+            Calque.check(served.depth() == noises.depth().mapAll(this::wrap));
+            Calque.check(served.weirdness() == noises.ridges().mapAll(this::wrap));
+        }
+
+        callback.setReturnValue(served);
     }
+
+    @Shadow
+    protected abstract DensityFunction wrap(DensityFunction function);
 }

@@ -411,6 +411,14 @@ public final class Dials extends Screen {
                         + " un tuyau de mod ont des centaines d'états qui décrivent le même volume.",
                 "Tout le travail est fait au CHARGEMENT. 11 413 formes effectivement partagées, mais"
                         + " l'écart de mémoire (9,2 Mo) est du même ordre que le bruit du banc."));
+        world.add(Dial.serverFlag("Calque du routeur de bruit", Config.CALQUE,
+                "Avant de fabriquer le relief d'un chunk, le jeu parcourt son arbre de fonctions de"
+                        + " densité pour y glisser des caches. L'étape des biomes en redemande SIX"
+                        + " parcours complets — alors que le constructeur les avait déjà faits.",
+                "Résultat identique, et c'est démontré : le contrôle compare les RÉFÉRENCES et"
+                        + " trouve les mêmes objets, donc aucun écart n'est possible en aucun point."
+                        + " Gain mesuré ×1,00 à ×1,07 selon la charge de la machine : sous le seuil"
+                        + " du laboratoire, donc gardé SANS chiffre de gain."));
         world.add(Dial.serverFlag("Cadastre des structures", Config.CADASTRE,
                 "Le placeur Jigsaw teste chaque pièce contre une forme de voxels qui grossit à"
                         + " chaque pièce posée — son coût croît comme le CUBE du nombre de pièces."

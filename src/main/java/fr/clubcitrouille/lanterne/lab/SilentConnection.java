@@ -119,6 +119,8 @@ public final class SilentConnection extends Connection {
         absorbed++;
         if (packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket move) {
             lastTeleportId = move.id();
+        } else if (packet instanceof net.minecraft.network.protocol.common.ClientboundKeepAlivePacket alive) {
+            lastKeepAlive = alive.getId();
         }
     }
 
@@ -150,6 +152,20 @@ public final class SilentConnection extends Connection {
 
     /** Voir {@link #lastTeleportId()}. Moins un tant que le serveur n'en a imposé aucune. */
     private int lastTeleportId = -1;
+
+    /** Voir {@link #lastKeepAlive()}. Zéro tant que le serveur n'a rien demandé. */
+    private long lastKeepAlive;
+
+    /**
+     * Le dernier défi de présence que le serveur a envoyé, ou zéro.
+     *
+     * <p>Une doublure dont la connexion est réellement tickée doit y répondre : passé quinze
+     * secondes sans réponse, le serveur la déconnecte pour délai dépassé — au beau milieu du relevé,
+     * et sans que le tableau ne dise pourquoi il s'est arrêté.
+     */
+    public long lastKeepAlive() {
+        return lastKeepAlive;
+    }
 
     /** Nombre de paquets que le serveur a voulu envoyer à ce joueur. */
     public long absorbed() {

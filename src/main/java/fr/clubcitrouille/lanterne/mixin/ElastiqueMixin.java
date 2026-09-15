@@ -74,14 +74,7 @@ public abstract class ElastiqueMixin {
 
     @Inject(method = "resetPosition", at = @At("TAIL"))
     private void lanterne$anchor(CallbackInfo callback) {
-        long now = System.nanoTime();
-        if (Elastique.observing() && this.lanterne$anchorNanos != 0L
-                && now - this.lanterne$anchorNanos < 10_000_000L
-                && Elastique.traceBudget()) {
-            fr.clubcitrouille.lanterne.Lanterne.LOG.info("[TRACE-ANCRE] rappel rapproché",
-                    new Throwable("qui appelle resetPosition ?"));
-        }
-        this.lanterne$anchorNanos = now;
+        this.lanterne$anchorNanos = System.nanoTime();
     }
 
     /**
@@ -143,12 +136,7 @@ public abstract class ElastiqueMixin {
         if (!armed && !Elastique.observing()) {
             return vanilla;
         }
-        long frozen = this.lanterne$frozenNanos();
-        if (Elastique.observing() && frozen > 60_000_000L) {
-            fr.clubcitrouille.lanterne.Lanterne.LOG.info("[TRACE-GEL] paquet jugé à +{} ms",
-                    frozen / 1_000_000L);
-        }
-        return Elastique.widenResidual(vanilla, frozen, armed);
+        return Elastique.widenResidual(vanilla, this.lanterne$frozenNanos(), armed);
     }
 
     /**

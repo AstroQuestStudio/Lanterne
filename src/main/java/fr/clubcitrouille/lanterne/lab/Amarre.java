@@ -3,6 +3,7 @@ package fr.clubcitrouille.lanterne.lab;
 import java.util.Locale;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.MinecraftServer;
@@ -63,9 +64,24 @@ import fr.clubcitrouille.lanterne.core.TickBudget;
  *
  * <p>La doublure avance donc <b>par petits pas</b>, un par tick de client, chacun validé contre les
  * collisions du monde et glissant axe par axe — exactement comme le fait la physique d'un vrai
- * client. Sa position annoncée est donc toujours atteignable, et toujours libre. Ce que le serveur
- * en fera, lui, dépend de sa capacité à refaire le même chemin <b>d'un seul grand pas</b> : c'est
- * précisément là que naît l'élastique, et c'est donc précisément cela qu'on mesure.
+ * client. Sa position annoncée est donc toujours atteignable, et toujours libre.
+ *
+ * <h2>Le mécanisme que l'épreuve a fini par établir, et celui qu'on croyait</h2>
+ *
+ * <p>On supposait au départ que l'élastique venait du <em>contrôle de cohérence</em> : le serveur
+ * refaisant d'un seul grand pas le chemin que le client avait parcouru en plusieurs petits, et
+ * heurtant ce que les petits contournaient.
+ *
+ * <p><b>C'est faux</b>, et le code du jeu le dit : {@code lastGood} est remis à jour après chaque
+ * paquet accepté, si bien que chaque appel à {@code move()} ne couvre jamais qu'un seul pas de
+ * client, retard ou pas. Le relevé a tranché dans le même sens — <b>zéro</b> déclenchement de
+ * cohérence sur toutes les exécutions.
+ *
+ * <p>Ce qui s'accumule pendant un à-coup, c'est l'écart à {@code firstGood}, qui lui reste figé tout
+ * le tick pendant que le client continue d'avancer. Passé cinq paquets dans la même fenêtre, le jeu
+ * ramène {@code deltaPackets} à un : la tolérance retombe à cent blocs au carré au moment précis où
+ * le joueur a le plus bougé. C'est le <b>contrôle de vitesse</b> qui le renvoie en arrière, et c'est
+ * ce que l'épreuve mesure.
  *
  * <h2>Ce que l'épreuve refuse de faire</h2>
  *
@@ -88,7 +104,8 @@ import fr.clubcitrouille.lanterne.core.TickBudget;
  * cette épreuve qui ne mesure rien, et c'est elle qu'il faut réparer.
  */
 public final class Amarre {
-    private enum Step { OFF, SETTLING, LOADING, CALM, CHARGING, STORM_BARE, STORM_GUARDED, DONE }
+    private enum Step { OFF, SETTLING, LOADING, CALM_SETTLE, CALM, CHARGING, STORM_BARE,
+                        STORM_GUARDED, DONE }
 
     /** Durée nominale d'un tick, en nanosecondes. */
     private static final long NOMINAL_NANOS = 50_000_000L;
@@ -101,6 +118,29 @@ public final class Amarre {
 
     /** Ticks de relevé pour la phase au repos. */
     private static final int CALM_TICKS = 100;
+
+    /**
+     * Ticks consécutifs sous cinquante millisecondes exigés avant de déclarer le serveur au repos.
+     *
+     * <h2>Une phase « au repos » qui ne l'était pas</h2>
+     *
+     * <p>Le quatrième relevé a annoncé <b>NON CONFORME</b> sur la garantie la plus importante du
+     * module : quinze pas sur cent trente élargis « alors que le serveur était au repos », avec un
+     * pire retard de ×2,76.
+     *
+     * <p>Le module n'y était pour rien. La phase démarrait immédiatement après la pose de neuf mille
+     * colonnes de pierre et pendant que les chunks arrivaient encore : le serveur avait réellement du
+     * retard, et le module a réellement fait ce qu'on lui demande. C'était l'épreuve qui mentait sur
+     * ses propres conditions.
+     *
+     * <p>On exige donc d'abord une <b>preuve de calme</b> — une série ininterrompue de ticks tenus —
+     * avant de compter quoi que ce soit. Et si le calme se rompt pendant le relevé, l'épreuve refuse
+     * de conclure au lieu d'accuser.
+     */
+    private static final int CALM_STREAK = 40;
+
+    /** Ticks au-delà desquels on renonce à attendre le calme. */
+    private static final int CALM_PATIENCE = 1200;
 
     /** Ticks laissés à la charge pour s'installer avant qu'on relève quoi que ce soit. */
     private static final int CHARGE_SETTLE = 100;
@@ -192,6 +232,10 @@ public final class Amarre {
     /** Instant du dernier pas rejoué, pour tenir le rythme de vingt par seconde en temps réel. */
     private static long lastStepNanos;
 
+    /** Ce à quoi la doublure a déjà répondu — voir {@link #drive} et {@link #animate}. */
+    private static int answeredTeleport = -1;
+    private static long answeredKeepAlive;
+
     /** Pas de client réellement poussés dans la connexion, par bras. */
     private static long bareSteps;
     private static long guardedSteps;
@@ -216,6 +260,8 @@ public final class Amarre {
     private static long calmSteps;
     private static long calmWidened;
     private static double calmLateness;
+    private static int calmOverruns;
+    private static int calmStreak;
 
     /** Verdicts des deux tableaux déterministes. */
     private static boolean deadBandOk;
@@ -229,11 +275,65 @@ public final class Amarre {
         return step != Step.OFF && step != Step.DONE;
     }
 
-    /** Chronomètre le tick entier. Appelé depuis {@code ServerTickEvent.Pre}. */
+    /** Chronomètre le tick entier, et fait vivre la doublure. Depuis {@code ServerTickEvent.Pre}. */
     public static void beginTick() {
-        if (running()) {
-            tickStarted = System.nanoTime();
+        if (!running()) {
+            return;
         }
+        tickStarted = System.nanoTime();
+        animate();
+    }
+
+    /**
+     * Fait ticker la connexion de la doublure, comme le serveur le ferait pour un vrai joueur.
+     *
+     * <h2>Le défaut de doublure qui a coûté trois relevés</h2>
+     *
+     * <p>Les trois premiers relevés ont annoncé « pire retard ×1,00 » alors que l'épreuve figeait le
+     * serveur trois secondes et demie. La trace a désigné le coupable sans ambiguïté : la ligne 1092
+     * de {@code handleMovePlayer},
+     *
+     * <pre>
+     * if (this.tickCount == 0) {
+     *     this.resetPosition();
+     * }
+     * </pre>
+     *
+     * <p>{@code tickCount} n'augmente que dans {@code tickPlayer()}, qui n'est appelé que par
+     * {@code ServerGamePacketListenerImpl.tick()}, lui-même appelé par {@code Connection.tick()}.
+     * Or {@link SilentConnection} <b>redéfinit</b> {@code tick()} pour ne faire que vider sa file :
+     * l'écouteur d'une doublure n'est donc jamais tické, son {@code tickCount} reste éternellement à
+     * zéro, et <b>chaque paquet de mouvement regèle la position de référence</b>.
+     *
+     * <p>Conséquence : aucune fenêtre ne pouvait jamais dépasser un paquet. Ni le retard, ni l'écart
+     * à {@code firstGood} ne pouvaient croître — l'épreuve mesurait une situation qui n'existe chez
+     * aucun joueur réel, et elle l'aurait fait en silence.
+     *
+     * <p>Cela vaut d'être noté au-delà de cette épreuve : <b>une doublure de ce dépôt n'est pas un
+     * joueur complet</b>. Tout ce qui passe par le tick de la connexion — mouvement, présence, délai
+     * d'inactivité — ne s'exécute pas pour elle. On répare donc ici, localement, plutôt que dans
+     * {@link SilentConnection} : une vingtaine d'autres épreuves s'appuient sur des doublures inertes,
+     * et leur rendre un tick de connexion changerait leurs mesures sans qu'on l'ait demandé.
+     *
+     * <p>Ticker la connexion réveille le contrôle de présence, qui déconnecte au bout de trente
+     * secondes sans réponse. On y répond donc, comme un vrai client.
+     */
+    private static void animate() {
+        if (step != Step.CALM && step != Step.CHARGING
+                && step != Step.STORM_BARE && step != Step.STORM_GUARDED) {
+            return;
+        }
+        ServerPlayer actor = Understudy.actor(0);
+        SilentConnection line = Understudy.line(0);
+        if (actor == null || line == null || actor.connection == null) {
+            return;
+        }
+        long challenge = line.lastKeepAlive();
+        if (challenge != 0L && challenge != answeredKeepAlive) {
+            answeredKeepAlive = challenge;
+            actor.connection.handleKeepAlive(new ServerboundKeepAlivePacket(challenge));
+        }
+        actor.connection.tick();
     }
 
     public static void begin(MinecraftServer server) {
@@ -278,23 +378,45 @@ public final class Amarre {
                 if (--waiting > 0) {
                     return;
                 }
-                if (!openScene(server)) {
+                if (!placeActor(server)) {
                     finish();
                     return;
                 }
                 Settings.setElastique(true);
+                step = Step.CALM_SETTLE;
+                calmStreak = 0;
+                waiting = CALM_PATIENCE;
+            }
+            case CALM_SETTLE -> {
+                drive(server);
+                boolean held = tickStarted != 0L
+                        && System.nanoTime() - tickStarted <= NOMINAL_NANOS;
+                calmStreak = held ? calmStreak + 1 : 0;
+                if (calmStreak < CALM_STREAK && --waiting > 0) {
+                    return;
+                }
+                if (calmStreak < CALM_STREAK) {
+                    Lanterne.LOG.warn("[AMARRE] Le serveur n'a pas tenu {} ticks d'affilée en {} "
+                            + "ticks d'attente. La phase au repos va tourner sans repos, et refusera "
+                            + "de conclure.", CALM_STREAK, CALM_PATIENCE);
+                }
                 Elastique.reset();
+                calmOverruns = 0;
                 step = Step.CALM;
                 waiting = CALM_TICKS;
             }
             case CALM -> {
                 drive(server);
+                if (tickStarted != 0L && System.nanoTime() - tickStarted > NOMINAL_NANOS) {
+                    calmOverruns++;
+                }
                 if (--waiting > 0) {
                     return;
                 }
                 calmSteps = Elastique.samples();
                 calmWidened = Elastique.widened();
                 calmLateness = Elastique.worstLateness();
+                buildSlab(server);
                 buildCharge(server);
                 step = Step.CHARGING;
                 waiting = CHARGE_SETTLE;
@@ -481,8 +603,7 @@ public final class Amarre {
      * céder devant sa lecture. Elles sont conservées ici parce qu'elles sont instructives : le
      * mécanisme du symptôme n'est pas celui qu'on suppose spontanément.
      */
-    private static boolean openScene(MinecraftServer server) {
-        ServerLevel level = server.overworld();
+    private static boolean placeActor(MinecraftServer server) {
         ServerPlayer actor = Understudy.actor(0);
         if (actor == null) {
             Lanterne.LOG.error("[AMARRE] ÉPREUVE INVALIDE : aucune doublure n'est entrée en scène. "
@@ -490,34 +611,52 @@ public final class Amarre {
             anyFailure = true;
             return false;
         }
-
-        int ground = Scene.groundLevel(level);
         originX = actor.getX();
         originZ = actor.getZ();
+        clientX = actor.getX();
+        clientY = actor.getY();
+        clientZ = actor.getZ();
+        lastStepNanos = System.nanoTime();
+        Lanterne.LOG.info("[AMARRE] Doublure en ({}, {}). La phase au repos se déroule sur le "
+                + "terrain d'origine : bâtir la dalle AVANT elle rendrait le serveur occupé pendant "
+                + "la seule phase où l'on prétend qu'il ne l'est pas.",
+                (int) originX, (int) originZ);
+        return true;
+    }
 
+    /**
+     * Pose la dalle sur laquelle la doublure courra en ligne droite.
+     *
+     * <p>Une dalle nue, et non la forêt de piliers de la première version : voir
+     * {@link #advanceOneClientTick}. Elle n'est bâtie qu'<b>après</b> la phase au repos, parce que
+     * poser dix mille blocs occupe le serveur — et que le quatrième relevé de cette épreuve a accusé
+     * le module d'un retard que l'épreuve avait elle-même fabriqué.
+     */
+    private static void buildSlab(MinecraftServer server) {
+        ServerLevel level = server.overworld();
+        ServerPlayer actor = Understudy.actor(0);
+        if (actor == null) {
+            return;
+        }
+        int ground = Scene.groundLevel(level);
         int laid = 0;
         for (int dx = -SLAB; dx <= SLAB; dx++) {
             for (int dz = -SLAB; dz <= SLAB; dz++) {
                 BlockPos floor = BlockPos.containing(originX + dx, ground, originZ + dz);
-                // Sans mise à jour des voisins : on pose quarante mille blocs, et déclencher une
-                // cascade de propagation à chacun figerait le serveur pour de mauvaises raisons —
-                // c'est-à-dire pendant la phase où l'on prétend qu'il va bien.
+                // Sans mise à jour des voisins : on pose des dizaines de milliers de blocs, et
+                // déclencher une cascade de propagation à chacun coûterait bien plus que la pose.
                 level.setBlock(floor, Blocks.STONE.defaultBlockState(), 2);
                 level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 2);
                 level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 2);
                 laid++;
             }
         }
-
         clientX = originX;
         clientY = ground + 1d;
         clientZ = originZ;
         actor.snapTo(clientX, clientY, clientZ, 0f, 0f);
-
-        lastStepNanos = System.nanoTime();
-        Lanterne.LOG.info("[AMARRE] Scène ouverte : dalle de {} colonnes, sol à {}, doublure en "
-                + "({}, {}).", laid, ground, (int) originX, (int) originZ);
-        return laid > 0;
+        answeredTeleport = -1;
+        Lanterne.LOG.info("[AMARRE] Dalle de {} colonnes posée, sol à {}.", laid, ground);
     }
 
     /**
@@ -562,8 +701,13 @@ public final class Amarre {
 
         // Accuser réception, comme un vrai client. Sans cela le serveur ignore toute position
         // annoncée par ce joueur, et l'épreuve mesurerait zéro sans rien signaler.
+        //
+        // UNE SEULE FOIS PAR NUMÉRO, et c'est impératif : accuser deux fois le même fait tomber le
+        // jeu dans « if (awaitingPositionFromClient == null) disconnect(invalid_player_movement) ».
+        // La doublure serait expulsée au milieu du relevé, pour un motif qui n'a rien à voir.
         int teleport = line.lastTeleportId();
-        if (teleport >= 0) {
+        if (teleport >= 0 && teleport != answeredTeleport) {
+            answeredTeleport = teleport;
             actor.connection.handleAcceptTeleportPacket(
                     new ServerboundAcceptTeleportationPacket(teleport));
         }
@@ -578,6 +722,23 @@ public final class Amarre {
         lastStepNanos += (long) steps * NOMINAL_NANOS;
 
         ServerLevel level = actor.level();
+        // <h2>Choisir la direction AVANT la salve, et non pendant</h2>
+        //
+        // Un relevé a rendu dix retours en arrière, le suivant zéro, sur le même code. La cause
+        // n'était pas le module : quand un à-coup tombait alors que la doublure longeait le bord de
+        // son terrain, elle faisait demi-tour au milieu de la salve. Son écart à « firstGood »
+        // cessait alors de croître — et c'est cet écart, et lui seul, que le contrôle de vitesse
+        // examine. L'épreuve mesurait donc la position du hasard, pas le comportement du module.
+        //
+        // On regarde donc d'abord si la salve tient dans le terrain, et l'on se retourne avant de
+        // partir. Chaque salve est alors une ligne droite de longueur connue, dans les deux bras.
+        double reach = steps * STEP;
+        if (Math.abs(clientX + headingX * reach - originX) > PADDOCK) {
+            headingX = -headingX;
+        }
+        if (Math.abs(clientZ + headingZ * reach - originZ) > PADDOCK) {
+            headingZ = -headingZ;
+        }
         for (int i = 0; i < steps; i++) {
             advanceOneClientTick(level, actor);
             actor.connection.handleMovePlayer(
@@ -630,8 +791,9 @@ public final class Amarre {
     private static void verdict() {
         Lanterne.LOG.info("[AMARRE] ── Tableau 3 · le monde réel ──");
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[AMARRE] Au repos (module armé)  : %d pas · %d élargissement(s) · pire retard ×%.2f",
-                calmSteps, calmWidened, calmLateness));
+                "[AMARRE] Au repos (module armé)  : %d pas · %d élargissement(s) · pire retard ×%.2f "
+                        + "· %d tick(s) > 50 ms",
+                calmSteps, calmWidened, calmLateness, calmOverruns));
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[AMARRE] En charge, SANS le module : %d pas · %d retour(s) en arrière "
                         + "(%d vitesse, %d cohérence) · pire retard ×%.2f · %d tick(s) > 50 ms",
@@ -656,16 +818,31 @@ public final class Amarre {
             anyFailure = true;
             return;
         }
-        if (calmWidened > 0L) {
+        // Le seuil est le retard, et non le simple dépassement des 50 ms. Un tick à 60 ms est un
+        // tick manqué, mais il reste DANS la bande morte : le module n'y a aucune latitude, et
+        // constater qu'il n'a rien fait garde donc tout son sens. Ce qui ôterait son sens au tableau,
+        // c'est une fenêtre réellement entrée dans la zone d'élargissement — là, élargir serait le
+        // comportement demandé, et le relevé ne prouverait plus rien.
+        if (calmLateness >= 1.5d) {
             Lanterne.LOG.error(String.format(Locale.ROOT,
-                    "[AMARRE] NON CONFORME : %d pas sur %d ont été élargis alors que le serveur était "
-                    + "au repos (pire retard ×%.2f). La promesse « un serveur sain se comporte comme "
-                    + "sans le mod » est fausse.", calmWidened, calmSteps, calmLateness));
+                    "[AMARRE] REFUS DE CONCLURE sur le repos : une fenêtre a atteint ×%.2f, "
+                    + "c'est-à-dire la zone où le module a le DROIT d'élargir (%d élargissement(s), "
+                    + "%d tick(s) > 50 ms). Ce n'est pas le module qu'il faudrait accuser, c'est ce "
+                    + "relevé qu'il faut jeter. La garantie reste éprouvée par le tableau 1, qui ne "
+                    + "dépend d'aucune scène.", calmLateness, calmWidened, calmOverruns));
+        } else if (calmWidened > 0L) {
+            Lanterne.LOG.error(String.format(Locale.ROOT,
+                    "[AMARRE] NON CONFORME : %d pas sur %d ont été élargis alors que le serveur "
+                    + "tenait TOUS ses ticks (pire retard ×%.2f). La promesse « un serveur sain se "
+                    + "comporte comme sans le mod » est fausse.",
+                    calmWidened, calmSteps, calmLateness));
             anyFailure = true;
         } else {
             Lanterne.LOG.info(String.format(Locale.ROOT,
-                    "[AMARRE] CONFORME : au repos, %d pas jugés, zéro élargissement. Le serveur sain "
-                    + "se comporte exactement comme sans le mod.", calmSteps));
+                    "[AMARRE] CONFORME : au repos, %d pas réellement jugés par le code du jeu, pire "
+                    + "fenêtre ×%.2f (bande morte), zéro élargissement. Ce tableau éprouve le "
+                    + "BRANCHEMENT — que le module voit bien passer les paquets et n'y touche pas ; "
+                    + "c'est le tableau 1 qui éprouve la loi.", calmSteps, calmLateness));
         }
 
         // Puis l'utilité, qui a le droit de ne rien pouvoir dire.
@@ -695,9 +872,18 @@ public final class Amarre {
         }
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[AMARRE] CONFORME : %d retour(s) en arrière sans le module, %d avec — soit %.0f %% "
-                + "de moins, à charge et à trajet identiques.",
+                + "de moins. Même charge, même cadence de paquets, mêmes gels provoqués.",
                 bareRollbacks, guardedRollbacks,
                 100d * (bareRollbacks - guardedRollbacks) / bareRollbacks));
+        // Le nombre de pas JUGÉS diffère entre les deux bras, et ce n'est pas un défaut : après un
+        // retour en arrière, le jeu attend un accusé de réception et ignore le reste de la salve.
+        // Moins de retours en arrière, c'est donc mécaniquement plus de mouvements traités — et
+        // c'est la seconde façon de voir le même résultat.
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[AMARRE] Mouvements effectivement traités : %d sans le module, %d avec (+%.0f %%). "
+                + "Un retour en arrière fait jeter la fin de la salve.",
+                bareSteps, guardedSteps,
+                bareSteps == 0L ? 0d : 100d * (guardedSteps - bareSteps) / bareSteps));
     }
 
     private static void finish() {
