@@ -91,10 +91,28 @@ public final class Pregen {
      */
     private static final int IN_FLIGHT = 24;
 
-    /** Part d'un tick qu'on s'autorise à consommer, en millisecondes. */
-    private static final long BUDGET_MS = 30L;
+    /**
+     * Part d'un tick qu'on s'autorise à consommer, en millisecondes.
+     *
+     * <p>Relue à chaque tick plutôt que retenue au lancement : une pré-génération dure des heures,
+     * et l'administrateur qui s'aperçoit qu'elle gêne doit pouvoir la brider sans tout reprendre.
+     */
+    private static long budgetMs() {
+        return fr.clubcitrouille.lanterne.core.Config.PREGEN_BUDGET_MS.get();
+    }
 
     private static boolean running;
+
+    /**
+     * Instant d'entrée dans la pause, ou zéro si l'on travaille.
+     *
+     * <p>Voir {@link #activeNanos()} : ce qui est mesuré ici finit par être <b>retiré</b> du
+     * dénominateur du débit.
+     */
+    private static long pausedAt;
+
+    /** Temps déjà passé en pause, hors pause en cours. */
+    private static long pausedNanos;
     private static ServerLevel level;
     private static final List<CompletableFuture<?>> PENDING = new ArrayList<>();
     private static final LongOpenHashSet ALREADY = new LongOpenHashSet();
@@ -154,6 +172,8 @@ public final class Pregen {
         startedAt = System.nanoTime();
         lastReport = startedAt;
         lastLogged = startedAt;
+        pausedAt = 0L;
+        pausedNanos = 0L;
         hideBar();
         int side = radiusChunks * 2 + 1;
         wanted = (long) side * side;
@@ -162,7 +182,20 @@ public final class Pregen {
         long known = readExistingChunks(target);
         Lanterne.LOG.info("[PRÉGÉN] {} chunk(s) visés autour de l'origine (rayon {}), dont {} déjà "
                 + "écrits sur disque et qui seront sautés. Budget : {} ms par tick.",
-                wanted, radiusChunks, known, BUDGET_MS);
+                wanted, radiusChunks, known, budgetMs());
+
+        // Dit tout de suite ce qui va se passer, plutôt que de laisser l'opérateur constater qu'il
+        // ne se passe rien. Celui qui lance la commande DEPUIS LE JEU est lui-même un joueur
+        // connecté : sans cette ligne, il verrait une pré-génération qui ne démarre jamais et
+        // conclurait à une panne. C'est le seul piège de ce réglage, et il se désamorce en le
+        // disant.
+        int present = target.getServer().getPlayerList().getPlayerCount();
+        if (present > 0 && fr.clubcitrouille.lanterne.core.Config.PREGEN_PAUSE_ON_JOIN.get()) {
+            Lanterne.LOG.info("[PRÉGÉN] en attente : {} joueur(s) connecté(s), et "
+                    + "« pause_a_la_connexion » est active. Elle démarrera au départ du dernier. "
+                    + "Pour générer pendant que vous jouez, mettre ce réglage à false dans "
+                    + "config/lanterne-server.toml.", present);
+        }
     }
 
     /**
@@ -259,7 +292,10 @@ public final class Pregen {
         if (!running) {
             return;
         }
-        long deadline = System.nanoTime() + BUDGET_MS * 1_000_000L;
+        if (suspended(server)) {
+            return;
+        }
+        long deadline = System.nanoTime() + budgetMs() * 1_000_000L;
 
         PENDING.removeIf(pending -> {
             if (pending.isDone()) {
@@ -286,6 +322,83 @@ public final class Pregen {
         }
 
         report();
+    }
+
+    /**
+     * Faut-il se taire parce qu'un joueur est là ?
+     *
+     * <h2>Un joueur et une pré-génération se disputent le même cœur</h2>
+     *
+     * <p>Sur un hébergement à un cœur — celui qu'on loue pour jouer entre amis — il n'y a rien à
+     * partager : les trente millisecondes que la pré-génération prend dans le tick sont trente
+     * millisecondes que le joueur n'a pas. Le rendre entier au joueur dès qu'il arrive vaut mieux
+     * que de lui servir un serveur à moitié occupé, d'autant que le travail en question n'est
+     * <b>jamais</b> urgent : c'est précisément son intérêt de pouvoir être fait plus tard.
+     *
+     * <h2>Ce qui est en vol n'est pas abandonné</h2>
+     *
+     * <p>On cesse de <em>soumettre</em>, on n'annule rien. Les chunks déjà demandés aboutissent et
+     * sont écrits ; le prochain tick les comptera. Annuler aurait perdu du travail déjà payé.
+     *
+     * <h2>Et le temps de pause sort du dénominateur</h2>
+     *
+     * <p>C'est le détail qui décide si le chiffre final veut dire quelque chose. Une pré-génération
+     * de dix minutes dont huit passées en pause n'a pas un débit six fois moindre : elle a le même
+     * débit, pendant deux minutes. Laisser la pause dans le calcul reviendrait à mesurer surtout le
+     * temps où l'on n'a rien fait — un dénominateur faux rend tous les numérateurs inutiles.
+     */
+    private static boolean suspended(MinecraftServer server) {
+        if (!fr.clubcitrouille.lanterne.core.Config.PREGEN_PAUSE_ON_JOIN.get()
+                || server.getPlayerList().getPlayers().isEmpty()) {
+            resume();
+            return false;
+        }
+        if (pausedAt == 0L) {
+            pausedAt = System.nanoTime();
+            Lanterne.LOG.info("[PRÉGÉN] suspendue — {} joueur(s) connecté(s). Le serveur leur est "
+                    + "rendu en entier, ce qui est en vol aboutit, et la reprise est automatique au "
+                    + "départ du dernier. Le temps de pause ne comptera pas dans le débit annoncé.",
+                    server.getPlayerList().getPlayerCount());
+        }
+        long now = System.nanoTime();
+        if (now - lastReport >= 1_000_000_000L) {
+            lastReport = now;
+            showPaused(server);
+        }
+        return true;
+    }
+
+    /** Sort de la pause, s'il y en avait une, et verse son temps au compteur. */
+    private static void resume() {
+        if (pausedAt == 0L) {
+            return;
+        }
+        long waited = System.nanoTime() - pausedAt;
+        pausedNanos += waited;
+        pausedAt = 0L;
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[PRÉGÉN] reprise après %s de pause — le serveur est de nouveau vide.",
+                humanDuration(waited / 1.0E9d)));
+    }
+
+    /**
+     * Le temps réellement passé à travailler, pause déduite.
+     *
+     * <p>La pause <b>en cours</b> est déduite elle aussi : sans quoi le débit affiché s'effondrerait
+     * seconde après seconde sous les yeux d'un opérateur qui vient d'arriver, et il en conclurait
+     * que la pré-génération est en train de ralentir alors qu'elle est simplement à l'arrêt.
+     */
+    private static long activeNanos() {
+        long active = System.nanoTime() - startedAt - pausedNanos;
+        if (pausedAt != 0L) {
+            active -= System.nanoTime() - pausedAt;
+        }
+        return Math.max(1L, active);
+    }
+
+    /** Le débit, calculé sur le temps de travail et non sur le temps écoulé. */
+    private static double rate() {
+        return finished / (activeNanos() / 1.0E9d);
     }
 
     /**
@@ -335,8 +448,7 @@ public final class Pregen {
             return;
         }
         lastReport = now;
-        double seconds = (now - startedAt) / 1.0E9d;
-        double rate = finished / Math.max(0.001d, seconds);
+        double rate = rate();
         long seen = issued + skipped;
         float share = (float) Math.min(1d, seen / (double) Math.max(1L, wanted));
 
@@ -383,9 +495,48 @@ public final class Pregen {
                 share * 100d, seen, wanted, rate, humanTime(secondsLeft)))
                 .withStyle(ChatFormatting.AQUA));
         bar.setProgress(share);
+        bar.setColor(BossEvent.BossBarColor.GREEN);
+        refreshViewers();
+    }
 
-        // La liste est révisée à chaque passage : un opérateur promu en cours de route la reçoit, un
-        // joueur déconnecté cesse d'y figurer, et un joueur dépromu ne la voit plus.
+    /**
+     * La barre pendant la pause.
+     *
+     * <h2>Une barre figée se lit comme une panne</h2>
+     *
+     * <p>Sans cet affichage, l'opérateur qui vient d'arriver voit une barre qui ne bouge plus, et
+     * conclut que la pré-génération a planté. Elle a fait exactement ce qu'on lui a demandé — et
+     * c'est son arrivée à lui qui l'a provoqué. La barre doit donc le dire, et changer de couleur
+     * pour qu'on n'ait pas à la lire pour le comprendre.
+     */
+    private static void showPaused(MinecraftServer server) {
+        if (level == null) {
+            return;
+        }
+        if (bar == null) {
+            bar = new ServerBossEvent(java.util.UUID.randomUUID(),
+                    Component.literal("Pré-génération"),
+                    BossEvent.BossBarColor.YELLOW, BossEvent.BossBarOverlay.PROGRESS);
+        }
+        long seen = issued + skipped;
+        float share = (float) Math.min(1d, seen / (double) Math.max(1L, wanted));
+        int players = server.getPlayerList().getPlayerCount();
+        bar.setName(Component.literal(String.format(Locale.ROOT,
+                "Pré-génération EN PAUSE  ·  %d / %d chunks  ·  %d joueur(s) connecté(s)",
+                seen, wanted, players))
+                .withStyle(ChatFormatting.YELLOW));
+        bar.setProgress(share);
+        bar.setColor(BossEvent.BossBarColor.YELLOW);
+        refreshViewers();
+    }
+
+    /**
+     * Révise qui voit la barre.
+     *
+     * <p>À chaque passage, et non une fois pour toutes : un opérateur promu en cours de route la
+     * reçoit, un joueur déconnecté cesse d'y figurer, et un joueur dépromu ne la voit plus.
+     */
+    private static void refreshViewers() {
         for (ServerPlayer viewer : level.getServer().getPlayerList().getPlayers()) {
             boolean allowed = level.getServer().getPlayerList().isOp(viewer.nameAndId());
             if (allowed) {
@@ -410,6 +561,18 @@ public final class Pregen {
         return String.format(Locale.ROOT, "%d h %02d restantes", total / 3600L, (total % 3600L) / 60L);
     }
 
+    /** Une durée <b>écoulée</b>, en clair. Voir {@link #humanTime} pour une durée qui reste. */
+    private static String humanDuration(double seconds) {
+        long total = (long) Math.max(0d, seconds);
+        if (total < 60L) {
+            return total + " s";
+        }
+        if (total < 3600L) {
+            return String.format(Locale.ROOT, "%d min %02d s", total / 60L, total % 60L);
+        }
+        return String.format(Locale.ROOT, "%d h %02d", total / 3600L, (total % 3600L) / 60L);
+    }
+
     private static void hideBar() {
         if (bar != null) {
             bar.removeAllPlayers();
@@ -419,19 +582,36 @@ public final class Pregen {
     }
 
     private static void conclude() {
+        double worked = activeNanos() / 1.0E9d;
+        double rate = rate();
         running = false;
         hideBar();
-        double seconds = (System.nanoTime() - startedAt) / 1.0E9d;
         Lanterne.LOG.info(String.format(Locale.ROOT,
-                "[PRÉGÉN] terminé — %d chunk(s) générés et %d sautés en %.1f s, soit %.1f par seconde. "
-                + "Ces chunks seront désormais servis depuis le disque, ce qui coûte une quinzaine de "
-                + "fois moins que de les fabriquer devant le joueur.",
-                finished, skipped, seconds, finished / Math.max(0.001d, seconds)));
+                "[PRÉGÉN] terminé — %d chunk(s) générés et %d sautés en %s de travail, soit "
+                + "%.1f par seconde. Ces chunks seront désormais servis depuis le disque, ce qui "
+                + "coûte une quinzaine de fois moins que de les fabriquer devant le joueur.",
+                finished, skipped, humanDuration(worked), rate));
+        // La pause n'est dite QUE si elle a eu lieu, et le temps total est rappelé à côté du temps
+        // de travail : sans cela, quelqu'un qui a regardé l'horloge trouverait le chiffre trop beau
+        // et aurait raison de s'en méfier.
+        double idle = pausedNanos / 1.0E9d;
+        if (idle >= 1d) {
+            Lanterne.LOG.info(String.format(Locale.ROOT,
+                    "[PRÉGÉN] dont %s de pause, joueurs connectés — soit %s d'horloge en tout. "
+                    + "Le débit ci-dessus est celui du travail réel, pas celui de l'attente.",
+                    humanDuration(idle), humanDuration(worked + idle)));
+        }
     }
 
     /** Arrête proprement, en laissant aboutir ce qui est en vol. */
     public static void halt() {
         if (running) {
+            // On verse la pause en cours au compteur sans passer par resume(), qui annoncerait une
+            // reprise : l'arrêt n'est pas une reprise, et le journal ne doit pas dire le contraire.
+            if (pausedAt != 0L) {
+                pausedNanos += System.nanoTime() - pausedAt;
+                pausedAt = 0L;
+            }
             running = false;
             hideBar();
             Lanterne.LOG.info("[PRÉGÉN] interrompu — {} chunk(s) générés, {} sautés. La reprise est "

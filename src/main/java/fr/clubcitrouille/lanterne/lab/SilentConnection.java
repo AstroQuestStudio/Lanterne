@@ -114,6 +114,20 @@ public final class SilentConnection extends Connection {
      *
      * <p>On retient donc le numéro, et l'épreuve qui en a besoin y répond comme le ferait un vrai
      * client. Les doublures qui ne bougent pas ne s'en servent jamais et n'en souffrent pas.
+     *
+     * <h2>Le lot de chunks, qui est le même piège en pire</h2>
+     *
+     * <p>Depuis que le serveur livre les chunks par <b>lots acquittés</b>, il n'en envoie qu'un seul
+     * tant que le client n'a pas répondu : {@code maxUnacknowledgedBatches} vaut <b>un</b> à
+     * l'ouverture, et ne passe à dix qu'au premier accusé reçu.
+     *
+     * <p>Une doublure qui n'accuse jamais reçoit donc <b>neuf chunks, puis plus rien</b> — au lieu des
+     * quatre cent quarante et un d'une distance de vue de dix. Un banc de connexion mesurerait deux
+     * pour cent du travail réel et conclurait qu'arriver sur un serveur ne coûte rien.
+     *
+     * <p>C'est la même leçon que la téléportation, et elle vaut d'être écrite deux fois : <b>un
+     * silence n'est pas neutre</b>. Le protocole interprète l'absence de réponse comme une réponse,
+     * et ce qu'il en déduit est exactement l'inverse de ce que le banc voulait observer.
      */
     private void absorb(Packet<?> packet) {
         absorbed++;
@@ -121,7 +135,39 @@ public final class SilentConnection extends Connection {
             lastTeleportId = move.id();
         } else if (packet instanceof net.minecraft.network.protocol.common.ClientboundKeepAlivePacket alive) {
             lastKeepAlive = alive.getId();
+        } else if (packet instanceof net.minecraft.network.protocol.game
+                .ClientboundChunkBatchFinishedPacket batch) {
+            owedBatches++;
+            receivedChunks += batch.batchSize();
         }
+    }
+
+    /** Lots de chunks reçus et pas encore accusés. Voir {@link #absorb}. */
+    private int owedBatches;
+
+    /** Chunks effectivement livrés à cette doublure depuis le début. */
+    private long receivedChunks;
+
+    /**
+     * Combien de lots attendent une réponse.
+     *
+     * <p>La connexion <b>constate</b>, elle ne répond pas : répondre demande le joueur, qu'elle ne
+     * connaît pas. C'est {@link Understudy} qui s'en charge, comme pour la téléportation.
+     */
+    public int owedBatches() {
+        return owedBatches;
+    }
+
+    /** Un lot vient d'être accusé. */
+    public void batchAcknowledged() {
+        if (owedBatches > 0) {
+            owedBatches--;
+        }
+    }
+
+    /** Chunks reçus depuis l'inscription — la grandeur qu'un banc de connexion doit publier. */
+    public long receivedChunks() {
+        return receivedChunks;
     }
 
     /**

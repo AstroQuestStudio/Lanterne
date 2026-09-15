@@ -111,6 +111,24 @@ public final class TickBudget {
         return pressure;
     }
 
+    /**
+     * Temps déjà consommé par le tick <b>en cours</b>, en millisecondes.
+     *
+     * <h2>Ce que la pression ne peut pas dire</h2>
+     *
+     * <p>{@link #pressure()} décrit les ticks <em>passés</em>, lissés : c'est ce qu'il faut pour
+     * décider d'une dégradation durable, et c'est inutilisable pour décider s'il reste de la place
+     * <b>maintenant</b>. Un tick isolé qui déborde ne bouge presque pas la moyenne — or c'est
+     * précisément le tick isolé qui se voit, quand quatre cents chunks arrivent d'un coup.
+     *
+     * <p>Ce compteur-ci répond à l'autre question : <em>ce tick-ci a déjà mangé combien ?</em> Il
+     * n'a de sens qu'appelé pendant le tick, et il rend zéro en dehors.
+     */
+    public static double elapsedThisTickMillis() {
+        long start = tickStart;
+        return start == 0L ? 0d : (System.nanoTime() - start) / 1_000_000d;
+    }
+
     /** Temps de tick moyen en millisecondes, pour le rapport. */
     public static double averageMillis() {
         return averageNanos / 1_000_000d;

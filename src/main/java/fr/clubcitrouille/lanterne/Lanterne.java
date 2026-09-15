@@ -175,6 +175,9 @@ public final class Lanterne {
         // La ventilation du cheptel chronomètre elle aussi des ticks entiers : c'est la durée
         // complète qui se multiplie par la part du profileur pour donner des millisecondes par poste.
         fr.clubcitrouille.lanterne.lab.Cheptel.beginTick();
+        // Le seuil chronomètre lui aussi des ticks entiers : ce qu'il compare est le coût COMPLET
+        // d'une arrivée, livraison de chunks comprise, et ce coût est réparti sur tout le tick.
+        fr.clubcitrouille.lanterne.lab.Seuil.beginTick();
         Census.resetCounters();
         // Une fois par tick SERVEUR, et non par monde. LevelTickEvent.Pre se déclenche pour chacun
         // des trois mondes ; basculer le recensement à chaque fois faisait écraser celui de
@@ -201,6 +204,9 @@ public final class Lanterne {
             fr.clubcitrouille.lanterne.core.Burin.tick(event.getServer());
         }
         fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
+        // Les doublures accusent leurs lots de chunks — sans quoi le serveur leur en envoie neuf et
+        // s'arrête. Ne coûte qu'une comparaison tant qu'aucun banc n'en a demandé.
+        fr.clubcitrouille.lanterne.lab.Understudy.tick();
         SelfTest.tick(event.getServer());
         Bench.endTick(event.getServer().overworld());
         fr.clubcitrouille.lanterne.lab.Fonte.endTick(event.getServer());

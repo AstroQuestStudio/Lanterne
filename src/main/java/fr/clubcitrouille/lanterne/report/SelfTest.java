@@ -104,6 +104,7 @@ public final class SelfTest {
      * et aucun banc à palier unique ne peut faire la différence.
      */
     private static boolean cheptel;
+    private static boolean seuil;
 
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
     private static boolean swarm;
@@ -420,6 +421,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve du cheptel armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_SEUIL"))) {
+            seuil = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du seuil armée.");
+            return;
+        }
 
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
@@ -447,7 +455,8 @@ public final class SelfTest {
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
-                    && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel)) {
+                    && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel
+                    && !seuil)) {
             return;
         }
 
@@ -477,6 +486,7 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Amarre.running()
                 && !fr.clubcitrouille.lanterne.lab.Cognee.running()
                 && !fr.clubcitrouille.lanterne.lab.Cheptel.running()
+                && !fr.clubcitrouille.lanterne.lab.Seuil.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running() && waiting-- > 0) {
             return;
         }
@@ -499,6 +509,21 @@ public final class SelfTest {
             } else if (step == Step.LOADING) {
                 fr.clubcitrouille.lanterne.lab.Cheptel.begin(server);
                 step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (seuil) {
+            // AUCUNE doublure posée d'avance, et c'est tout l'objet : ce banc mesure l'ARRIVÉE.
+            // Poser le décor avant de mesurer reviendrait à mesurer un monde déjà chaud, c'est-à-dire
+            // exactement la condition dont on veut faire la différence.
+            if (fr.clubcitrouille.lanterne.lab.Seuil.running()) {
+                fr.clubcitrouille.lanterne.lab.Seuil.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Seuil.begin(server);
+                step = Step.LAUNCHED;
+            } else if (step == Step.LAUNCHED) {
+                server.halt(false);
             }
             return;
         }

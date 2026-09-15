@@ -42,6 +42,7 @@
     "CompressionMixin",
     "MiningMixin",
     "BurinMixin",
+    "ChunkSenderMixin",
     "ElastiqueMixin",
     "SectionStorageAccessor",
     "PoiStreamMixin",

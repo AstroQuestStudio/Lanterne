@@ -648,6 +648,13 @@ public final class Settings {
      * sur une position périmée, et la place unique du rattrapage qui se coince au premier refus.
      */
     private static boolean burin = true;
+    /**
+     * L'écluse : la livraison des chunks passe après le reste du tick.
+     *
+     * <p>Voir {@code core.Ecluse}. <b>Éteinte par défaut</b> : la mesure ne lui a pas donné raison,
+     * et le commentaire de {@code Config.ECLUSE} dit exactement pourquoi.
+     */
+    private static boolean ecluse;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -1224,6 +1231,11 @@ public final class Settings {
         return burin;
     }
 
+    /** L'écluse de livraison des chunks. Voir {@code core.Ecluse}. */
+    public static boolean ecluse() {
+        return ecluse;
+    }
+
     /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
@@ -1403,6 +1415,7 @@ public final class Settings {
         // « burin » n'appartient qu'à ce module : aucun autre mot-clé du fichier ne le contient, et
         // il ne contient aucun d'eux. C'est la condition pour qu'un banc isole réellement.
         burin = wanted.contains("burin");
+        ecluse = wanted.contains("ecluse");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -1528,6 +1541,7 @@ public final class Settings {
         decayDelay = Config.DECAY_DELAY.get();
         mining = Config.MINING.get();
         burin = Config.BURIN.get();
+        ecluse = Config.ECLUSE.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -1631,6 +1645,9 @@ public final class Settings {
         }
         if (burin) {
             text.append("burin ");
+        }
+        if (ecluse) {
+            text.append("ecluse ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }

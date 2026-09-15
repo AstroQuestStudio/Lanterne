@@ -117,6 +117,27 @@ public final class Understudy {
     }
 
     /**
+     * Fait entrer <b>une</b> doublure de plus, sans chasser celles déjà en scène.
+     *
+     * <p>{@link #enter} commence par tout vider : c'est ce qu'on veut d'un banc qui pose un décor
+     * d'un bloc. Mais un banc qui mesure une <em>arrivée</em> a besoin de l'inverse — faire entrer
+     * quelqu'un dans un monde déjà peuplé, précisément pour que les chunks y soient déjà chargés.
+     *
+     * @return l'indice de la doublure ajoutée, ou -1 si le serveur l'a refusée
+     */
+    public static int addOne(MinecraftServer server, ServerLevel level, double x, double z) {
+        int before = CAST.size();
+        entering = true;
+        try {
+            place(server, level, before, x, z);
+        } finally {
+            entering = false;
+        }
+        publish();
+        return CAST.size() > before ? before : -1;
+    }
+
+    /**
      * Transmet les positions au recensement.
      *
      * <p>Redondant avec {@code level.players()} quand tout va bien, et c'est délibéré : trois
@@ -140,7 +161,7 @@ public final class Understudy {
         UUID id = UUID.nameUUIDFromBytes(("lanterne-understudy-" + index).getBytes());
         GameProfile profile = new GameProfile(id, "Doublure" + index);
 
-        ServerPlayer player = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
+        ServerPlayer player = new ServerPlayer(server, level, profile, announcedInformation());
 
         // <h2>Se placer avant d'entrer, et non après</h2>
         //
@@ -169,7 +190,7 @@ public final class Understudy {
             // doublure doit ressembler à ce qu'elle double, y compris dans ce qu'elle prétend
             // comprendre.
             server.getPlayerList().placeNewPlayer(line, player,
-                    new CommonListenerCookie(profile, announcedLatencyMs, ClientInformation.createDefault(), false,
+                    new CommonListenerCookie(profile, announcedLatencyMs, announcedInformation(), false,
                             net.neoforged.neoforge.network.connection.ConnectionType.NEOFORGE));
         } catch (Exception refused) {
             Lanterne.LOG.warn("Doublure {} refusée : {}", index, refused.toString());
@@ -273,5 +294,117 @@ public final class Understudy {
         for (SilentConnection line : LINES) {
             line.resetCount();
         }
+    }
+
+    /**
+     * Les doublures accusent-elles réception de leurs lots de chunks ?
+     *
+     * <h2>Pourquoi ce n'est pas allumé pour tout le monde</h2>
+     *
+     * <p>Sans accusé, une doublure reçoit neuf chunks puis plus rien — voir
+     * {@link SilentConnection#absorb}. C'est un mensonge pour un banc de <b>connexion</b>, dont
+     * c'est précisément l'objet.
+     *
+     * <p>Mais c'est <b>sans conséquence</b> pour un banc d'entités, et l'allumer partout aurait un
+     * prix : livrer quatre cent quarante et un chunks à chacune de cent doublures ajoute un coût
+     * considérable, constant, et parfaitement étranger à ce que ces bancs-là mesurent. Il noierait
+     * le signal, et surtout il rendrait <b>incomparables</b> les chiffres déjà publiés dans les
+     * commentaires de configuration — un dénominateur qu'on change sans le dire invalide tout
+     * l'historique d'un seul coup.
+     *
+     * <p>Chaque banc décide donc, et celui qui l'allume sait pourquoi.
+     */
+    public static void answerChunkBatches(boolean on) {
+        answering = on;
+    }
+
+    /**
+     * Distance de vue que les doublures <b>annoncent</b> au serveur.
+     *
+     * <h2>Deux, et personne ne l'avait vu</h2>
+     *
+     * <p>{@code ClientInformation.createDefault()} annonce une distance de vue de <b>deux</b>. Le
+     * serveur retient le plus petit des deux nombres — le sien et celui du client — et livre donc
+     * quarante-neuf chunks à une doublure là où un joueur réglé sur dix en reçoit quatre cent
+     * quarante et un. <b>Neuf fois moins.</b>
+     *
+     * <p>C'est la seconde façon dont une doublure minimisait son coût sans le dire, après l'accusé
+     * de lot manquant. Les deux avaient la même forme : une valeur par défaut parfaitement
+     * raisonnable pour le jeu, et parfaitement fausse pour une mesure.
+     *
+     * <p>Zéro — le défaut — laisse la valeur de vanilla, pour ne pas déplacer sous leurs pieds les
+     * chiffres des bancs déjà publiés. Un banc qui a besoin d'un joueur grandeur nature le demande.
+     */
+    public static void announceViewDistance(int chunks) {
+        announcedViewDistance = chunks;
+    }
+
+    private static int announcedViewDistance;
+
+    /** Ce que la doublure déclare d'elle-même. Voir {@link #announceViewDistance}. */
+    private static ClientInformation announcedInformation() {
+        ClientInformation base = ClientInformation.createDefault();
+        if (announcedViewDistance <= 0) {
+            return base;
+        }
+        return new ClientInformation(base.language(), announcedViewDistance, base.chatVisibility(),
+                base.chatColors(), base.modelCustomisation(), base.mainHand(),
+                base.textFilteringEnabled(), base.allowsListing(), base.particleStatus());
+    }
+
+    private static boolean answering;
+
+    /**
+     * Débit que les doublures réclament, en chunks par tick.
+     *
+     * <p>Un vrai client calcule ce nombre en divisant la taille du lot par le temps qu'il a mis à le
+     * traiter. Une doublure ne traite rien : elle demanderait donc l'infini, que le serveur
+     * plafonnerait à soixante-quatre — le débit d'un client infiniment rapide, qui n'existe pas.
+     *
+     * <p>On réclame plutôt ce que vanilla lui-même choisit faute d'information : neuf. C'est la
+     * valeur que le serveur emploie avant d'avoir jamais entendu le client, et donc la moins
+     * arbitraire des valeurs disponibles.
+     */
+    private static final float ASKED_CHUNKS_PER_TICK = 9.0f;
+
+    /**
+     * Répond aux lots reçus, une fois par tick de serveur.
+     *
+     * <p>Rien à faire si aucune doublure n'est en scène, ce qui est le cas en jeu : cette méthode ne
+     * coûte alors qu'une comparaison.
+     */
+    public static void tick() {
+        if (!answering || LINES.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < LINES.size() && index < CAST.size(); index++) {
+            SilentConnection line = LINES.get(index);
+            ServerPlayer actor = CAST.get(index);
+            while (line.owedBatches() > 0) {
+                actor.connection.chunkSender.onChunkBatchReceivedByClient(ASKED_CHUNKS_PER_TICK);
+                line.batchAcknowledged();
+            }
+        }
+    }
+
+    /**
+     * Chunks livrés à <b>une</b> doublure.
+     *
+     * <p>Le total ne suffit pas à un banc qui fait entrer les doublures l'une après l'autre : tant
+     * que la première reçoit encore, son travail se mélangerait à celui de la seconde et les deux
+     * relevés seraient faux — l'un trop bas, l'autre trop haut, sans qu'aucun ne le signale.
+     */
+    public static long chunksDeliveredTo(int index) {
+        SilentConnection line = line(index);
+        return line == null ? 0L : line.receivedChunks();
+    }
+
+    /** Total des chunks réellement livrés aux doublures. */
+    public static long chunksDelivered() {
+        long total = 0L;
+        for (SilentConnection line : LINES) {
+            total += line.receivedChunks();
+        }
+        return total;
     }
 }

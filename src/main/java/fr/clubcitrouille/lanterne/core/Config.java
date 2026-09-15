@@ -72,6 +72,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue NEAR_RADIUS;
     public static final ModConfigSpec.BooleanValue MINING;
     public static final ModConfigSpec.BooleanValue BURIN;
+    public static final ModConfigSpec.BooleanValue ECLUSE;
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
@@ -84,6 +85,9 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue BROOM_ITEMS;
     public static final ModConfigSpec.BooleanValue BROOM_MOBS;
     public static final ModConfigSpec.BooleanValue BROOM_ARROWS;
+
+    public static final ModConfigSpec.BooleanValue PREGEN_PAUSE_ON_JOIN;
+    public static final ModConfigSpec.IntValue PREGEN_BUDGET_MS;
 
     public static final ModConfigSpec SPEC;
 
@@ -522,6 +526,31 @@ public final class Config {
                 "Inutile en vanilla - les compteurs y sont deja rattrapes exactement.")
                 .define("rendement_strict", false);
 
+        ECLUSE = BUILDER.comment(
+                "L'ECLUSE : la livraison des chunks passe apres le reste du tick.",
+                "",
+                "ETEINT PAR DEFAUT, et ce n'est pas un oubli : la mesure ne lui donne pas raison.",
+                "",
+                "L'idee etait de lisser le pic d'une arrivee. Le banc du seuil a montre que le pic",
+                "n'est PAS la ou on le croyait. A distance de vue 10, sur un monde deja ecrit :",
+                "  arrivee a FROID (chunks a lire)      : pire tick 106 ms de moyenne",
+                "  arrivee a CHAUD (chunks deja en RAM) : pire tick  34 ms",
+                "Les trois quarts du pic sont donc du CHARGEMENT, pas de l'envoi. Une ecluse posee",
+                "a l'entree de l'envoi ne peut rien contre eux, et la mesure le confirme :",
+                "  pire tick sans ecluse : 96,0 / 94,6 / 128,7 / 105,1 ms  (moyenne 106)",
+                "  pire tick avec ecluse : 117,5 / 75,8 / 132,9 ms         (moyenne 109)",
+                "Aucune difference, et le module allonge l'arrivee de 11 %.",
+                "",
+                "Le seul signe favorable est sur le changement de dimension - pire tick 77 ms sans,",
+                "64 ms avec - mais la dispersion y est du meme ordre que l'ecart. Deux echantillons",
+                "de chaque cote ne suffisent pas, et la regle du projet est qu'un module non prouve",
+                "reste eteint.",
+                "",
+                "Le code est garde parce qu'il est juste et qu'il coute une comparaison quand il est",
+                "eteint. A rallumer si vous voulez l'eprouver sur VOTRE machine - et merci de",
+                "publier le chiffre.")
+                .define("ecluse", false);
+
         BUILDER.pop();
 
         BUILDER.comment(
@@ -612,6 +641,45 @@ public final class Config {
                 .define("projectiles", true);
 
         BUILDER.pop();
+        BUILDER.pop();
+
+        BUILDER.comment(
+                "La pre-generation : /lanterne pregen <rayon en chunks>.",
+                "",
+                "Fabriquer un chunk devant le joueur coute une QUINZAINE de fois plus cher que de",
+                "le servir depuis le disque (13-17 contre 155-209 chunks par seconde, mesure).",
+                "Pre-generer ne repartit rien sur d'autres coeurs : cela SUPPRIME le travail du",
+                "moment ou il gene. C'est le seul levier de generation dont le gain ne depende pas",
+                "du nombre de coeurs, et donc le bon levier pour un hebergement a un coeur.",
+                "",
+                "Ce qui existe deja est saute sans etre charge : interrompre ne perd rien, et la",
+                "reprise est gratuite.").push("pregeneration");
+
+        PREGEN_PAUSE_ON_JOIN = BUILDER.comment(
+                "Suspendre la pre-generation des qu'un joueur est connecte.",
+                "",
+                "Un joueur et une pre-generation se disputent le meme coeur. Suspendre rend au",
+                "joueur la totalite du serveur, et la pre-generation reprend seule au depart du",
+                "dernier. Rien n'est perdu : les chunks deja en vol aboutissent, et le temps passe",
+                "en pause est RETIRE du calcul de debit - sans quoi le chiffre annonce a la fin",
+                "mesurerait surtout le temps ou l'on n'a rien fait.",
+                "",
+                "ATTENTION : si vous lancez la commande depuis le jeu, vous etes vous-meme un",
+                "joueur connecte. La pre-generation attendra donc votre deconnexion, et elle le dit",
+                "en clair au lancement. Mettre a false pour generer pendant que vous jouez.")
+                .define("pause_a_la_connexion", true);
+        PREGEN_BUDGET_MS = BUILDER.comment(
+                "Part d'un tick que la pre-generation s'autorise, en millisecondes.",
+                "",
+                "Un tick dure 50 ms. 30 (defaut) laisse de la marge au reste du serveur tout en",
+                "avancant vite sur un serveur vide. Baisser si vous generez pendant que des joueurs",
+                "jouent ET que pause_a_la_connexion est a false.",
+                "",
+                "Le budget est relu a CHAQUE chunk soumis, jamais une fois par tick : une",
+                "soumission peut declencher une generation synchrone et depasser largement ce qu'on",
+                "aurait estime en debut de tick.")
+                .defineInRange("budget_ms_par_tick", 30, 1, 45);
+
         BUILDER.pop();
         SPEC = BUILDER.build();
     }
