@@ -49,11 +49,14 @@ import net.minecraft.world.level.ChunkPos;
  *
  * <h2>Le nombre de fils, et pourquoi il ne mord jamais</h2>
  *
- * <p>Même formule que {@code Util.maxAllowedExecutorThreads()} (vérifié) : le nombre de cœurs
- * disponibles moins un, jamais sous un seul. Sur la machine de développement — plusieurs cœurs — cela
- * ouvre un vrai recouvrement. Sur la cible annoncée pour le déploiement dédié — un seul cœur logique —
- * la formule rend exactement <b>un</b>, et le comportement redevient rigoureusement celui
- * d'aujourd'hui : une tâche à la fois, sans fil supplémentaire à faire vivre, sans risque de
+ * <p>Le nombre de cœurs que {@link Quota} promet, moins un, jamais sous un seul — voir sa Javadoc de
+ * classe pour la raison de ne plus se fier directement à {@code Util.maxAllowedExecutorThreads()} ou à
+ * {@code Runtime.getRuntime().availableProcessors()} : sur un hébergement mutualisé qui ne confine pas
+ * correctement le conteneur, ce nombre peut afficher le matériel entier plutôt que le quota réellement
+ * promis. Sur la machine de développement — plusieurs cœurs — cela ouvre un vrai recouvrement. Sur la
+ * cible annoncée pour le déploiement dédié — un seul cœur logique, confirmé par {@link Quota} plutôt
+ * que supposé — la formule rend exactement <b>un</b>, et le comportement redevient rigoureusement
+ * celui d'aujourd'hui : une tâche à la fois, sans fil supplémentaire à faire vivre, sans risque de
  * régression sur la machine qui en a le moins les moyens.
  *
  * <h2>Ce que ce module ne change pas</h2>
@@ -84,13 +87,20 @@ public final class ChunkDecode {
     private ChunkDecode() {}
 
     /**
-     * Même calcul que {@code Util.maxAllowedExecutorThreads()} : les cœurs disponibles moins un, entre
-     * un et un plafond raisonnable. Sur une machine à un seul cœur logique, ceci rend {@code 1} — le
-     * bassin existe mais ne peut jamais faire mieux qu'exécuter les décodages l'un après l'autre,
-     * exactement comme le ferait le fil unique de vanilla.
+     * Les cœurs promis par {@link Quota}, moins un — jamais sous un seul.
+     *
+     * <p>Ce n'était, jusqu'ici, que {@code Runtime.getRuntime().availableProcessors() - 1}, le même
+     * calcul que {@code Util.maxAllowedExecutorThreads()} de vanilla. Sur du matériel dédié cela
+     * suffit ; sur un conteneur facturé pour un seul cœur mais posé sur une machine qui en affiche
+     * vingt-six sans confinement cgroup correct — le piège précisément nommé pour ce déploiement —
+     * ce calcul aurait ouvert vingt-cinq fils pour un seul cœur de temps CPU réel. {@link Quota} lit
+     * d'abord le quota du conteneur avant de se rabattre sur ce nombre, et le dit au journal quand il
+     * doit s'y rabattre. Sur une machine à un seul cœur logique confirmé, ceci rend toujours {@code 1}
+     * — le bassin existe mais ne peut jamais faire mieux qu'exécuter les décodages l'un après
+     * l'autre, exactement comme le ferait le fil unique de vanilla.
      */
     private static int threads() {
-        return Mth.clamp(Runtime.getRuntime().availableProcessors() - 1, 1, 16);
+        return Mth.clamp(Quota.cores() - 1, 1, 16);
     }
 
     /**
