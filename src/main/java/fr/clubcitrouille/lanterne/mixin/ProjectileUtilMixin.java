@@ -49,16 +49,16 @@ public abstract class ProjectileUtilMixin {
     @WrapMethod(method = "getManyEntityHitResult(Lnet/minecraft/world/level/Level;"
             + "Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/Vec3;"
             + "Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/phys/AABB;"
-            + "Ljava/util/function/Predicate;FLnet/minecraft/world/level/ClipContext$Block;Z)"
+            + "Ljava/util/function/Predicate;FLnet/minecraft/world/level/ClipContext$Block;ZZ)"
             + "Ljava/util/Collection;")
     private static Collection<EntityHitResult> lanterne$skipWhenNothingToHit(Level level,
             Entity source, Vec3 from, Vec3 to, AABB targetSearchArea, Predicate<Entity> matching,
             float entityMargin, ClipContext.Block clipType, boolean includeFromEntity,
-            Operation<Collection<EntityHitResult>> original) {
+            boolean projectSurfaceHitLocation, Operation<Collection<EntityHitResult>> original) {
         if (Settings.projectiles() && Quarry.noTargetIn(targetSearchArea)) {
             return List.of();
         }
         return original.call(level, source, from, to, targetSearchArea, matching, entityMargin,
-                clipType, includeFromEntity);
+                clipType, includeFromEntity, projectSurfaceHitLocation);
     }
 }

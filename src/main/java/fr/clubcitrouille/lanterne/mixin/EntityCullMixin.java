@@ -74,10 +74,10 @@ public abstract class EntityCullMixin {
                     value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/entity/EntityRenderDispatcher;"
                             + "shouldRender(Lnet/minecraft/world/entity/Entity;"
-                            + "Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z"))
+                            + "Lnet/minecraft/client/renderer/culling/Frustum;DDDF)Z"))
     private boolean lanterne$veil(EntityRenderDispatcher dispatcher, Entity entity, Frustum frustum,
-            double camX, double camY, double camZ, Operation<Boolean> original) {
-        if (!original.call(dispatcher, entity, frustum, camX, camY, camZ)) {
+            double camX, double camY, double camZ, float partialTicks, Operation<Boolean> original) {
+        if (!original.call(dispatcher, entity, frustum, camX, camY, camZ, partialTicks)) {
             return false;
         }
         if (Settings.shroud() && Shroud.hidden(entity, camX, camY, camZ)) {

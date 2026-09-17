@@ -6,7 +6,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.world.level.biome.BiomeResolver;
-import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 
@@ -57,11 +56,9 @@ public abstract class EmballageBiomeMixin {
      * méthode tourne sur des {@code ProtoChunk}, qui n'ont jamais été emballés.
      */
     @Inject(
-            method = "fillBiomesFromNoise(Lnet/minecraft/world/level/biome/BiomeResolver;"
-                    + "Lnet/minecraft/world/level/biome/Climate$Sampler;)V",
+            method = "fillBiomesFromNoise(Lnet/minecraft/world/level/biome/BiomeResolver;)V",
             at = @At("HEAD"))
-    private void lanterne$dropOnBiomeRepaint(
-            BiomeResolver resolveur, Climate.Sampler echantillonneur, CallbackInfo callback) {
+    private void lanterne$dropOnBiomeRepaint(BiomeResolver resolveur, CallbackInfo callback) {
         if ((Object) this instanceof LevelChunk chunk) {
             Emballage.oublie(chunk);
         }

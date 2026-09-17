@@ -11,7 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.state.GameRenderState;
 
@@ -83,8 +82,7 @@ public abstract class UpscaleGameRendererMixin {
     private long lanterne$lastFrame;
 
     @Inject(method = "render", at = @At("HEAD"))
-    private void lanterne$restoreAndBeat(DeltaTracker deltaTracker, boolean advanceGameTime,
-            CallbackInfo callback) {
+    private void lanterne$restoreAndBeat(CallbackInfo callback) {
         if (this.lanterne$screen != null) {
             this.mainRenderTarget = this.lanterne$screen;
             this.lanterne$screen = null;
@@ -122,9 +120,8 @@ public abstract class UpscaleGameRendererMixin {
     }
 
     @Inject(method = "render", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/GameRenderer;renderLevel(Lnet/minecraft/client/DeltaTracker;)V"))
-    private void lanterne$shrink(DeltaTracker deltaTracker, boolean advanceGameTime,
-            CallbackInfo callback) {
+            target = "Lnet/minecraft/client/renderer/GameRenderer;renderLevel()V"))
+    private void lanterne$shrink(CallbackInfo callback) {
         RenderTarget scene = Scene.borrow(this.mainRenderTarget);
         if (scene == null) {
             lanterne$resetSkyIfNeeded();
@@ -174,8 +171,7 @@ public abstract class UpscaleGameRendererMixin {
      */
     @Inject(method = "render", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/fog/FogRenderer;endFrame()V"))
-    private void lanterne$grow(DeltaTracker deltaTracker, boolean advanceGameTime,
-            CallbackInfo callback) {
+    private void lanterne$grow(CallbackInfo callback) {
         RenderTarget screen = this.lanterne$screen;
         if (screen == null) {
             return;
