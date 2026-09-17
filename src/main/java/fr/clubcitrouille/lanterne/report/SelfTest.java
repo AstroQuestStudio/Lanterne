@@ -111,6 +111,8 @@ public final class SelfTest {
     private static boolean coince;
     /** Vrai si l'on éprouve le décodage parallèle des chunks relus. Voir {@code lab.Restitution}. */
     private static boolean restitution;
+    /** Vrai si l'on éprouve la moitié serveur du cache de chunks client. Voir {@code lab.Rappel}. */
+    private static boolean rappel;
     private static int pregenRadius;
 
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
@@ -476,6 +478,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de restitution (décodage parallèle des chunks) armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_RAPPEL"))) {
+            rappel = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du rappel (moitié serveur du cache de chunks client) armée.");
+            return;
+        }
 
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
@@ -507,7 +516,8 @@ public final class SelfTest {
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
                     && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel
-                    && !seuil && !terrassement && !coince && !restitution && pregenRadius <= 0)) {
+                    && !seuil && !terrassement && !coince && !restitution && !rappel
+                    && pregenRadius <= 0)) {
             return;
         }
 
@@ -903,6 +913,16 @@ public final class SelfTest {
                 fr.clubcitrouille.lanterne.lab.Restitution.tick(server);
             } else if (step == Step.SETTLING) {
                 fr.clubcitrouille.lanterne.lab.Restitution.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (rappel) {
+            if (fr.clubcitrouille.lanterne.lab.Rappel.running()) {
+                fr.clubcitrouille.lanterne.lab.Rappel.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Rappel.begin(server);
                 step = Step.LAUNCHED;
             }
             return;
