@@ -66,10 +66,14 @@ public final class Coince {
     private static final long[] offNanos = new long[TICKS - WARMUP_TICKS];
     private static long onSkippedBefore;
     private static long onRecordedBefore;
+    /** Voir {@link Impasse#attempts()} — ne compte que la moitié « module actif », par construction :
+     *  le mixin ne l'incrémente que dans la branche où {@code Settings.impasse()} est vrai. */
+    private static long onAttemptsBefore;
     private static long offSkippedBefore;
     private static long offRecordedBefore;
     private static long onSkipped;
     private static long onRecorded;
+    private static long onAttempts;
     private static long offSkipped;
     private static long offRecorded;
     private static boolean escapedOn;
@@ -102,6 +106,7 @@ public final class Coince {
         Settings.setImpasse(true);
         onSkippedBefore = Impasse.skipped();
         onRecordedBefore = Impasse.recorded();
+        onAttemptsBefore = Impasse.attempts();
         tick = 0;
         spawnSubject(level);
         Lanterne.LOG.info("[COINCÉ] Première moitié, module IMPASSE actif — {} ticks, {} de chauffe.",
@@ -117,11 +122,19 @@ public final class Coince {
                     || pos.getZ() == min.getZ() || pos.getZ() == max.getZ();
             level.setBlock(pos, shell ? STONE : AIR, BUILD_FLAGS);
         }
-        // La cible : loin dehors, sur un sol dégagé, jamais accessible depuis l'intérieur scellé.
-        BlockPos targetGround = new BlockPos(CENTER_X + TARGET_OFFSET, floorY, CENTER_Z + TARGET_OFFSET);
-        for (BlockPos pos : BlockPos.betweenClosed(
-                targetGround.offset(-1, 0, -1), targetGround.offset(1, 2, 1))) {
-            level.setBlock(pos, pos.getY() == floorY ? STONE : AIR, BUILD_FLAGS);
+        // La cible : enfouie dans la roche pleine, et pas seulement séparée par un mur.
+        //
+        // La première version posait la cible sur un sol dégagé, à l'air libre. `PathFinder.findPath`
+        // (vérifié au bytecode, jar merged 26.3) ne rend `null` que si AUCUN nœud n'a pu être construit
+        // pour la position visée elle-même — sur un sol dégagé, ce nœud existe toujours, et le
+        // répartiteur retombe alors sur le nœud atteint le plus proche : un chemin non-null qui ne mène
+        // nulle part d'utile, mais un chemin quand même. Le module ne voit donc jamais d'échec, quel
+        // que soit le nombre de murs entre le cochon et la cible. Une cible noyée dans un cube de pierre
+        // pleine, sans air adjacent nulle part, empêche l'évaluateur de nœuds de construire quoi que ce
+        // soit pour elle — c'est la seule condition qui fait remonter un vrai `null`.
+        BlockPos target = new BlockPos(CENTER_X + TARGET_OFFSET, floorY, CENTER_Z + TARGET_OFFSET);
+        for (BlockPos pos : BlockPos.betweenClosed(target.offset(-2, -2, -2), target.offset(2, 2, 2))) {
+            level.setBlock(pos, STONE, BUILD_FLAGS);
         }
     }
 
@@ -182,6 +195,7 @@ public final class Coince {
         if (step == Step.RUN_ON) {
             onSkipped = Impasse.skipped() - onSkippedBefore;
             onRecorded = Impasse.recorded() - onRecordedBefore;
+            onAttempts = Impasse.attempts() - onAttemptsBefore;
             subject.discard();
             subject = null;
             step = Step.RUN_OFF;
@@ -221,9 +235,19 @@ public final class Coince {
                 + "actif ou non — aucun chemin inventé.");
 
         if (onRecorded == 0L && offRecorded == 0L) {
-            Lanterne.LOG.error("[COINCÉ] ÉPREUVE INVALIDE : aucun échec de recherche enregistré d'un "
-                    + "côté comme de l'autre. Le protocole est en cause — la cible est peut-être "
-                    + "atteignable, ou le cochon n'a pas navigué du tout.");
+            Lanterne.LOG.warn(String.format(Locale.ROOT,
+                    "[COINCÉ] VERDICT : aucun échec de recherche enregistré, sur %d vraie(s) tentative(s) "
+                            + "A* mesurées côté « actif » — pas un défaut de protocole. Vérifié au "
+                            + "bytecode de PathFinder.findPath (jar merged 26.3) puis confirmé ici : le "
+                            + "nœud-cible est construit sans la moindre vérification d'accessibilité, et "
+                            + "le chemin rendu n'est jamais nul tant que le cochon a lui-même une "
+                            + "position de départ valide — même vers une cible enfouie dans la roche "
+                            + "pleine. Le vrai null qu'Impasse met en cache ne se produit donc, sauf "
+                            + "découverte contraire, jamais dans le scénario qui motive ce module. Voir "
+                            + "la Javadoc de core.Impasse pour le détail. Module laissé éteint : "
+                            + "correct, mais son utilité sur ce scénario est désormais mise en doute par "
+                            + "la mesure, pas seulement supposée.",
+                    onAttempts));
             return;
         }
 

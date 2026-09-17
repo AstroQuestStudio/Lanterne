@@ -82,6 +82,7 @@ public abstract class PathfindMixin {
         }
 
         Path result = finder.findPath(region, mob, targets, distance, range, multiplier);
+        Impasse.noteAttempt();
         if (result == null) {
             this.lanterne$lastFailStart = startKey;
             this.lanterne$lastFailTargets = targetKey;

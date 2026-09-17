@@ -43,6 +43,28 @@ import net.minecraft.core.BlockPos;
  * quasiment à chaque tick, donc de clef, donc ne touche jamais le cache. Ce n'est pas un défaut :
  * c'est exactement le sous-ensemble que ce module ne prétend pas traiter, une cible mobile n'étant
  * jamais à proprement parler « la même impasse ».
+ *
+ * <h2>Ce que le banc a découvert, et qui change la portée réelle de ce module</h2>
+ *
+ * <p>Le scénario motivant — loup derrière une porte fermée, golem visant une position murée — a été
+ * reproduit dans {@code lab/Coince}, avec une cible délibérément enfouie dans la roche pleine (aucun
+ * air adjacent nulle part). Vérifié par lecture du bytecode réel de {@code PathFinder.findPath} (jar
+ * merged 26.3) <b>puis confirmé en jeu</b> : le nœud-cible est construit par
+ * {@code NodeEvaluator.getTarget(x, y, z)}, une conversion <b>purement géométrique</b>, sans la
+ * moindre vérification d'accessibilité. Le répartiteur de recherche retombe donc toujours sur le
+ * nœud exploré le plus proche de cette cible géométrique — même enfouie dans la pierre — et rend un
+ * chemin <b>non-null</b>, qui ne mène nulle part d'utile mais qui n'est jamais {@code null}. Dix
+ * relevés consécutifs sur un cochon scellé dans une boîte de pierre, cible enfouie à vingt blocs, ont
+ * tous rendu un chemin non-null.
+ *
+ * <p>La seule condition qui fait remonter un vrai {@code null} : {@code NodeEvaluator.getStart()}
+ * échoue — c'est-à-dire que le mob <b>lui-même</b> n'a aucune position de départ exploitable, un état
+ * dégénéré (entité embarquée dans du solide) qui n'a rien à voir avec « bloqué par un mur ou une
+ * porte ». Le scénario qui motive ce module — un mob avec une position valide, dont la cible est
+ * hors d'atteinte — ne produit donc, sauf découverte contraire, <b>jamais</b> le {@code null} que ce
+ * module cherche à mettre en cache. Il reste correct (aucun chemin inventé, aucun risque) mais son
+ * utilité réelle sur le scénario qui l'a motivé est désormais mise en doute par la mesure elle-même,
+ * pas seulement supposée — voir le verdict de {@code lab/Coince} pour le détail.
  */
 public final class Impasse {
     /**
@@ -56,6 +78,8 @@ public final class Impasse {
 
     private static long skipped;
     private static long recorded;
+    /** Diagnostic temporaire : vraies recherches lancées (ni évitées, ni court-circuitées par vanilla). */
+    private static long attempts;
 
     private Impasse() {}
 
@@ -78,6 +102,23 @@ public final class Impasse {
     /** Un nouvel échec vient d'être retenu comme référence pour ce mob. */
     public static void noteRecorded() {
         recorded++;
+    }
+
+    /** Une vraie recherche vient d'être lancée — voir {@link #attempts()}. */
+    public static long noteAttempt() {
+        return ++attempts;
+    }
+
+    /**
+     * Vraies recherches A* lancées depuis le démarrage, échec ou non.
+     *
+     * <p>Diagnostic permanent, pas seulement de mise au point : {@code attempts() - recorded()} dit
+     * combien de recherches ont abouti à un chemin non-null — la mesure directe de la découverte
+     * documentée dans la Javadoc de classe : sur cible géométriquement valide, ce nombre est
+     * pratiquement toujours égal à {@code attempts()} lui-même.
+     */
+    public static long attempts() {
+        return attempts;
     }
 
     /** Recherches A* évitées depuis le démarrage — le gain, en clair. */
