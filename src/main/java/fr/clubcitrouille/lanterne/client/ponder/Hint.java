@@ -1,6 +1,6 @@
 package fr.clubcitrouille.lanterne.client.ponder;
 
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLScancode;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
@@ -82,8 +82,8 @@ public final class Hint {
 
     public static final KeyMapping OPEN = new KeyMapping(
             "key.lanterne.guide",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_W,
+            InputConstants.Type.KEYBOARD,
+            SDLScancode.SDL_SCANCODE_W,
             // La catégorie appartient à Compass, qui l'a déclarée. La redéclarer lève.
             Compass.OPEN.getCategory());
 
@@ -173,9 +173,9 @@ public final class Hint {
     }
 
     private static boolean held(Minecraft client) {
-        if (OPEN.isUnbound() || OPEN.getKey().getType() != InputConstants.Type.KEYSYM) {
+        if (OPEN.isUnbound() || OPEN.getKey().getType() != InputConstants.Type.KEYBOARD) {
             return false;
         }
-        return InputConstants.isKeyDown(client.getWindow(), OPEN.getKey().getValue());
+        return InputConstants.isKeyDown(OPEN.getKey().getValue());
     }
 }

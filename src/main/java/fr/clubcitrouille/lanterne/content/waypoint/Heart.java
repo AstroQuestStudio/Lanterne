@@ -1,7 +1,5 @@
 package fr.clubcitrouille.lanterne.content.waypoint;
 
-import com.mojang.serialization.MapCodec;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,7 +10,6 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -47,29 +44,15 @@ import net.minecraft.world.phys.BlockHitResult;
  * attachée. Un bloc-entité aurait dupliqué cette information, donc permis qu'elle diverge.
  */
 public class Heart extends Block {
-    public static final MapCodec<Heart> CODEC = simpleCodec(Heart::new);
-
     public Heart(Properties properties) {
         super(properties);
     }
 
-    @Override
-    protected MapCodec<? extends Block> codec() {
-        return CODEC;
-    }
-
-    /**
-     * Le cœur vaut de l'obsidienne aux yeux du cadre.
-     *
-     * <p>{@code PortalShape} de vanilla n'interroge pas le bloc mais cette extension de NeoForge. En la
-     * rendant vraie, on obtient gratuitement deux choses : le cadre est reconnu par le même code que
-     * celui du Nether, et — puisque ce cadre porte alors un cœur — {@link Gates} peut refuser qu'il
-     * devienne un portail du Nether ordinaire.
-     */
-    @Override
-    public boolean isPortalFrame(BlockState state, BlockGetter level, BlockPos pos) {
-        return true;
-    }
+    // Le cœur vaut de l'obsidienne aux yeux du cadre par le tag data/minecraft/tags/block/
+    // nether_portal_frame.json, et non plus par une extension NeoForge : PortalShape teste
+    // désormais BlockTags.NETHER_PORTAL_FRAME directement (vérifié dans PortalShape.java, 26.3).
+    // L'ancien isPortalFrame(BlockState, BlockGetter, BlockPos) n'existe plus nulle part à
+    // implémenter — il n'y avait donc rien à porter, seulement une donnée à déclarer.
 
     @Override
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,

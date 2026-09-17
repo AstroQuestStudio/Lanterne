@@ -7,7 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TreeSet;
 
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLScancode;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
@@ -1198,14 +1198,14 @@ public final class Counter extends Screen {
         if (this.minecraft == null) {
             return false;
         }
-        return InputConstants.isKeyDown(this.minecraft.getWindow(), GLFW.GLFW_KEY_LEFT_SHIFT)
-                || InputConstants.isKeyDown(this.minecraft.getWindow(), GLFW.GLFW_KEY_RIGHT_SHIFT);
+        return InputConstants.isKeyDown(SDLScancode.SDL_SCANCODE_LSHIFT)
+                || InputConstants.isKeyDown(SDLScancode.SDL_SCANCODE_RSHIFT);
     }
 
     @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == SDLScancode.SDL_SCANCODE_ESCAPE) {
             // Échap efface d'abord la recherche : sortir d'un écran parce qu'on voulait sortir d'un
             // filtre est la petite frustration classique de ce genre d'interface.
             if (!this.search.isEmpty()) {
@@ -1217,7 +1217,7 @@ public final class Counter extends Screen {
             onClose();
             return true;
         }
-        if (key == GLFW.GLFW_KEY_BACKSPACE) {
+        if (key == SDLScancode.SDL_SCANCODE_BACKSPACE) {
             if (!this.search.isEmpty()) {
                 this.search = this.search.substring(0, this.search.length() - 1);
                 this.page = 0;
@@ -1226,11 +1226,11 @@ public final class Counter extends Screen {
             this.typing = true;
             return true;
         }
-        if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+        if (key == SDLScancode.SDL_SCANCODE_RETURN || key == SDLScancode.SDL_SCANCODE_KP_ENTER) {
             commit();
             return true;
         }
-        if (key == GLFW.GLFW_KEY_TAB) {
+        if (key == SDLScancode.SDL_SCANCODE_TAB) {
             this.selling = !this.selling;
             this.page = 0;
             this.picked = null;

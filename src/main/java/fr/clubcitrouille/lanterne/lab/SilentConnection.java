@@ -133,6 +133,7 @@ public final class SilentConnection extends Connection {
         absorbed++;
         if (packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket move) {
             lastTeleportId = move.id();
+            lastTeleportChange = move.change();
         } else if (packet instanceof net.minecraft.network.protocol.common.ClientboundKeepAlivePacket alive) {
             lastKeepAlive = alive.getId();
         } else if (packet instanceof net.minecraft.network.protocol.game
@@ -181,6 +182,18 @@ public final class SilentConnection extends Connection {
     }
 
     /**
+     * La position et la rotation qui accompagnaient {@link #lastTeleportId()}.
+     *
+     * <p>Depuis la 26.3, {@code ServerboundAcceptTeleportationPacket} ne se contente plus de
+     * renvoyer le numéro : il répète la position, probablement pour que le serveur vérifie que le
+     * client a bien reçu <em>celle-là</em> et non une téléportation plus ancienne. Sans ce relevé,
+     * la doublure ne saurait plus quoi répéter.
+     */
+    public net.minecraft.world.entity.PositionMoveRotation lastTeleportChange() {
+        return lastTeleportChange;
+    }
+
+    /**
      * Toujours ouverte.
      *
      * <p>Sans cela, le serveur constaterait une connexion morte au premier tick et retirerait le
@@ -198,6 +211,9 @@ public final class SilentConnection extends Connection {
 
     /** Voir {@link #lastTeleportId()}. Moins un tant que le serveur n'en a imposé aucune. */
     private int lastTeleportId = -1;
+
+    /** Voir {@link #lastTeleportChange()}. */
+    private net.minecraft.world.entity.PositionMoveRotation lastTeleportChange;
 
     /** Voir {@link #lastKeepAlive()}. Zéro tant que le serveur n'a rien demandé. */
     private long lastKeepAlive;

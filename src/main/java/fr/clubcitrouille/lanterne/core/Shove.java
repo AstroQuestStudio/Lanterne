@@ -5,6 +5,7 @@ import java.util.List;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.AbortableIterationConsumer;
+import net.minecraft.util.Continuation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.level.Level;
@@ -26,7 +27,7 @@ import net.minecraft.world.phys.AABB;
  * <p>La raison se lit dans le jeu :
  *
  * <pre>
- * public AbortableIterationConsumer.Continuation getEntities(AABB bb, AbortableIterationConsumer&lt;T&gt; entities) {
+ * public Continuation getEntities(AABB bb, AbortableIterationConsumer&lt;T&gt; entities) {
  *     for (T entity : this.storage) {
  *         if (entity.getBoundingBox().intersects(bb) &amp;&amp; entities.accept(entity).shouldAbort()) {
  * </pre>
@@ -118,10 +119,10 @@ public final class Shove {
             if (candidate != pusher && selector.test(candidate)) {
                 found.add(candidate);
                 if (found.size() >= scan) {
-                    return AbortableIterationConsumer.Continuation.ABORT;
+                    return Continuation.ABORT;
                 }
             }
-            return AbortableIterationConsumer.Continuation.CONTINUE;
+            return Continuation.CONTINUE;
         });
 
         // Les segments du dragon de l'End sont stockés à part et ne figurent dans aucune section.

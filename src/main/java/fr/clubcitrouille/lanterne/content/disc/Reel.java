@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -17,6 +18,7 @@ import com.google.gson.JsonPrimitive;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackLocationInfo;
+import net.minecraft.server.packs.PackMetadataResources;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackSelectionConfig;
 import net.minecraft.server.packs.PackType;
@@ -144,13 +146,13 @@ public final class Reel implements PackResources {
         return new Pack(location,
                 new Pack.ResourcesSupplier() {
                     @Override
-                    public PackResources openPrimary(PackLocationInfo info) {
+                    public PackMetadataResources openMetadata(PackLocationInfo info) {
                         return reel;
                     }
 
                     @Override
-                    public PackResources openFull(PackLocationInfo info, Pack.Metadata meta) {
-                        return reel;
+                    public Stream<PackResources> openResources(PackLocationInfo info, Pack.Metadata meta) {
+                        return Stream.of(reel);
                     }
                 },
                 metadata,

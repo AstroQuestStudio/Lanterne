@@ -13,7 +13,10 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.levelgen.densityfunction.SamplerContext;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
@@ -367,12 +370,23 @@ public final class Bourg {
 
     private static Structure.GenerationContext context(ServerLevel level, ChunkPos at) {
         ChunkGenerator generator = level.getChunkSource().getGenerator();
+        RandomState randomState = level.getChunkSource().randomState();
+        // Le contexte de bruit prend désormais un Climate.Sampler explicite — vanilla le construit
+        // de la même façon pour disposer une structure : voir ChunkGenerator.createStructures en
+        // 26.3, même appel, même absence de tampon partagé (celui-ci ne sert qu'aux tranches de
+        // terrain, pas à la disposition d'une seule structure).
+        Climate.Sampler climateSampler =
+                randomState.createClimateSampler(SamplerContext.builder().enableCaches().build());
         return new Structure.GenerationContext(
                 level.registryAccess(),
                 generator,
                 generator.getBiomeSource(),
-                level.getChunkSource().randomState(),
-                level.getStructureManager(),
+                climateSampler,
+                randomState,
+                // Deux gestionnaires distincts et sans rapport : structureManager() retrouve les
+                // structures déjà posées dans ce monde ; celui qu'attend le contexte lit les
+                // GABARITS .nbt, et vit sur le serveur — pas sur le niveau.
+                level.getServer().getStructureTemplateManager(),
                 level.getSeed(),
                 at,
                 level,

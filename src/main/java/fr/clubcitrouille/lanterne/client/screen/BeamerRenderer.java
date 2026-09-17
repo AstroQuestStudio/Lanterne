@@ -3,6 +3,7 @@ package fr.clubcitrouille.lanterne.client.screen;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -274,7 +275,7 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
         // a pas de lacet qui ait un sens : on se rabat sur le nord, ce qui laisse le texte lisible
         // depuis la direction d'où l'on regarde d'ordinaire une image posée au sol.
         float yaw = state.facing.getAxis().isVertical() ? 180f : -state.facing.toYRot();
-        poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yaw)));
         say(poseStack, collector, state.what, wide, -10f, EDGE);
         if (!state.todo.isEmpty()) {
             say(poseStack, collector, state.todo, wide, 2f, HINT);

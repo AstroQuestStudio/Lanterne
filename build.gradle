@@ -150,6 +150,15 @@ repositories {
             includeGroup 'net.caffeinemc'
         }
     }
+
+    // Le dépôt de PaperMC, pour velocity-native — même raison de portée que ci-dessus.
+    maven {
+        name = 'PaperMC'
+        url = 'https://repo.papermc.io/repository/maven-public/'
+        content {
+            includeGroup 'com.velocitypowered'
+        }
+    }
 }
 
 // <h2>Le décodeur vidéo : les liaisons embarquées, les binaires téléchargés</h2>
@@ -208,6 +217,18 @@ dependencies {
     // toute la signature des constructeurs d'options.
     compileOnly 'net.caffeinemc:sodium-neoforge-api:0.9.2+mc26.2'
 
+    // <h2>Le sélecteur de fichiers natif n'est plus une dépendance transitive du jeu</h2>
+    //
+    // La 26.2 embarquait encore GLFW, et « lwjgl-tinyfd » venait avec — jamais déclaré ici parce
+    // que jamais nécessaire de le déclarer. La 26.3 remplace GLFW par SDL pour tout ce qui touche
+    // au jeu lui-même (fenêtre, clavier), et tinyfd n'a pas d'équivalent SDL dans le jeu : ce
+    // module l'utilise pour une raison qui n'a rien à voir avec vanilla — laisser le joueur
+    // choisir une image sur son disque dans client/painting/Reach.java — et doit donc désormais le
+    // demander lui-même. « compileOnly » suffit : l'appel est déjà protégé par un
+    // « catch (Throwable) » qui bascule sur les deux autres voies (lien, dossier surveillé) si le
+    // sélecteur natif est absent au lancement — voir Reach.java.
+    compileOnly 'org.lwjgl:lwjgl-tinyfd:3.4.1'
+
     jarJar(implementation('javazoom:jlayer:[1.0.1,1.1)')) {
         version {
             prefer '1.0.1'
@@ -221,6 +242,17 @@ dependencies {
     jarJar(implementation('org.bytedeco:ffmpeg:[8.1.2-1.5.14,8.2)')) {
         version {
             prefer '8.1.2-1.5.14'
+        }
+    }
+
+    // <h2>Le chiffreur réseau de Krypton</h2>
+    //
+    // Contient l'API (VelocityCipher, Natives) et les binaires natifs OpenSSL pour les plateformes
+    // courantes, avec repli Java pur intégré si aucun binaire ne correspond — jamais d'échec au
+    // démarrage, seulement un gain variable selon la plateforme. Voir core/network/ et NOTICE.md.
+    jarJar(implementation('com.velocitypowered:velocity-native:[4.2.0,5.0)')) {
+        version {
+            prefer '4.2.0'
         }
     }
 }

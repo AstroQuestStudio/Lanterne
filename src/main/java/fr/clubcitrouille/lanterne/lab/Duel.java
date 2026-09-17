@@ -373,7 +373,9 @@ public final class Duel {
         victim.hurtServer(level, level.damageSources().generic(), 1.0f);
         Vec3 motion = victim.getDeltaMovement();
         victim.setDeltaMovement(motion.x, KNOCKBACK, motion.z);
-        victim.hurtMarked = true;
+        // Renommé syncVelocity en 26.3 — même champ public, même effet : forcer la resynchro de
+        // la vitesse vers les clients après l'avoir écrasée manuellement ci-dessus.
+        victim.syncVelocity = true;
 
         if (victim.hurtTime != HURT_DURATION) {
             note(ARENAS[arena], String.format(Locale.ROOT,

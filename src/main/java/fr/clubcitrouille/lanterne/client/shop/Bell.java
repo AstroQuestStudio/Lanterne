@@ -46,8 +46,8 @@ import fr.clubcitrouille.lanterne.content.shop.TradeAsk;
 public final class Bell {
     public static final KeyMapping OPEN = new KeyMapping(
             "key.lanterne.boutique",
-            InputConstants.Type.KEYSYM,
-            org.lwjgl.glfw.GLFW.GLFW_KEY_K,
+            InputConstants.Type.KEYBOARD,
+            org.lwjgl.sdl.SDLScancode.SDL_SCANCODE_K,
             Compass.OPEN.getCategory());
 
     private Bell() {}

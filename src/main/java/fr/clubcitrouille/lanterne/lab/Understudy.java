@@ -231,7 +231,7 @@ public final class Understudy {
         player.setGameMode(GameType.SURVIVAL);
         // Invulnérable : on mesure la charge d'un joueur, pas les aléas de sa survie. Cela ne
         // change rien à ce que le serveur calcule pour lui.
-        player.setInvulnerable(true);
+        player.setPermanentlyInvulnerable(true);
 
         CAST.add(player);
         LINES.add(line);

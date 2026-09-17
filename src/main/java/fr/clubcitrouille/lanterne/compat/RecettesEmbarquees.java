@@ -239,7 +239,7 @@ public final class RecettesEmbarquees {
             }
             JsonElement arbre = JsonParser.parseReader(
                     new InputStreamReader(flux, StandardCharsets.UTF_8));
-            Recipe<?> recette = Recipe.CODEC.parse(ops, arbre).getPartialOrThrow(
+            Recipe<?> recette = Recipe.DIRECT_CODEC.parse(ops, arbre).getPartialOrThrow(
                     message -> new IllegalStateException(message));
             if (!(recette instanceof CraftingRecipe etabli)) {
                 // Pas une faute : simplement une recette qui ne se montre pas dans une table à

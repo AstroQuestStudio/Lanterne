@@ -1,7 +1,5 @@
 package fr.clubcitrouille.lanterne.content.screen;
 
-import com.mojang.serialization.MapCodec;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -53,18 +51,11 @@ import org.jspecify.annotations.Nullable;
  * d'interface qu'on puisse faire.
  */
 public class Panel extends BaseEntityBlock {
-    public static final MapCodec<Panel> CODEC = simpleCodec(Panel::new);
-
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
 
     public Panel(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH));
-    }
-
-    @Override
-    protected MapCodec<? extends BaseEntityBlock> codec() {
-        return CODEC;
     }
 
     @Override

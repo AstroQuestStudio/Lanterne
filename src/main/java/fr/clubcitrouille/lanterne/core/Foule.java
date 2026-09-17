@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 
 import net.minecraft.core.SectionPos;
 import net.minecraft.util.AbortableIterationConsumer;
+import net.minecraft.util.Continuation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.entity.EntityAccess;
@@ -572,12 +573,12 @@ public final class Foule {
          * <p>Les géants d'abord, puis les cellules que la boîte élargie touche. Le test final est
          * celui du jeu, mot pour mot, et l'interruption est propagée telle quelle.
          */
-        public AbortableIterationConsumer.Continuation parcourt(
+        public Continuation parcourt(
                 AABB boite, AbortableIterationConsumer<EntityAccess> sortie) {
             for (int i = 0; i < this.geants.size(); i++) {
                 Entity bete = this.geants.get(i);
                 if (bete.getBoundingBox().intersects(boite) && sortie.accept(bete).shouldAbort()) {
-                    return AbortableIterationConsumer.Continuation.ABORT;
+                    return Continuation.ABORT;
                 }
             }
 
@@ -603,13 +604,13 @@ public final class Foule {
                             Entity bete = cellule.get(i);
                             if (bete.getBoundingBox().intersects(boite)
                                     && sortie.accept(bete).shouldAbort()) {
-                                return AbortableIterationConsumer.Continuation.ABORT;
+                                return Continuation.ABORT;
                             }
                         }
                     }
                 }
             }
-            return AbortableIterationConsumer.Continuation.CONTINUE;
+            return Continuation.CONTINUE;
         }
 
         /**

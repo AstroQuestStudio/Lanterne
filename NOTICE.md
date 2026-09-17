@@ -76,8 +76,9 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `client/upscale/Deep.loader()` + `tools/EssaiNgx.java` — le relevé NGX | **Rien.** Les noms de fonctions `NVSDK_NGX_*` sont lus dans la **table d'export** de la DLL que le pilote installe ; aucun en-tête, aucune ligne de source du SDK de NVIDIA n'a été copiée ni même consultée. Voir `notes/dlss-panama.md`. | — |
 | `core/Digue.java` + `mixin/{BeeHive,BeeHoming,MapChunk,GameEventChunk,SleepBed,RemoveBlock}Mixin.java` — la digue | Idée et points d'accroche de [ServerCore](https://github.com/Wesley1808/ServerCore) (Wesley1808), paquet `optimizations/sync_loads` | MIT |
 | `core/Sommaire.java` + `mixin/PackIndexMixin.java` — le sommaire des zip | Idée de [quick-pack](https://github.com/DrexHD/quick-pack) (DrexHD) | **GPL-3.0-only** |
-| `client/Tampon.java` + `mixin/BufferStorageMixin.java` — le tampon mutable | Idée de [framepace](https://github.com/lap2ka/framepace) (Lap2ka), lui-même rétroportage du correctif **Mojang MC-307596** livré en 26.3 | MIT |
 | `core/Elastique.java` + `mixin/ElastiqueMixin.java` — l'élastique | **Rien n'est repris de TT20, et rien ne pouvait l'être** : voir ci-dessous. Écrit depuis les sources décompilées de 26.2 seules. | — |
+| `core/network/MinecraftCipher{Decoder,Encoder}.java` — le chiffreur réseau | [Krypton](https://github.com/astei/krypton) (Andrew Steinborn) — repris quasi tel quel ; s'appuie sur `com.velocitypowered:velocity-native` (embarqué par jarJar, natif OpenSSL avec repli Java) | LGPL-3.0-only |
+| `mixin/ConnectionMixin.java`, `mixin/ServerLoginPacketListenerImplMixin.java`, `core/network/ConnectionEncryption.java` — l'accroche | **Rien n'est repris.** Point d'accroche réécrit pour la 26.3 : `Connection.setEncryptionKey` y reçoit des `Cipher` déjà construits, plus la `SecretKey` brute — voir la javadoc de `ConnectionEncryption`. Ne couvre que le serveur pour l'instant, le client demande un relais entre deux méthodes non encore écrit. | — |
 
 **L'élastique** demande une précision de licence, parce que le mod auquel on pense
 d'abord est justement celui dont on ne peut rien prendre :

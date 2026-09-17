@@ -7,6 +7,7 @@ import java.util.Locale;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.AbortableIterationConsumer;
+import net.minecraft.util.Continuation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.entity.EntitySectionStorage;
@@ -351,11 +352,11 @@ public final class Cohue {
         // bascule du banc, et ce coût-là appartient à la bascule : en jeu, une grille vit des
         // milliers de ticks et n'est bâtie qu'une fois.
         sections.getEntities(betes[0].getBoundingBox().inflate(0.2d, -0.01d, 0.2d),
-                ignoree -> AbortableIterationConsumer.Continuation.CONTINUE);
+                ignoree -> Continuation.CONTINUE);
         AbortableIterationConsumer<Entity> compteur = candidate -> {
             compte[0]++;
             compte[1] += candidate.getId();
-            return AbortableIterationConsumer.Continuation.CONTINUE;
+            return Continuation.CONTINUE;
         };
         int combien = betes.length;
         long depart = System.nanoTime();

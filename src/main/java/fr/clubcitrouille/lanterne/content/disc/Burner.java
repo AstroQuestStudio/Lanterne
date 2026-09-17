@@ -1,7 +1,5 @@
 package fr.clubcitrouille.lanterne.content.disc;
 
-import com.mojang.serialization.MapCodec;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -59,8 +57,6 @@ import org.jspecify.annotations.Nullable;
  * fichier qui n'admet aucune exception — voir {@link BurnerEntity#abandon}.
  */
 public class Burner extends BaseEntityBlock {
-    public static final MapCodec<Burner> CODEC = simpleCodec(Burner::new);
-
     /** Vrai pendant la gravure. Sert au rendu, au son et au signal de redstone. */
     public static final BooleanProperty WORKING = BlockStateProperties.LIT;
 
@@ -74,10 +70,6 @@ public class Burner extends BaseEntityBlock {
                 .setValue(LOADED, false));
     }
 
-    @Override
-    protected MapCodec<? extends BaseEntityBlock> codec() {
-        return CODEC;
-    }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) {

@@ -96,12 +96,20 @@ public final class Needle {
      * <p>Une trame MP3 rend 1152 échantillons par canal, soit vingt-six millisecondes de musique. Le
      * moteur sonore en réclame une seconde à la fois, donc une quarantaine de trames par tampon.
      * L'étiquette ID3v2 éventuelle est sautée par {@code Bitstream} lui-même, à sa construction.
+     *
+     * <h2>Toujours ramené à un seul canal, quel que soit le MP3</h2>
+     *
+     * <p>Voir la javadoc de {@link Wave} pour la raison : {@code OpenAL} ne spatialise que le
+     * monophonique, et presque tout MP3 d'origine est stéréo. JLayer décode toujours selon le mode
+     * réel de la trame ; c'est ici, à la sortie, que les deux voies sont moyennées en une — la même
+     * opération que {@link Wave} fait pour ses propres canaux surnuméraires.
      */
     private static final class Mpeg implements FloatSampleSource {
         private final InputStream source;
         private final Bitstream bitstream;
         private final Decoder decoder = new Decoder();
         private final AudioFormat format;
+        private final int channels;
 
         /**
          * La première trame, lue d'avance et gardée.
@@ -124,8 +132,9 @@ public final class Needle {
             if (this.first == null) {
                 throw new IOException("MP3 sans aucune trame lisible");
             }
-            int channels = this.first.mode() == Header.SINGLE_CHANNEL ? 1 : 2;
-            this.format = new AudioFormat(this.first.frequency(), 16, channels, true, false);
+            this.channels = this.first.mode() == Header.SINGLE_CHANNEL ? 1 : 2;
+            // Toujours un seul canal déclaré : voir la javadoc de classe.
+            this.format = new AudioFormat(this.first.frequency(), 16, 1, true, false);
         }
 
         @Override
@@ -148,8 +157,18 @@ public final class Needle {
                 this.bitstream.closeFrame();
                 short[] samples = decoded.getBuffer();
                 int length = decoded.getBufferLength();
-                for (int at = 0; at < length; at++) {
-                    output.accept(samples[at] / 32767.5f + 1.0f / 65535.0f);
+                if (this.channels == 1) {
+                    for (int at = 0; at < length; at++) {
+                        output.accept(samples[at] / 32767.5f + 1.0f / 65535.0f);
+                    }
+                } else {
+                    // Entrelacé gauche-droite : une paire d'échantillons par trame stéréo, moyennée
+                    // en une seule voie — voir la javadoc de classe.
+                    for (int at = 0; at + 1 < length; at += 2) {
+                        float left = samples[at] / 32767.5f + 1.0f / 65535.0f;
+                        float right = samples[at + 1] / 32767.5f + 1.0f / 65535.0f;
+                        output.accept((left + right) * 0.5f);
+                    }
                 }
                 return true;
             } catch (JavaLayerException broken) {
@@ -193,6 +212,18 @@ public final class Needle {
      * l'ordre, elle ne perd aucune source, elle ne peut pas saturer, et elle n'est jamais muette. Ce
      * qu'elle perd est l'image stéréophonique d'un fichier surround — sur un jukebox, dans un jeu qui
      * spatialise lui-même le son autour du bloc, personne ne l'entendra.
+     *
+     * <h2>Deux canaux aussi, et ce n'est plus un détail</h2>
+     *
+     * <p>La version précédente gardait la stéréo telle quelle jusqu'à deux canaux, en ne repliant que
+     * le surround. C'était faux pour la raison inverse de celle exposée ci-dessus : {@code OpenAL} ne
+     * spatialise <b>que</b> les sources monophoniques — {@code AL_SOURCE_RELATIVE} mis à part, une
+     * source stéréo n'a pas de position unique à laquelle appliquer une atténuation, et le moteur la
+     * joue à volume constant, quelle que soit la distance déclarée sur le {@code SoundInstance}. Un
+     * disque personnalisé, presque toujours issu d'un mixage stéréo, s'entendait donc aussi fort à
+     * l'autre bout de la base qu'à côté du jukebox. Les disques de vanilla, eux, sont pré-encodés en
+     * monophonique par Mojang, précisément pour ne jamais heurter cette limite. On applique donc la
+     * même règle qu'au surround, dès deux canaux.
      */
     private static final class Wave implements FloatSampleSource {
         /** Environ une trame de la taille que le moteur sonore attend d'un décodeur. */
@@ -210,7 +241,9 @@ public final class Needle {
             this.source = source;
             this.head = Riff.read(source, -1L);
             this.left = this.head.dataBytes();
-            this.voices = this.head.channels() <= 2 ? this.head.channels() : 1;
+            // Toujours un — voir la javadoc de classe. Le chemin de repli ci-dessous (la moyenne
+            // de tous les canaux) gère aussi bien deux voies que six.
+            this.voices = 1;
             this.format = new AudioFormat(this.head.sampleRate(), 16, this.voices, true, false);
             this.step = this.head.bits() / 8;
             int stride = this.head.stride();

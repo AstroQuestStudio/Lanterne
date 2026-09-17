@@ -44,12 +44,12 @@ public final class Compass {
 
     public static final KeyMapping OPEN = new KeyMapping(
             "key.lanterne.waypoints",
-            InputConstants.Type.KEYSYM,
+            InputConstants.Type.KEYBOARD,
             // B, J et N sont les touches par défaut de JourneyMap — carte, repère, gestionnaire.
             // G est libre en vanilla et ne heurte aucune d'elles. Une touche par défaut qui entre en
             // conflit n'est pas un détail : elle rend la fonctionnalité invisible pour qui a déjà le
             // mod concurrent, et c'est précisément le public visé.
-            org.lwjgl.glfw.GLFW.GLFW_KEY_G,
+            org.lwjgl.sdl.SDLScancode.SDL_SCANCODE_G,
             new KeyMapping.Category(Identifier.fromNamespaceAndPath(Lanterne.ID, "lanterne")));
 
     private Compass() {}

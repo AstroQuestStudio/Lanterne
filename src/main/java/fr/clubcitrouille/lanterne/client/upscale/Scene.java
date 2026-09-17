@@ -1,10 +1,11 @@
 package fr.clubcitrouille.lanterne.client.upscale;
 
-import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.renderpearl.api.GpuFormat;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.mixin.RenderTargetAccessor;
 
 /**
  * La toile : la cible de rendu réduite dans laquelle le monde est dessiné.
@@ -148,7 +149,8 @@ public final class Scene {
         // c'est une correction. Voir le chapitre « L'identité de la toile est un contrat » en tête
         // de cette classe — SkyRenderer garde l'OBJET dans un champ final, et lui en substituer un
         // autre le laisserait dessiner dans une cible détruite.
-        if (target != null && target.useStencil == screen.useStencil
+        if (target != null && ((RenderTargetAccessor) target).lanterne$depthFormat()
+                        == ((RenderTargetAccessor) screen).lanterne$depthFormat()
                 && (target.width != width || target.height != height)) {
             try {
                 target.resize(width, height);
@@ -162,8 +164,8 @@ public final class Scene {
         if (target == null || target.width != width || target.height != height) {
             release();
             try {
-                target = new TextureTarget("Lanterne / toile", width, height, true,
-                        screen.useStencil, GpuFormat.RGBA8_UNORM);
+                target = new TextureTarget("Lanterne / toile", width, height, GpuFormat.RGBA8_UNORM,
+                        ((RenderTargetAccessor) screen).lanterne$depthFormat());
                 // Une toile neuve : l'identité change, donc le ciel doit être rebâti.
                 skyStale = true;
             } catch (Throwable problem) {
@@ -181,8 +183,8 @@ public final class Scene {
             if (aa == null || aa.width != width || aa.height != height) {
                 releaseAa();
                 try {
-                    aa = new TextureTarget("Lanterne / anticrénelage", width, height, false,
-                            false, GpuFormat.RGBA8_UNORM);
+                    aa = new TextureTarget("Lanterne / anticrénelage", width, height,
+                            GpuFormat.RGBA8_UNORM, null);
                 } catch (Throwable problem) {
                     // On ne casse pas la mise à l'échelle pour autant : sans cette cible, la
                     // chaîne « aa_ » échouerait à s'exécuter, alors on redescend sur la variante

@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Prediction;
 import net.minecraft.world.Containers;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -93,7 +94,7 @@ public class BurnerEntity extends BlockEntity {
         ItemStack out = this.held;
         this.held = ItemStack.EMPTY;
         if (!player.getInventory().add(out)) {
-            player.drop(out, false);
+            player.drop(out, false, Prediction.SERVER_ONLY);
         }
         this.mark(false);
         if (this.level != null) {

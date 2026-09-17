@@ -1,7 +1,5 @@
 package fr.clubcitrouille.lanterne.content;
 
-import com.mojang.serialization.MapCodec;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -54,15 +52,8 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * était censée tenir. On vérifie avant de relâcher.
  */
 public class Anchor extends Block {
-    public static final MapCodec<Anchor> CODEC = simpleCodec(Anchor::new);
-
     public Anchor(Properties properties) {
         super(properties);
-    }
-
-    @Override
-    protected MapCodec<? extends Block> codec() {
-        return CODEC;
     }
 
     @Override

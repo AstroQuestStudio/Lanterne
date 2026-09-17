@@ -1,7 +1,5 @@
 package fr.clubcitrouille.lanterne.content;
 
-import com.mojang.serialization.MapCodec;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -43,15 +41,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * retirer le jeu.
  */
 public class Vigil extends BaseEntityBlock {
-    public static final MapCodec<Vigil> CODEC = simpleCodec(Vigil::new);
-
     public Vigil(Properties properties) {
         super(properties);
-    }
-
-    @Override
-    protected MapCodec<? extends BaseEntityBlock> codec() {
-        return CODEC;
     }
 
     @Override

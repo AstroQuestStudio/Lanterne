@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.AbortableIterationConsumer;
 import net.minecraft.util.ClassInstanceMultiMap;
+import net.minecraft.util.Continuation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.entity.EntityAccess;
 import net.minecraft.world.level.entity.EntitySection;
@@ -134,10 +135,10 @@ public abstract class FouleSectionMixin implements Foule.Section {
      */
     @WrapMethod(method = "getEntities(Lnet/minecraft/world/phys/AABB;"
             + "Lnet/minecraft/util/AbortableIterationConsumer;)"
-            + "Lnet/minecraft/util/AbortableIterationConsumer$Continuation;")
-    private AbortableIterationConsumer.Continuation lanterne$parcourtParCellules(AABB boite,
+            + "Lnet/minecraft/util/Continuation;")
+    private Continuation lanterne$parcourtParCellules(AABB boite,
             AbortableIterationConsumer<EntityAccess> sortie,
-            Operation<AbortableIterationConsumer.Continuation> original) {
+            Operation<Continuation> original) {
         Foule.Grille grille = Foule.grilleDe(this);
         if (grille == null) {
             return original.call(boite, sortie);

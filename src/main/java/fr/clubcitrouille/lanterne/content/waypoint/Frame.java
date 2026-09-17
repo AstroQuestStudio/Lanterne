@@ -261,7 +261,12 @@ public record Frame(Direction.Axis axis, BlockPos min, BlockPos max, BlockPos he
                 || state.is(Gates.GATE.get());
     }
 
+    /**
+     * Même test que {@code PortalShape.FRAME} en 26.3 : le cadre se reconnaît désormais au tag
+     * {@code minecraft:nether_portal_frame} — voir {@code Heart} et le tag de bloc qui y ajoute le
+     * cœur de repère — et non plus à une méthode {@code isPortalFrame} par bloc, qui n'existe plus.
+     */
     private static boolean isFrame(BlockGetter level, BlockPos pos) {
-        return level.getBlockState(pos).isPortalFrame(level, pos);
+        return level.getBlockState(pos).is(BlockTags.NETHER_PORTAL_FRAME);
     }
 }

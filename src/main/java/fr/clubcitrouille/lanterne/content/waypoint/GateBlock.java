@@ -2,8 +2,6 @@ package fr.clubcitrouille.lanterne.content.waypoint;
 
 import java.util.Map;
 
-import com.mojang.serialization.MapCodec;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
@@ -57,8 +55,6 @@ import org.jspecify.annotations.Nullable;
  * Rien à écrire ici, mais tout à comprendre avant de croire qu'il manque quelque chose.
  */
 public class GateBlock extends Block implements Portal {
-    public static final MapCodec<GateBlock> CODEC = simpleCodec(GateBlock::new);
-
     public static final EnumProperty<Direction.Axis> AXIS = BlockStateProperties.HORIZONTAL_AXIS;
 
     private static final Map<Direction.Axis, VoxelShape> SHAPES =
@@ -77,11 +73,6 @@ public class GateBlock extends Block implements Portal {
     public GateBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(AXIS, Direction.Axis.X));
-    }
-
-    @Override
-    protected MapCodec<? extends Block> codec() {
-        return CODEC;
     }
 
     @Override

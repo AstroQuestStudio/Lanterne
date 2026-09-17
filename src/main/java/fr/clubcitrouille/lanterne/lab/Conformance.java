@@ -122,7 +122,7 @@ public final class Conformance {
             cow.setPersistenceRequired();
             // Invulnérable : une créature qui meurt en route ne mesure plus rien, et les dégâts de
             // chute ne sont pas le sujet.
-            cow.setInvulnerable(true);
+            cow.setPermanentlyInvulnerable(true);
             if (level.addFreshEntity(cow)) {
                 SUBJECTS.add(new Subject(cow, range, y));
             }

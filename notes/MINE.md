@@ -230,7 +230,7 @@ Pas ecrit a la main : la licence et la version viennent de la source, pas de la 
 |---|---|:--:|:--:|---|---|
 | [disconnect-packet-fix](https://github.com/ascpixi/disconnect-packet-fix) | MIT | oui | oui | **PRENDRE** | MC-271325. Correctif net. |
 | [fast-ip-ping](https://github.com/Fallen-Breath/fast-ip-ping) | LGPL-3.0-only | oui | oui | **PRENDRE** | Ping du menu multijoueur. Trivial et visible. |
-| [krypton](https://github.com/astei/krypton) | LGPL-3.0-only | oui | oui | **PRENDRE** | La pile reseau. Lanterne a deja la compression : le reste est a prendre. |
+| [krypton](https://github.com/astei/krypton) | LGPL-3.0-only | oui | oui | **PRIS (serveur)** | Chiffreur repris — voir NOTICE.md. Client pas encore cable (relais SecretKey entre deux methodes de ClientHandshakePacketListenerImpl a ecrire). |
 | [not-enough-bandwidth](https://github.com/USS-Shenzhou/NotEnoughBandwidth) | GPL-3.0-or-later | oui | oui | **PRENDRE** | Economise la bande passante. Complementaire de la compression. |
 | [xxl-packets](https://github.com/lazul1ne/XXLPackets) | CC0-1.0 | oui | oui | **PRENDRE** | Leve la limite de 2 Mo par paquet. Indispensable en gros modpack. |
 | [bandwidthoptimizer](https://github.com/duckgun13476/BandwidthOptimizer) | LGPL-2.1-or-later | oui | oui | MESURER | Meme cible, a departager. |

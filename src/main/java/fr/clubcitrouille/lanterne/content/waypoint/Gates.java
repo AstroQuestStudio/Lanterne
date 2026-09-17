@@ -137,7 +137,7 @@ public final class Gates {
                     .strength(-1.0F)
                     .sound(SoundType.GLASS)
                     .lightLevel(state -> 12)
-                    .pushReaction(PushReaction.BLOCK));
+                    .pushReaction(PushReaction.IMMOVEABLE));
 
     /**
      * L'ouverture de l'écran, posée par le client au démarrage.

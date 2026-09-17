@@ -437,13 +437,13 @@ public final class Emballage {
      * surestime, ce qui est le bon sens de l'erreur.
      */
     private static int poids(LevelChunk chunk, ClientboundLevelChunkWithLightPacket paquet) {
-        ClientboundLevelChunkPacketData donnees = paquet.getChunkData();
+        ClientboundLevelChunkPacketData donnees = paquet.chunkData();
         int total = SOCLE + donnees.getReadBuffer().readableBytes();
         for (long[] carte : donnees.getHeightmaps().values()) {
             total += carte.length * Long.BYTES;
         }
-        ClientboundLightUpdatePacketData lumiere = paquet.getLightData();
-        total += (lumiere.getSkyUpdates().size() + lumiere.getBlockUpdates().size()) * COUCHE;
+        ClientboundLightUpdatePacketData lumiere = paquet.lightData();
+        total += (lumiere.skyUpdates().size() + lumiere.blockUpdates().size()) * COUCHE;
         return total + chunk.getBlockEntities().size() * ETIQUETTE;
     }
 

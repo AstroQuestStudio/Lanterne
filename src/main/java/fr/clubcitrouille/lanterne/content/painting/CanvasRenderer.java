@@ -4,6 +4,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 
+import org.joml.Matrix4f;
+
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -173,7 +175,7 @@ public class CanvasRenderer extends EntityRenderer<Canvas, CanvasState> {
         }
         poseStack.pushPose();
         // Le tableau est modélisé face au sud, comme celui de vanilla ; on le tourne vers son mur.
-        poseStack.mulPose(Axis.YP.rotationDegrees(180 - state.direction.get2DDataValue() * 90));
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(180 - state.direction.get2DDataValue() * 90)));
         RenderType type = RenderTypes.entityCutout(Mosaic.ID);
         // La case de l'image, ou celle du dos si elle n'est pas encore arrivée : un tableau en
         // attente est une plaque sombre, jamais un trou.

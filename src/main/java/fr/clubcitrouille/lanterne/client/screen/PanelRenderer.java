@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import net.minecraft.client.gui.Font;
@@ -355,7 +356,7 @@ public class PanelRenderer implements BlockEntityRenderer<PanelEntity, PanelRend
 
         poseStack.pushPose();
         poseStack.translate(centre.x(), centre.y(), centre.z());
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.facing.toYRot()));
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-state.facing.toYRot())));
         line(poseStack, collector, state.what, wide, -10f, EDGE, lit);
         if (!state.todo.isEmpty()) {
             line(poseStack, collector, state.todo, wide, 2f, HINT, lit);

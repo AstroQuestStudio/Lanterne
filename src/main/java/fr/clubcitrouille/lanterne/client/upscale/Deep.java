@@ -7,7 +7,7 @@ import java.nio.file.attribute.FileTime;
 import java.util.Locale;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.DeviceInfo;
+import com.mojang.renderpearl.api.device.DeviceInfo;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import net.minecraft.client.Minecraft;

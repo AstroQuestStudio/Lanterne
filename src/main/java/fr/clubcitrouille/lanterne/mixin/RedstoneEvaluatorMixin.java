@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneWireBlock;
 
 import fr.clubcitrouille.lanterne.core.Settings;
 
@@ -105,7 +105,7 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * algorithme est dans le jeu depuis que Mojang l'a écrit, et il suffit de cinq lignes pour l'allumer.
  * Il reste éteint par défaut pour la raison ci-dessus, qui n'a rien à voir avec la vitesse.
  */
-@Mixin(RedStoneWireBlock.class)
+@Mixin(RedstoneWireBlock.class)
 public abstract class RedstoneEvaluatorMixin {
     /**
      * @author Lanterne

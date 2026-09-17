@@ -751,8 +751,11 @@ public final class Amarre {
         int teleport = line.lastTeleportId();
         if (teleport >= 0 && teleport != answeredTeleport) {
             answeredTeleport = teleport;
+            net.minecraft.world.entity.PositionMoveRotation change = line.lastTeleportChange();
             actor.connection.handleAcceptTeleportPacket(
-                    new ServerboundAcceptTeleportationPacket(teleport));
+                    new ServerboundAcceptTeleportationPacket(teleport,
+                            change.position().x, change.position().y, change.position().z,
+                            change.yRot(), change.xRot()));
         }
         actor.connection.markClientLoaded();
 

@@ -320,7 +320,7 @@ public final class EntityThrottle {
         }
         // L'animation de dégât en cours, et les images d'invulnérabilité qui la suivent. La seconde
         // est la plus importante des deux : c'est elle qui, restée haute, fait refuser les coups.
-        if (body.hurtTime > 0 || body.invulnerableTime > 0) {
+        if (body.hurtTime > 0 || body.getInvulnerableTime() > 0) {
             return true;
         }
         // Une créature qui poursuit un joueur doit pouvoir le rejoindre et le frapper. Poursuivre

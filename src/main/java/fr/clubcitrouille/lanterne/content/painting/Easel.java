@@ -34,6 +34,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.util.Prediction;
 import net.minecraft.world.item.ItemStack;
 
 import net.neoforged.bus.api.IEventBus;
@@ -1071,7 +1072,7 @@ public final class Easel {
         }
         ItemStack brush = Brush.charged(plate.hash(), width, height, Trim.BOIS);
         if (!player.getInventory().add(brush)) {
-            player.drop(brush, false);
+            player.drop(brush, false, Prediction.SERVER_ONLY);
         }
         reply(source, "Pinceau « " + plate.name() + " » en " + width + "×" + height + " blocs.");
         return 1;

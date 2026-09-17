@@ -19,7 +19,10 @@ import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.repository.Pack;
+import net.minecraft.server.packs.repository.PackCompatibility;
 import net.minecraft.server.packs.repository.PackSource;
+import net.minecraft.world.flag.FeatureFlagSet;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.Settings;
@@ -90,8 +93,14 @@ public final class Sommaire {
 
         PackLocationInfo where = new PackLocationInfo("lanterne-banc",
                 Component.literal("Banc du sommaire"), PackSource.BUILT_IN, Optional.empty());
+        // openPrimary() a disparu en 26.3 : openResources() rend maintenant un Stream (un paquet
+        // avec overlays en rendrait plusieurs), et ce banc n'en a jamais eu — le premier suffit.
+        Pack.Metadata metadata = new Pack.Metadata(Component.literal("Banc du sommaire"),
+                PackCompatibility.COMPATIBLE, FeatureFlagSet.of(), List.of(), false);
         PackResources pack = new FilePackResources.FileResourcesSupplier(archive)
-                .openPrimary(where);
+                .openResources(where, metadata)
+                .findFirst()
+                .orElseThrow();
 
         Lanterne.LOG.info("[SOMMAIRE] Paquet fabriqué : {} entrées, {} espaces de noms, {} "
                 + "répertoires · {} interrogations par passe.",

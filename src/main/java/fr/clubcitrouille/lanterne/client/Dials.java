@@ -7,7 +7,7 @@ import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLScancode;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
@@ -1060,8 +1060,8 @@ public final class Dials extends Screen {
         if (this.minecraft == null) {
             return false;
         }
-        return InputConstants.isKeyDown(this.minecraft.getWindow(), GLFW.GLFW_KEY_LEFT_SHIFT)
-                || InputConstants.isKeyDown(this.minecraft.getWindow(), GLFW.GLFW_KEY_RIGHT_SHIFT);
+        return InputConstants.isKeyDown(SDLScancode.SDL_SCANCODE_LSHIFT)
+                || InputConstants.isKeyDown(SDLScancode.SDL_SCANCODE_RSHIFT);
     }
 
     @Override

@@ -1,7 +1,5 @@
 package fr.clubcitrouille.lanterne.content.screen;
 
-import com.mojang.serialization.MapCodec;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
@@ -53,8 +51,6 @@ import org.jspecify.annotations.Nullable;
  * monde attend d'une machine. Voir {@link #LIT}.
  */
 public class Beamer extends BaseEntityBlock {
-    public static final MapCodec<Beamer> CODEC = simpleCodec(Beamer::new);
-
     /**
      * Les six directions, et non les quatre horizontales.
      *
@@ -74,10 +70,6 @@ public class Beamer extends BaseEntityBlock {
                 .setValue(LIT, false));
     }
 
-    @Override
-    protected MapCodec<? extends BaseEntityBlock> codec() {
-        return CODEC;
-    }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {

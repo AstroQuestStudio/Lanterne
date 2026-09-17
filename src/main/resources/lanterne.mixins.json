@@ -37,7 +37,6 @@
     "ThreadCountMixin",
     "ExperienceOrbAccessor",
     "RegionFileVersionMixin",
-    "HopperMixin",
     "RemblaiBlockMixin",
     "RemblaiFormeMixin",
     "RemblaiVoisinsMixin",
@@ -54,11 +53,8 @@
     "BurinMixin",
     "ClimatMixin",
     "ChunkSenderMixin",
-    "CielMixin",
-    "CielCellMixin",
     "CielAquiferAccessor",
     "ElastiqueMixin",
-    "ColonneMixin",
     "SectionStorageAccessor",
     "PoiStreamMixin",
     "InsideEffectsMixin",
@@ -76,9 +72,8 @@
     "RemoveBlockMixin",
     "PackIndexMixin",
     "JigsawPlacerMixin",
-    "NoiseCalqueMixin",
-    "FilonNoiseMixin",
-    "FilonGeneratorMixin"
+    "ConnectionMixin",
+    "ServerLoginPacketListenerImplMixin"
   ],
   "client": [
     "EntityCullMixin",
@@ -92,6 +87,6 @@
     "SoundDecodeMixin",
     "UpscaleGameRendererMixin",
     "VideoOptionsMixin",
-    "BufferStorageMixin"
+    "RenderTargetAccessor"
   ]
 }
