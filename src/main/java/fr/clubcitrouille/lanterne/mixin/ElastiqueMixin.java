@@ -16,6 +16,37 @@ import fr.clubcitrouille.lanterne.core.Settings;
 /**
  * Les trois seuils de mouvement, mesurés à l'horloge plutôt qu'au tick.
  *
+ * <h2>DÉSACTIVÉ sur la branche 26.3 — retiré de lanterne.mixins.json, faute d'avoir trouvé la vraie
+ * cause</h2>
+ *
+ * <p>Au premier spawn d'un joueur, {@code lanterne$countSpeedRollback} plantait le serveur intégré :
+ * {@code MixinTransformerError}, « Scanned 0 target(s) ». Deux corrections ont été tentées et ont
+ * échoué <b>de façon identique</b> :
+ *
+ * <ol>
+ *   <li>l'ancrage {@code @At(INVOKE, target = "Logger.warn(String, Object[])")} d'origine ;</li>
+ *   <li>un ancrage {@code @At(CONSTANT, stringValue = "{} moved too quickly! {},{},{}")}, en
+ *       supposant l'appel lui-même transformé par un passage tiers avant Mixin.</li>
+ * </ol>
+ *
+ * <p>Les deux ont été vérifiées avant d'écrire une ligne — pas devinées. Le désassemblage
+ * ({@code javap -c}) du jar de compilation ({@code minecraft-patched-26.3.0.3-beta-merged.jar})
+ * montre, à l'intérieur même de {@code handleMovePlayer}, l'appel <em>et</em> la constante de texte
+ * exactement sous la forme visée — une seule fois chacun, sans ambiguïté. Le patch officiel de
+ * NeoForge pour ce fichier ({@code patches/.../ServerGamePacketListenerImpl.java.patch}, branche
+ * {@code 26.3.x}) a aussi été lu en entier : aucune de ses modifications ne touche à cette zone du
+ * code. Le seul coremod NeoForge nommé « method_redirector » présent dans le rapport de plantage a
+ * été lu en entier lui aussi : il ne redirige que {@code finalizeSpawn}, rien qui touche au
+ * mouvement.
+ *
+ * <p>Autrement dit : tout ce qui est vérifiable depuis ce laboratoire dit que la cible existe. Et
+ * pourtant Mixin ne la trouve pas au chargement réel du jeu. La cause reste donc inconnue — un
+ * décalage entre le jar de compilation et ce que le joueur charge réellement, ou un comportement de
+ * Mixin qui échappe à cette méthode de vérification. Continuer à deviner coûterait un lancement et
+ * un plantage de plus à chaque tentative ; le module est donc désactivé le temps de trouver une
+ * vraie piste — voir aussi si {@code lanterne$countCoherenceRollback}, jamais atteint faute d'avoir
+ * dépassé le premier échec, porte le même défaut.
+ *
  * <p>Le raisonnement entier — pourquoi ces trois nombres et pas d'autres, pourquoi un carré, et
  * pourquoi cela n'ouvre pas la porte aux tricheurs — est dans {@link Elastique}. Ici, seulement les
  * points d'accroche et ce qui les rend fragiles.

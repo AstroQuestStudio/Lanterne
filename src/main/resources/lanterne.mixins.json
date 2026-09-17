@@ -54,7 +54,6 @@
     "ClimatMixin",
     "ChunkSenderMixin",
     "CielAquiferAccessor",
-    "ElastiqueMixin",
     "SectionStorageAccessor",
     "PoiStreamMixin",
     "InsideEffectsMixin",
