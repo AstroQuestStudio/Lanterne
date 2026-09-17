@@ -91,6 +91,7 @@
     "SoundDecodeMixin",
     "UpscaleGameRendererMixin",
     "VideoOptionsMixin",
-    "BufferStorageMixin"
+    "BufferStorageMixin",
+    "ServerNameResolverMixin"
   ]
 }

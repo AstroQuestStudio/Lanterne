@@ -78,6 +78,7 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `core/Sommaire.java` + `mixin/PackIndexMixin.java` — le sommaire des zip | Idée de [quick-pack](https://github.com/DrexHD/quick-pack) (DrexHD) | **GPL-3.0-only** |
 | `client/Tampon.java` + `mixin/BufferStorageMixin.java` — le tampon mutable | Idée de [framepace](https://github.com/lap2ka/framepace) (Lap2ka), lui-même rétroportage du correctif **Mojang MC-307596** livré en 26.3 | MIT |
 | `core/Elastique.java` + `mixin/ElastiqueMixin.java` — l'élastique | **Rien n'est repris de TT20, et rien ne pouvait l'être** : voir ci-dessous. Écrit depuis les sources décompilées de 26.2 seules. | — |
+| `mixin/ServerNameResolverMixin.java` — pas de recherche DNS inversée pour une IP littérale | Idée de [Fast IP Ping](https://github.com/Fallen-Breath/fast-ip-ping) (Fallen_Breath) ; point d'accroche réécrit — un seul mixin sur `ServerNameResolver.resolveAddress`, méthode nommée et stable, là où l'original en posait deux ou trois sur des classes anonymes et des lambdas | LGPL-3.0-only |
 
 **L'élastique** demande une précision de licence, parce que le mod auquel on pense
 d'abord est justement celui dont on ne peut rien prendre :
