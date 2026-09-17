@@ -64,7 +64,28 @@ public final class Restitution {
     private static final int MAX_EVICT_WAIT = 400;
     private static final int SETTLE_AFTER_EVICTION_TICKS = 20;
 
-    private enum Step { OFF, SEEDING, SAVE_1, WAIT_1, MEASURE_ON, SAVE_2, WAIT_2, MEASURE_OFF, DONE }
+    /**
+     * Ticks d'attente pure après avoir changé {@link Settings#decode}, avant de commencer à
+     * chronométrer.
+     *
+     * <h2>La course que le premier relevé a débusquée</h2>
+     *
+     * <p>{@code Settings.setDecode(true)} s'exécute sur le fil principal, mais {@code loadAsync} est
+     * intercepté sur le fil {@code worldgen} — un bassin de travail distinct qui peut déjà porter des
+     * demandes émises <em>avant</em> le changement de réglage (reliquat de {@code SEEDING} ou de la
+     * sauvegarde forcée). Basculer le réglage puis chronométrer dans le même tick laisse ce reliquat
+     * se mélanger à la mesure : trois relevés consécutifs ont rendu 0 décodage engagé sur 536 à 784
+     * appels, contre 392 sur un relevé isolé, <b>sans qu'une seule ligne de code n'ait changé entre les
+     * deux</b> — la signature d'une course, pas d'un défaut déterministe. Cette pause laisse le bassin
+     * de l'{@code IOWorker} se vider de tout travail antérieur au changement avant que le chronomètre
+     * ne parte.
+     */
+    private static final int SETTLE_AFTER_FLAG_TICKS = 20;
+
+    private enum Step {
+        OFF, SEEDING, SAVE_1, WAIT_1, SETTLE_ON, MEASURE_ON,
+        SAVE_2, WAIT_2, SETTLE_OFF, MEASURE_OFF, DONE
+    }
 
     private static Step step = Step.OFF;
     private static MinecraftServer host;
@@ -76,6 +97,8 @@ public final class Restitution {
 
     private static int evictWait;
     private static int settleLeft;
+    /** Ticks restants avant de commencer à chronométrer — voir {@link #SETTLE_AFTER_FLAG_TICKS}. */
+    private static int flagSettle;
 
     private static final int[] baselineHeights = new int[GRID_CHUNKS];
     private static final int[] onHeights = new int[GRID_CHUNKS];
@@ -150,9 +173,9 @@ public final class Restitution {
             }
             case WAIT_1 -> waitEviction(source, () -> {
                 Settings.setDecode(true);
-                resetGrid();
-                phaseStart = System.nanoTime();
-                step = Step.MEASURE_ON;
+                ChunkDecode.resetStats();
+                flagSettle = SETTLE_AFTER_FLAG_TICKS;
+                step = Step.SETTLE_ON;
             }, () -> {
                 // Éviction jamais confirmée : rien à mesurer côté "actif", on passe directement à
                 // "éteint" plutôt que de publier un chiffre douteux.
@@ -161,6 +184,15 @@ public final class Restitution {
                 Settings.setDecode(false);
                 step = Step.SAVE_2;
             });
+            case SETTLE_ON -> {
+                if (--flagSettle <= 0) {
+                    Lanterne.LOG.info("[RESTITUTION] Réglage stabilisé ({} ticks) — Settings.decode()={}.",
+                            SETTLE_AFTER_FLAG_TICKS, Settings.decode());
+                    resetGrid();
+                    phaseStart = System.nanoTime();
+                    step = Step.MEASURE_ON;
+                }
+            }
             case MEASURE_ON -> {
                 if (pumpGrid(server, source, true)) {
                     onMs = (System.nanoTime() - phaseStart) / 1.0E6d;
@@ -186,14 +218,22 @@ public final class Restitution {
             }
             case WAIT_2 -> waitEviction(source, () -> {
                 Settings.setDecode(false);
-                resetGrid();
-                phaseStart = System.nanoTime();
-                step = Step.MEASURE_OFF;
+                flagSettle = SETTLE_AFTER_FLAG_TICKS;
+                step = Step.SETTLE_OFF;
             }, () -> {
                 Lanterne.LOG.error("[RESTITUTION] Moitié « éteint » ABANDONNÉE — éviction non confirmée.");
                 offMs = -1d;
                 finish();
             });
+            case SETTLE_OFF -> {
+                if (--flagSettle <= 0) {
+                    Lanterne.LOG.info("[RESTITUTION] Réglage stabilisé ({} ticks) — Settings.decode()={}.",
+                            SETTLE_AFTER_FLAG_TICKS, Settings.decode());
+                    resetGrid();
+                    phaseStart = System.nanoTime();
+                    step = Step.MEASURE_OFF;
+                }
+            }
             case MEASURE_OFF -> {
                 if (pumpGrid(server, source, true)) {
                     offMs = (System.nanoTime() - phaseStart) / 1.0E6d;
@@ -336,6 +376,9 @@ public final class Restitution {
                 "[RESTITUTION] Décodages effectués sur le bassin séparé depuis le démarrage : %d, "
                         + "%.3f ms/décodage en moyenne.",
                 ChunkDecode.decoded(), ChunkDecode.averageMillis()));
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[RESTITUTION] DIAGNOSTIC : loadAsync intercepté %d fois, dont %d avec le module engagé.",
+                ChunkDecode.entered(), ChunkDecode.engaged()));
 
         double ratio = onMs <= 0d ? 0d : offMs / onMs;
         Lanterne.LOG.info("[RESTITUTION] ── Verdict de VITESSE ──");

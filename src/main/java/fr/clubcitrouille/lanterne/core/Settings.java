@@ -47,8 +47,14 @@ import java.util.Locale;
  * espérait qu'il fasse.
  */
 public final class Settings {
-    /** Coupe tout, d'un coup. Sert au banc et au diagnostic. */
-    private static boolean master = true;
+    /**
+     * Coupe tout, d'un coup. Sert au banc et au diagnostic.
+     *
+     * <p>{@code volatile} depuis que {@link #decode} l'est : {@code Settings.decode()} lit
+     * {@code master && decode}, et {@code IOWorkerMixin} l'appelle depuis le fil de l'{@code IOWorker}
+     * — un champ nu ici laisserait la même fenêtre de visibilité s'ouvrir sur la moitié du test.
+     */
+    private static volatile boolean master = true;
 
     /** Le compteur de basculements. Voir {@link #epoch()} pour ce qu'il protège. */
     private static long epoch;
@@ -212,8 +218,20 @@ public final class Settings {
      * {@code ChunkDecode} rend un bassin d'un seul fil, et le comportement redevient alors
      * rigoureusement celui de vanilla : ce module ne devrait donc jamais régresser cette cible-là, mais
      * « ne devrait pas » n'est toujours pas mesuré non plus.
+     *
+     * <h2>Le bug trouvé au banc : une visibilité jamais garantie entre fils</h2>
+     *
+     * <p>Premier réglage de ce dépôt lu depuis un fil qui n'est ni le fil principal ni un fil de
+     * laboratoire dédié : {@code IOWorkerMixin} le consulte depuis le fil de l'{@code IOWorker},
+     * tandis que {@link #setDecode} est appelé depuis le fil principal. Un champ {@code boolean} nu
+     * n'offre aucune garantie de visibilité entre fils — le modèle mémoire Java autorise le fil de
+     * lecture à ne jamais revoir l'écriture, et c'est exactement ce que le banc {@code Restitution} a
+     * mesuré : 536 interceptions de {@code loadAsync}, zéro avec le module engagé, alors que
+     * {@code setDecode(true)} avait bien été appelé juste avant. {@code volatile} force la
+     * republication en mémoire principale à chaque écriture et sa relecture à chaque lecture — le
+     * seul coût est une barrière mémoire, négligeable face au chargement d'un chunk.
      */
-    private static boolean decode;
+    private static volatile boolean decode;
 
     /**
      * Le niveau de détail porté sur le client, retiré après essai — douzième plan démoli, et le seul

@@ -83,6 +83,10 @@ public final class ChunkDecode {
     private static final AtomicLong decoded = new AtomicLong();
     /** Temps cumulé passé à décoder, en nanosecondes — pour rapporter une moyenne, pas juste un compte. */
     private static final AtomicLong decodeNanos = new AtomicLong();
+    /** Diagnostic temporaire : entrées dans {@code lanterne$parallelDecode}, module actif ou non. */
+    private static final AtomicLong entered = new AtomicLong();
+    /** Diagnostic temporaire : entrées où {@code Settings.decode()} était vrai. */
+    private static final AtomicLong engaged = new AtomicLong();
 
     private ChunkDecode() {}
 
@@ -127,6 +131,22 @@ public final class ChunkDecode {
         return decoded.get();
     }
 
+    public static long noteEntered() {
+        return entered.incrementAndGet();
+    }
+
+    public static void noteEngaged() {
+        engaged.incrementAndGet();
+    }
+
+    public static long entered() {
+        return entered.get();
+    }
+
+    public static long engaged() {
+        return engaged.get();
+    }
+
     /** Temps moyen d'un décodage, en millisecondes — {@code 0} tant que rien n'a été décodé. */
     public static double averageMillis() {
         long count = decoded.get();
@@ -136,5 +156,7 @@ public final class ChunkDecode {
     public static void resetStats() {
         decoded.set(0L);
         decodeNanos.set(0L);
+        entered.set(0L);
+        engaged.set(0L);
     }
 }

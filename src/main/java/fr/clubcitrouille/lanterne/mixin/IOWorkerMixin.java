@@ -97,9 +97,11 @@ public abstract class IOWorkerMixin {
     @WrapMethod(method = "loadAsync")
     private CompletableFuture<Optional<CompoundTag>> lanterne$parallelDecode(
             ChunkPos pos, Operation<CompletableFuture<Optional<CompoundTag>>> original) {
+        ChunkDecode.noteEntered();
         if (!Settings.decode()) {
             return original.call(pos);
         }
+        ChunkDecode.noteEngaged();
 
         // Même priorité que vanilla (FOREGROUND, vérifié premier de l'énumération — ordinal 0) : ce
         // n'est pas une valeur devinée, c'est celle que submitThrowingTask utilise déjà.
