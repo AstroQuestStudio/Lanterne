@@ -304,6 +304,46 @@ public final class Pregen {
         return running;
     }
 
+    /** Vrai tant que le log d'activation de {@link #keepServerAwake(int)} reste à écrire. */
+    private static boolean pauseSuppressAnnounced;
+
+    /**
+     * Empêche la pause automatique de vanilla de couper le tick pendant une pré-génération.
+     *
+     * <h2>La pause coupe le tick avant que ce fichier ne soit seulement appelé</h2>
+     *
+     * <p>{@code MinecraftServer.tickServer} compte les ticks sans joueur dans {@code emptyTicks} et,
+     * au seuil de {@code pause_a_l_absence} secondes, retourne <b>avant</b> {@code tickChildren} —
+     * vérifié par lecture du bytecode : le retour anticipé précède l'appel à
+     * {@code EventHooks.fireServerTickPre}, l'événement dont dépend {@link #tick(MinecraftServer)}.
+     * Une pré-génération lancée sans personne connecté — exactement le moment où elle gêne le
+     * moins — s'arrêtait donc d'elle-même au bout d'une minute, sans qu'aucune ligne de ce fichier
+     * ne s'en aperçoive : ni erreur, ni journal, le tick du monde cessait simplement d'avancer.
+     *
+     * <p>{@code PregenActivityMixin} intercepte la seule lecture de {@code PlayerList.getPlayerCount()}
+     * dont dépend ce compteur — vérifiée par bytecode comme n'étant lue qu'à cet endroit dans la
+     * méthode. Le correctif ne désactive pas la pause en général : un serveur vide sans pré-génération
+     * en cours doit continuer de se mettre en veille, c'est tout l'intérêt du réglage vanilla. On fait
+     * seulement croire, le temps d'un tick, qu'il y a de l'activité — {@code emptyTicks} repart alors
+     * à zéro exactement comme s'il y avait un joueur, jamais plus loin que ça.
+     *
+     * @param vanillaCount ce que {@code PlayerList.getPlayerCount()} a rendu
+     * @return {@code vanillaCount} inchangé, sauf {@code 1} si une pré-génération tourne et qu'il
+     *         valait zéro
+     */
+    public static int keepServerAwake(int vanillaCount) {
+        if (vanillaCount != 0 || !running) {
+            pauseSuppressAnnounced = false;
+            return vanillaCount;
+        }
+        if (!pauseSuppressAnnounced) {
+            pauseSuppressAnnounced = true;
+            Lanterne.LOG.info("[PRÉGÉN] pause automatique désactivée tant que la pré-génération "
+                    + "est active.");
+        }
+        return 1;
+    }
+
     /**
      * Ouvre une pré-génération autour de l'origine du monde.
      *
@@ -817,9 +857,10 @@ public final class Pregen {
 
         showBar(share, seen, rate);
 
-        // Le journal reste plus espacé que la barre : cinq secondes suffisent à suivre, et une ligne
-        // par seconde sur une pré-génération de plusieurs heures rendrait le fichier illisible.
-        if (now - lastLogged < 5_000_000_000L) {
+        // Le journal suit maintenant la même cadence que la barre — une ligne par seconde. Un texte
+        // pesant une centaine d'octets, une fois par seconde, ne pèse rien face au reste du tick ;
+        // voir le commit qui a resserré ce délai pour la mesure qui le confirme.
+        if (now - lastLogged < 1_000_000_000L) {
             return;
         }
         lastLogged = now;

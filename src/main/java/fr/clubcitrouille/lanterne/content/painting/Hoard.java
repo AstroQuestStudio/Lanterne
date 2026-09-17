@@ -371,7 +371,10 @@ public final class Hoard {
         KITCHEN.submit(() -> {
             if (!Mill.fingerprint(png).equals(hash)) {
                 Lanterne.LOG.warn("[ATELIER] image « {} » reçue abîmée : empreinte différente.", hash);
-                ASKED.remove(hash);
+                // ASKED est une HashSet ordinaire, touchée par ailleurs uniquement depuis le fil
+                // client (voir le Javadoc de classe) : la muter directement ici, depuis le fil de
+                // fond, la ferait courir contre ce fil sans le moindre verrou.
+                Minecraft.getInstance().execute(() -> ASKED.remove(hash));
                 return;
             }
             try {
@@ -399,7 +402,7 @@ public final class Hoard {
             } catch (IOException problem) {
                 Lanterne.LOG.warn("[ATELIER] image « {} » illisible sur le disque : {}",
                         hash, problem.getMessage());
-                ASKED.remove(hash);
+                Minecraft.getInstance().execute(() -> ASKED.remove(hash));
             }
         });
     }

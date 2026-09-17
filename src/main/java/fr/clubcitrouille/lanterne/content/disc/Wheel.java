@@ -114,9 +114,17 @@ public final class Wheel {
             } catch (IOException problem) {
                 Lanterne.LOG.warn("[ATELIER] morceau non mis en cache : {}", problem.getMessage());
             }
-            OFFERS.clear();
-            OFFERS.put(hash, cut.data());
-            ready.accept(new Post.Vinyl(-1, hash, "", cut.seconds()));
+            byte[] data = cut.data();
+            Post.Vinyl posted = new Post.Vinyl(-1, hash, "", cut.seconds());
+            // OFFERS est une HashMap ordinaire, lue et écrite par ailleurs uniquement depuis le fil
+            // client (grant, pump) : la remplir ici, depuis le fil de fond LATHE, la ferait courir
+            // contre ce fil sans verrou — exactement le bogue que Hoard.prepare évite déjà en
+            // repassant par Minecraft.execute avant de toucher son équivalent d'OFFERS.
+            Minecraft.getInstance().execute(() -> {
+                OFFERS.clear();
+                OFFERS.put(hash, data);
+                ready.accept(posted);
+            });
         });
     }
 
@@ -304,9 +312,12 @@ public final class Wheel {
         FILLED.remove(hash);
         byte[] music = buffer;
         LATHE.submit(() -> {
+            // ASKED est une HashSet ordinaire, touchée par ailleurs uniquement depuis le fil client
+            // (accept) : chaque retrait ci-dessous repasse donc par Minecraft.execute plutôt que de
+            // la muter directement sur ce fil de fond.
             if (!Mill.fingerprint(music).equals(hash)) {
                 Lanterne.LOG.warn("[ATELIER] morceau « {} » reçu abîmé.", hash);
-                ASKED.remove(hash);
+                Minecraft.getInstance().execute(() -> ASKED.remove(hash));
                 return;
             }
             // Le format est relu sur les octets reçus : le serveur ne l'annonce pas, et il n'aurait
@@ -314,7 +325,7 @@ public final class Wheel {
             Press.Grain grain = Press.grain(music);
             if (!grain.playable()) {
                 Lanterne.LOG.warn("[ATELIER] morceau « {} » reçu dans un format illisible.", hash);
-                ASKED.remove(hash);
+                Minecraft.getInstance().execute(() -> ASKED.remove(hash));
                 return;
             }
             try {
@@ -325,7 +336,7 @@ public final class Wheel {
                         music.length / 1024, grain.label());
             } catch (IOException problem) {
                 Lanterne.LOG.warn("[ATELIER] morceau « {} » non écrit : {}", hash, problem.getMessage());
-                ASKED.remove(hash);
+                Minecraft.getInstance().execute(() -> ASKED.remove(hash));
             }
         });
     }

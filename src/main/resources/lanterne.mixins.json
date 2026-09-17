@@ -77,7 +77,8 @@
     "PackIndexMixin",
     "JigsawPlacerMixin",
     "ConnectionMixin",
-    "ServerLoginPacketListenerImplMixin"
+    "ServerLoginPacketListenerImplMixin",
+    "PregenActivityMixin"
   ],
   "client": [
     "EntityCullMixin",
