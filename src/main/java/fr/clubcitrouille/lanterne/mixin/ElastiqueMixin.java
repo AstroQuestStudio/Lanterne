@@ -152,13 +152,21 @@ public abstract class ElastiqueMixin {
      * <p>La leçon est celle que ce dépôt répète : un compteur qui ne peut pas monter ne prouve pas
      * que la chose n'arrive pas — il prouve qu'on ne la regardait pas.
      *
-     * <p>Le point d'ancrage est le journal d'avertissement du jeu, reconnaissable à sa signature :
-     * {@code warn(String, Object[])} pour celui-ci, {@code warn(String, Object)} pour l'autre. Le
-     * désassemblage confirme qu'il n'y en a qu'un de chaque forme dans la méthode.
+     * <h2>Pourquoi l'ancrage vise la chaîne du message, et non l'appel lui-même</h2>
+     *
+     * <p>La première version visait directement {@code warn(String, Object[])} — le désassemblage de
+     * la 26.2 confirmait bien un seul appel de cette forme dans la méthode. Sur la 26.3, ce même appel
+     * existe toujours, identique, dans le jar de compilation ; et pourtant l'ancrage échouait au
+     * démarrage, « Scanned 0 target(s) » — le signe d'une classe transformée une fois de plus avant
+     * que Mixin n'y pose le sien, par un passage que le jar de compilation seul ne montre pas.
+     *
+     * <p>Une constante de texte encaissé dans le bytecode résiste à ce genre de remaniement bien
+     * mieux qu'une signature d'appel : rien n'a de raison de réécrire le message d'avertissement
+     * lui-même, quand la forme de l'appel qui le porte peut changer d'un passage de transformation à
+     * l'autre.
      */
     @Inject(method = "handleMovePlayer",
-            at = @At(value = "INVOKE",
-                     target = "Lorg/slf4j/Logger;warn(Ljava/lang/String;[Ljava/lang/Object;)V"))
+            at = @At(value = "CONSTANT", args = "stringValue={} moved too quickly! {},{},{}"))
     private void lanterne$countSpeedRollback(CallbackInfo callback) {
         Elastique.countSpeedRollback();
     }
