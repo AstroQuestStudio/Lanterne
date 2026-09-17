@@ -37,7 +37,6 @@
     "ThreadCountMixin",
     "ExperienceOrbAccessor",
     "RegionFileVersionMixin",
-    "HopperMixin",
     "RemblaiBlockMixin",
     "RemblaiFormeMixin",
     "RemblaiVoisinsMixin",
