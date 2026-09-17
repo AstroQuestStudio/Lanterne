@@ -88,6 +88,7 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.content.painting.Easel.register(modBus);
         fr.clubcitrouille.lanterne.content.disc.Groove.register(modBus);
         fr.clubcitrouille.lanterne.content.disc.Retrack.register();
+        fr.clubcitrouille.lanterne.core.PortalPreload.register();
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.painting.Easel::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(
