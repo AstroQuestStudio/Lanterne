@@ -79,6 +79,7 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `core/Elastique.java` + `mixin/ElastiqueMixin.java` — l'élastique | **Rien n'est repris de TT20, et rien ne pouvait l'être** : voir ci-dessous. Écrit depuis les sources décompilées de 26.2 seules. | — |
 | `core/network/MinecraftCipher{Decoder,Encoder}.java` — le chiffreur réseau | [Krypton](https://github.com/astei/krypton) (Andrew Steinborn) — repris quasi tel quel ; s'appuie sur `com.velocitypowered:velocity-native` (embarqué par jarJar, natif OpenSSL avec repli Java) | LGPL-3.0-only |
 | `mixin/ConnectionMixin.java`, `mixin/ServerLoginPacketListenerImplMixin.java`, `core/network/ConnectionEncryption.java` — l'accroche | **Rien n'est repris.** Point d'accroche réécrit pour la 26.3 : `Connection.setEncryptionKey` y reçoit des `Cipher` déjà construits, plus la `SecretKey` brute — voir la javadoc de `ConnectionEncryption`. Ne couvre que le serveur pour l'instant, le client demande un relais entre deux méthodes non encore écrit. | — |
+| `mixin/ServerNameResolverMixin.java` — pas de recherche DNS inversée pour une IP littérale | Idée de [Fast IP Ping](https://github.com/Fallen-Breath/fast-ip-ping) (Fallen_Breath) ; point d'accroche réécrit pour la 26.3 — un seul mixin sur `ServerNameResolver.resolveAddress`, méthode nommée et stable, là où l'original en posait deux ou trois sur des classes anonymes et des lambdas | LGPL-3.0-only |
 
 **L'élastique** demande une précision de licence, parce que le mod auquel on pense
 d'abord est justement celui dont on ne peut rien prendre :

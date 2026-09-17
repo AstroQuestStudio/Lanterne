@@ -87,6 +87,7 @@
     "SoundDecodeMixin",
     "UpscaleGameRendererMixin",
     "VideoOptionsMixin",
-    "RenderTargetAccessor"
+    "RenderTargetAccessor",
+    "ServerNameResolverMixin"
   ]
 }
