@@ -66,6 +66,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ELASTIQUE;
     public static final ModConfigSpec.BooleanValue SOMMAIRE;
     public static final ModConfigSpec.BooleanValue REDSTONE;
+    public static final ModConfigSpec.BooleanValue IMPASSE;
     public static final ModConfigSpec.BooleanValue MOULDS;
     public static final ModConfigSpec.BooleanValue DECAY;
     public static final ModConfigSpec.IntValue DECAY_DELAY;
@@ -449,6 +450,32 @@ public final class Config {
                 "",
                 "Un mod d'optimisation qui casse une ferme a echoue, meme s'il double les ticks.")
                 .define("moteur_redstone", false);
+        IMPASSE = BUILDER.comment(
+                "IMPASSE : ne pas rechercher deux fois de suite un chemin qu'on vient de prouver",
+                "impossible.",
+                "",
+                "Un mob bloque - un loup qui ne peut pas rejoindre son maitre par une porte fermee,",
+                "un golem qui vise une position murée, un raid qui vise un point du village hors",
+                "d'atteinte - redemande le MEME chemin a chaque fois que son IA se reconsidere,",
+                "parfois a chaque tick. Chaque demande relance une recherche A* complete : creation",
+                "d'une region de lecture, exploration de noeuds, pour retrouver exactement le NON",
+                "deja rendu l'instant d'avant.",
+                "",
+                "Ce module retient, PAR MOB et non partage, le dernier point de depart et le dernier",
+                "ensemble de cibles pour lesquels la recherche a echoue, avec l'instant de l'echec. Si",
+                "le meme mob redemande EXACTEMENT le meme depart et les memes cibles dans la seconde",
+                "qui suit, on rend NUL sans relancer la recherche - la reponse est celle qu'on vient",
+                "de prouver.",
+                "",
+                "Rien n'est perdu, seulement retarde. Un obstacle qui disparait vraiment n'est visible",
+                "au plus qu'une seconde plus tard - le temps que l'entree perimee cesse de compter.",
+                "Aucun chemin n'est partage entre mobs de gabarits ou de capacites differents : la clef",
+                "vit sur l'instance de navigation elle-meme, jamais dans une table commune.",
+                "",
+                "Eteint par defaut : correct par construction (lu dans le bytecode reel, pas devine),",
+                "mais jamais passe par le banc lab/ qui verifie la conformite avant la vitesse, comme",
+                "l'exige la premiere regle de ce depot. Un module non mesure n'existe pas.")
+                .define("chemin_impasse", false);
         MOULDS = BUILDER.comment(
                 "MOULES : les formes de collision partagees entre etats de blocs identiques.",
                 "",

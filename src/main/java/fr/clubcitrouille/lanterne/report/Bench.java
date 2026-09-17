@@ -735,6 +735,13 @@ public final class Bench {
                     fr.clubcitrouille.lanterne.core.Pasture.penned()));
         }
 
+        if (fr.clubcitrouille.lanterne.core.Impasse.skipped() > 0L) {
+            say(String.format(Locale.ROOT,
+                    "Impasse : %d recherche(s) de chemin evitee(s) · %d echec(s) retenu(s) comme reference",
+                    fr.clubcitrouille.lanterne.core.Impasse.skipped(),
+                    fr.clubcitrouille.lanterne.core.Impasse.recorded()));
+        }
+
         if (fr.clubcitrouille.lanterne.core.Clump.freed() > 0L) {
             say(String.format(Locale.ROOT,
                     "Fusions d.orbes autorisées que vanilla aurait refusées : %d",

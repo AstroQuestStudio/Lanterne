@@ -192,6 +192,30 @@ public final class Settings {
     private static boolean save = true;
 
     /**
+     * Le décodage NBT des chunks déjà écrits, sorti du fil unique de lecture. Voir {@code ChunkDecode}.
+     *
+     * <h2>Éteint par défaut — la première règle de ce projet, appliquée à la lettre</h2>
+     *
+     * <p>Le raisonnement tient : {@code AbstractConsecutiveExecutor} (vérifié) sérialise une tâche à la
+     * fois par {@code IOWorker}, et {@code RegionFileStorage.read} confond dans cette même tâche
+     * l'ouverture du flux — qui doit rester sérialisée, elle protège un cache non synchronisé — et son
+     * décodage NBT, qui ne touche plus rien de partagé une fois le flux en main. Sortir le second du
+     * premier devrait laisser N chunks se décoder en même temps sur une machine à N cœurs, au lieu d'un
+     * seul à la fois quel que soit le nombre de cœurs disponibles.
+     *
+     * <p>Mais ce raisonnement n'est pas une mesure, et « la première règle de ce projet est qu'un
+     * module non mesuré n'existe pas » — voir plus haut la note de {@link #horizon}. Le dépôt s'interdit
+     * de lancer un client pour cette même raison que {@code Horizon} : aucun chiffre n'a encore été
+     * produit sur une vraie relecture de monde déjà écrit. {@code lab} porte le banc qui doit trancher.
+     *
+     * <p>Sur la machine visée pour un déploiement dédié — un seul cœur logique — la formule de
+     * {@code ChunkDecode} rend un bassin d'un seul fil, et le comportement redevient alors
+     * rigoureusement celui de vanilla : ce module ne devrait donc jamais régresser cette cible-là, mais
+     * « ne devrait pas » n'est toujours pas mesuré non plus.
+     */
+    private static boolean decode;
+
+    /**
      * Le niveau de détail porté sur le client, retiré après essai — douzième plan démoli, et le seul
      * qui ait cassé le jeu.
      *
@@ -481,6 +505,13 @@ public final class Settings {
      */
     private static final boolean STENCIL_REMOVED_AFTER_REMEASUREMENT = true;
     private static boolean redstone;
+    /**
+     * Le refus de rechercher deux fois le meme chemin impossible. Voir {@link Impasse}.
+     *
+     * <p>Eteint par defaut, pour la meme raison que {@link #decode} : correct par construction,
+     * jamais passe au banc lab/ qui tranche conformite puis vitesse.
+     */
+    private static boolean impasse = false;
     private static boolean moulds = true;
     private static boolean decay = true;
     /** Ticks entre le detachement d'une feuille et sa chute. */
@@ -1067,6 +1098,11 @@ public final class Settings {
         return master && save;
     }
 
+    /** Le décodage parallèle des chunks déjà écrits. Voir {@code ChunkDecode} et la note ci-dessus. */
+    public static boolean decode() {
+        return master && decode;
+    }
+
     public static boolean jam() {
         return master && jam;
     }
@@ -1124,6 +1160,10 @@ public final class Settings {
 
     public static boolean redstone() {
         return master && redstone;
+    }
+
+    public static boolean impasse() {
+        return master && impasse;
     }
 
     public static boolean recall() {
@@ -1387,6 +1427,7 @@ public final class Settings {
         projectiles = wanted.contains("projectile") || wanted.contains("fleche");
         anchor = wanted.contains("anchor") || wanted.contains("ancre");
         save = wanted.contains("save") || wanted.contains("sauvegarde");
+        decode = wanted.contains("decode") || wanted.contains("decodage") || wanted.contains("restitution");
         explosions = wanted.contains("explosion") || wanted.contains("blast");
         jam = wanted.contains("jam");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
@@ -1402,6 +1443,7 @@ public final class Settings {
         decay = wanted.contains("decay") || wanted.contains("chute");
         moulds = wanted.contains("moules");
         redstone = wanted.contains("redstone");
+        impasse = wanted.contains("impasse") || wanted.contains("deadend") || wanted.contains("cheminimpasse");
         recall = wanted.contains("memoire") || wanted.contains("conditions");
         senses = wanted.contains("capteur") || wanted.contains("sens");
         // « cadastre » et rien d'autre. Surtout pas « structure » ni « jigsaw » : le premier
@@ -1591,6 +1633,7 @@ public final class Settings {
         spill = Config.SPILL.get();
         moulds = Config.MOULDS.get();
         redstone = Config.REDSTONE.get();
+        impasse = Config.IMPASSE.get();
         recall = Config.RECALL.get();
         senses = Config.SENSES.get();
         cadastre = Config.CADASTRE.get();
@@ -1677,6 +1720,9 @@ public final class Settings {
         }
         if (redstone) {
             text.append("redstone ");
+        }
+        if (impasse) {
+            text.append("impasse ");
         }
         if (recall) {
             text.append("memoire ");

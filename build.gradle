@@ -250,10 +250,27 @@ dependencies {
     // Contient l'API (VelocityCipher, Natives) et les binaires natifs OpenSSL pour les plateformes
     // courantes, avec repli Java pur intégré si aucun binaire ne correspond — jamais d'échec au
     // démarrage, seulement un gain variable selon la plateforme. Voir core/network/ et NOTICE.md.
+    // <h2>Le conflit de version, et pourquoi on l'exclut plutôt que de le forcer</h2>
+    //
+    // velocity-native réclame Netty 4.2.18.Final et Guava 33.7.1-jre en dépendances transitives ;
+    // « net.neoforged:minecraft-dependencies:26.3 » épingle ces mêmes bibliothèques à des versions
+    // légèrement antérieures (Netty 4.2.16.Final, Guava 33.6.0-jre) avec « strictly », c'est-à-dire
+    // sans tolérer qu'une version plus récente les remplace. Les deux exigences sont incompatibles
+    // et la résolution de dépendances échoue net.
+    //
+    // On n'a pas besoin des jars de velocity-native pour Netty ou Guava : ce sont des bibliothèques
+    // déjà présentes, en entier, sur le classpath du jeu — NeoForge les y met lui-même. Le code de
+    // velocity-native se lie à leurs classes à l'exécution, peu importe qui les a apportées. Exclure
+    // ces groupes transitifs revient donc à dire « sers-toi de ce qui est déjà là », ce qui est vrai
+    // dans tous les cas, alors que forcer une version choisirait arbitrairement laquelle des deux
+    // demandes doit céder.
     jarJar(implementation('com.velocitypowered:velocity-native:[4.2.0,5.0)')) {
         version {
             prefer '4.2.0'
         }
+        exclude group: 'io.netty'
+        exclude group: 'com.google.guava', module: 'guava'
+        exclude group: 'org.jspecify', module: 'jspecify'
     }
 }
 
