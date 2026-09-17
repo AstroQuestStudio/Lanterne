@@ -5,6 +5,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.logging.log4j.core.filter.AbstractFilter;
 import org.apache.logging.log4j.message.Message;
 
@@ -33,6 +34,29 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *
  * <p>Ce n'est pas un incident : c'est un choix de plateforme, journalisé comme une panne. Et il
  * n'existe aucun réglage pour l'éteindre.
+ *
+ * <h2>Pourquoi le filtre ci-dessous ne suffit pas pour CE cas précis</h2>
+ *
+ * <p>Vérifié par lecture du bytecode réel, pas supposé : {@code KQueue.<clinit>} (Netty 4.2.16.Final)
+ * capture l'échec et ne journalise qu'en <b>DEBUG</b> — {@code logger.debug("KQueue support is not
+ * available: {}", cause.getMessage())}. {@link NoiseFilter} ne regarde jamais rien sous {@code WARN}
+ * (voir sa Javadoc), donc cet évènement-source passe toujours, quel que soit {@link Settings#hush()}.
+ *
+ * <p>Et la ligne « An exception occurred processing Appender DebugFile » qui suit — celle que le
+ * joueur voit vraiment — ne traverse de toute façon <b>jamais</b> {@link NoiseFilter} : lecture du
+ * bytecode de {@code AppenderControl.handleAppenderError} (log4j-core 2.26.0) confirmée,
+ * elle part par {@code Appender.getHandler().error(...)}, le canal interne de diagnostic de log4j
+ * — le même genre de canal hors filtre que {@link Reclame} avait déjà dû contourner pour une tout
+ * autre raison (la réclame de l'hébergeur, écrite sur l'entrée standard, ne traverse pas non plus le
+ * journal). Un filtre posé sur la configuration des journaux ne peut rien contre un message qui ne
+ * passe jamais par elle.
+ *
+ * <p>La seule prise possible est donc en amont, sur la source : voir {@link #preventKQueueCrash()},
+ * qui coupe l'appel {@code debug()} avant qu'il ne parte — jamais émis, donc jamais rendu, donc jamais
+ * l'occasion pour {@code NoClassDefFoundError} de retomber sur le même échec d'initialisation de
+ * classe. Contrairement à {@link #install()}, ce geste-là n'est <b>pas</b> optionnel : ce n'est pas
+ * une préférence de confort, c'est la correction d'un vrai plantage, et il ne dépend donc pas de
+ * {@link Settings#hush()}.
  *
  * <h2>Ce qu'on fait taire, et ce qu'on ne fait jamais taire</h2>
  *
@@ -85,6 +109,33 @@ public final class Hush {
             // Un journal qu'on n'arrive pas à filtrer reste un journal qui fonctionne. On ne fait
             // pas échouer un serveur pour une question de propreté.
             Lanterne.LOG.debug("Filtre de journal non posé : {}", refused.toString());
+        }
+    }
+
+    /**
+     * Coupe à la source le plantage documenté dans la Javadoc de classe.
+     *
+     * <p>Relève le niveau des deux loggers Netty en cause à {@code INFO} : {@code isDebugEnabled()}
+     * rend alors {@code false} pour eux, {@code KQueue.<clinit>} ne compose ni n'émet son message, et
+     * rien n'atteint jamais un appender qui tenterait de le rendre — {@code io.netty.channel.kqueue}
+     * ne sert de toute façon jamais à rien sur une machine qui n'est ni macOS ni BSD, et son silence
+     * en DEBUG ne prive personne d'un diagnostic exploitable.
+     *
+     * <p>Sans effet sur {@code epoll} ni sur quoi que ce soit d'autre : deux noms de logger précis,
+     * rien de plus. Appelé sans condition, avant que le réseau ne s'initialise — voir le point
+     * d'appel dans {@code Lanterne}, juste à côté d'{@link #install()}.
+     *
+     * <p>{@code Configurator.setLevel} est l'API publique et stable de log4j-core pour ce geste ; pas
+     * de réflexion, pas de champ privé forcé. Si l'appel échoue — implémentation de journal différente
+     * de celle attendue — on continue sans lui : au pire, le message revient, ce qui est le
+     * comportement d'aujourd'hui, pas une régression.
+     */
+    public static void preventKQueueCrash() {
+        try {
+            Configurator.setLevel("io.netty.channel.kqueue.KQueue", Level.INFO);
+            Configurator.setLevel("io.netty.channel.kqueue.Native", Level.INFO);
+        } catch (Throwable refused) {
+            Lanterne.LOG.debug("Silence du logger kqueue non posé : {}", refused.toString());
         }
     }
 

@@ -122,6 +122,10 @@ public final class Lanterne {
         // commande est écrite sur l'entrée standard par le démon et ne traverse jamais le journal.
         NeoForge.EVENT_BUS.addListener(fr.clubcitrouille.lanterne.core.Reclame::onCommand);
         Settings.configureFromEnvironment();
+        // Pas optionnel, contrairement à install() juste après : ce n'est pas une préférence de
+        // confort, c'est la correction d'un vrai plantage — voir la Javadoc de Hush pour pourquoi
+        // le filtre qui suit ne peut structurellement rien contre celui-ci.
+        fr.clubcitrouille.lanterne.core.Hush.preventKQueueCrash();
         fr.clubcitrouille.lanterne.core.Hush.install();
         fr.clubcitrouille.lanterne.core.Machine.appraise();
         fr.clubcitrouille.lanterne.content.waypoint.Waypoints.register(modBus);
