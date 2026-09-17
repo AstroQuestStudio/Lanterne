@@ -125,6 +125,7 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.Hush.install();
         fr.clubcitrouille.lanterne.core.Machine.appraise();
         fr.clubcitrouille.lanterne.content.waypoint.Waypoints.register(modBus);
+        fr.clubcitrouille.lanterne.core.network.SouvenirNet.register(modBus);
         // Les touches et les couches d'interface passent par le bus du MOD et n'existent que côté
         // client. L'appel est donc gardé : un serveur dédié ne doit jamais charger ces classes, et
         // la garde suffit — une classe n'est chargée qu'au moment où l'on s'en sert.
@@ -210,6 +211,8 @@ public final class Lanterne {
             fr.clubcitrouille.lanterne.core.Burin.tick(event.getServer());
         }
         fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
+        // Le service continu ne soumet rien tant que Pregen tourne — voir sa Javadoc de classe.
+        fr.clubcitrouille.lanterne.lab.Lisiere.tick(event.getServer());
         // Les doublures accusent leurs lots de chunks — sans quoi le serveur leur en envoie neuf et
         // s'arrête. Ne coûte qu'une comparaison tant qu'aucun banc n'en a demandé.
         fr.clubcitrouille.lanterne.lab.Understudy.tick();

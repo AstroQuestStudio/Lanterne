@@ -107,6 +107,10 @@ public final class SelfTest {
      */
     private static boolean cheptel;
     private static boolean seuil;
+    /** Vrai si l'on éprouve le cache d'échec de recherche de chemin. Voir {@code lab.Coince}. */
+    private static boolean coince;
+    /** Vrai si l'on éprouve le décodage parallèle des chunks relus. Voir {@code lab.Restitution}. */
+    private static boolean restitution;
     private static int pregenRadius;
 
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
@@ -458,6 +462,20 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve du seuil armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_COINCE"))) {
+            coince = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du coincé (cache d'impasse) armée.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_RESTITUTION"))) {
+            restitution = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de restitution (décodage parallèle des chunks) armée.");
+            return;
+        }
 
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
@@ -489,7 +507,7 @@ public final class SelfTest {
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
                     && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel
-                    && !seuil && !terrassement && pregenRadius <= 0)) {
+                    && !seuil && !terrassement && !coince && !restitution && pregenRadius <= 0)) {
             return;
         }
 
@@ -865,6 +883,26 @@ public final class SelfTest {
                 fr.clubcitrouille.lanterne.lab.Quarry.tick(server);
             } else if (step == Step.SETTLING) {
                 fr.clubcitrouille.lanterne.lab.Quarry.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (coince) {
+            if (fr.clubcitrouille.lanterne.lab.Coince.running()) {
+                fr.clubcitrouille.lanterne.lab.Coince.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Coince.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (restitution) {
+            if (fr.clubcitrouille.lanterne.lab.Restitution.running()) {
+                fr.clubcitrouille.lanterne.lab.Restitution.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Restitution.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

@@ -7,11 +7,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 
 import fr.clubcitrouille.lanterne.core.Emballage;
+import fr.clubcitrouille.lanterne.core.Souvenir;
 
 /**
  * Les prises d'invalidation : tout ce qui rend périmé le paquet d'un chunk.
@@ -84,6 +87,7 @@ public abstract class EmballageChunkMixin {
     @Inject(method = "markUnsaved()V", at = @At("HEAD"))
     private void lanterne$dropOnChange(CallbackInfo callback) {
         Emballage.oublie((LevelChunk) (Object) this);
+        lanterne$bumpSouvenir();
     }
 
     /** Voir §2 : la sortie anticipée qui saute {@code markUnsaved}. */
@@ -95,23 +99,40 @@ public abstract class EmballageChunkMixin {
     private void lanterne$dropOnBlockState(
             BlockPos position, BlockState etat, int drapeaux, CallbackInfoReturnable<BlockState> callback) {
         Emballage.oublie((LevelChunk) (Object) this);
+        lanterne$bumpSouvenir();
     }
 
     /** Voir §3 : entité de bloc créée ou promue hors de {@code setBlockState}. */
     @Inject(method = "setBlockEntity(Lnet/minecraft/world/level/block/entity/BlockEntity;)V", at = @At("HEAD"))
     private void lanterne$dropOnBlockEntityAdded(BlockEntity entite, CallbackInfo callback) {
         Emballage.oublie((LevelChunk) (Object) this);
+        lanterne$bumpSouvenir();
     }
 
     /** Voir §4 : entité de bloc retirée par son ticker, sans passer par {@code setBlockState}. */
     @Inject(method = "removeBlockEntity(Lnet/minecraft/core/BlockPos;)V", at = @At("HEAD"))
     private void lanterne$dropOnBlockEntityRemoved(BlockPos position, CallbackInfo callback) {
         Emballage.oublie((LevelChunk) (Object) this);
+        lanterne$bumpSouvenir();
     }
 
     /** Voir §5 : le chunk est déchargé, la place est rendue. */
     @Inject(method = "setLoaded(Z)V", at = @At("HEAD"))
     private void lanterne$dropOnUnload(boolean charge, CallbackInfo callback) {
         Emballage.oublie((LevelChunk) (Object) this);
+        lanterne$bumpSouvenir();
+    }
+
+    /**
+     * Fait avancer la révision de {@code Souvenir} au même point que {@link Emballage#oublie} —
+     * même source de vérité pour « ce chunk a changé », deux consommateurs différents. Sans effet
+     * côté client : {@code Souvenir} ne tient sa table que pour un {@code ServerLevel}.
+     */
+    private void lanterne$bumpSouvenir() {
+        LevelChunk chunk = (LevelChunk) (Object) this;
+        Level level = chunk.getLevel();
+        if (level instanceof ServerLevel serverLevel) {
+            Souvenir.bump(serverLevel, chunk.getPos());
+        }
     }
 }

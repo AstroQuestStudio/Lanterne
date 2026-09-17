@@ -67,6 +67,8 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SOMMAIRE;
     public static final ModConfigSpec.BooleanValue REDSTONE;
     public static final ModConfigSpec.BooleanValue IMPASSE;
+    public static final ModConfigSpec.BooleanValue SOUVENIR;
+    public static final ModConfigSpec.IntValue SOUVENIR_BUDGET_MB;
     public static final ModConfigSpec.BooleanValue MOULDS;
     public static final ModConfigSpec.BooleanValue DECAY;
     public static final ModConfigSpec.IntValue DECAY_DELAY;
@@ -105,6 +107,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue PREGEN_IN_FLIGHT;
     public static final ModConfigSpec.BooleanValue PREGEN_SERPENTINE;
     public static final ModConfigSpec.BooleanValue PREGEN_ASYNC;
+    public static final ModConfigSpec.BooleanValue PREGEN_CONTINUOUS;
 
     public static final ModConfigSpec SPEC;
 
@@ -476,6 +479,29 @@ public final class Config {
                 "mais jamais passe par le banc lab/ qui verifie la conformite avant la vitesse, comme",
                 "l'exige la premiere regle de ce depot. Un module non mesure n'existe pas.")
                 .define("chemin_impasse", false);
+        SOUVENIR = BUILDER.comment(
+                "SOUVENIR : le client garde le monde deja vu, d'une session a l'autre.",
+                "",
+                "Un chunk qui n'a pas change depuis la derniere fois qu'un joueur l'a vu n'a pas",
+                "besoin d'etre renvoye en entier a sa reconnexion : le client compare la revision",
+                "qu'il connait a celle du serveur, et un chunk inchange se contente d'un accuse",
+                "minuscule au lieu du paquet complet.",
+                "",
+                "L'identite du monde envoyee au client n'est JAMAIS la seed ni rien qui en derive :",
+                "un identifiant aleatoire tire une seule fois a la creation du monde. Un client qui",
+                "mentirait sur sa revision ne gagnerait qu'un decor visuellement en retard - toute",
+                "collision, tout coup, toute interaction restent arbitres par le serveur sur l'etat",
+                "reel, cache ou pas. Voir la javadoc de Souvenir pour le detail complet.",
+                "",
+                "Eteint par defaut : correct par construction, jamais passe au banc lab/ qui tranche",
+                "conformite puis vitesse, comme l'exige la premiere regle de ce depot.")
+                .define("souvenir", false);
+        SOUVENIR_BUDGET_MB = BUILDER.comment(
+                "SOUVENIR : plafond du cache de disque cote client, en mebioctets.",
+                "",
+                "Aucune eviction n'est encore ecrite au-dela de ce plafond dans cette version : on",
+                "cesse simplement d'ecrire de nouvelles entrees. Voir SouvenirVault.")
+                .defineInRange("souvenir_budget_mo", 256, 16, 4096);
         MOULDS = BUILDER.comment(
                 "MOULES : les formes de collision partagees entre etats de blocs identiques.",
                 "",
@@ -968,6 +994,29 @@ public final class Config {
                 "produit est identique : les deux chemins finissent sur le meme appel de generation",
                 "et sur le meme niveau de ticket.")
                 .define("soumission_asynchrone", true);
+        PREGEN_CONTINUOUS = BUILDER.comment(
+                "Pre-generer en continu, juste au-dela de ce que chaque joueur voit deja - sans",
+                "commande, sans rayon fixe, sans jamais s'arreter. Voir lab/Lisiere.java.",
+                "",
+                "Ce n'est PAS la meme chose que la pre-generation manuelle ci-dessus, qui reste",
+                "prioritaire : tant qu'elle tourne, ce reglage ne soumet rien, pour ne jamais se",
+                "disputer les memes ressources.",
+                "",
+                "Ce module ne PEUT PAS savoir avec certitude qu'un coeur supplementaire (« flex »,",
+                "offre par certains hebergeurs) existe reellement a un instant donne - aucune JVM ne",
+                "le peut. Il observe seulement que le tick reste large (TickBudget.pressure() bas) et",
+                "en deduit qu'il y a de la marge, quelle qu'en soit la cause. Des qu'elle se resserre,",
+                "il s'arrete IMMEDIATEMENT ; il ne la reprend que lentement, une fois la marge",
+                "confirmee durable - la meme asymetrie que TickBudget applique a lui-meme.",
+                "",
+                "Sur un coeur unique CONFIRME (Quota.cores() = 1), ce module reste aussi prudent que",
+                "la pause manuelle ci-dessus : rien n'est soumis tant qu'un seul joueur est connecte,",
+                "quelle que soit la pression du tick a l'instant - une accalmie momentanee n'est pas",
+                "une marge reelle sur une machine qui n'a litteralement rien d'autre a donner.",
+                "",
+                "Eteint par defaut : correct par construction, jamais mesure sur un vrai hebergement",
+                "mutualise. Un module non mesure n'existe pas.")
+                .define("continu", false);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

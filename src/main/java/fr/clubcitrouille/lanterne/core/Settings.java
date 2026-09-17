@@ -512,6 +512,14 @@ public final class Settings {
      * jamais passe au banc lab/ qui tranche conformite puis vitesse.
      */
     private static boolean impasse = false;
+    /**
+     * Le cache de chunks persistant cote client. Voir {@link Souvenir}.
+     *
+     * <p>Eteint par defaut, pour la meme raison que {@link #decode} et {@link #impasse} : correct
+     * par construction, jamais passe au banc lab/ qui tranche conformite puis vitesse. C'est de plus
+     * le plus gros morceau de protocole reseau neuf de ce depot - la prudence y compte double.
+     */
+    private static boolean souvenir = false;
     private static boolean moulds = true;
     private static boolean decay = true;
     /** Ticks entre le detachement d'une feuille et sa chute. */
@@ -1103,6 +1111,11 @@ public final class Settings {
         return master && decode;
     }
 
+    /** Isole ce module pour une mesure au banc — même geste que {@link #setTide}. */
+    public static void setDecode(boolean value) {
+        decode = value;
+    }
+
     public static boolean jam() {
         return master && jam;
     }
@@ -1164,6 +1177,15 @@ public final class Settings {
 
     public static boolean impasse() {
         return master && impasse;
+    }
+
+    public static boolean souvenir() {
+        return master && souvenir;
+    }
+
+    /** Isole ce module pour une mesure au banc — même geste que {@link #setTide}. */
+    public static void setImpasse(boolean value) {
+        impasse = value;
     }
 
     public static boolean recall() {
@@ -1444,6 +1466,7 @@ public final class Settings {
         moulds = wanted.contains("moules");
         redstone = wanted.contains("redstone");
         impasse = wanted.contains("impasse") || wanted.contains("deadend") || wanted.contains("cheminimpasse");
+        souvenir = wanted.contains("souvenir") || wanted.contains("chunkcache") || wanted.contains("vault");
         recall = wanted.contains("memoire") || wanted.contains("conditions");
         senses = wanted.contains("capteur") || wanted.contains("sens");
         // « cadastre » et rien d'autre. Surtout pas « structure » ni « jigsaw » : le premier
@@ -1634,6 +1657,7 @@ public final class Settings {
         moulds = Config.MOULDS.get();
         redstone = Config.REDSTONE.get();
         impasse = Config.IMPASSE.get();
+        souvenir = Config.SOUVENIR.get();
         recall = Config.RECALL.get();
         senses = Config.SENSES.get();
         cadastre = Config.CADASTRE.get();
@@ -1723,6 +1747,9 @@ public final class Settings {
         }
         if (impasse) {
             text.append("impasse ");
+        }
+        if (souvenir) {
+            text.append("souvenir ");
         }
         if (recall) {
             text.append("memoire ");

@@ -51,6 +51,7 @@
     "CompressionMixin",
     "EmballageEnvoiMixin",
     "EmballageChunkMixin",
+    "SouvenirSendMixin",
     "EmballageBiomeMixin",
     "MiningMixin",
     "BurinMixin",
@@ -91,6 +92,7 @@
     "UpscaleGameRendererMixin",
     "VideoOptionsMixin",
     "RenderTargetAccessor",
-    "ServerNameResolverMixin"
+    "ServerNameResolverMixin",
+    "SouvenirReceiveMixin"
   ]
 }
