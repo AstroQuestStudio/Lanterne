@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.level.ChunkPos;
 
+import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.Config;
 import fr.clubcitrouille.lanterne.core.Digue;
 import fr.clubcitrouille.lanterne.core.Quota;
@@ -132,6 +133,13 @@ public final class Lisiere {
 
     private static int cooldown;
 
+    /** {@link #submittedTotal} au moment du dernier engagement — pour dire ce qu'un passage a fait. */
+    private static long submittedAtEngage;
+
+    /** Ticks entre deux lignes de résumé pendant qu'on est engagé — voir {@link #reportIfDue}. */
+    private static final int REPORT_PERIOD = 200;
+    private static int reportCooldown;
+
     static {
         RECENT.defaultReturnValue(Long.MIN_VALUE);
     }
@@ -177,13 +185,24 @@ public final class Lisiere {
         if (engaged) {
             if (pressure >= DISENGAGE_AT) {
                 engaged = false;
+                Lanterne.LOG.info(String.format(java.util.Locale.ROOT,
+                        "[LISIÈRE] Pression de tick remontée (%.2f) — pré-génération suspendue. "
+                                + "%d chunk(s) soumis pendant cet engagement.",
+                        pressure, submittedTotal - submittedAtEngage));
             }
         } else if (pressure < ENGAGE_BELOW) {
             engaged = true;
+            submittedAtEngage = submittedTotal;
+            reportCooldown = 0;
+            Lanterne.LOG.info(String.format(java.util.Locale.ROOT,
+                    "[LISIÈRE] Marge de tick détectée (pression %.2f) — pré-génération en avant "
+                            + "des joueurs activée.", pressure));
         }
         if (!engaged) {
             return;
         }
+
+        reportIfDue();
 
         if (--cooldown > 0) {
             return;
@@ -214,6 +233,21 @@ public final class Lisiere {
                 scanAround(level, player, radius);
             }
         }
+    }
+
+    /**
+     * Une ligne de résumé toutes les {@link #REPORT_PERIOD} ticks pendant qu'on est engagé — jamais
+     * pendant le silence, pour ne pas remplir le journal d'un serveur qui n'a jamais de marge.
+     */
+    private static void reportIfDue() {
+        if (--reportCooldown > 0) {
+            return;
+        }
+        reportCooldown = REPORT_PERIOD;
+        Lanterne.LOG.info(String.format(java.util.Locale.ROOT,
+                "[LISIÈRE] toujours engagée — %d chunk(s) soumis depuis le début de cet engagement, "
+                        + "%d en vol.",
+                submittedTotal - submittedAtEngage, AIRBORNE.get()));
     }
 
     /** Échantillonne {@link #SAMPLES} points sur le cercle de ce rayon, autour de ce joueur. */
