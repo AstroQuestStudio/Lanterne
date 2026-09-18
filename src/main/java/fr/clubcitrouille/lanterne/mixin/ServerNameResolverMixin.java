@@ -25,67 +25,56 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * <h2>Idée de <a href="https://github.com/Fallen-Breath/fast-ip-ping">Fast IP Ping</a> (Fallen_Breath,
  * LGPL-3.0-only — voir {@code NOTICE.md}), point d'accroche réécrit pour la 26.3</h2>
  *
- * <p>{@code ServerAddressResolver.SYSTEM} — le résolveur système — appelle
- * {@code InetAddress.getByName(hôte)}. Pour une IP littérale (« 51.68.x.x »), cet appel ne fait
- * aucune requête réseau : il se contente de découper la chaîne en octets. Mais le nom d'hôte de
- * l'objet retourné reste {@code null}, <b>non résolu</b> — et {@link ResolvedServerAddress#getHostName()}
- * l'interroge, ce qui déclenche <em>alors</em> une vraie recherche DNS inversée, coûteuse et souvent
- * vaine puisqu'une IP littérale n'a le plus souvent aucun nom à trouver. C'est cette recherche
- * paresseuse, pas la connexion elle-même, qui ajoute une à cinq secondes au ping ou à la connexion
- * d'un serveur identifié par IP plutôt que par nom de domaine.
+ * <p>{@code ServerAddressResolver.SYSTEM} — le résolveur système appelé par le corps vanilla de
+ * {@link ServerNameResolver#resolveAddress} — appelle {@code InetAddress.getByName(hôte)} puis,
+ * <b>dans le même appel</b>, interroge le nom d'hôte du résultat pour construire le
+ * {@link ResolvedServerAddress} qu'il retourne. Pour une IP littérale, cette interrogation déclenche
+ * une vraie recherche DNS inversée — coûteuse (plusieurs secondes) et vaine, puisqu'une IP de VPS n'a
+ * en général aucun nom à trouver.
  *
- * <p>Le mod d'origine posait deux à trois mixins — un par appelant de {@code InetAddress.getByName},
- * chacun visant soit une classe anonyme, soit une lambda, deux cibles fragiles d'une version à
- * l'autre. Ici, {@link ServerNameResolver#resolveAddress} est l'unique point par lequel passent à la
- * fois {@code ConnectScreen} (la connexion) et {@code ServerStatusPinger} (le ping de la liste des
- * serveurs) — vérifié dans les sources décompilées de la 26.3, où les deux classes ne connaissent que
- * {@link ServerNameResolver#DEFAULT}. Un seul point d'accroche, une seule méthode publique nommée,
- * suffit donc là où l'original en imposait plusieurs.
+ * <p><b>Version précédente de ce correctif, insuffisante</b> : patcher le résultat après le retour de
+ * la méthode vanilla (injection {@code @At("RETURN")}) arrive trop tard — la recherche DNS a déjà eu
+ * lieu <em>à l'intérieur</em> du corps de la méthode originale avant même que notre code s'exécute.
+ * Mesuré en production avec une instrumentation temporaire : {@code resolveAddress()} vanilla mettait
+ * ~9,5 s à retourner, notre ancien patch s'appliquait ensuite en 0 ms sur un résultat déjà obtenu
+ * lentement. Preuve dans {@code notes/nuit-17-18-septembre-2026.md} et l'historique de ce fichier.
  *
- * <p>La correction elle-même : quand l'hôte demandé est une IP littérale, on reconstruit l'adresse
- * résolue avec {@code InetAddress.getByAddress(hôte, octets)} au lieu de {@code getByName} — cette
- * variante donne le nom d'hôte <b>à la construction</b>, ce qui rend {@code getHostName()} immédiat
- * pour le reste de la session, sans jamais consulter le DNS.
+ * <p><b>Correction actuelle</b> : injection en tête de méthode ({@code @At("HEAD")}), qui court-circuite
+ * entièrement le corps vanilla pour une IP littérale — celui-ci n'est alors jamais exécuté, donc la
+ * recherche DNS inversée qu'il contient n'a jamais lieu. On construit nous-mêmes l'adresse résolue via
+ * {@code InetAddresses.forString} (parsing pur, aucun accès réseau) puis
+ * {@code InetAddress.getByAddress(hôte, octets)}, qui préremplit le nom d'hôte à la construction.
+ *
+ * <p>{@link ServerNameResolver#resolveAddress} est l'unique point par lequel passent à la fois
+ * {@code ConnectScreen} (la connexion) et {@code ServerStatusPinger} (le ping de la liste des
+ * serveurs) — vérifié par lecture du vrai jar client de cette version, pas des sources décompilées
+ * périmées. Un seul point d'accroche suffit donc pour les deux usages.
  */
 @Mixin(ServerNameResolver.class)
 public abstract class ServerNameResolverMixin {
 
-    // Instrumentation temporaire : le joueur rapporte toujours plusieurs secondes de délai
-    // malgré ce correctif. Ces logs isolent où passe le temps réellement — à retirer une fois
-    // la cause confirmée (voir Lanterne.LOG au démarrage pour le contexte de session).
-    private static final ThreadLocal<Long> lanterne$entree = new ThreadLocal<>();
-
-    @Inject(method = "resolveAddress", at = @At("HEAD"))
-    private void lanterne$chrono_debut(ServerAddress address, CallbackInfoReturnable<Optional<ResolvedServerAddress>> callback) {
-        lanterne$entree.set(System.nanoTime());
-        Lanterne.LOG.info("[CHRONO-PING] resolveAddress() debute pour hote='{}'", address.getHost());
-    }
-
-    @Inject(method = "resolveAddress", at = @At("RETURN"), cancellable = true)
+    // Instrumentation temporaire conservee : confirme que le court-circuit HEAD ramene bien
+    // resolveAddress() a quelques millisecondes au lieu des ~9,5 s vanilla. A retirer une fois
+    // le gain confirme par le joueur en conditions reelles.
+    @Inject(method = "resolveAddress", at = @At("HEAD"), cancellable = true)
     private void lanterne$skipReverseDnsForLiteralIp(ServerAddress address,
             CallbackInfoReturnable<Optional<ResolvedServerAddress>> callback) {
-        Long debut = lanterne$entree.get();
-        long avantPatchMs = debut != null ? (System.nanoTime() - debut) / 1_000_000 : -1;
-        Lanterne.LOG.info("[CHRONO-PING] resolveAddress() vanilla termine en {} ms (avant notre patch)", avantPatchMs);
-
-        Optional<ResolvedServerAddress> result = callback.getReturnValue();
-        if (result.isEmpty() || !InetAddresses.isInetAddress(address.getHost())) {
-            Lanterne.LOG.info("[CHRONO-PING] patch ignore : resultat vide={} ou hote pas une IP litterale='{}'",
-                    result.isEmpty(), address.getHost());
+        String host = address.getHost();
+        if (!InetAddresses.isInetAddress(host)) {
             return;
         }
-        InetSocketAddress resolved = result.get().asInetSocketAddress();
+        long t0 = System.nanoTime();
         try {
-            long t0 = System.nanoTime();
-            InetAddress patched = InetAddress.getByAddress(address.getHost(), resolved.getAddress().getAddress());
+            byte[] octets = InetAddresses.forString(host).getAddress();
+            InetAddress patched = InetAddress.getByAddress(host, octets);
             callback.setReturnValue(Optional.of(
-                    ResolvedServerAddress.from(new InetSocketAddress(patched, resolved.getPort()))));
-            long patchMs = (System.nanoTime() - t0) / 1_000_000;
-            Lanterne.LOG.info("[CHRONO-PING] patch applique en {} ms, hostName desormais precharge a '{}'", patchMs, address.getHost());
+                    ResolvedServerAddress.from(new InetSocketAddress(patched, address.getPort()))));
+            long ms = (System.nanoTime() - t0) / 1_000_000;
+            Lanterne.LOG.info("[CHRONO-PING] court-circuit HEAD pour IP litterale '{}' : {} ms, corps vanilla jamais execute", host, ms);
         } catch (UnknownHostException ignored) {
-            Lanterne.LOG.warn("[CHRONO-PING] patch ECHOUE (tableau d'octets inattendu), adresse d'origine conservee");
+            // Tableau d'octets de longueur inattendue : on laisse le corps vanilla s'executer
+            // normalement (pas d'annulation) plutot que de casser la connexion.
+            Lanterne.LOG.warn("[CHRONO-PING] court-circuit ECHOUE pour '{}', repli sur le chemin vanilla", host);
         }
-        long totalMs = debut != null ? (System.nanoTime() - debut) / 1_000_000 : -1;
-        Lanterne.LOG.info("[CHRONO-PING] resolveAddress() (avec notre mixin) termine en {} ms au total", totalMs);
     }
 }

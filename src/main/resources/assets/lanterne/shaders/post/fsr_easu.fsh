@@ -25,9 +25,9 @@ layout(std140) uniform SamplerInfo {
     vec2 InSize;
 };
 
-in vec2 texCoord;
+layout(location = 0) in vec2 texCoord;
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
 // FSR prend le canal vert pour luminance. Ce n'est pas une approximation
 // grossiere : le vert porte l'essentiel de la luminance percue, et l'economie

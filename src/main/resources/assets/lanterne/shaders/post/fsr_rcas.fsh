@@ -34,9 +34,9 @@ layout(std140) uniform RcasConfig {
     vec4 Tuning;
 };
 
-in vec2 texCoord;
+layout(location = 0) in vec2 texCoord;
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
 float chroma(vec3 c) {
     return c.g;

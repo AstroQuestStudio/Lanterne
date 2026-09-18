@@ -44,9 +44,9 @@ layout(std140) uniform SamplerInfo {
     vec2 InSize;
 };
 
-in vec2 texCoord;
+layout(location = 0) in vec2 texCoord;
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
 // Luminance percue. On garde les trois canaux ici, a la difference d'EASU qui
 // se contente du vert : EASU pese douze echantillons par pixel et l'economie s'y
