@@ -94,6 +94,9 @@
     "VideoOptionsMixin",
     "RenderTargetAccessor",
     "ServerNameResolverMixin",
-    "SouvenirReceiveMixin"
+    "SouvenirReceiveMixin",
+    "RenderPipelinesMixin",
+    "SectionCompilerMixin",
+    "FluidRendererMixin"
   ]
 }
