@@ -69,9 +69,15 @@ public final class Relief {
     private static final int REGION_CHUNKS = 32;
     private static final int REGION_BLOCKS = REGION_CHUNKS * 16;
     private static final short UNEXPLORED = Short.MIN_VALUE;
-    private static final byte[] MAGIC = {'L', 'R', 'E', 'L', 1};
+    // Version 2 : ajoute un octet d'index de texture par colonne (voir TEX_INDEX) apres les
+    // couleurs, pour que le viewer texture chaque face avec le vrai sprite du bloc au lieu de
+    // le teinter uniformement. Technique adaptee de BlueMap (github.com/BlueMap-Minecraft/BlueMap,
+    // licence MIT), simplifiee : un seul index par colonne (face du dessus), pas un modele 3D complet.
+    private static final byte[] MAGIC = {'L', 'R', 'E', 'L', 2};
+    private static final int NO_TEXTURE = 255;
 
     private static final Map<String, int[]> COLORS = loadColors();
+    private static final Map<String, Integer> TEX_INDEX = loadTexIndex();
     private static final int[] FALLBACK_COLOR = {130, 130, 130};
 
     private static final AtomicLong regionsWritten = new AtomicLong();
@@ -87,6 +93,7 @@ public final class Relief {
     private static RegionFile currentRegion;
     private static short[] currentHeights;
     private static byte[] currentColors;
+    private static byte[] currentTexIndex;
     private static int currentChunkIndex;
 
     /** Une region en attente, avec sa dimension d'origine : {@link #decodeChunkSurface} en a besoin
@@ -187,6 +194,8 @@ public final class Relief {
         currentHeights = new short[REGION_BLOCKS * REGION_BLOCKS];
         java.util.Arrays.fill(currentHeights, UNEXPLORED);
         currentColors = new byte[REGION_BLOCKS * REGION_BLOCKS * 3];
+        currentTexIndex = new byte[REGION_BLOCKS * REGION_BLOCKS];
+        java.util.Arrays.fill(currentTexIndex, (byte) NO_TEXTURE);
         currentChunkIndex = 0;
         return true;
     }
@@ -296,6 +305,8 @@ public final class Relief {
                 currentColors[flat * 3] = (byte) rgb[0];
                 currentColors[flat * 3 + 1] = (byte) rgb[1];
                 currentColors[flat * 3 + 2] = (byte) rgb[2];
+                Integer tex = TEX_INDEX.get(blockId);
+                currentTexIndex[flat] = (byte) (tex != null ? tex : NO_TEXTURE);
             }
         }
     }
@@ -398,6 +409,7 @@ public final class Relief {
                 out.write(MAGIC);
                 for (short h : currentHeights) out.writeShort(h);
                 out.write(currentColors);
+                out.write(currentTexIndex);
             }
             Files.move(tmp, finalPath, StandardCopyOption.REPLACE_EXISTING);
             regionsWritten.incrementAndGet();
@@ -462,6 +474,34 @@ public final class Relief {
             Lanterne.LOG.warn("[RELIEF] lecture de block_colors.json impossible : {}", e.toString());
         }
         return map;
+    }
+
+    private static Map<String, Integer> loadTexIndex() {
+        Map<String, Integer> map = new HashMap<>();
+        try (InputStream in = Relief.class.getClassLoader()
+                .getResourceAsStream("lanterne/relief_atlas_index.json")) {
+            if (in == null) {
+                Lanterne.LOG.warn("[RELIEF] relief_atlas_index.json introuvable — la carte 3D "
+                        + "retombera sur une teinte unie au lieu de vraies textures.");
+                return map;
+            }
+            Gson gson = new Gson();
+            CompoundJsonIndex parsed = gson.fromJson(
+                    new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8),
+                    CompoundJsonIndex.class);
+            if (parsed != null && parsed.blocks != null) map.putAll(parsed.blocks);
+        } catch (IOException e) {
+            Lanterne.LOG.warn("[RELIEF] lecture de relief_atlas_index.json impossible : {}", e.toString());
+        }
+        return map;
+    }
+
+    /** Miroir minimal du format ecrit par tools/ExtractColors.java (cols/rows/tile + bloc->index). */
+    private static final class CompoundJsonIndex {
+        int cols;
+        int rows;
+        int tile;
+        Map<String, Integer> blocks;
     }
 
     public static String report() {

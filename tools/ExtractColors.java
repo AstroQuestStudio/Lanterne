@@ -1,4 +1,5 @@
 import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -7,11 +8,16 @@ import java.util.*;
 import java.util.zip.*;
 
 /**
- * Outil ponctuel, pas partie du mod : lit les textures réelles du jar client Minecraft
- * et calcule une couleur moyenne par bloc (en ignorant les pixels transparents), pour
- * nourrir un module de carte 3D avec des couleurs authentiques plutôt qu'inventées.
+ * Outil ponctuel, pas partie du mod : lit les textures réelles du jar client Minecraft.
+ * Produit deux choses pour la carte 3D (RELIEF) :
+ *  1. block_colors.json — couleur moyenne par bloc (repli quand pas d'atlas, et debug).
+ *  2. relief_atlas.png + relief_atlas_index.json — un atlas de vraies textures 16x16 (pas
+ *     juste une couleur moyenne), pour que le viewer web texture chaque face au lieu de la
+ *     teinter uniformément. Technique adaptée de BlueMap (github.com/BlueMap-Minecraft/BlueMap,
+ *     licence MIT) : un atlas de sprites + un index bloc->cellule, en plus simple puisqu'on
+ *     n'a besoin que de la face du dessus (carte 2.5D par colonne, pas de modèles 3D complets).
  *
- * Usage: java ExtractColors.java <chemin-jar-client> <chemin-sortie-json>
+ * Usage: java ExtractColors.java <chemin-jar-client> <dossier-sortie-mod> <dossier-sortie-panel>
  */
 public class ExtractColors {
     // bloc -> chemin(s) de texture relatifs à assets/minecraft/textures/block/
@@ -132,10 +138,18 @@ public class ExtractColors {
         return null;
     }
 
+    static final int TILE = 16; // taille d'une cellule dans l'atlas (16x16, la resolution native vanilla)
+
     public static void main(String[] args) throws Exception {
-        if (args.length < 2) { System.err.println("Usage: ExtractColors <jar> <out.json>"); System.exit(1); }
+        if (args.length < 3) {
+            System.err.println("Usage: ExtractColors <jar> <dossier-sortie-mod> <dossier-sortie-panel>");
+            System.exit(1);
+        }
         String jarPath = args[0];
-        String outPath = args[1];
+        Path modOut = Paths.get(args[1]);
+        Path panelOut = Paths.get(args[2]);
+        Files.createDirectories(modOut);
+        Files.createDirectories(panelOut);
 
         Map<String, BufferedImage> images = new HashMap<>();
         try (ZipFile zf = new ZipFile(jarPath)) {
@@ -154,35 +168,97 @@ public class ExtractColors {
         }
         System.out.println("Textures lues: " + images.size());
 
-        StringBuilder json = new StringBuilder();
-        json.append("{\n");
-        int done = 0, missing = 0;
         List<String> keys = new ArrayList<>(MAP.keySet());
+        int cellCount = keys.size() + 1; // +1 : cellule blanche de repli pour les blocs sans texture connue
+        int cols = (int) Math.ceil(Math.sqrt(cellCount));
+        int rows = (int) Math.ceil(cellCount / (double) cols);
+        BufferedImage atlas = new BufferedImage(cols * TILE, rows * TILE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = atlas.createGraphics();
+
+        StringBuilder colorsJson = new StringBuilder("{\n");
+        StringBuilder indexJson = new StringBuilder("{\n  \"cols\": " + cols + ",\n  \"rows\": " + rows
+                + ",\n  \"tile\": " + TILE + ",\n  \"blocks\": {\n");
+        int done = 0, missing = 0;
         for (int i = 0; i < keys.size(); i++) {
             String block = keys.get(i);
             String[] candidates = MAP.get(block);
-            int[] rgb = null;
-            String usedTex = null;
+            BufferedImage src = null;
             for (String cand : candidates) {
                 BufferedImage img = images.get(cand);
-                if (img != null) { rgb = averageColor(img); usedTex = cand; break; }
+                if (img != null) { src = img; break; }
             }
-            if (rgb == null) { missing++; System.err.println("MANQUANT: " + block + " (" + String.join(",", candidates) + ")"); continue; }
+            if (src == null) {
+                missing++;
+                System.err.println("MANQUANT: " + block + " (" + String.join(",", candidates) + ")");
+                continue;
+            }
+            int[] rgb = averageColor(src);
             int[] tint = tintFor(block);
+            BufferedImage tile = normalizeTile(src);
             if (tint != null) {
-                rgb = new int[]{
-                        (rgb[0] * tint[0]) / 255,
-                        (rgb[1] * tint[1]) / 255,
-                        (rgb[2] * tint[2]) / 255
-                };
+                tile = tinted(tile, tint);
+                rgb = new int[]{(rgb[0] * tint[0]) / 255, (rgb[1] * tint[1]) / 255, (rgb[2] * tint[2]) / 255};
             }
+            int cellX = done % cols, cellY = done / cols;
+            g.drawImage(tile, cellX * TILE, cellY * TILE, null);
+
+            colorsJson.append(String.format("  \"minecraft:%s\": [%d, %d, %d]", block, rgb[0], rgb[1], rgb[2]));
+            indexJson.append(String.format("    \"minecraft:%s\": %d", block, done));
             done++;
-            json.append(String.format("  \"minecraft:%s\": [%d, %d, %d]", block, rgb[0], rgb[1], rgb[2]));
-            json.append(i < keys.size() - 1 ? ",\n" : "\n");
+            boolean last = i == keys.size() - 1;
+            colorsJson.append(last ? "\n" : ",\n");
+            indexJson.append(last ? "\n" : ",\n");
         }
-        json.append("}\n");
-        Files.write(Paths.get(outPath), json.toString().getBytes(StandardCharsets.UTF_8));
-        System.out.println("Ecrit " + done + " couleurs (" + missing + " manquantes) -> " + outPath);
+        // Cellule blanche de repli : un bloc sans entree dans MAP retombe sur sa couleur moyenne
+        // (deja calculee ailleurs, cote mod) multipliee par du blanc pur -> couleur inchangee, sans
+        // avoir besoin d'un deuxieme materiau/mesh juste pour les quelques blocs non textures.
+        int whiteIdx = done;
+        int wx = whiteIdx % cols, wy = whiteIdx / cols;
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(wx * TILE, wy * TILE, TILE, TILE);
+        indexJson.append(",\n    \"__white__\": " + whiteIdx + "\n");
+
+        g.dispose();
+        colorsJson.append("}\n");
+        indexJson.append("  }\n}\n");
+
+        Files.write(modOut.resolve("block_colors.json"), colorsJson.toString().getBytes(StandardCharsets.UTF_8));
+        Files.write(modOut.resolve("relief_atlas_index.json"), indexJson.toString().getBytes(StandardCharsets.UTF_8));
+        ImageIO.write(atlas, "png", modOut.resolve("relief_atlas.png").toFile());
+        // Copie identique cote panel (asset statique bundle, pas de dependance a la VM pour l'afficher).
+        Files.copy(modOut.resolve("relief_atlas.png"), panelOut.resolve("relief_atlas.png"), StandardCopyOption.REPLACE_EXISTING);
+        Files.copy(modOut.resolve("relief_atlas_index.json"), panelOut.resolve("relief_atlas_index.json"), StandardCopyOption.REPLACE_EXISTING);
+
+        System.out.println("Ecrit " + done + " blocs (" + missing + " manquants), atlas " + cols + "x" + rows
+                + " cellules -> " + modOut + " et " + panelOut);
+    }
+
+    /** Redimensionne/rogne une texture (parfois animee, plusieurs frames empilees verticalement,
+     * ex: eau/lave) a une seule tuile TILExTILE en ne gardant que la premiere frame. */
+    static BufferedImage normalizeTile(BufferedImage img) {
+        int w = img.getWidth();
+        BufferedImage frame = img.getSubimage(0, 0, w, Math.min(w, img.getHeight()));
+        if (w == TILE) return frame;
+        BufferedImage out = new BufferedImage(TILE, TILE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.drawImage(frame, 0, 0, TILE, TILE, null);
+        g.dispose();
+        return out;
+    }
+
+    static BufferedImage tinted(BufferedImage img, int[] tint) {
+        BufferedImage out = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < img.getHeight(); y++) {
+            for (int x = 0; x < img.getWidth(); x++) {
+                int argb = img.getRGB(x, y);
+                int a = (argb >>> 24) & 0xFF;
+                int r = ((argb >> 16) & 0xFF) * tint[0] / 255;
+                int gg = ((argb >> 8) & 0xFF) * tint[1] / 255;
+                int b = (argb & 0xFF) * tint[2] / 255;
+                out.setRGB(x, y, (a << 24) | (r << 16) | (gg << 8) | b);
+            }
+        }
+        return out;
     }
 
     static int[] averageColor(BufferedImage img) {
