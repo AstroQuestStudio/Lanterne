@@ -246,6 +246,70 @@ monde réel, la fusion elle-même devient un ajout localisé à `SectionCompiler
 jamais toucher au pipeline/format — le risque le plus élevé (casser TOUT le rendu de terrain)
 est alors déjà écarté avant même d'écrire une ligne de fusion.
 
+## Le point d'injection exact du binding 2, trouvé en bytecode réel — toujours pas codé
+
+Reprise pour exécuter l'étape 1 ("format étendu seul") ci-dessus. Avant d'écrire le mixin,
+localisation précise du point d'accroche dans `<clinit>` de `RenderPipelines.class`
+(`javap -p -c -constants`, jamais `.mcsrc/`) :
+
+- `GENERIC_BLOCKS_SNIPPET` : `withVertexBinding(0, DefaultVertexFormat.BLOCK)`, une seule
+  fois dans tout `<clinit>` (confirmé : un seul `putfield vertexFormatPerBuffer` sur ce
+  chemin). Le tableau `vertexFormatPerBuffer` du `Builder` est alloué à taille fixe 16
+  (`bipush 16 ; anewarray`) dans le constructeur — `withVertexBinding(2, ...)` est donc une
+  simple écriture dans une case déjà réservée, jamais une réallocation, confirmé par lecture
+  directe (pas supposé, contrairement à la mention "additif" de la passe précédente qui
+  n'avait pas vérifié la taille du tableau).
+- `LIT_BLOCKS_SNIPPET` = `GENERIC_BLOCKS_SNIPPET` + `BindGroupLayout(SAMPLER2)`.
+- `TERRAIN_SNIPPET` = `LIT_BLOCKS_SNIPPET` + `BindGroupLayout(PROJECTION, CHUNK_SECTION,
+  TERRAIN_INFO)` + shaders `core/terrain` (vertex et fragment) — **aucun nouveau
+  `withVertexBinding` dans cette construction** : hérite du binding 0 = `BLOCK` uniquement.
+- `MULTIDRAW_TERRAIN_SNIPPET` = `LIT_BLOCKS_SNIPPET` + `BindGroupLayout(PROJECTION,
+  TERRAIN_INFO)` + **`withVertexBinding(1, DefaultVertexFormat.CHUNK_DATA_INSTANCED)`** +
+  shaders `core/terrain` + `withShaderDefine("MULTIDRAW_TERRAIN")`.
+- Les six pipelines terrain (`SOLID_TERRAIN`, `CUTOUT_TERRAIN`, `TRANSLUCENT_TERRAIN` +
+  variantes `_MULTIDRAW`) descendent de l'un de ces deux snippets — modifier le snippet
+  suffit à propager le nouveau binding aux six sans les toucher individuellement.
+- Deux pipelines `OIT_TERRAIN`/`OIT_TERRAIN_MULTIDRAW` (order-independent transparency)
+  existent aussi et référencent le même shader `core/terrain` — à vérifier s'ils héritent
+  aussi de `TERRAIN_SNIPPET`/`MULTIDRAW_TERRAIN_SNIPPET` (probable vu le nom du shader
+  partagé) ou construisent leur propre snippet ; **pas confirmé dans cette passe**, à
+  vérifier avant de conclure que six pipelines suffisent — il y en a peut-être huit à couvrir.
+
+**Le vrai obstacle à l'injection Mixin, pas résolu ici** : `buildSnippet()` produit un objet
+`Snippet` immuable — `withVertexBinding()` est une méthode du `Builder`, pas du `Snippet`, donc
+intercepter la valeur *après* `buildSnippet()` (ex. `@ModifyExpressionValue` sur l'écriture du
+champ statique `TERRAIN_SNIPPET`) est trop tard, l'objet est déjà figé. Il faut intercepter
+*avant* — la dernière méthode du `Builder` appelée juste avant `buildSnippet()`, à savoir
+`withFragmentShader("core/terrain")`, et chaîner `.withVertexBinding(2, ...)` sur sa valeur de
+retour. Problème : `withFragmentShader` est appelé ~50 fois dans `<clinit>` pour tous les
+autres pipelines du jeu — un `@ModifyExpressionValue` sans discriminant toucherait tout, pas
+seulement le terrain.
+
+Piste vérifiée viable mais pas testée en compilation : `withFragmentShader("core/terrain")`
+pour `TERRAIN_SNIPPET` est le **premier** appel à cette méthode dans tout `<clinit>` (rien
+avant lui dans la construction de `OIT_ACCUMULATE_SNIPPET`, qui précède et ne configure pas de
+shader par ce chemin) — `ordinal = 0`. Celui de `MULTIDRAW_TERRAIN_SNIPPET` est le suivant
+immédiat — `ordinal = 1`. Un `@ModifyExpressionValue(method = "<clinit>", at = @At(value =
+"INVOKE", target = ".../RenderPipeline$Builder;withFragmentShader(Ljava/lang/String;)...",
+ordinal = 0))` et son jumeau `ordinal = 1` cibleraient donc précisément les deux bons appels
+sans toucher aux ~48 autres. **Non écrit ni compilé dans cette passe** — l'ordinal a été
+compté à la main sur le désassemblage, pas vérifié par un build+test réel, et reste donc à
+confirmer avant de faire confiance à ce mixin en production.
+
+**Ce qui manque encore, au-delà du mixin de pipeline, avant de pouvoir vérifier quoi que ce
+soit visuellement** : `SectionCompiler` doit écrire un second flux de sommets (les bornes de
+sprite par quad) dans un `VertexBuffer` séparé pour le binding 2 — non exploré dans cette
+passe. Sans ça, le pipeline attendrait des données sur un binding que rien ne remplit, ce qui
+casserait le rendu au chargement du premier chunk (erreur de validation Vulkan probable, pas
+un ralentissement silencieux). C'est le vrai morceau qui reste, plus gros que le mixin
+lui-même.
+
+**Décision** : ne pas écrire le mixin ni les shaders dans cette passe malgré le point
+d'injection maintenant précis, parce que la partie `SectionCompiler` (double flux de sommets)
+n'a pas été scopée du tout, et livrer le mixin seul sans elle produirait un pipeline
+incomplet, invérifiable, potentiellement crash au premier chunk chargé. Mieux vaut un point
+d'injection exact et documenté que trois morceaux à moitié écrits.
+
 ## Frustum/occlusion de sections — vérifié, rien à faire non plus
 
 `net.minecraft.client.renderer.SectionOcclusionGraph` (vérifié par `javap`) a déjà
