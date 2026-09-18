@@ -1,5 +1,6 @@
 package fr.clubcitrouille.lanterne.mixin;
 
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -7,12 +8,14 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.state.GameRenderState;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 
 import fr.clubcitrouille.lanterne.client.upscale.Scene;
 import fr.clubcitrouille.lanterne.client.upscale.Swell;
@@ -180,5 +183,45 @@ public abstract class UpscaleGameRendererMixin {
         this.mainRenderTarget = screen;
         this.lanterne$screen = null;
         Scene.give(screen, scene);
+    }
+
+    /**
+     * Décale la matrice de projection d'une fraction de pixel, et fait avancer la reprojection.
+     *
+     * <h2>Pourquoi cette accroche précisément</h2>
+     *
+     * <p>{@code ProjectionMatrixBuffer.getBuffer(Matrix4f)} n'a aucun cache de version : il réécrit
+     * son tampon d'uniformes à chaque appel, à partir de la matrice qu'on lui passe. C'est donc le
+     * dernier moment où la modifier a un sens — après, c'est déjà sur la carte graphique — et le
+     * seul endroit d'où la variable locale de {@code renderLevel} soit atteignable. Voir
+     * {@code notes/fsr2-plan.md} pour la lecture de bytecode qui a fixé ce point précis.
+     *
+     * <h2>Pourquoi lire {@code cameraRenderState} plutôt que capturer une variable locale</h2>
+     *
+     * <p>La matrice reçue ici porte déjà le tremblement de blessure et le balancement de marche —
+     * {@code bobHurt}/{@code bobView}, appliqués juste avant cet appel. La confier telle quelle à
+     * {@link fr.clubcitrouille.lanterne.client.upscale.Reproject#advance} ferait croire à un
+     * mouvement de caméra à chaque pas du joueur. {@code cameraRenderState.projectionMatrix} est la
+     * version d'avant ces deux effets, et {@code gameRenderState().levelRenderState} y mène sans
+     * qu'il soit besoin de capturer une variable locale supplémentaire — cette accroche en montre
+     * déjà l'usage pour {@code shouldResetSkyRenderer}.
+     */
+    @ModifyVariable(method = "renderLevel", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/renderer/ProjectionMatrixBuffer;"
+                    + "getBuffer(Lorg/joml/Matrix4f;)Lcom/mojang/renderpearl/api/buffers/GpuBufferSlice;"),
+            ordinal = 0)
+    private Matrix4f lanterne$jitter(Matrix4f matrix) {
+        if (!Upscale.temporal() || !Scene.temporalReady()) {
+            return matrix;
+        }
+        RenderTarget scene = this.mainRenderTarget;
+        if (scene == null) {
+            return matrix;
+        }
+        CameraRenderState camera = this.gameRenderState().levelRenderState.cameraRenderState;
+        Scene.reproject().advance(camera.projectionMatrix, camera.viewRotationMatrix,
+                camera.pos.x, camera.pos.y, camera.pos.z);
+        Scene.jitter().advance();
+        return Scene.jitter().applyTo(matrix, scene.width, scene.height);
     }
 }

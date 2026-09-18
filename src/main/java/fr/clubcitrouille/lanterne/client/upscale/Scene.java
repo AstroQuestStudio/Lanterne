@@ -96,6 +96,25 @@ public final class Scene {
      */
     private static RenderTarget aa;
 
+    /**
+     * L'historique de l'accumulation temporelle : ce que {@link Accumulate} a produit à l'image
+     * précédente, à la même taille réduite que la toile.
+     *
+     * <p>Allouée et libérée comme {@link #aa}, mais sur la seule condition de
+     * {@link Upscale#temporal()} — indépendante de l'anticrénelage. Voir {@link #give} pour l'ordre
+     * exact : {@link Accumulate} la lit, puis {@link #accum} l'y recopie pour l'image suivante.
+     */
+    private static RenderTarget history;
+
+    /** Le résultat de cette image pour {@link Accumulate} — ce que {@link Resolve} remonte ensuite. */
+    private static RenderTarget accum;
+
+    /** Le décalage sous-pixellaire de la projection, tant que l'accumulation temporelle est active. */
+    private static final Jitter JITTER = new Jitter();
+
+    /** La matrice de reprojection de l'image courante vers la précédente. Voir {@link #give}. */
+    private static final Reproject REPROJECT = new Reproject();
+
     /** Voir {@link #consumeSkyStale()}. */
     private static boolean skyStale;
 
@@ -227,6 +246,11 @@ public final class Scene {
                         ((RenderTargetAccessor) screen).lanterne$depthFormat());
                 // Une toile neuve : l'identité change, donc le ciel doit être rebâti.
                 skyStale = true;
+                // Et l'historique accumulé, s'il existe, ne correspond plus à rien : une autre
+                // taille, potentiellement une autre scène entière. Voir Reproject.reset().
+                releaseTemporal();
+                REPROJECT.reset();
+                JITTER.reset();
             } catch (Throwable problem) {
                 target = null;
                 Lanterne.LOG.warn("[ÉCHELLE] Impossible d'allouer une toile de {}×{}.",
@@ -257,12 +281,59 @@ public final class Scene {
         } else {
             releaseAa();
         }
+
+        if (Upscale.temporal()) {
+            // Relu à chaque image, comme Upscale.antialias() : bien moins cher qu'un champ de plus
+            // à tenir synchronisé, et la houle change cette taille bien plus souvent qu'on ne
+            // change de préréglage.
+            JITTER.retune(width, screen.width);
+            // Comparé à width/height comme aa ci-dessus, et pas seulement à null : la houle
+            // redimensionne la toile en place, sans jamais passer par le bloc de recréation qui
+            // vide ces deux cibles. Sans cette comparaison, elles resteraient à l'ancienne taille
+            // pendant que scene/target grandissent ou rétrécissent sous elles.
+            if (history == null || accum == null || history.width != width || history.height != height) {
+                releaseTemporal();
+                try {
+                    history = new TextureTarget("Lanterne / historique", width, height,
+                            GpuFormat.RGBA8_UNORM, null);
+                    accum = new TextureTarget("Lanterne / accumulation", width, height,
+                            GpuFormat.RGBA8_UNORM, null);
+                    // Un historique neuf n'a rien reprojeté d'encore vrai : sans ce reset, la
+                    // toute première image mélangerait la scène avec une texture non initialisée.
+                    REPROJECT.reset();
+                } catch (Throwable problem) {
+                    releaseTemporal();
+                    Lanterne.LOG.warn("[ÉCHELLE] Cibles d'accumulation temporelle de {}×{} refusées : "
+                            + "la remontée se fera sans elles.", width, height, problem);
+                }
+            }
+        } else {
+            releaseTemporal();
+        }
         return target;
     }
 
     /** La cible d'anticrénelage, ou {@code null} si elle n'est ni voulue ni allouable. */
     static RenderTarget antialiasTarget() {
         return aa;
+    }
+
+    /** Le décalage sous-pixellaire à appliquer à la projection. Appelé depuis le mixin. */
+    public static Jitter jitter() {
+        return JITTER;
+    }
+
+    /** La matrice de reprojection à faire avancer chaque image. Appelé depuis le mixin. */
+    public static Reproject reproject() {
+        return REPROJECT;
+    }
+
+    /**
+     * Les cibles de l'accumulation temporelle sont-elles allouées ? Appelé depuis le mixin, pour ne
+     * décaler la projection que si {@link Accumulate} a effectivement de quoi accumuler.
+     */
+    public static boolean temporalReady() {
+        return history != null && accum != null;
     }
 
     /**
@@ -278,6 +349,21 @@ public final class Scene {
         // ici et nulle part ailleurs.
         if (Deep.available() && Deep.resolve(scene, screen)) {
             return;
+        }
+
+        // L'accumulation temporelle, si elle est demandée, allouée, et utilisable — trois
+        // conditions distinctes qui peuvent chacune manquer sans casser la remontée : voir
+        // Accumulate, dont l'échec ne coupe que lui-même.
+        if (Upscale.temporal() && temporalReady() && Accumulate.available()) {
+            if (REPROJECT.primed() && Accumulate.run(scene, history, accum, REPROJECT.matrix())) {
+                history.copyColorFrom(accum);
+                Resolve.run(accum, screen);
+                return;
+            }
+            // Pas encore d'historique utilisable (premier monde, ou sortie de reset) : on
+            // réamorce avec l'image courante, pour que la reprojection de la prochaine image
+            // retombe sur quelque chose de vrai plutôt que sur une texture jamais écrite.
+            history.copyColorFrom(scene);
         }
         Resolve.run(scene, screen);
     }
@@ -298,6 +384,21 @@ public final class Scene {
             skyStale = true;
         }
         releaseAa();
+        releaseTemporal();
+        REPROJECT.reset();
+        JITTER.reset();
+    }
+
+    /** Libère les cibles de l'accumulation temporelle. Voir {@link #releaseAa()}, même raison. */
+    private static void releaseTemporal() {
+        if (history != null) {
+            history.destroyBuffers();
+            history = null;
+        }
+        if (accum != null) {
+            accum.destroyBuffers();
+            accum = null;
+        }
     }
 
     /**
