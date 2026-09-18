@@ -306,12 +306,22 @@ public final class ClientConfig {
                 "resolution decalees (suite de Halton) en reprojetant l'historique sur l'image",
                 "courante, pour reconstituer plus de details qu'une seule image n'en porte.",
                 "",
-                "ETAT DE CETTE PREMIERE VERSION : pas de rejet de desocclusion. Un objet qui",
-                "bouge vite peut laisser une trainee fantome d'une ou deux images la ou il vient",
-                "de decouvrir une zone jamais vue. Verifie en jeu avant d'activer par defaut.",
+                "VERIFIE EN JEU REEL (monde importe, capture automatique via Snap, camera mise",
+                "en mouvement par Vertige - un client sans main humaine derriere n'a sinon aucun",
+                "mouvement a photographier). Le premier essai melangeait 90% d'historique sans",
+                "aucun rejet : un panoramique laissait un flou/une trainee nette sur les bords a",
+                "fort contraste, absente en EASU/RCAS seuls - defaut reel, pas suppose. Corrige",
+                "par un serrage de voisinage (rejette un historique carrement faux) ET un poids",
+                "adaptatif au mouvement apparent (l'historique valide mais trop souvent",
+                "reechantillonne s'efface progressivement quand la camera bouge). A l'arret, ou",
+                "sur un panoramique rapide mais plausible (90 deg/s), le resultat est desormais",
+                "indiscernable d'EASU/RCAS seuls a l'oeil. Sur une rotation deliberement extreme",
+                "(220 deg/s, une toupie, pas un joueur), un flou residuel leger subsiste -",
+                "limite connue et acceptee plutot que masquee.",
                 "",
-                "DESACTIVE PAR DEFAUT, independant du reglage FSR ci-dessus.")
-                .define("lentille_temporelle", false);
+                "ACTIVE PAR DEFAUT depuis cette verification, independant du reglage FSR",
+                "ci-dessus (n'a d'effet que si lentille l'est aussi).")
+                .define("lentille_temporelle", true);
         TAMPON = BUILDER.comment(
                 "LE TAMPON : immuable chez Mojang, mutable chez NVIDIA.",
                 "",
