@@ -314,49 +314,120 @@ niveau — plutôt qu'à de la plomberie d'enregistrement. Voir §7.5.
   jamais reprise de `.mcsrc/`.
 
 **PAS encore vérifié, et c'est un manque honnête, pas une omission tue :**
-- **Aucune confirmation visuelle en jeu réel, malgré trois tentatives.** `run-portails`, trois
-  lancements cette nuit, chacun suivi par PID précis (jamais de `taskkill` large) :
-  1. Réglage éteint (valeur par défaut) — a rejoint un monde sans encombre, mais n'exerçait pas le
-     code du portail.
-  2. Réglage allumé — arrêté proprement pendant le chargement des ressources, avant de rejoindre un
-     monde.
-  3. Réglage allumé, `LANTERNE_AUTO_SCREENSHOT=1` — bloqué **avant même la sélection du backend
-     graphique**, sur l'écran-titre selon toute vraisemblance : le journal s'arrête net à
-     22:51:39, juste après le choix Vulkan/OpenGL, sans plus une ligne pendant plus de quatre
-     minutes, alors que les deux lancements précédents avaient franchi ce point en quelques
-     secondes. Le dossier `saves/New World` du lancement n°1 était toujours présent, et
-     `--quickPlaySingleplayer` pointait vers un nom (`banc`) qui n'existe pas dans ce dossier
-     isolé — l'hypothèse la plus probable est un blocage sur un écran nécessitant une confirmation
-     (monde déjà présent sous un autre nom, ou verrou de session résiduel), **avant tout code de ce
-     mod, avant même que `Minecraft.level` puisse être non nul** — donc un blocage d'infrastructure
-     de test, pas un indice contre le mécanisme lui-même. Arrêté proprement, PID précis.
-  Résultat net des trois : le code de rendu du portail n'a JAMAIS tourné dans un client réel cette
-  nuit. Zéro capture d'écran, zéro ligne de journal `[PORTAIL]` obtenue.
+- **Aucune confirmation visuelle en jeu réel, malgré SIX tentatives sur deux passes.** `run-portails`,
+  six lancements cette nuit, chacun suivi par PID précis (jamais de `taskkill` large) :
+  1. Réglage éteint (défaut) — a rejoint un monde sans encombre. N'exerçait pas le code du portail.
+  2. Réglage allumé — arrêté proprement pendant le chargement des ressources, avant tout monde.
+  3. Réglage allumé, `AUTO_SCREENSHOT=1` — bloqué avant la sélection du backend graphique, plus de
+     quatre minutes sans une ligne de journal. Diagnostic à l'époque : conflit entre
+     `--quickPlaySingleplayer banc` (nom absent de ce dossier isolé) et le `New World` déjà présent
+     du lancement n°1. **`run-portails/saves/` vidé avant la suite, sur cette base.**
+  4. (Après nettoyage) Réglage allumé, `AUTO_SCREENSHOT=1` — a franchi le point de blocage n°3 sans
+     encombre : chargement des paquets de données, 1866 avancements, `RecipePriorityManager` — la
+     preuve que l'hypothèse du point 3 était correcte. Puis arrêt net et propre (« Stopping! », sans
+     la moindre exception) 121 ms après « Loaded 0 recipe priority overrides ».
+  5. Relancé immédiatement, mêmes réglages — **arrêt au MÊME point, à 118 ms près.** Déterminisme
+     troublant, mais voir plus bas pourquoi ce n'est pas allé plus loin.
+  6. Relancé une troisième fois — cette fois bloqué plus tôt (avant même le chargement des paquets de
+     données), plus de deux minutes sans une ligne, puis arrêt propre. **Point de blocage différent
+     des deux tentatives précédentes**, sur une machine par ailleurs moins chargée (8 processus Java
+     concurrents contre 12+ plus tôt dans la soirée, 11,8 Go de RAM libre sur 31,4 — vérifié, pas
+     supposé). Ce manque de reproductibilité EXACTE écarte un bug déterministe dans le code de ce
+     mod et pointe vers une cause environnementale.
+  Aucune des six tentatives n'a produit la moindre exception, le moindre rapport de plantage
+  (`crash-reports/` systématiquement vide ou absent), ni le moindre fichier `hs_err_pid*.log`
+  (vérifié : plantage natif de la JVM écarté). Résultat net : le code de rendu du portail n'a JAMAIS
+  tourné dans un client réel cette nuit. Zéro capture d'écran, zéro ligne `[PORTAIL]`.
+
+  **Ce qui a été écarté, avec preuve, comme cause :**
+  - Le code du mod lui-même ne s'arrête jamais tout seul — aucun `System.exit`/`Runtime.exit` nulle
+    part dans `src/main/java`, vérifié par recherche exhaustive.
+  - Le point d'arrêt (juste après le chargement des recettes serveur, ou avant) est
+    **architecturalement antérieur** à tout code du portail : `PortailRenderMixin` ne s'exécute que
+    depuis `GameRenderer.renderLevel()`, qui suppose un monde DÉJÀ chargé et une première image DÉJÀ
+    en cours de rendu — un état que ces six lancements n'ont jamais atteint.
+  - Pas un défaut d'EULA (aucun `eula.txt` requis pour du solo, et le run n°1 de la toute première
+    passe avait rejoint un monde sans réclamer quoi que ce soit).
+  - Pas un épuisement mémoire au moins pour la tentative n°6 (11,8 Go libres, mesuré au moment du
+    blocage).
+
+  **Hypothèse la plus solide, non confirmée mais cohérente avec toutes les observations :** ce dépôt
+  n'a PAS de worktree Git séparé par fork ce soir — les deux autres chantiers actifs
+  (`client/upscale/*`, `core/`) compilent et modifient le MÊME répertoire de travail, et
+  `./gradlew runClient` écrit ses arguments de lancement dans des fichiers **partagés**
+  (`build/moddev/clientRunVmArgs.txt`, `build/moddev/clientRunProgramArgs.txt`) juste avant de
+  démarrer le processus client. Un `runClient` concurrent d'un autre fork, à quelques secondes du
+  mien, écrirait dans les MÊMES fichiers — et un processus déjà en train de les lire au mauvais
+  instant hériterait potentiellement d'arguments qui ne sont pas les siens (mauvais `gameDir`,
+  mauvaise liste de mods). C'est cohérent avec : l'absence totale d'exception (rien à intercepter,
+  le processus lit simplement d'autres valeurs que prévu), la non-reproductibilité exacte du point de
+  blocage (dépend du minutage relatif des lancements concurrents, jamais garanti), et la présence
+  confirmée, pendant TOUTES ces tentatives, d'autres processus Java volumineux appartenant aux autres
+  forks (revérifié par `CreationDate` à chaque tentative, jamais un seul `run-portails` isolé sur la
+  machine). **Non vérifié formellement** — le confirmer demanderait d'observer le contenu de
+  `clientRunProgramArgs.txt` au moment précis d'un blocage, ce qu'aucune de ces six tentatives n'a
+  capturé.
 - Aucun chiffre de performance : `Radiographie`/`Snap` n'ont jamais tourné avec le portail actif.
-  Et même si un lancement y était arrivé cette nuit précise, le chiffre aurait dû être marqué
-  non fiable — une autre application gourmande (War Thunder) tournait en parallèle sur la machine de
-  test, contention de GPU/CPU non contrôlée.
-- Conséquence directe des deux points ci-dessus : aucun défaut visuel silencieux (le risque que ce
-  dépôt nomme explicitly ailleurs — « un mur invisible ne crashe jamais ») n'a pu être exclu. Le
+  Et même si un lancement y était arrivé cette nuit précise, le chiffre aurait dû être marqué non
+  fiable — une autre application gourmande (War Thunder) tournait en parallèle sur la machine de
+  test, contention de GPU/CPU non contrôlée, en plus de la contention inter-forks ci-dessus.
+- Conséquence directe des points ci-dessus : aucun défaut visuel silencieux (le risque que ce dépôt
+  nomme explicitement ailleurs — « un mur invisible ne crashe jamais ») n'a pu être exclu. Le
   raisonnement de §7.1-7.3 est solide et sourcé, mais ce dépôt lui-même le dit ailleurs : un plan
   vérifié par lecture n'est pas un plan vérifié à l'écran.
 
 ### 7.5 Suite logique, pas un échec
 
-1. **Voir le résultat** — un lancement `run-portails` qui va jusqu'au bout, avec
-   `LANTERNE_AUTO_SCREENSHOT=1`, pour la toute première vue réelle de ce mécanisme. D'abord vider
-   `run-portails/saves/` (ou passer une vraie graine/nom de monde neuf) pour écarter l'hypothèse la
-   plus probable du blocage du §7.4 point 3 — un conflit entre `--quickPlaySingleplayer banc`
-   (nom qui n'existe pas dans ce dossier isolé) et le `New World` déjà présent du tout premier
-   lancement de ce soir.
+1. **Voir le résultat, sur une machine calme.** Le blocage des six tentatives de ce soir pointe vers
+   une contention entre forks partageant le même répertoire de travail (§7.4) — la première chose à
+   essayer n'est pas un septième lancement au milieu de la même mêlée, c'est le même lancement quand
+   plus aucun autre `runClient` ne tourne en parallèle sur la machine, ou depuis un vrai `git
+   worktree` isolé (voir `EnterWorktree`) qui donne à `build/moddev/` sa propre copie.
 2. **Mesurer le coût** — une fois vu, `Radiographie` sur une scène reproductible, sur une machine
-   sans contention externe, pour un chiffre qui mérite d'être cité.
+   sans contention externe (ni inter-forks, ni jeu tiers), pour un chiffre qui mérite d'être cité.
 3. **Un vrai cadre de destination** — vérifier la convention `Frustum(Matrix4fc, Matrix4f)` pour
    permettre une caméra de destination qui réoriente, pas seulement translate.
 4. **Un bloc réel** — remplacer le rectangle ancré sur le joueur par un bloc + entité de rendu
    NeoForge enregistrés, avec une position et une destination choisies en jeu.
 5. **Les entités à travers le portail** — rejouer l'extraction (`LevelExtractor`) pour une seconde
    caméra ; le chantier que §7.2 identifie comme la vraie limite structurelle actuelle.
+
+### 7.6 La vraie cible, au-delà de ce soir : le portail INTER-dimensionnel
+
+Précision de l'utilisateur, à consigner pour la prochaine passe : le prototype de ce soir — un
+portail à l'intérieur d'une même dimension — est un choix de périmètre délibéré pour un MVP faisable
+en une passe, **pas** l'objectif final. Le vrai besoin est de raccourcir la coupure de chargement au
+changement de dimension (Overworld/Nether/End), aujourd'hui longue et pénible.
+
+**Pourquoi c'est structurellement plus dur, pas juste "le même mécanisme avec une autre dimension" :**
+
+- **Deux dimensions chargées et actives EN MÊME TEMPS**, près du portail, le temps que le joueur
+  puisse voir puis traverser sans coupure — alors que ce prototype ne lit et ne dessine qu'UNE seule
+  `ClientLevel`/`ServerLevel` à la fois. Une vue à travers un portail inter-dimensionnel demanderait
+  de faire tourner `LevelRenderer.render` avec une `CameraRenderState` pointant vers une **section de
+  monde d'une dimension différente** — un chantier que ce prototype n'a jamais eu à affronter : ici,
+  la caméra de destination reste dans la MÊME `ClientLevel` que la caméra réelle (translation seule,
+  voir §7.3), donc `this.levelRenderState`/`sectionRenderDispatcher`/`viewArea` — tous liés à UNE
+  dimension côté client — n'ont jamais eu besoin d'être remis en question.
+- **Double tick côté serveur.** Aujourd'hui, une seule des trois dimensions (`ServerLevel`) tourne
+  "près" du joueur à la fois — les deux autres existent mais ne simulent que ce qu'elles doivent
+  (chunk tickets minimaux). Garder une zone d'une SECONDE dimension pleinement active (mobs, blocs
+  mécaniques, redstone) juste pour un portail visible ferait payer un coût de simulation permanent,
+  précisément le genre de coût que ce dépôt mesure et refuse de supposer ailleurs (voir `core/Tide`,
+  `lab/Pregen`) — un chantier de gestion de chunk tickets inter-dimension à lui seul.
+- **Double chargement de chunks**, donc une vraie zone de chunks générés/chargés des DEUX côtés en
+  permanence près de chaque portail — pas un coût qu'on paie une fois, un coût qui grandit avec le
+  nombre de portails ouverts.
+
+**Ce que le prototype de ce soir apporte quand même à ce chantier**, pour que la prochaine passe ne
+reparte pas de zéro : la technique de réentrance dans `LevelRenderer.render` (§7.1), le contournement
+du piège de re-entrance sur les listes d'entités (§7.2), et la technique de composition par quad
+texturé (§7.1 fin) restent valables telles quelles pour un second appel visant une dimension
+différente — seule la provenance de la `CameraRenderState`/du contenu à extraire change. Le vrai
+chantier neuf serait : (a) obtenir une référence à la `ClientLevel` de la dimension de destination
+sans y être connecté comme "la" dimension active, (b) convaincre le serveur de charger/tick a minima
+une zone de l'autre dimension près du portail plutôt que near-zéro, et (c) transmettre ce contenu au
+client — probablement un chantier de plusieurs semaines, pas une extension de ce prototype.
 
 Rien de tout cela n'est fait cette passe, et c'est écrit ici pour que la suite ne reparte pas de
 zéro — exactement la règle que ce dépôt applique déjà à `notes/moteur-rendu-maison.md` et à
