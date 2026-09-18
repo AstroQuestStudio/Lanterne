@@ -106,6 +106,16 @@ public final class SelfTest {
      * et aucun banc à palier unique ne peut faire la différence.
      */
     private static boolean cheptel;
+    /** Vrai si l'on éprouve la loterie de tick aléatoire sur la charge de champ. Voir {@code lab.Billet}. */
+    private static boolean billet;
+    /**
+     * Vrai si l'on contrôle la loterie de tick aléatoire elle-même, plutôt que son gain.
+     *
+     * <p>Ne mesure aucun temps : construit trois sections connues et vérifie que {@code
+     * core.Loterie#localise} retrouve exactement les positions posées. Voir {@code
+     * core.Loterie#autoTest}.
+     */
+    private static boolean loterieTest;
     private static boolean seuil;
     /** Vrai si l'on éprouve le cache d'échec de recherche de chemin. Voir {@code lab.Coince}. */
     private static boolean coince;
@@ -430,6 +440,20 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve du cheptel armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_BILLET"))) {
+            billet = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve du billet (loterie de tick aléatoire) armée.");
+            return;
+        }
+        if ("1".equals(System.getenv("LANTERNE_LOTERIE_TEST"))) {
+            loterieTest = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Contrôle de la loterie (correction, pas vitesse) armé.");
+            return;
+        }
         // Une pre-generation entiere, tous les chunks au MEME reglage.
         //
         // Le banc de carriere apparie un chunk sur deux dans la meme grille : deux chunks « mod
@@ -515,7 +539,8 @@ public final class SelfTest {
                     && !quarry && !tidy && !vault && !swarm && !volley && !zip && !palette
                     && !inventaire && !fonte
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
-                    && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel
+                    && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel && !billet
+                    && !loterieTest
                     && !seuil && !terrassement && !coince && !restitution && !rappel
                     && pregenRadius <= 0)) {
             return;
@@ -526,6 +551,24 @@ public final class SelfTest {
             // n'a besoin d'aucun monde — c'est le seul banc du dépôt dans ce cas.
             if (step == Step.SETTLING) {
                 fr.clubcitrouille.lanterne.lab.Sommaire.run(server);
+                step = Step.LAUNCHED;
+                server.halt(false);
+            }
+            return;
+        }
+        if (loterieTest) {
+            // Aucune doublure non plus : les trois sections de contrôle sont posées par
+            // ServerLevel.setBlock directement, qui charge (ou génère) leur chunk lui-même — comme
+            // le ferait une commande /setblock à des coordonnées jamais visitées.
+            if (step == Step.SETTLING) {
+                String désaccord = fr.clubcitrouille.lanterne.core.Loterie.autoTest(server.overworld());
+                if (désaccord == null) {
+                    Lanterne.LOG.info("[LOTERIE] contrôle réussi : les trois sections connues sont "
+                            + "retrouvées exactement — {}", fr.clubcitrouille.lanterne.core.Loterie
+                            .describe());
+                } else {
+                    Lanterne.LOG.error("[LOTERIE] contrôle ÉCHOUÉ : {}", désaccord);
+                }
                 step = Step.LAUNCHED;
                 server.halt(false);
             }
@@ -547,6 +590,7 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Amarre.running()
                 && !fr.clubcitrouille.lanterne.lab.Cognee.running()
                 && !fr.clubcitrouille.lanterne.lab.Cheptel.running()
+                && !fr.clubcitrouille.lanterne.lab.Billet.running()
                 && !fr.clubcitrouille.lanterne.lab.Seuil.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running()
                 && !fr.clubcitrouille.lanterne.lab.Terrassement.running() && waiting-- > 0) {
@@ -570,6 +614,22 @@ public final class SelfTest {
                 waiting = chunkLoadDelay();
             } else if (step == Step.LOADING) {
                 fr.clubcitrouille.lanterne.lab.Cheptel.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (billet) {
+            // Même piège, même remède qu'au-dessus : sans doublure, aucun chunk n'est simulé et le
+            // champ ne tique jamais.
+            if (fr.clubcitrouille.lanterne.lab.Billet.running()) {
+                fr.clubcitrouille.lanterne.lab.Billet.tick(server);
+            } else if (step == Step.SETTLING) {
+                Understudy.enter(server, server.overworld(), 1, 512);
+                step = Step.LOADING;
+                waiting = chunkLoadDelay();
+            } else if (step == Step.LOADING) {
+                fr.clubcitrouille.lanterne.lab.Billet.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

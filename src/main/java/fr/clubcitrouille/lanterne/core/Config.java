@@ -86,6 +86,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue COLONNE;
     public static final ModConfigSpec.BooleanValue REMBLAI;
     public static final ModConfigSpec.BooleanValue FOULE;
+    public static final ModConfigSpec.BooleanValue LOTERIE;
     public static final ModConfigSpec.IntValue TIDE_MIN_VIEW;
     public static final ModConfigSpec.IntValue TIDE_MAX_VIEW;
     public static final ModConfigSpec.IntValue TIDE_MIN_SIMULATION;
@@ -693,6 +694,17 @@ public final class Config {
                 "",
                 "A mesurer avant de croire quoi que ce soit.")
                 .define("foule", true);
+        LOTERIE = BUILDER.comment(
+                "LA LOTERIE : le tirage de bloc aleatoire, sans les billets perdants.",
+                "",
+                "Chaque section qui a quelque chose a ticker (herbe, cultures, glace...) tire trois",
+                "positions par tick, au hasard sur les 4096 blocs de la section, et lit la palette a",
+                "chacune - meme quand un seul bloc sur quatre mille compte. Ce module retrouve",
+                "directement une position eligible quand elles sont rares, sans changer la probabilite",
+                "de tirage (meme algorithme que Lithium, categorie non-experimentale).",
+                "",
+                "A mesurer avant de croire quoi que ce soit.")
+                .define("loterie", false);
         COLONNE = BUILDER.comment(
                 "LA COLONNE : deux chunks voisins ne calculent plus deux fois le meme bruit.",
                 "",

@@ -200,6 +200,9 @@ public final class Lanterne {
         // La ventilation du cheptel chronomètre elle aussi des ticks entiers : c'est la durée
         // complète qui se multiplie par la part du profileur pour donner des millisecondes par poste.
         fr.clubcitrouille.lanterne.lab.Cheptel.beginTick();
+        // Le billet chronomètre lui aussi des ticks entiers, pour la même raison que le cheptel :
+        // voir sa Javadoc de classe — la charge qu'il juge n'a pas d'entités à compter.
+        fr.clubcitrouille.lanterne.lab.Billet.beginTick();
         // Le seuil chronomètre lui aussi des ticks entiers : ce qu'il compare est le coût COMPLET
         // d'une arrivée, livraison de chunks comprise, et ce coût est réparti sur tout le tick.
         fr.clubcitrouille.lanterne.lab.Seuil.beginTick();

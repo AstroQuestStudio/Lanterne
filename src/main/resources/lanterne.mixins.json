@@ -14,6 +14,8 @@
     "FurnaceMixin",
     "ServerLevelMixin",
     "LevelMixin",
+    "LoterieMixin",
+    "LoterieSectionMixin",
     "NaturalSpawnerMixin",
     "MobMixin",
     "FouleSectionMixin",

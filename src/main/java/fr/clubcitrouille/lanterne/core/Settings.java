@@ -731,6 +731,13 @@ public final class Settings {
     private static boolean remblai = true;
     /** Les termes quadratiques de la foule. Voir {@code core.Foule}. */
     private static boolean foule = true;
+    /**
+     * Le tirage de bloc aléatoire sans billet perdant. Voir {@link Loterie}.
+     *
+     * <p>Éteint par défaut : module neuf, gain non encore établi sur ce dépôt — voir le commentaire
+     * de {@code Config.LOTERIE}.
+     */
+    private static boolean loterie;
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
@@ -1370,6 +1377,11 @@ public final class Settings {
         return foule;
     }
 
+    /** Le tirage de bloc aléatoire sans billet perdant. Voir {@code core.Loterie}. */
+    public static boolean loterie() {
+        return loterie;
+    }
+
     /**
      * Les repères ne dépendent pas de l'interrupteur général, pour la même raison que la Lanterne :
      * ce sont des <b>données de joueur</b>. Un banc qui coupe tout ne doit pas pouvoir rendre un
@@ -1560,6 +1572,11 @@ public final class Settings {
         colonne = wanted.contains("colonne");
         remblai = wanted.contains("remblai");
         foule = wanted.contains("foule");
+        // PAS « loterie » : ce mot contient « lot », déjà pris par la fusion en lots des entonnoirs
+        // trois lignes plus haut, et l'allumerait avec elle. Un mot-clé qui en contient un autre est
+        // ce qui a fait mesurer deux modules pour un, plusieurs fois dans ce dépôt — voir les notes
+        // de « cadastre » et « calque » ci-dessus.
+        loterie = wanted.contains("tirage");
         rationing = wanted.contains("ration");
         scratchPos = wanted.contains("scratch") || wanted.contains("pos");
         strictYield = wanted.contains("strict");
@@ -1695,6 +1712,7 @@ public final class Settings {
         colonne = Config.COLONNE.get();
         remblai = Config.REMBLAI.get();
         foule = Config.FOULE.get();
+        loterie = Config.LOTERIE.get();
         waypoints = Config.WAYPOINTS.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
@@ -1828,6 +1846,9 @@ public final class Settings {
         }
         if (foule) {
             text.append("foule ");
+        }
+        if (loterie) {
+            text.append("loterie ");
         }
         return text.isEmpty() ? "aucun module" : text.toString().trim();
     }
