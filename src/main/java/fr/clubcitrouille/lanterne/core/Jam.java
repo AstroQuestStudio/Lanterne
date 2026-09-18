@@ -61,6 +61,18 @@ import net.minecraft.world.entity.Entity;
  * <p>La correction est donc <b>conservatrice</b> : au pire, un tas met seize ticks à commencer à se
  * disperser au lieu d'un seul. Au mieux — et c'est le cas courant — on supprime la totalité d'un
  * calcul quadratique dont le résultat était l'immobilité.
+ *
+ * <h2>Appelant unique : le fil du serveur</h2>
+ *
+ * <p>{@link #WHERE} et {@link #STILLNESS} sont des tables fastutil, non synchronisées, indexées
+ * par {@code entity.getId()}. C'est délibéré : un verrou, appelé une fois par créature et par tick,
+ * réintroduirait un coût significatif sur exactement le chemin que ce module existe pour alléger.
+ * La classe ne reste correcte que parce que son unique appelant — l'injection dans {@code
+ * LivingEntity.pushEntities} — s'exclut désormais explicitement du côté client. En solo, client et
+ * serveur intégré tournent dans la même JVM sur deux fils distincts et partagent les mêmes
+ * identifiants d'entité ; sans cette exclusion, les deux fils mutaient ces tables en même temps et
+ * corrompaient leur tableau interne. Toute nouvelle injection vers {@link #jammed} doit préserver
+ * cette garantie plutôt que d'ajouter une synchronisation ici.
  */
 public final class Jam {
     /** Ticks d'immobilité avant de déclarer une créature coincée. */

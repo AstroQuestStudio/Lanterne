@@ -167,12 +167,34 @@ public abstract class LivingEntityMixin {
         return lanterne$decision;
     }
 
+    /**
+     * {@code pushEntities} n'est PAS gardée par {@code isClientSide()} dans {@code aiStep} : le
+     * bytecode de Minecraft l'appelle sans condition, juste après {@code checkAutoSpinAttack}. En
+     * solo, où client et serveur intégré tournent dans la même JVM sur deux fils distincts, cette
+     * injection s'exécute donc deux fois par tick pour une même créature — une fois pour l'entité
+     * cliente (fil de rendu), une fois pour l'entité serveur (fil du serveur intégré), les deux
+     * partageant le même {@code getId()} puisque l'identifiant est répliqué du serveur vers le
+     * client. {@link Jam#jammed} indexe ses tables par cet identifiant, sans synchronisation : deux
+     * fils qui y écrivent en même temps corrompent le tableau interne des tables fastutil et font
+     * planter la partie ({@code ArrayIndexOutOfBoundsException}).
+     *
+     * <p>Le calcul que {@code Jam} économise n'a de sens que côté serveur : c'est lui, et lui seul,
+     * qui paie le coût quadratique de {@code getPushableEntities}. Le client ne fait que rejouer la
+     * même bousculade sur une position qu'une prochaine synchronisation réseau va de toute façon
+     * écraser ; la court-circuiter là-bas n'économise rien qui compte, et l'évaluer y était une
+     * erreur d'injection, pas un besoin réel. On restreint donc l'appel au côté serveur — ce qui
+     * supprime la course à la racine, sans verrou : les tables de {@code Jam} ne sont plus jamais
+     * touchées que par le fil du serveur.
+     */
     @Inject(method = "pushEntities", at = @At("HEAD"), cancellable = true)
     private void lanterne$skipJammed(CallbackInfo callback) {
         if (!Settings.jam()) {
             return;
         }
         LivingEntity self = (LivingEntity) (Object) this;
+        if (self.level().isClientSide()) {
+            return; // voir le commentaire ci-dessus : Jam est une optimisation serveur uniquement
+        }
         if (Jam.jammed(self, Crowd.neighbours(self), self.level().getGameTime())) {
             callback.cancel();
         }
