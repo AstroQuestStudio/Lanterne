@@ -597,3 +597,134 @@ dans les passes précédentes). Le module reste donc un interrupteur opt-in, plu
    dédiée), **en vérifiant D'ABORD qu'aucun autre client (le vrai jeu du joueur, ou un autre
    fork) ne tourne** — la contention de cette passe (jusqu'à quatre clients simultanés) rend
    toute mesure FPS prise sans cette vérification inutilisable par construction.
+
+## Le plafond de distance 16 : la vraie cause, trouvée — ce n'était ni `RENDER_DISTANCE_REALLY_FAR`, ni `IntegratedServer`
+
+Reprise ciblée sur le seul point bloquant laissé par la passe précédente : le plafond de vue 16
+qui a empêché toute mesure FPS non limitée par le CPU. Mandat explicite : lire
+`IntegratedServer`/`Options` par `javap` sur le vrai jar patché, jamais `.mcsrc/`, et vérifier si
+`Tide` ou un autre module Lanterne y participe sans le dire.
+
+### Piste `RENDER_DISTANCE_REALLY_FAR` / `hasEnoughRam` — vérifiée, écartée par la mesure, pas par supposition
+
+`net/minecraft/client/Options.class` (`javap -p -c -constants` sur le vrai jar
+`build/moddev/artifacts/minecraft-patched-26.3.0.3-beta.jar`) construit bien l'`OptionInstance` de
+`renderDistance` avec un `IntRange` dont la borne haute dépend d'un booléen `hasEnoughRam` calculé
+une seule fois dans le constructeur (`Runtime.getRuntime().maxMemory() >= 1_000_000_000L` — vrai
+mécanisme vanilla, pas une invention de ce dépôt) : `IntRange(2, hasEnoughRam ? 32 : 16, false)`.
+C'est un vrai plafond documenté — mais **pas celui qui mordait ici**. Vérifié en instrumentant
+temporairement `Doorway.onClientSetup` (mixin de diagnostic retiré après usage, jamais commité) :
+sur la machine de développement (8 417 968 128 octets de tas max, largement au-dessus du seuil),
+`renderDistance.values()` donne bien `IntRange[minInclusive=2, maxInclusive=32]` — la plage
+autorise 32 sans problème. Le plafond à 16 n'est donc PAS un manque de mémoire allouée à la JVM.
+
+### `IntegratedServer` — vérifié, innocenté
+
+`IntegratedServer.tickServer` (`javap -p -c`) fait exactement
+`Math.max(2, minecraft.options.renderDistance().get())` puis compare à
+`getPlayerList().getViewDistance()` avant d'appeler `setViewDistance(...)` si différent — un
+plancher de 2, aucun plafond. `PlayerList.setViewDistance` ne fait que propager la valeur
+(`ClientboundSetChunkCacheRadiusPacket` + `ServerChunkCache.setViewDistance`), sans la borner non
+plus. Le journal « Changing view distance to 16, from 10 » ne fait que refléter fidèlement ce que
+`Options.renderDistance().get()` valait DÉJÀ au moment du tick — la vraie question était donc :
+pourquoi cette valeur vaut-elle 16 en mémoire, alors que `options.txt` contient 32 et que la plage
+l'autorise ?
+
+### `Tide` et le reste de Lanterne — revérifiés, toujours innocents
+
+Recherche exhaustive (`grep -rn` sur `renderDistance()`, `RENDER_DISTANCE`, `ViewDistance`) dans
+tout `src/main/java/fr/clubcitrouille/lanterne` : `Tide`/`Surge` ne touchent que
+`PlayerList.setViewDistance`/`setSimulationDistance` (le réglage SERVEUR, temporaire, de toute
+façon réécrasé à chaque tick par `IntegratedServer` comme ci-dessus) — jamais
+`Options.renderDistance()`, l'option CLIENT. Aucun autre module ne référence l'option client. Ni
+`Glass` (banc de mesure, gate par `LANTERNE_GLASS`, jamais armé ici) ni `Reveil` (dépose un
+`options.txt` minimal au tout premier lancement, seulement si le fichier n'existe pas encore, et
+ne touche jamais `renderDistance`) n'en sont responsables.
+
+### La vraie cause : `GraphicsPreset.apply()`, rejoué sans condition à chaque démarrage
+
+Trouvée en remontant l'appelant de `Options.renderDistance()` dans TOUT le jar patché (pas
+seulement `Options`/`IntegratedServer`/`PlayerList`) : `Minecraft.<init>` (`javap -p -c` sur
+`net.minecraft.client.Minecraft`) appelle, juste après avoir construit `Options` (donc juste après
+`Options.load()`), **sans aucune condition** :
+
+```
+this.options.applyGraphicsPreset(this.options.graphicsPreset().get());
+```
+
+`GraphicsPreset.apply(Minecraft)` (`javap -p -c` sur `net.minecraft.client.GraphicsPreset`) est un
+`tableswitch` sur l'ordinal de l'enum (`FAST=0, FANCY=1, FABULOUS=2, CUSTOM=3`) qui réécrit sans
+condition tout un paquet de réglages « liés au préréglage » — dont `renderDistance` — avec des
+valeurs codées en dur :
+
+- `FAST` → `renderDistance = 8` (offset 95 du bytecode, dans le bloc `case 0`)
+- `FANCY` → `renderDistance = 16` (offset 358, dans le bloc `case 1`)
+- `FABULOUS` → `renderDistance = 32` (offset 620, dans le bloc `case 2`)
+- `CUSTOM` → **rien** : le `tableswitch` tombe directement sur `default: 887: return`, aucun
+  `OptionInstance.set(...)` n'est appelé — confirmé octet pour octet, pas supposé.
+
+`options.txt` des répertoires de banc (`run/`, `run-vitrage/`, `run-lambdaform/`, tous vérifiés)
+contient `graphicsPreset:"fancy"` — le préréglage par défaut de vanilla, jamais changé
+explicitement par personne ici. **`FANCY` force `renderDistance` à 16, inconditionnellement, à
+CHAQUE lancement**, après que le fichier a été lu — d'où le plafond, quoi que `options.txt` annonce
+individuellement pour `renderDistance`.
+
+### Pourquoi éditer `renderDistance` seul dans `options.txt` ne suffit jamais à s'en sortir
+
+En jeu, déplacer le curseur de distance de vue déclenche `Options.setGraphicsPresetToCustom()` (
+listener `onValueUpdate` de plusieurs `OptionInstance`, vu dans `Options.javap.txt` — sept points
+d'appel distincts) : la protection normale de vanilla, qui fait automatiquement basculer
+`graphicsPreset` sur `CUSTOM` dès qu'un réglage qu'il gouverne change à la main, pour que la
+prochaine relecture du préréglage (ci-dessus) ne l'écrase plus jamais.
+
+Cette protection ne s'arme JAMAIS pendant `Options.load()` : `OptionInstance.set(T)`
+(`javap -p -c` sur `OptionInstance`) fait `if (!Minecraft.getInstance().isRunning()) { this.value =
+validated; return; }` — un retour anticipé qui saute l'appel au `ValueUpdateListener` (donc à
+`setGraphicsPresetToCustom()`) tant que le jeu n'a pas fini de démarrer. Au moment où
+`Options.load()` tourne, `Minecraft.isRunning()` vaut faux : `renderDistance` se charge bien à 32
+en mémoire l'espace d'un instant, MAIS `graphicsPreset` reste `"fancy"` (jamais promu à `CUSTOM`,
+puisque le listener qui ferait ce travail n'a pas eu l'occasion de tourner) — et
+`applyGraphicsPreset(FANCY)`, appelé juste après dans `Minecraft.<init>`, écrase alors 32 par 16
+sans qu'aucune protection ne s'y oppose. Éditer le fichier à la main court-circuite exactement le
+garde-fou qui protège un changement fait au curseur en jeu.
+
+### Verdict : comportement vanilla réel, documenté ici plutôt que contourné à l'aveugle — correctif de configuration, pas de code
+
+Ce n'est ni un plafond artificiel de Lanterne, ni un bug du moteur : c'est un vrai mécanisme
+vanilla (les préréglages graphiques regroupent des réglages) qui a un vrai angle mort — le
+chargement depuis fichier ne déclenche pas la même protection qu'un changement interactif. Un
+correctif de CODE (mixin sur `Options.load()` ou sur `OptionInstance.set()`, pour promouvoir
+`graphicsPreset` à `CUSTOM` quand la valeur chargée diffère de ce que le préréglage produirait)
+toucherait un chemin extrêmement chaud et partagé par la totalité des réglages du jeu (pas
+seulement la distance de vue) pour un bénéfice qui ne concerne que les répertoires de banc de ce
+dépôt — un pari disproportionné pour ce qu'il rapporte, exactement le genre de correctif à
+l'aveugle que ce dépôt refuse ailleurs. **Non fait, délibérément.**
+
+Le correctif retenu est donc une simple correction de configuration, dans `options.txt` : poser
+`graphicsPreset:"custom"` à côté de `renderDistance` chaque fois qu'une valeur autre que celle du
+préréglage par défaut est voulue — exactement ce que ferait un joueur qui déplace le curseur en
+jeu. Vérifié par lecture de bytecode que c'est suffisant et total : la branche `CUSTOM` de
+`GraphicsPreset.apply()` ne touche RIEN (`return` immédiat), donc plus aucune réapplication ne
+vient jamais écraser `renderDistance`/`simulationDistance` chargés depuis le fichier.
+
+**Non appliqué à `run-vitrage/` dans cette passe** : le répertoire était occupé par un autre fork
+(`user.dir` confirmé par `jcmd` sur le PID actif) pendant toute la durée de cette investigation —
+et une consigne explicite du coordinateur, reçue en cours de passe, a demandé l'arrêt de tout
+nouveau lancement de client ce soir (plusieurs fenêtres Minecraft génaient déjà le joueur). Le
+correctif exact pour la prochaine passe qui reprend `run-vitrage/` : éditer son `options.txt`,
+remplacer `graphicsPreset:"fancy"` par `graphicsPreset:"custom"`, laisser `renderDistance:32` — un
+lancement suffit alors à confirmer dans le journal `Changing view distance to 32, from ...` au lieu
+de 16.
+
+### Ce qui a été vérifié EN DIRECT malgré tout, avant la consigne d'arrêt
+
+Trois lancements clients (deux dans `run-vitrage/`, un dans un répertoire isolé
+`run-diag-vue-lanterne/` créé pour éliminer tout risque de contamination par un autre fork —
+**supprimé après usage**, conformément à la consigne de ne pas laisser de nouveaux répertoires
+traîner) ont chacun reproduit EXACTEMENT le même résultat avec `graphicsPreset:"fancy"` +
+`renderDistance:32` dans le fichier : `renderDistance.values()` donne `[2, 32]` (la plage autorise
+32, confirmant que `hasEnoughRam` n'est pour rien dans ce plafond), mais `renderDistance.get()`
+vaut 16 dès `FMLClientSetupEvent` — c'est-à-dire après que `Options.load()` ET
+`applyGraphicsPreset()` ont tous les deux déjà tourné, cohérent avec le mécanisme décrit ci-dessus.
+Reproduit trois fois, dans deux répertoires différents, sans exception — ce n'est pas un hasard de
+contention.
