@@ -56,7 +56,16 @@ final class Resolve {
      */
     static final Identifier AA = Identifier.fromNamespaceAndPath(Lanterne.ID, "aa");
 
-    private static final Set<Identifier> ALLOWED = Set.of(PostChain.MAIN_TARGET_ID, SCENE, AA);
+    /**
+     * Le G-buffer de normales, produit par {@link Gbuffer} — RGB la normale vue (signée), A la
+     * profondeur brute de la même image. Voir le Javadoc de {@link Nuancier} pour le contrat
+     * complet à l'attention d'un nuancier tiers, et celui de {@code gbuffer_normal.fsh} pour
+     * pourquoi la profondeur voyage dans ce canal plutôt que via {@code use_depth_buffer} sur
+     * {@link #SCENE} (qui n'en a pas toujours).
+     */
+    static final Identifier NORMAL = Identifier.fromNamespaceAndPath(Lanterne.ID, "normal");
+
+    private static final Set<Identifier> ALLOWED = Set.of(PostChain.MAIN_TARGET_ID, SCENE, AA, NORMAL);
 
     private static final Resolve.Bundle BUNDLE = new Resolve.Bundle();
 
@@ -101,6 +110,10 @@ final class Resolve {
             if (aa != null) {
                 BUNDLE.aa = frame.importExternal("lanterne anticrénelage", aa);
             }
+            RenderTarget normal = Scene.normalTarget();
+            if (normal != null) {
+                BUNDLE.normal = frame.importExternal("lanterne normales", normal);
+            }
             chain.addToFrame(frame, screen.width, screen.height, BUNDLE);
             // UNPOOLED et non le bassin du jeu : les cibles intermédiaires des chaînes sont
             // déclarées « persistent » dans les JSON, donc gardées par PostChain lui-même. Il ne
@@ -115,6 +128,7 @@ final class Resolve {
             BUNDLE.screen = null;
             BUNDLE.scene = null;
             BUNDLE.aa = null;
+            BUNDLE.normal = null;
         }
     }
 
@@ -122,13 +136,15 @@ final class Resolve {
      * Le panier de cibles : ce que la chaîne réclame par son nom, et ce qu'on lui tend.
      *
      * <p>Un seul exemplaire réutilisé d'une image à l'autre, vidé dans le {@code finally} de
-     * {@link #run}. Deux champs et deux comparaisons de nom : l'équivalent de {@code LevelTargetBundle}
-     * de vanilla, en trente fois plus court parce qu'on n'a que deux cibles au lieu de sept.
+     * {@link #run}. Quatre champs et quatre comparaisons de nom : l'équivalent de
+     * {@code LevelTargetBundle} de vanilla, bien plus court parce qu'on n'a que quatre cibles
+     * possibles au lieu de sept.
      */
     private static final class Bundle implements PostChain.TargetBundle {
         private ResourceHandle<RenderTarget> screen;
         private ResourceHandle<RenderTarget> scene;
         private ResourceHandle<RenderTarget> aa;
+        private ResourceHandle<RenderTarget> normal;
 
         @Override
         public void replace(Identifier id, ResourceHandle<RenderTarget> handle) {
@@ -138,6 +154,8 @@ final class Resolve {
                 this.scene = handle;
             } else if (AA.equals(id)) {
                 this.aa = handle;
+            } else if (NORMAL.equals(id)) {
+                this.normal = handle;
             } else {
                 throw new IllegalArgumentException("Cible inconnue de la remontée : " + id);
             }
@@ -151,7 +169,10 @@ final class Resolve {
             if (SCENE.equals(id)) {
                 return this.scene;
             }
-            return AA.equals(id) ? this.aa : null;
+            if (AA.equals(id)) {
+                return this.aa;
+            }
+            return NORMAL.equals(id) ? this.normal : null;
         }
     }
 }

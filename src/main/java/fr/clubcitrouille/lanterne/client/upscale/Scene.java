@@ -109,6 +109,24 @@ public final class Scene {
     /** Le résultat de cette image pour {@link Accumulate} — ce que {@link Resolve} remonte ensuite. */
     private static RenderTarget accum;
 
+    /**
+     * Le premier vrai G-buffer de ce module : une normale par fragment reconstruite par
+     * {@link Gbuffer}, à la même taille réduite que la toile.
+     *
+     * <h2>Pourquoi allouée systématiquement, sans réglage pour la couper</h2>
+     *
+     * <p>Contrairement à {@link #aa} ou {@link #history}/{@link #accum}, rien ici ne sait
+     * aujourd'hui si le nuancier actif référence {@code lanterne:normal} — {@link Resolve#chain()}
+     * ne le découvre qu'en interrogeant {@code ShaderManager}, après que cette allocation a déjà
+     * eu lieu. Le coût retenu (RGBA16_FLOAT, résolution de la toile) est modeste — quelques
+     * mébioctets à la résolution d'un écran courant, contre les dizaines que pèse la toile
+     * elle-même — et il a semblé préférable de toujours l'offrir plutôt que d'ajouter un réglage de
+     * plus pour une économie mineure. Gater cette allocation sur les cibles réellement référencées
+     * par la chaîne active est un raffinement plausible d'une passe future, pas un prérequis
+     * fonctionnel : voir le Javadoc de {@link Nuancier} pour ce point précis.
+     */
+    private static RenderTarget normal;
+
     /** Le décalage sous-pixellaire de la projection, tant que l'accumulation temporelle est active. */
     private static final Jitter JITTER = new Jitter();
 
@@ -282,6 +300,22 @@ public final class Scene {
             releaseAa();
         }
 
+        // Comparé à width/height et pas seulement à null, même raison que pour aa juste
+        // au-dessus : la houle redimensionne la toile en place, sans jamais vider ce champ.
+        if (normal == null || normal.width != width || normal.height != height) {
+            releaseNormal();
+            try {
+                normal = new TextureTarget("Lanterne / normales", width, height, GpuFormat.RGBA16_FLOAT, null);
+            } catch (Throwable problem) {
+                // Comme aa : on ne casse pas la mise à l'échelle pour autant. Un nuancier qui
+                // référencerait lanterne:normal verrait simplement cette cible absente du panier
+                // (voir Resolve.Bundle#get), pas une remontée en échec.
+                normal = null;
+                Lanterne.LOG.warn("[ÉCHELLE] Cible de normales de {}×{} refusée : lanterne:normal "
+                        + "restera absente.", width, height, problem);
+            }
+        }
+
         if (Upscale.temporal()) {
             // Relu à chaque image, comme Upscale.antialias() : bien moins cher qu'un champ de plus
             // à tenir synchronisé, et la houle change cette taille bien plus souvent qu'on ne
@@ -318,6 +352,14 @@ public final class Scene {
         return aa;
     }
 
+    /**
+     * La cible de normales de G-buffer, ou {@code null} si elle n'a pas pu être allouée. Appelée
+     * depuis {@link Resolve#run}, pour l'offrir aux nuanciers sous {@code lanterne:normal}.
+     */
+    static RenderTarget normalTarget() {
+        return normal;
+    }
+
     /** Le décalage sous-pixellaire à appliquer à la projection. Appelé depuis le mixin. */
     public static Jitter jitter() {
         return JITTER;
@@ -344,6 +386,17 @@ public final class Scene {
      * unie. Une image perdue, puis le rendu natif pour le reste de la session.
      */
     public static void give(RenderTarget screen, RenderTarget scene) {
+        // Avant tout le reste : lanterne:normal doit porter le résultat de CETTE image quel que
+        // soit le chemin emprunté ensuite (Deep, accumulation temporelle, ou EASU/RCAS seuls).
+        // Lue depuis "scene" — la vraie toile, jamais accum — parce que c'est la seule des cibles
+        // de cette classe qui porte systématiquement une profondeur : voir le Javadoc de
+        // Gbuffer et celui de gbuffer_normal.fsh pour pourquoi lanterne:scene, lui, ne l'a pas
+        // toujours (accum n'a pas de profondeur, et l'accumulation temporelle est activée par
+        // défaut).
+        if (normal != null) {
+            Gbuffer.run(scene, normal);
+        }
+
         // Les trois échelons, dans l'ordre. Deep rend faux en toutes circonstances aujourd'hui, et
         // c'est écrit ainsi plutôt que supprimé : le jour où le pont natif existe, la bascule est
         // ici et nulle part ailleurs.
@@ -384,9 +437,18 @@ public final class Scene {
             skyStale = true;
         }
         releaseAa();
+        releaseNormal();
         releaseTemporal();
         REPROJECT.reset();
         JITTER.reset();
+    }
+
+    /** Libère la cible de normales de G-buffer. Voir {@link #releaseAa()}, même raison. */
+    private static void releaseNormal() {
+        if (normal != null) {
+            normal.destroyBuffers();
+            normal = null;
+        }
     }
 
     /** Libère les cibles de l'accumulation temporelle. Voir {@link #releaseAa()}, même raison. */
