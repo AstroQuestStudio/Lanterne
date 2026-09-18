@@ -92,6 +92,8 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * ancrage au démarrage</b>. Elle a été relevée au désassembleur, et c'est la seule façon de ne pas
  * se tromper.
  */
+// LANTERNE_MIXIN_DESACTIVE : absence de lanterne.mixins.json volontaire, voir la javadoc
+// ci-dessus. tools/verifie_mixins.py reconnaît ce jeton et n'en fait pas un échec.
 @Mixin(ServerGamePacketListenerImpl.class)
 public abstract class ElastiqueMixin {
     /**

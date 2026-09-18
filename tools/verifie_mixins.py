@@ -50,6 +50,21 @@ passera d'ici sans encombre.
 Autrement dit : un mixin qui passe ce contrôle n'est pas prouvé. Un mixin qui y
 échoue est cassé.
 
+UN MIXIN PEUT ÊTRE ABSENT DU MANIFESTE SANS ÊTRE UN OUBLI
+===========================================================
+
+Un fichier présent dans mixin/ mais absent de lanterne.mixins.json ne s'applique jamais — et
+c'est en général un oubli d'enregistrement, donc une vraie panne. Mais ce dépôt garde aussi,
+volontairement, la trace d'expériences mesurées en jeu puis rejetées (voir ElastiqueMixin,
+HopperMixin) : le fichier reste, avec sa javadoc complète, pour ne pas repartir de zéro le jour
+où une vraie piste se présente, mais il ne doit surtout pas s'appliquer.
+
+Distinguer les deux cas à la lecture de la prose serait fragile — la même fragilité que ce
+contrôleur dénonce partout ailleurs. Le marqueur littéral MARQUEUR_DESACTIVATION, posé juste
+avant l'annotation « @Mixin » de la classe, le permet sans ambiguïté : un fichier qui le porte
+est annoncé, pas compté en échec. Un fichier absent du manifeste et sans ce marqueur reste une
+panne, exactement comme avant.
+
 USAGE
 =====
 
@@ -220,6 +235,13 @@ _lues = {}
 HORS_PORTEE = ("java.", "javax.", "jdk.", "sun.", "com.google.", "org.slf4j.",
                "it.unimi.", "org.joml.")
 
+# Marque un mixin volontairement absent de lanterne.mixins.json : une experience mesuree en
+# jeu, puis rejetee, dont le fichier est garde comme trace (voir la javadoc de la classe). Ce
+# n'est pas un oubli d'enregistrement, et ce controleur ne doit pas le signaler comme tel — mais
+# il ne doit pas non plus le confondre avec un VRAI oubli en devinant sur la prose de la javadoc :
+# une chaine litterale, sans ambiguite, tranche a la place de deviner.
+MARQUEUR_DESACTIVATION = "LANTERNE_MIXIN_DESACTIVE"
+
 
 def analyse(sortie):
     """Decoupe une sortie de « javap » multi-classes, et en tire ce qui nous interesse."""
@@ -359,8 +381,13 @@ def main():
             continue
 
         if fichier.stem not in declares:
-            plaintes.append(f"{fichier.name} : absent de lanterne.mixins.json — "
-                            f"ce mixin ne s'applique donc jamais.")
+            if MARQUEUR_DESACTIVATION in texte:
+                print(f"  · {fichier.name} : absent de lanterne.mixins.json, mais marqué "
+                      f"« {MARQUEUR_DESACTIVATION} » — désactivation intentionnelle et "
+                      f"documentée (voir sa javadoc), pas un oubli.")
+            else:
+                plaintes.append(f"{fichier.name} : absent de lanterne.mixins.json — "
+                                f"ce mixin ne s'applique donc jamais.")
             continue
 
         # 1 et 2 : la classe visée, les noms de méthodes, et leurs signatures.

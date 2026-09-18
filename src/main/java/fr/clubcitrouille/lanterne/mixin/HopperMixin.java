@@ -74,6 +74,8 @@ import fr.clubcitrouille.lanterne.core.Sleep;
  * <p>C'est la même règle que pour les créatures qui tombent : <b>l'exactitude d'abord, le gain
  * ensuite</b>.
  */
+// LANTERNE_MIXIN_DESACTIVE : absence de lanterne.mixins.json volontaire, voir la javadoc
+// ci-dessus. tools/verifie_mixins.py reconnaît ce jeton et n'en fait pas un échec.
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperMixin {
     @Shadow
