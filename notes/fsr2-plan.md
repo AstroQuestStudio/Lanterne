@@ -97,3 +97,57 @@ raisons, pas une seule :
 Les cinq étapes ci-dessus, dans l'ordre. L'étape 1 (vérifier le point
 d'injection en bytecode 26.3) est un préalable strict à tout le reste — ne pas
 écrire le mixin avant.
+
+## Mise à jour — étape 1 faite, vrai blocage trouvé à l'étape 4
+
+**Étape 1, confirmée en bytecode réel de la 26.3** (`javap -c -l` sur
+`GameRenderer.class`, jamais `.mcsrc/`) : `renderLevel()`, variable locale
+**6** — seul `Matrix4f` de la méthode, construit `new Matrix4f(camera.projectionMatrix)`
+à l'offset 50-62, muté par le bobbing (vue/coup/rotation) jusqu'à l'offset 255,
+consommé par `levelProjectionMatrixBuffer.getBuffer(Lorg/joml/Matrix4f;)` à
+l'offset 262. Mixin à poser : `@ModifyVariable(method = "renderLevel", at =
+@At(value = "INVOKE", target = ".../ProjectionMatrixBuffer;getBuffer(Lorg/joml/Matrix4f;)..."),
+ordinal = 0)` — ordinal 0 suffit, c'est le seul `Matrix4f` local de la méthode.
+
+Pour `Reproject.advance()` : ne pas essayer de lire la variable locale 6 (elle
+porte déjà le bobbing, pas la vue pure). `CameraRenderState` (variable locale 5
+dans la même méthode) expose directement `projectionMatrix`, `viewRotationMatrix`
+et `pos` en champs publics (vérifié par `javap -p`) — les lire tels quels à la
+tête de `renderLevel()` donne exactement les matrices non décalées que
+`Reproject.advance()` attend, sans dépendre du bobbing local.
+
+**Livré et compilé, mais volontairement PAS branché** : `lentille_temporelle`
+dans `ClientConfig` (défaut `false`), `Upscale.temporal()` (accesseur, lu par
+personne pour l'instant), `shaders/post/temporal_accumulate.fsh`,
+`post_effect/upscale_temporal_accumulate.json`. Rien de tout ça n'a d'effet :
+aucun mixin ni aucun appelant ne les utilise encore — même état que `Jitter`/
+`Reproject` avant cette passe.
+
+**Le vrai blocage, trouvé à l'étape 4, pas supposé** : `PostChain`/`PostPass`
+n'exposent **aucune API pour changer un uniforme après construction** — vérifié
+par `javap -p` sur `PostChain.class` et `PostPass.class` dans le vrai jar. Les
+`UniformValue` d'un JSON (voir `RcasConfig`/`Tuning` dans `upscale_aa_moyenne.json`)
+sont figés à la compilation de la passe, exactement comme le documente déjà
+l'en-tête de `Resolve.java` pour la netteté (« il faudrait bâtir le pipeline à
+la main »). Or la matrice de reprojection change **à chaque image** — c'est
+tout le principe de `Reproject`. Il est donc impossible de la faire passer par
+le mécanisme JSON existant sans recompiler la chaîne à chaque image (inenvisageable :
+un shader qui recompile 60 fois par seconde tue le FPS bien plus sûrement qu'il
+ne le gagne).
+
+**Deux vraies pistes pour la prochaine passe, ni essayées ni écartées** :
+1. Chercher si `com.mojang.renderpearl` expose un mécanisme d'uniforme
+   "dynamique"/calculé par image en dehors du JSON de `PostChain` — les blocs
+   `SamplerInfo` (`InSize`/`OutSize`) sont bien recalculés à chaque image sans
+   recompilation, donc un tel mécanisme existe forcément quelque part dans le
+   moteur ; il reste à trouver comment un mod peut y accrocher son propre
+   uniforme plutôt que d'en déduire qu'il n'existe pas.
+2. Construire un `RenderPipeline` à la main pour cette seule passe (pas pour
+   EASU/RCAS, qui restent sur `PostChain`) — plus de code, mais donne un accès
+   direct au tampon d'uniformes sans passer par le JSON. C'est le détour que
+   l'en-tête de `Resolve.java` évitait pour EASU/RCAS ; il redevient
+   probablement nécessaire ici, pour cette seule passe qui a un besoin que
+   `PostChain` ne sait pas satisfaire.
+
+Ne pas retenter l'étape 4 sans avoir résolu ce point précis en premier — écrire
+le nuanceur et le mixin avant serait retravailler pour rien.

@@ -189,6 +189,22 @@ public final class Upscale {
         return "upscale_" + (antialias() ? "aa_" : "") + edge.key();
     }
 
+    /**
+     * L'accumulation temporelle précède-t-elle EASU ?
+     *
+     * <p>Même raison que {@link #antialias()} : relu à chaque demande de chaîne plutôt que mémorisé,
+     * pour ne jamais se désynchroniser du fichier de config.
+     */
+    public static boolean temporal() {
+        try {
+            return ClientConfig.SPEC.isLoaded()
+                    ? ClientConfig.LENS_TEMPORAL.get()
+                    : ClientConfig.LENS_TEMPORAL.getDefault();
+        } catch (Throwable tooEarly) {
+            return false;
+        }
+    }
+
     /** Bascule l'anticrénelage et écrit le fichier client. */
     public static void toggleAntialias() {
         ClientConfig.LENS_AA.set(!antialias());

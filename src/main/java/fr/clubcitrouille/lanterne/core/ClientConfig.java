@@ -53,6 +53,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<Upscale.Edge> LENS_EDGE;
     public static final ModConfigSpec.BooleanValue LENS_AA;
     public static final ModConfigSpec.BooleanValue LENS_SWELL;
+    public static final ModConfigSpec.BooleanValue LENS_TEMPORAL;
     public static final ModConfigSpec.BooleanValue TAMPON;
     public static final ModConfigSpec.BooleanValue DIN;
     public static final ModConfigSpec.IntValue DIN_REGION;
@@ -296,6 +297,21 @@ public final class ClientConfig {
                 "Le prereglage ci-dessus devient alors un PLANCHER : la houle ne descend jamais",
                 "en dessous de ce que le joueur a demande.")
                 .define("lentille_houle", false);
+        LENS_TEMPORAL = BUILDER.comment(
+                "ACCUMULATION TEMPORELLE : une premiere brique de remontee facon FSR 2/DLSS,",
+                "posee AVANT EASU/RCAS plutot qu'a la place.",
+                "",
+                "FSR 1.0 (ci-dessus) ne regarde qu'UNE image : sa nettete est plafonnee par ce",
+                "qu'un seul instant contient. Ce module accumule plusieurs images basse",
+                "resolution decalees (suite de Halton) en reprojetant l'historique sur l'image",
+                "courante, pour reconstituer plus de details qu'une seule image n'en porte.",
+                "",
+                "ETAT DE CETTE PREMIERE VERSION : pas de rejet de desocclusion. Un objet qui",
+                "bouge vite peut laisser une trainee fantome d'une ou deux images la ou il vient",
+                "de decouvrir une zone jamais vue. Verifie en jeu avant d'activer par defaut.",
+                "",
+                "DESACTIVE PAR DEFAUT, independant du reglage FSR ci-dessus.")
+                .define("lentille_temporelle", false);
         TAMPON = BUILDER.comment(
                 "LE TAMPON : immuable chez Mojang, mutable chez NVIDIA.",
                 "",
