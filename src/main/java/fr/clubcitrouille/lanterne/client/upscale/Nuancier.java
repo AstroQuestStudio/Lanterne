@@ -3,13 +3,21 @@ package fr.clubcitrouille.lanterne.client.upscale;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
+
+import com.mojang.brigadier.arguments.StringArgumentType;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.event.AddPackFindersEvent;
 
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackSelectionConfig;
@@ -20,6 +28,7 @@ import net.minecraft.server.packs.repository.PackSource;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.ClientConfig;
+import fr.clubcitrouille.lanterne.core.Settings;
 
 /**
  * Des nuanciers de shaders déposés à la main, chargés comme un pack de ressources.
@@ -183,6 +192,30 @@ public final class Nuancier {
     private static Path dossier() {
         return Path.of("").toAbsolutePath()
                 .resolve("config").resolve("lanterne").resolve("shaderpacks");
+    }
+
+    /**
+     * Les noms des sous-dossiers valables de {@code shaderpacks/} — même filtre que
+     * {@link #onAddPackFinders} (un {@code pack.mcmeta} présent), pas la liste brute des dossiers.
+     * Triée, pour un affichage et une autocomplétion stables. Lue par {@code /lanterne nuancier}
+     * ci-dessous ; ni mise en cache ni écoutée sur rechargement, une commande valant bien une
+     * lecture de dossier à chaque appel.
+     */
+    public static List<String> listNames() {
+        Path racine = dossier();
+        if (!Files.isDirectory(racine)) {
+            return List.of();
+        }
+        try (var entrees = Files.list(racine)) {
+            return entrees.filter(Files::isDirectory)
+                    .filter(candidat -> Files.isRegularFile(candidat.resolve("pack.mcmeta")))
+                    .map(candidat -> candidat.getFileName().toString())
+                    .sorted()
+                    .toList();
+        } catch (IOException problem) {
+            Lanterne.LOG.warn("[NUANCIER] lecture de {} impossible", racine, problem);
+            return List.of();
+        }
     }
 
     /**
@@ -528,5 +561,144 @@ public final class Nuancier {
         } catch (IOException problem) {
             Lanterne.LOG.warn("[NUANCIER] impossible de creer le nuancier Club Citrouille dans {}", racine, problem);
         }
+    }
+
+    // --- Commande -------------------------------------------------------------------------
+
+    /**
+     * {@code /lanterne nuancier} : un endroit en jeu pour voir et choisir un nuancier, là où
+     * jusqu'ici la seule façon de le faire était d'éditer {@code lentille_nuancier_actif} à la
+     * main dans {@code lanterne-client.toml} (voir {@link ClientConfig#LENS_NUANCIER}).
+     *
+     * <ul>
+     *   <li>{@code /lanterne nuancier} ou {@code /lanterne nuancier liste} — énumère ce que
+     *       {@link #listNames()} trouve sous {@code config/lanterne/shaderpacks/}, et dit lequel
+     *       est actif.</li>
+     *   <li>{@code /lanterne nuancier <nom>} — active le nuancier nommé, avec autocomplétion des
+     *       noms trouvés ({@code SuggestionProvider}, même geste que {@code Theatre.subjects()}
+     *       dans {@code client.ponder.Usher}).</li>
+     *   <li>{@code /lanterne nuancier off} — revient à la chaîne intégrée au mod.</li>
+     * </ul>
+     *
+     * <h2>Commande CLIENTE, comme {@code client.profil.Loupe} et {@code client.ponder.Usher}</h2>
+     *
+     * <p>Ce réglage ne regarde que l'écran de CE joueur — {@link ClientConfig} est du type
+     * {@code CLIENT}, pas {@code SERVER}. L'enregistrer sur le dispatcheur serveur (comme
+     * {@code report.LanterneCommand}) exécuterait le code sur la machine qui HÉBERGE la partie :
+     * en multijoueur, cela écrirait le fichier de configuration client du serveur, pas celui du
+     * joueur qui tape la commande — jamais ce qu'on veut pour un réglage que « le serveur ne peut
+     * pas imposer ». {@link RegisterClientCommandsEvent} fournit un dispatcheur distinct qui ne
+     * quitte jamais le client ; le littéral {@code "lanterne"} s'y fusionne avec celui de Loupe et
+     * Usher (Brigadier fusionne les enregistrements successifs d'un même nom), donc
+     * {@code /lanterne nuancier} cohabite avec {@code /lanterne profil} et {@code /lanterne guide}
+     * sans rien savoir l'un de l'autre.
+     *
+     * <h2>Pourquoi les messages ne passent pas par {@code CommandSourceStack.sendSuccess}</h2>
+     *
+     * <p>Même choix que {@code client.profil.Loupe} : une source de commande cliente n'a pas de
+     * joueur serveur derrière elle pour porter la réponse. {@link #tell} écrit donc directement
+     * dans la discussion du joueur local.
+     *
+     * <h2>Le changement s'applique sans redémarrage</h2>
+     *
+     * <p>{@link Resolve#chain()} appelle {@link Upscale#nuancierActif()} à chaque image — voir son
+     * Javadoc. {@link Upscale#setNuancier} pose ce champ ET le fichier client dans le même geste
+     * que {@link Upscale#cycleEdge}/{@link Upscale#toggleSwell} ; aucun rechargement de ressources
+     * n'est nécessaire, la prochaine image dessinée lit déjà la nouvelle valeur. Le nuancier
+     * lui-même (son JSON, son GLSL) doit en revanche déjà être chargé comme pack de ressources par
+     * {@link #onAddPackFinders} — vrai dès le démarrage du jeu, puisque cette méthode-ci ne
+     * choisit qu'un nom parmi ceux qu'{@link #onAddPackFinders} a déjà enregistrés.
+     */
+    @SubscribeEvent
+    public static void onRegisterClientCommands(RegisterClientCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("lanterne")
+                .then(Commands.literal("nuancier")
+                        .executes(context -> {
+                            liste();
+                            return 1;
+                        })
+                        .then(Commands.literal("liste").executes(context -> {
+                            liste();
+                            return 1;
+                        }))
+                        .then(Commands.literal("off").executes(context -> {
+                            choisir("");
+                            return 1;
+                        }))
+                        .then(Commands.argument("nom", StringArgumentType.word())
+                                .suggests((context, builder) ->
+                                        SharedSuggestionProvider.suggest(listNames(), builder))
+                                .executes(context -> {
+                                    choisir(StringArgumentType.getString(context, "nom"));
+                                    return 1;
+                                }))));
+    }
+
+    private static void liste() {
+        List<String> noms = listNames();
+        String actif = Upscale.nuancierActif();
+
+        tell(Component.literal("── Nuanciers (" + noms.size() + ") ──").withStyle(ChatFormatting.GOLD));
+        if (noms.isEmpty()) {
+            tell(Component.literal("Aucun trouvé sous config/lanterne/shaderpacks/. Dépose un "
+                    + "sous-dossier avec un pack.mcmeta pour qu'il apparaisse ici — voir "
+                    + "exemple_teinte/ et club_citrouille/, écrits automatiquement au premier "
+                    + "lancement.").withStyle(ChatFormatting.GRAY));
+            return;
+        }
+        for (String nom : noms) {
+            boolean estActif = nom.equals(actif);
+            tell(Component.literal((estActif ? "  » " : "    ") + nom + (estActif ? "  (actif)" : ""))
+                    .withStyle(estActif ? ChatFormatting.GREEN : ChatFormatting.GRAY));
+        }
+        if (actif.isBlank()) {
+            tell(Component.literal("Aucun nuancier actif — la chaîne intégrée au mod (netteté et "
+                    + "anticrénelage réglés ailleurs) est utilisée.").withStyle(ChatFormatting.GRAY));
+        } else if (!noms.contains(actif)) {
+            // Le fichier de config nomme un nuancier qui n'est plus sur le disque (dossier
+            // renomme ou efface entre deux lancements) : Resolve#chain() echouera silencieusement
+            // a charger sa chaine et retombera sur le rendu natif — mieux vaut le dire ici que
+            // laisser le joueur chercher un ecran fige.
+            tell(Component.literal("« " + actif + " » est choisi dans la configuration mais absent "
+                    + "de ce dossier — la chaîne ne pourra pas se charger.").withStyle(ChatFormatting.RED));
+        }
+        if (!Settings.lens()) {
+            tell(Component.literal("La lentille (réglage \"lentille\") est éteinte : un nuancier "
+                    + "choisi ici ne s'appliquera qu'une fois la lentille allumée.")
+                    .withStyle(ChatFormatting.YELLOW));
+        }
+        tell(Component.literal("« /lanterne nuancier <nom> » pour activer, « /lanterne nuancier "
+                + "off » pour revenir à la chaîne intégrée.").withStyle(ChatFormatting.DARK_GRAY));
+    }
+
+    private static void choisir(String nom) {
+        String propre = nom == null ? "" : nom.trim();
+        if (!propre.isEmpty() && !listNames().contains(propre)) {
+            tell(Component.literal("Aucun nuancier nommé « " + propre + " » sous "
+                    + "config/lanterne/shaderpacks/. « /lanterne nuancier liste » pour voir ceux "
+                    + "trouvés.").withStyle(ChatFormatting.RED));
+            return;
+        }
+        Upscale.setNuancier(propre);
+        if (propre.isEmpty()) {
+            tell(Component.literal("Nuancier désactivé — la chaîne intégrée au mod reprend la main.")
+                    .withStyle(ChatFormatting.GOLD));
+            return;
+        }
+        tell(Component.literal("Nuancier actif : " + propre + ".").withStyle(ChatFormatting.GOLD));
+        if (!Settings.lens()) {
+            tell(Component.literal("La lentille est éteinte : ce nuancier ne s'appliquera qu'une "
+                    + "fois \"lentille\" allumée (lanterne-client.toml, ou l'écran Options > "
+                    + "Graphismes > Lanterne).").withStyle(ChatFormatting.YELLOW));
+        }
+    }
+
+    /** Écrit dans la discussion du joueur local. Voir la note de méthode plus haut sur pourquoi. */
+    private static void tell(Component message) {
+        var player = Minecraft.getInstance().player;
+        if (player == null) {
+            return;
+        }
+        player.sendSystemMessage(message);
     }
 }

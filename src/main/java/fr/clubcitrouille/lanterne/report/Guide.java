@@ -110,6 +110,12 @@ public final class Guide {
         // OPTIONAL — on l'annonce là où elle existe, et nulle part ailleurs.
         optionalLine(source, "/lanterne guide", "Le guide illustré : les mécanismes du mod, en "
                 + "animation. Ou garde W enfoncé sur un objet, dans l'inventaire comme dans JEI.");
+        // Elle aussi cliente (voir client.upscale.Nuancier) : le nuancier actif est un réglage de
+        // TON écran, pas de la partie.
+        optionalLine(source, "/lanterne nuancier", "Les nuanciers (shaders) déposés sous "
+                + "config/lanterne/shaderpacks/, et lequel est actif.");
+        optionalLine(source, "/lanterne nuancier off", "Revient à la chaîne intégrée au mod. "
+                + "« /lanterne nuancier <nom> », avec autocomplétion, pour en choisir un.");
         line(source, "/lanterne recettes", "Les recettes du mod que le serveur a vraiment chargées. "
                 + "À demander quand un afficheur prétend qu'un objet n'a pas de fabrication.");
         if (admin) {

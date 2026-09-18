@@ -272,6 +272,21 @@ public final class Upscale {
     }
 
     /**
+     * Choisit par nom un nuancier déposé sous {@code config/lanterne/shaderpacks/}, ou vide pour
+     * revenir à la chaîne intégrée au mod. Appelé par {@code Nuancier} pour
+     * {@code /lanterne nuancier <nom>} / {@code /lanterne nuancier off}.
+     *
+     * <p>Même geste que {@link #cycleEdge} et {@link #toggleSwell} juste au-dessus : le champ en
+     * mémoire ET le fichier client sont posés ensemble, pour qu'aucun redémarrage ne soit
+     * nécessaire — {@link Resolve#chain()} relit {@link #nuancierActif} à chaque image, donc le
+     * changement s'applique dès la prochaine image dessinée.
+     */
+    public static void setNuancier(String name) {
+        nuancierActif = name == null ? "" : name;
+        fr.clubcitrouille.lanterne.core.ClientConfig.LENS_NUANCIER.set(nuancierActif);
+    }
+
+    /**
      * Le préréglage vient de changer : la houle repart du natif.
      *
      * <p>Sans cela, elle jugerait le nouveau plancher sur des durées d'image relevées avec l'ancien,
