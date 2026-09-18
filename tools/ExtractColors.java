@@ -121,6 +121,28 @@ public class ExtractColors {
         MAP.put("dirt_path", new String[]{"dirt_path_top"});
     }
 
+    // Texture de flanc distincte de la face du dessus, pour les blocs ou la difference se voit
+    // (herbe : dessus vert, flanc terre+liseré vert ; gres : dessus lisse, flanc strié...). Absent
+    // de cette table -> le flanc reutilise la meme cellule que le dessus, ce qui est deja correct
+    // pour un bloc uniforme (pierre, sable...). "GRASS_OVERLAY" est un marqueur special : composite
+    // grass_block_side + grass_block_side_overlay teinte, comme le fait le rendu vanilla.
+    static final Map<String, String> SIDE_MAP = new LinkedHashMap<>();
+    static {
+        SIDE_MAP.put("grass_block", "GRASS_OVERLAY");
+        SIDE_MAP.put("podzol", "podzol_side");
+        SIDE_MAP.put("mycelium", "mycelium_side");
+        SIDE_MAP.put("deepslate", "deepslate");
+        SIDE_MAP.put("sandstone", "sandstone");
+        SIDE_MAP.put("red_sandstone", "red_sandstone");
+        SIDE_MAP.put("basalt", "basalt_side");
+        SIDE_MAP.put("blackstone", "blackstone");
+        SIDE_MAP.put("dirt_path", "dirt_path_side");
+        for (String wood : new String[]{"oak", "spruce", "birch", "jungle", "acacia", "dark_oak",
+                "mangrove", "cherry", "pale_oak", "bamboo"}) {
+            SIDE_MAP.put(wood + "_log", wood + "_log");
+        }
+    }
+
     // Vanilla teinte certains blocs au rendu (herbe, feuillage, eau) au lieu de peindre la couleur
     // dans la texture, qui reste grise/neutre — sans ça la carte afficherait de l'herbe grise.
     // Valeurs par défaut vanilla (biome plaines, sans carte de couleur réelle par biome).
@@ -169,18 +191,14 @@ public class ExtractColors {
         System.out.println("Textures lues: " + images.size());
 
         List<String> keys = new ArrayList<>(MAP.keySet());
-        int cellCount = keys.size() + 1; // +1 : cellule blanche de repli pour les blocs sans texture connue
-        int cols = (int) Math.ceil(Math.sqrt(cellCount));
-        int rows = (int) Math.ceil(cellCount / (double) cols);
-        BufferedImage atlas = new BufferedImage(cols * TILE, rows * TILE, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = atlas.createGraphics();
 
-        StringBuilder colorsJson = new StringBuilder("{\n");
-        StringBuilder indexJson = new StringBuilder("{\n  \"cols\": " + cols + ",\n  \"rows\": " + rows
-                + ",\n  \"tile\": " + TILE + ",\n  \"blocks\": {\n");
-        int done = 0, missing = 0;
-        for (int i = 0; i < keys.size(); i++) {
-            String block = keys.get(i);
+        // Passe 1 : resout chaque tuile a placer (dessus, et flanc quand il differe reellement)
+        // avant de dimensionner l'atlas, pour ne pas gaspiller de cellules sur un flanc introuvable.
+        Map<String, BufferedImage> topTile = new LinkedHashMap<>();
+        Map<String, int[]> topRgb = new LinkedHashMap<>();
+        Map<String, BufferedImage> sideTile = new LinkedHashMap<>(); // seulement si distinct du dessus
+        BufferedImage grassOverlayBase = null;
+        for (String block : keys) {
             String[] candidates = MAP.get(block);
             BufferedImage src = null;
             for (String cand : candidates) {
@@ -188,7 +206,6 @@ public class ExtractColors {
                 if (img != null) { src = img; break; }
             }
             if (src == null) {
-                missing++;
                 System.err.println("MANQUANT: " + block + " (" + String.join(",", candidates) + ")");
                 continue;
             }
@@ -199,16 +216,60 @@ public class ExtractColors {
                 tile = tinted(tile, tint);
                 rgb = new int[]{(rgb[0] * tint[0]) / 255, (rgb[1] * tint[1]) / 255, (rgb[2] * tint[2]) / 255};
             }
-            int cellX = done % cols, cellY = done / cols;
-            g.drawImage(tile, cellX * TILE, cellY * TILE, null);
+            topTile.put(block, tile);
+            topRgb.put(block, rgb);
 
-            colorsJson.append(String.format("  \"minecraft:%s\": [%d, %d, %d]", block, rgb[0], rgb[1], rgb[2]));
-            indexJson.append(String.format("    \"minecraft:%s\": %d", block, done));
-            done++;
-            boolean last = i == keys.size() - 1;
-            colorsJson.append(last ? "\n" : ",\n");
-            indexJson.append(last ? "\n" : ",\n");
+            String sideName = SIDE_MAP.get(block);
+            if (sideName == null) continue;
+            if (sideName.equals("GRASS_OVERLAY")) {
+                BufferedImage base = images.get("grass_block_side");
+                BufferedImage overlay = images.get("grass_block_side_overlay");
+                if (base != null && overlay != null) {
+                    sideTile.put(block, compositeOverlay(normalizeTile(base), tinted(normalizeTile(overlay), TINT.get("GRASS"))));
+                }
+                continue;
+            }
+            BufferedImage sideSrc = images.get(sideName);
+            if (sideSrc != null) sideTile.put(block, normalizeTile(sideSrc));
         }
+
+        int cellCount = topTile.size() + sideTile.size() + 1; // +1 : cellule blanche de repli
+        int cols = (int) Math.ceil(Math.sqrt(cellCount));
+        int rows = (int) Math.ceil(cellCount / (double) cols);
+        BufferedImage atlas = new BufferedImage(cols * TILE, rows * TILE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = atlas.createGraphics();
+
+        StringBuilder colorsJson = new StringBuilder("{\n");
+        StringBuilder indexJson = new StringBuilder("{\n  \"cols\": " + cols + ",\n  \"rows\": " + rows
+                + ",\n  \"tile\": " + TILE + ",\n  \"blocks\": {\n");
+        Map<String, Integer> topIndexOf = new LinkedHashMap<>();
+        int done = 0;
+        for (Map.Entry<String, BufferedImage> e : topTile.entrySet()) {
+            int cellX = done % cols, cellY = done / cols;
+            g.drawImage(e.getValue(), cellX * TILE, cellY * TILE, null);
+            topIndexOf.put(e.getKey(), done);
+            done++;
+        }
+        Map<String, Integer> sideIndexOf = new LinkedHashMap<>();
+        for (Map.Entry<String, BufferedImage> e : sideTile.entrySet()) {
+            int cellX = done % cols, cellY = done / cols;
+            g.drawImage(e.getValue(), cellX * TILE, cellY * TILE, null);
+            sideIndexOf.put(e.getKey(), done);
+            done++;
+        }
+
+        boolean firstEntry = true;
+        for (String block : topTile.keySet()) {
+            int[] rgb = topRgb.get(block);
+            int top = topIndexOf.get(block);
+            int side = sideIndexOf.getOrDefault(block, top); // pas de flanc distinct -> reutilise le dessus
+            if (!firstEntry) { colorsJson.append(",\n"); indexJson.append(",\n"); }
+            firstEntry = false;
+            colorsJson.append(String.format("  \"minecraft:%s\": [%d, %d, %d]", block, rgb[0], rgb[1], rgb[2]));
+            indexJson.append(String.format("    \"minecraft:%s\": {\"top\": %d, \"side\": %d}", block, top, side));
+        }
+        int missing = keys.size() - topTile.size();
+
         // Cellule blanche de repli : un bloc sans entree dans MAP retombe sur sa couleur moyenne
         // (deja calculee ailleurs, cote mod) multipliee par du blanc pur -> couleur inchangee, sans
         // avoir besoin d'un deuxieme materiau/mesh juste pour les quelques blocs non textures.
@@ -216,10 +277,10 @@ public class ExtractColors {
         int wx = whiteIdx % cols, wy = whiteIdx / cols;
         g.setColor(java.awt.Color.WHITE);
         g.fillRect(wx * TILE, wy * TILE, TILE, TILE);
-        indexJson.append(",\n    \"__white__\": " + whiteIdx + "\n");
+        indexJson.append(",\n    \"__white__\": {\"top\": " + whiteIdx + ", \"side\": " + whiteIdx + "}\n");
 
         g.dispose();
-        colorsJson.append("}\n");
+        colorsJson.append("\n}\n");
         indexJson.append("  }\n}\n");
 
         Files.write(modOut.resolve("block_colors.json"), colorsJson.toString().getBytes(StandardCharsets.UTF_8));
@@ -258,6 +319,18 @@ public class ExtractColors {
                 out.setRGB(x, y, (a << 24) | (r << 16) | (gg << 8) | b);
             }
         }
+        return out;
+    }
+
+    /** Composite un calque teinte (alpha-over) sur une base — reproduit ce que vanilla fait pour
+     * grass_block_side + grass_block_side_overlay au rendu (la base montre la terre, le calque
+     * ajoute le lisere vert par-dessus, la partie transparente du calque laisse voir la terre). */
+    static BufferedImage compositeOverlay(BufferedImage base, BufferedImage overlay) {
+        BufferedImage out = new BufferedImage(base.getWidth(), base.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.drawImage(base, 0, 0, null);
+        g.drawImage(overlay, 0, 0, null);
+        g.dispose();
         return out;
     }
 

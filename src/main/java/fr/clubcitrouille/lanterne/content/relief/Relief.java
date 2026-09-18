@@ -69,15 +69,16 @@ public final class Relief {
     private static final int REGION_CHUNKS = 32;
     private static final int REGION_BLOCKS = REGION_CHUNKS * 16;
     private static final short UNEXPLORED = Short.MIN_VALUE;
-    // Version 2 : ajoute un octet d'index de texture par colonne (voir TEX_INDEX) apres les
-    // couleurs, pour que le viewer texture chaque face avec le vrai sprite du bloc au lieu de
-    // le teinter uniformement. Technique adaptee de BlueMap (github.com/BlueMap-Minecraft/BlueMap,
-    // licence MIT), simplifiee : un seul index par colonne (face du dessus), pas un modele 3D complet.
-    private static final byte[] MAGIC = {'L', 'R', 'E', 'L', 2};
+    // Version 3 : deux octets d'index de texture par colonne (dessus, flanc) au lieu d'un seul —
+    // le flanc reutilisait la texture du dessus, ce qui rend l'herbe verte de haut en bas au lieu
+    // d'un dessus vert + flanc terreux comme en jeu. Technique adaptee de BlueMap
+    // (github.com/BlueMap-Minecraft/BlueMap, licence MIT), simplifiee : deux faces par colonne
+    // (dessus + flanc), pas un modele 3D complet.
+    private static final byte[] MAGIC = {'L', 'R', 'E', 'L', 3};
     private static final int NO_TEXTURE = 255;
 
     private static final Map<String, int[]> COLORS = loadColors();
-    private static final Map<String, Integer> TEX_INDEX = loadTexIndex();
+    private static final Map<String, int[]> TEX_INDEX = loadTexIndex(); // bloc -> {top, side}
     private static final int[] FALLBACK_COLOR = {130, 130, 130};
 
     private static final AtomicLong regionsWritten = new AtomicLong();
@@ -194,7 +195,7 @@ public final class Relief {
         currentHeights = new short[REGION_BLOCKS * REGION_BLOCKS];
         java.util.Arrays.fill(currentHeights, UNEXPLORED);
         currentColors = new byte[REGION_BLOCKS * REGION_BLOCKS * 3];
-        currentTexIndex = new byte[REGION_BLOCKS * REGION_BLOCKS];
+        currentTexIndex = new byte[REGION_BLOCKS * REGION_BLOCKS * 2]; // [top, side] par colonne
         java.util.Arrays.fill(currentTexIndex, (byte) NO_TEXTURE);
         currentChunkIndex = 0;
         return true;
@@ -305,8 +306,9 @@ public final class Relief {
                 currentColors[flat * 3] = (byte) rgb[0];
                 currentColors[flat * 3 + 1] = (byte) rgb[1];
                 currentColors[flat * 3 + 2] = (byte) rgb[2];
-                Integer tex = TEX_INDEX.get(blockId);
-                currentTexIndex[flat] = (byte) (tex != null ? tex : NO_TEXTURE);
+                int[] tex = TEX_INDEX.get(blockId);
+                currentTexIndex[flat * 2] = (byte) (tex != null ? tex[0] : NO_TEXTURE);
+                currentTexIndex[flat * 2 + 1] = (byte) (tex != null ? tex[1] : NO_TEXTURE);
             }
         }
     }
@@ -476,8 +478,8 @@ public final class Relief {
         return map;
     }
 
-    private static Map<String, Integer> loadTexIndex() {
-        Map<String, Integer> map = new HashMap<>();
+    private static Map<String, int[]> loadTexIndex() {
+        Map<String, int[]> map = new HashMap<>();
         try (InputStream in = Relief.class.getClassLoader()
                 .getResourceAsStream("lanterne/relief_atlas_index.json")) {
             if (in == null) {
@@ -489,19 +491,28 @@ public final class Relief {
             CompoundJsonIndex parsed = gson.fromJson(
                     new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8),
                     CompoundJsonIndex.class);
-            if (parsed != null && parsed.blocks != null) map.putAll(parsed.blocks);
+            if (parsed != null && parsed.blocks != null) {
+                for (Map.Entry<String, Face> e : parsed.blocks.entrySet()) {
+                    map.put(e.getKey(), new int[]{e.getValue().top, e.getValue().side});
+                }
+            }
         } catch (IOException e) {
             Lanterne.LOG.warn("[RELIEF] lecture de relief_atlas_index.json impossible : {}", e.toString());
         }
         return map;
     }
 
-    /** Miroir minimal du format ecrit par tools/ExtractColors.java (cols/rows/tile + bloc->index). */
+    /** Miroir minimal du format ecrit par tools/ExtractColors.java (cols/rows/tile + bloc->{top,side}). */
     private static final class CompoundJsonIndex {
         int cols;
         int rows;
         int tile;
-        Map<String, Integer> blocks;
+        Map<String, Face> blocks;
+    }
+
+    private static final class Face {
+        int top;
+        int side;
     }
 
     public static String report() {
