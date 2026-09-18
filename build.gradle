@@ -135,6 +135,62 @@ neoForge {
     }
 }
 
+// <h2>Le monde « banc » ne s'invente pas : il se copie, ou le lancement échoue tout de suite</h2>
+//
+// --quickPlaySingleplayer n'est pas --quickPlayNouveauMonde : si « saves/<nom> » n'existe pas encore
+// dans le répertoire isolé du banc, le client vanilla ne le crée PAS (net.minecraft.client.quickplay.
+// QuickPlay#joinSingleplayerWorld ne fait que lire, jamais écrire). Il affiche un écran « Failed to
+// Quick Play — Could not find a world with the provided identifier » et s'arrête là, SANS RIEN ÉCRIRE
+// dans logs/latest.log — ni exception, ni avertissement, ni la moindre ligne. Pour un humain c'est
+// un aller-retour de deux secondes vers la liste des mondes. Pour un banc automatisé qui ne sait
+// cliquer sur rien, c'est un blocage silencieux : le processus tourne, ne progresse jamais, et les
+// journaux ne racontent rien qui explique pourquoi.
+//
+// Constaté cette nuit sur plusieurs répertoires fraîchement créés (run-portails, run-portails2,
+// run-carte, run-clubcitrouille) : le journal s'arrête net juste après le sondage du GPU, zéro ligne
+// « joined the game », zéro exception — la signature exacte de cet écran, pas d'un plantage. Les
+// répertoires qui avaient déjà un monde « banc » de mesures précédentes (run-cheptel, run-lambdaform,
+// run-reveil) chargeaient sans accroc. D'où le « fréquent mais pas systématique » : chaque nouveau nom
+// de banc échoue à coup sûr à son premier lancement, chaque nom réutilisé fonctionne.
+//
+// La bonne réponse n'est pas de créer un monde vide à la place : « banc » doit être une COPIE du
+// monde du serveur de mesure (voir plus haut), pas une friche fraîchement engendrée — un monde vide
+// fausserait toute comparaison de performance. La bonne réponse est de copier la référence quand on
+// l'a sous la main, et d'échouer fort et tôt sinon — jamais de laisser le silence vanilla se faire
+// passer pour un blocage mystérieux.
+tasks.named('runClient') {
+    doFirst {
+        boolean quickplayArmed = System.getenv('LANTERNE_GLASS') == '1' || System.getenv('LANTERNE_SAVE') != null
+        if (quickplayArmed && project.hasProperty('banc')) {
+            String worldId = System.getenv('LANTERNE_SAVE') ?: 'banc'
+            File isolatedGameDir = project.file("run-${project.property('banc')}")
+            File targetSave = new File(isolatedGameDir, "saves/${worldId}")
+            if (!new File(targetSave, 'level.dat').exists()) {
+                File referenceSave = project.file("run/saves/${worldId}")
+                if (new File(referenceSave, 'level.dat').exists()) {
+                    logger.lifecycle(
+                        "[banc] « ${worldId} » absent de run-${project.property('banc')}/saves : copie depuis " +
+                        "la référence run/saves/${worldId} avant de lancer --quickPlaySingleplayer."
+                    )
+                    project.copy {
+                        from(referenceSave)
+                        into(targetSave)
+                        exclude 'session.lock'
+                    }
+                } else {
+                    throw new GradleException(
+                        "--quickPlaySingleplayer vise « ${worldId} », mais ni run-${project.property('banc')}/saves/${worldId} " +
+                        "ni la référence run/saves/${worldId} n'existent. Le client vanilla n'auto-crée PAS ce monde : il " +
+                        "afficherait « Failed to Quick Play » et resterait bloqué sans rien écrire dans le journal. " +
+                        "Seede le monde à la main dans run-${project.property('banc')}/saves/${worldId}, ou enlève " +
+                        "LANTERNE_GLASS/LANTERNE_SAVE pour ce premier lancement (menu normal, création manuelle du monde)."
+                    )
+                }
+            }
+        }
+    }
+}
+
 // <h2>Le décodeur MP3, embarqué dans l'archive</h2>
 //
 // Le mod ne convertit plus les fichiers du joueur : il les décode. Le Vorbis et le WAV sont lus par

@@ -194,6 +194,34 @@ public final class Glass {
     private static final double SUSPECT_RATE = 0.95d;
 
     /**
+     * Plafond d'attente du monde et du joueur, avant d'abandonner plutôt que de tourner en silence
+     * pour toujours.
+     *
+     * <h2>Un banc qui attendait un clic qui ne viendrait jamais</h2>
+     *
+     * <p>{@code --quickPlaySingleplayer} n'ouvre un monde sans intervention que s'il existe déjà
+     * <em>et</em> n'a besoin d'aucune confirmation. Dans tous les autres cas — monde absent
+     * ({@code QuickPlay#joinSingleplayerWorld}, écran « Failed to Quick Play »), sauvegarde d'une
+     * version antérieure à confirmer ({@code WorldOpenFlows#askForBackup}, « Create a backup before
+     * upgrading this world? »), structure de fichiers migrée puis à rejoindre
+     * ({@code WorldOpenFlows#upgradeAndOpenWorld}, « Upgrading World Completed — Do you want to join
+     * the world now? »), ou réglages expérimentaux ({@code WorldOpenFlows#confirmWorldCreation},
+     * « Worlds using Experimental Settings are not supported ») — le client vanilla affiche un écran
+     * qui attend un clic. Cette classe n'en simule aucun : voir la javadoc de classe, « rien ici ne
+     * construit ni ne peuple ce monde ». Et ces écrans n'écrivent RIEN dans le journal — ni exception,
+     * ni avertissement — donc sans garde-fou {@link #waitForWorld} tournerait indéfiniment, image
+     * après image, sans qu'aucune trace n'explique jamais pourquoi. Constaté en pratique cette nuit,
+     * sur plusieurs répertoires isolés, avec des arrêts forcés de plusieurs minutes à plus d'une heure.
+     *
+     * <p>Cent vingt secondes : largement au-dessus des chargements les plus lents observés côté
+     * réussite (moins de cent secondes, migration de structure de fichiers comprise — voir
+     * {@code FileFixerUpper} dans les journaux), largement en dessous des blocages réels constatés.
+     * Au-delà, {@link #refuse} arrête proprement plutôt que de laisser une fenêtre de test tourner
+     * pour rien, en nommant la cause probable au lieu de laisser un silence faire croire à un mystère.
+     */
+    private static final long WAIT_FOR_WORLD_TIMEOUT_NANOS = 120_000_000_000L;
+
+    /**
      * Part des intervalles collés à la médiane au-delà de laquelle on parle de cadence imposée.
      *
      * <p>Un affichage synchronisé rend des intervalles quasi identiques ; un affichage libre, non.
@@ -377,6 +405,7 @@ public final class Glass {
             return;
         }
         phase = Phase.WAITING;
+        phaseOpened = System.nanoTime();
         Lanterne.LOG.info("[VITRE] Banc d'images armé — attente du monde et du joueur.");
     }
 
@@ -601,6 +630,14 @@ public final class Glass {
     /** Attend que le monde soit chargé et le joueur présent, sans intervention humaine. */
     private static void waitForWorld(Minecraft minecraft) {
         if (minecraft.level == null || minecraft.player == null) {
+            if (System.nanoTime() - phaseOpened > WAIT_FOR_WORLD_TIMEOUT_NANOS) {
+                refuse(minecraft, "le monde n'a jamais chargé après "
+                        + (WAIT_FOR_WORLD_TIMEOUT_NANOS / 1_000_000_000L)
+                        + " s d'attente — vraisemblablement un écran vanilla resté sans réponse "
+                        + "(monde absent pour --quickPlaySingleplayer, sauvegarde à confirmer, "
+                        + "migration de structure à rejoindre, ou réglages expérimentaux à accepter). "
+                        + "Voir QuickPlay/WorldOpenFlows : aucun de ces écrans n'écrit dans ce journal.");
+            }
             return;
         }
         populate(minecraft);
