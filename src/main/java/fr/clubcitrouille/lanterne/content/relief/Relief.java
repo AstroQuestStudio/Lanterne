@@ -78,16 +78,22 @@ public final class Relief {
     private static final AtomicLong chunksDecoded = new AtomicLong();
     private static final AtomicLong unknownBlocks = new AtomicLong();
 
-    private static final ArrayDeque<Path> pending = new ArrayDeque<>();
     private static int rescanCooldown;
 
     // État de la région en cours de traitement, réparti sur plusieurs ticks.
     private static Path currentMca;
     private static Path currentTileDir;
+    private static ResourceKey<Level> currentDimension;
     private static RegionFile currentRegion;
     private static short[] currentHeights;
     private static byte[] currentColors;
     private static int currentChunkIndex;
+
+    /** Une region en attente, avec sa dimension d'origine : {@link #decodeChunkSurface} en a besoin
+     * pour savoir si le Nether (plafond de bedrock) demande un algorithme different de l'Overworld. */
+    private record PendingRegion(ResourceKey<Level> dimension, Path mca) {}
+
+    private static final ArrayDeque<PendingRegion> pendingRegions = new ArrayDeque<>();
 
     private Relief() {}
 
@@ -104,7 +110,7 @@ public final class Relief {
         long deadline = System.nanoTime() + ReliefConfig.BUDGET_MS.get() * 1_000_000L;
         while (System.nanoTime() < deadline) {
             if (currentRegion == null) {
-                Path next = pending.poll();
+                PendingRegion next = pendingRegions.poll();
                 if (next == null) return; // rien à faire ce tick
                 if (!beginRegion(next)) continue;
             }
@@ -123,9 +129,9 @@ public final class Relief {
             Path tileDir = regionDir.resolveSibling("lanterne_carte3d");
             try (DirectoryStream<Path> files = Files.newDirectoryStream(regionDir, "r.*.mca")) {
                 for (Path mca : files) {
-                    if (pending.contains(mca)) continue;
+                    if (pendingRegions.stream().anyMatch(p -> p.mca().equals(mca))) continue;
                     Path tile = tileFor(tileDir, mca);
-                    if (needsProcessing(mca, tile)) pending.add(mca);
+                    if (needsProcessing(mca, tile)) pendingRegions.add(new PendingRegion(key, mca));
                 }
             } catch (IOException e) {
                 Lanterne.LOG.warn("[RELIEF] balayage de {} impossible : {}", regionDir, e.toString());
@@ -164,17 +170,19 @@ public final class Relief {
     private static final List<ResourceKey<Level>> DIMENSIONS =
             List.of(Level.OVERWORLD, Level.NETHER, Level.END);
 
-    private static boolean beginRegion(Path mca) {
+    private static boolean beginRegion(PendingRegion pr) {
+        Path mca = pr.mca();
         try {
             currentRegion = new RegionFile(
                     new net.minecraft.world.level.chunk.storage.RegionStorageInfo(
-                            mca.toString(), Level.OVERWORLD, "relief"),
+                            mca.toString(), pr.dimension(), "relief"),
                     mca, mca.getParent(), false);
         } catch (IOException e) {
             Lanterne.LOG.warn("[RELIEF] ouverture de {} impossible : {}", mca, e.toString());
             return false;
         }
         currentMca = mca;
+        currentDimension = pr.dimension();
         currentTileDir = tileDirFor(mca);
         currentHeights = new short[REGION_BLOCKS * REGION_BLOCKS];
         java.util.Arrays.fill(currentHeights, UNEXPLORED);
@@ -246,19 +254,37 @@ public final class Relief {
             bs.get().getLongArray("data").ifPresent(d -> dataBySection.put(sy.get(), d));
         }
 
+        // Le Nether a un plafond de bedrock : le heightmap MOTION_BLOCKING vanilla rapporte donc le
+        // plafond (quasi constant, avec juste le bruit de generation du netherrack) pour CHAQUE
+        // colonne, jamais le vrai sol ou le joueur marche. Verifie sur le monde de test importe :
+        // gisait un motif de "terrasses" artificiel, confirmant que c'etait bien lu, pas invente.
+        // Un balayage manuel colonne par colonne (plafond -> vide -> premier sol) est plus couteux
+        // mais c'est la seule facon de retrouver la vraie surface dans cette dimension.
+        boolean isNether = currentDimension != null && currentDimension.equals(Level.NETHER);
+
         for (int z = 0; z < 16; z++) {
             for (int x = 0; x < 16; x++) {
                 int colIdx = z * 16 + x;
-                long h = unpack(heightArr, colIdx, hmBits, hmPerLong);
-                int surfaceY = (int) h + worldMinY - 1;
-                int sectionY = Math.floorDiv(surfaceY, 16);
-                ListTag palette = paletteBySection.get(sectionY);
-                if (palette == null) continue; // colonne vide (void, ou hauteur hors section connue)
-                int localY = surfaceY - sectionY * 16;
-                long[] data = dataBySection.get(sectionY);
-                String blockId = blockAt(palette, data, x, localY, z);
-                if (blockId == null || blockId.equals("minecraft:air") || blockId.equals("minecraft:cave_air")
-                        || blockId.equals("minecraft:void_air")) {
+                int surfaceY;
+                String blockId;
+                if (isNether) {
+                    int[] found = findNetherSurface(paletteBySection, dataBySection, x, z);
+                    if (found == null) continue; // aucun sol net sous le plafond dans cette colonne
+                    surfaceY = found[0];
+                    ListTag pal = paletteBySection.get(Math.floorDiv(surfaceY, 16));
+                    long[] dat = dataBySection.get(Math.floorDiv(surfaceY, 16));
+                    blockId = blockAt(pal, dat, x, Math.floorMod(surfaceY, 16), z);
+                } else {
+                    long h = unpack(heightArr, colIdx, hmBits, hmPerLong);
+                    surfaceY = (int) h + worldMinY - 1;
+                    int sectionY = Math.floorDiv(surfaceY, 16);
+                    ListTag palette = paletteBySection.get(sectionY);
+                    if (palette == null) continue; // colonne vide (void, ou hauteur hors section connue)
+                    int localY = surfaceY - sectionY * 16;
+                    long[] data = dataBySection.get(sectionY);
+                    blockId = blockAt(palette, data, x, localY, z);
+                }
+                if (blockId == null || isAirLike(blockId)) {
                     continue; // colonne d'air pur (void) : reste UNEXPLORED, le client ne la dessine pas
                 }
                 int rx = chunkLocalX * 16 + x;
@@ -272,6 +298,47 @@ public final class Relief {
                 currentColors[flat * 3 + 2] = (byte) rgb[2];
             }
         }
+    }
+
+    private static boolean isAirLike(String id) {
+        return id.equals("minecraft:air") || id.equals("minecraft:cave_air") || id.equals("minecraft:void_air");
+    }
+
+    /**
+     * Retrouve le vrai sol du Nether pour une colonne (x,z) : descend depuis le plafond, traverse sa
+     * masse solide, traverse le vide en dessous, et s'arrete au premier bloc solide rencontre ensuite
+     * — c'est ce premier "atterrissage" sous le plafond qui correspond a ce qu'un joueur foule.
+     * Retourne {worldY, -} ou null si la colonne n'a pas ce motif plafond/vide/sol (ex: colonne
+     * entierement videe par une grotte ouverte, ou entierement solide).
+     */
+    private static int[] findNetherSurface(Map<Integer, ListTag> paletteBySection,
+            Map<Integer, long[]> dataBySection, int x, int z) {
+        if (paletteBySection.isEmpty()) return null;
+        int maxSectionY = paletteBySection.keySet().stream().max(Integer::compareTo).orElseThrow();
+        int minSectionY = paletteBySection.keySet().stream().min(Integer::compareTo).orElseThrow();
+        boolean sawSolid = false;
+        boolean sawGapAfterSolid = false;
+        for (int sy = maxSectionY; sy >= minSectionY; sy--) {
+            ListTag palette = paletteBySection.get(sy);
+            long[] data = dataBySection.get(sy);
+            if (palette == null) {
+                // Section absente du NBT (pas forcement du vide reel) : on la traite comme une
+                // interruption de la masse solide plutot que de deviner son contenu.
+                if (sawSolid) sawGapAfterSolid = true;
+                continue;
+            }
+            for (int ly = 15; ly >= 0; ly--) {
+                String id = blockAt(palette, data, x, ly, z);
+                boolean solid = id != null && !isAirLike(id);
+                if (solid) {
+                    if (sawSolid && sawGapAfterSolid) return new int[]{sy * 16 + ly, 0};
+                    sawSolid = true;
+                } else if (sawSolid) {
+                    sawGapAfterSolid = true;
+                }
+            }
+        }
+        return null;
     }
 
     /** Nom du bloc a la position locale (x,y,z) dans une section de 16^3, via son palette+data. */
