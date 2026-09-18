@@ -288,6 +288,11 @@ public final class Radiographie {
         if (fpsMin <= fpsMax) {
             sb.append(String.format(Locale.ROOT, "FPS min/max (fenêtres de 1s) : %.1f / %.1f%n", fpsMin, fpsMax));
         }
+        // Fusion de faces (terrain) : voir fr.clubcitrouille.lanterne.client.terrain.Greedy — cumulé
+        // depuis le démarrage du client, pas juste cette session, mais suffisant pour comparer un
+        // lancement LANTERNE_GREEDY_MESH=1 à un lancement sans (le compteur reste à "aucun quad vu"
+        // dans ce cas, Greedy.accept() retournant false immédiatement).
+        sb.append(fr.clubcitrouille.lanterne.client.terrain.Greedy.report()).append('\n');
         sb.append('\n');
 
         sb.append("LENTILLE (mise à l'échelle) — chronologie\n").append("-".repeat(60)).append('\n');

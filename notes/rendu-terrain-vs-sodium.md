@@ -389,24 +389,61 @@ selon le shader de diagnostic utilisé, pas blancs. Deux hypothèses testées :
    (zones en marge rouge sur les pentes dans la visualisation, signe d'un `spriteSize.y`
    proche de zéro par endroits) reste non expliquée.
 
-**La cause exacte du carré gris/jaune n'est PAS confirmée.** `Greedy.ENABLED` exige
-maintenant `LANTERNE_GREEDY_MESH=1` explicitement (inversé par rapport à l'intention
-initiale) — aucun client normal ne peut afficher ce défaut. Un journal de diagnostic
-(`LANTERNE_GREEDY_DIAG=1`, gelé à 6 lignes) trace bornes de sprite/UV/delta pour les
-premières fusions réelles — utile pour reprendre l'investigation sans tout réinstrumenter.
+**Cause confirmée et corrigée (passe du 2026-09-18, suite).** Ce n'était PAS un bug de
+shader — trois passes successives avaient épuisé cette piste sans la trouver précisément
+parce qu'elle n'y était pas. Reconfirmé cette passe, avec preuve, que côté GPU tout était
+sain : un shader de diagnostic en bandes dures (`mod(floor(local.x)+floor(local.y), 2.0)`)
+a montré une répétition propre, une case par bloc, sur tout un run fusionné — `local`/
+`mergedU` s'enroulent correctement. Un second diagnostic (comparaison `dFdx(local)*size`
+vs `dFdx(uv)` brut, pixel exact via un petit script PowerShell `System.Drawing.Bitmap`
+plutôt qu'à l'œil) a innocenté les dérivées explicites. Un troisième (appel direct à
+`textureGrad` en contournant le "nearest snapping" de `sampleNearest`) a montré le même
+défaut, donc innocenté aussi cette arithmétique vanilla.
 
-### Pistes non explorées pour la prochaine passe
+La vraie cause, trouvée par `javap -c` sur `ModelBlockRenderer` du vrai jar patché :
+`QuadInstance` y est un champ `private final` UNIQUE alloué au constructeur, MUTÉ EN PLACE
+pour chaque quad d'une compilation de section avant d'être "put" — jamais réinstancié.
+`Greedy.Pending` gardait une référence VIVANTE vers ce `QuadInstance` (et vers son
+`BakedQuad`, lui bien immuable/sûr) au lieu d'un instantané. `Greedy.flush()`, appelé une
+seule fois à la fin de la compilation de la section, relisait donc la couleur/lumière du
+DERNIER quad traité par le thread pour TOUS les quads en attente — d'où une teinte plate et
+fausse, uniforme sur toute une section (pas un dégradé : mesuré au pixel près,
+`vertexColor` environ deux fois trop sombre et virant au bleu sur la zone fusionnée, alors
+que la même zone en rendu non fusionné, même caméra, même monde, retombait pixel pour pixel
+sur du blanc). Ça expliquait aussi pourquoi `mergeable()` ne bloquait jamais rien sur une
+différence de lumière/couleur : les deux côtés de la comparaison étaient littéralement le
+même objet au moment de la lecture, donc toujours "égaux".
 
-- Vérifier si le bogue est spécifique aux runs de longueur ≥ 3 (le seul cas tracé à la main
-  dans cette passe était `run=2`) — un run plus long pourrait révéler une divergence que
-  `run=2` masque.
-- Vérifier par un shader de diagnostic ciblé si c'est `mergedU` (le calcul lui-même) ou la
-  reconstruction `fract()` en aval qui produit la mauvaise couleur — cette passe a vérifié
-  les DONNÉES en amont (`spriteSize` lisible) mais pas le résultat de `lanterneSample` lui-même
-  pixel par pixel.
-- Les traînées rouges (marges de pente) mériteraient d'être isolées : sont-elles corrélées à
-  des quads réellement fusionnés, ou à un tout autre chemin de rendu (feuilles, blocs
-  partiels) qui partage aussi le format étendu ?
+Corrigé en instantanéisant couleur et lumière des 4 sommets dans `Greedy.accept()` (deux
+`int[4]` par quad en attente), avant que `ModelBlockRenderer` ne mute son objet partagé pour
+le quad suivant. `TerrainVertexFormat.putQuad`/`putMergedRunAlongX` acceptent maintenant ces
+tableaux au lieu d'un `QuadInstance` vivant pour le chemin Greedy (le chemin non-Greedy,
+immédiat, garde l'ancienne signature — il lit `QuadInstance` au bon moment, jamais affecté).
+Vérifié après correction : rendu fusionné strictement identique pixel pour pixel au rendu
+non fusionné, même caméra/monde (`New World (1)`, Vulkan). `Greedy.ENABLED` reste néanmoins
+derrière `LANTERNE_GREEDY_MESH=1` (pas d'activation par défaut) : le point #5 ci-dessous
+(pas de vérification de géométrie de quad à la fusion) reste un risque latent non traité par
+cette passe.
+
+Gain mesuré via `Radiographie` (nouvelle ligne `greedy : N quad(s) ... -> M quad(s) emis`,
+câblée dans son rapport cette passe) sur ce monde : 134345 quads UP/SOLID → 122057 émis
+(×0,909, -9,1 %) — modeste, cohérent avec le périmètre volontairement étroit (UP seulement,
+axe X seulement, un seul monde de neige assez découpé). FPS moyen mesuré quasi identique
+entre fusionné et non fusionné (460 vs 480 sur une fenêtre ~75 s, fenêtre 854×480, machine
+sur secteur) — sans signal net, la scène de test est dominée par du temps CPU hors-rendu
+(`Unsafe.park`, `extractSectionDrawGroups`) à ces fréquences d'image (300-900 FPS) plutôt que
+par le débit de sommets ; une scène avec beaucoup plus de terrain visible/de draw calls
+serait nécessaire pour isoler un gain FPS net à ce périmètre de fusion.
+
+### Pistes non explorées, toujours ouvertes
+
+- Item #5 des passes précédentes, toujours pas corrigé : `mergeable()` ne vérifie pas que
+  `first`/`last` partagent la même géométrie de quad (même modèle de bloc) — deux blocs
+  différents partageant par coïncidence sprite/couleur/lumière identiques mais un modèle de
+  face différent (bloc plein vs dalle) pourraient fusionner avec une géométrie incohérente.
+  Toujours pas la cause d'un bug observé (le monde de test n'a pas ce cas), mais à corriger
+  avant d'envisager `Greedy.ENABLED` par défaut.
+- Les traînées rouges (marges de pente) du diagnostic `spriteSize` d'une passe antérieure
+  restent non expliquées, jamais retestées depuis.
 - Le périmètre de fusion actuel (`UP` uniquement, axe X uniquement, couche `SOLID`
-  uniquement) reste le plus simple délibérément — ne pas étendre avant d'avoir un cas simple
-  qui rend correctement.
+  uniquement) reste le plus simple délibérément.

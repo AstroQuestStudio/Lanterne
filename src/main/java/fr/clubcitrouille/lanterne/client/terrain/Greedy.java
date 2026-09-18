@@ -53,36 +53,68 @@ import fr.clubcitrouille.lanterne.Lanterne;
  */
 public final class Greedy {
     /**
-     * {@code LANTERNE_GREEDY_MESH=1} active la fusion — DÉSACTIVÉE PAR DÉFAUT tant qu'elle n'est pas
-     * vérifiée saine.
+     * {@code LANTERNE_GREEDY_MESH=1} active la fusion.
      *
-     * <h2>Pourquoi ce n'est plus activé par défaut</h2>
+     * <h2>Historique du carré gris/jaune — cause confirmée et corrigée</h2>
      *
-     * <p>Le premier vrai test client a montré un sol de neige fusionné rendu en larges carrés GRIS
-     * (pas blancs), avec des lignes de bord visibles entre eux — vu directement par l'utilisateur sur
-     * son écran pendant cette passe. Une première cause a été identifiée et corrigée (discontinuité de
-     * dérivée d'écran au bord de tuile, voir {@code terrain.fsh}), mais un second test après ce
-     * correctif montre le défaut TOUJOURS présent — la géométrie ou l'UV fusionnés visent donc encore
-     * la mauvaise région de l'atlas, pas seulement le mauvais niveau de mip. Cause exacte non encore
-     * confirmée. Le format étendu (UV1/UV3, shader) reste lui vérifié sain et actif inconditionnellement
-     * — seule LA FUSION elle-même, {@link #accept}/{@link #flush}, est neutralisée ici.
+     * <p>Deux passes précédentes ont vu un sol de neige fusionné rendu en larges carrés GRIS/JAUNES
+     * uniformes. Une première cause réelle (discontinuité de dérivée d'écran au bord de tuile) a été
+     * corrigée dans {@code terrain.fsh}, mais le défaut persistait. Une passe ultérieure a épuisé
+     * TOUTES les pistes côté shader (bornes de sprite lues correctement, {@code local}/{@code mergedU}
+     * calculés et enroulés correctement — vérifié par un shader de diagnostic en bandes dures montrant
+     * bien N répétitions par quad fusionné de longueur N — dérivées explicites non dégénérées, le
+     * "nearest snapping" de {@code sampleNearest} innocenté en échantillonnant directement via
+     * {@code textureGrad}) sans trouver la cause, parce qu'elle n'était PAS côté shader.
+     *
+     * <p><b>La vraie cause</b> (confirmée par {@code javap -c} sur {@code ModelBlockRenderer} du vrai
+     * jar patché, puis par comparaison de pixels exacts entre rendu fusionné et non fusionné au même
+     * endroit) : {@link Pending} gardait une référence VIVANTE vers le {@link QuadInstance} passé à
+     * {@link #accept}. Or {@code ModelBlockRenderer.quadInstance} est un champ {@code private final},
+     * UNE SEULE instance allouée au constructeur et MUTÉE EN PLACE pour chaque quad de la section avant
+     * d'être "put" — {@link #flush}, appelé une seule fois à la fin de la compilation de la section,
+     * relisait donc au moment de la fusion la couleur/lumière du DERNIER quad traité par le thread pour
+     * TOUS les quads en attente, pas celle du quad réellement mis de côté. Ça expliquait à la fois la
+     * teinte fausse (mesurée : environ la moitié de la luminosité attendue, uniforme sur toute la zone
+     * fusionnée d'une section — pas un dégradé, signe d'une valeur figée unique) ET pourquoi
+     * {@link #mergeable} ne refusait jamais rien sur une différence de lumière (les deux côtés de la
+     * comparaison étaient littéralement le même objet au moment de la lecture). Corrigé en
+     * instantanéisant couleur et lumière des 4 sommets dans {@link #accept}, avant que
+     * {@code ModelBlockRenderer} ne mute son objet partagé pour le quad suivant — voir le Javadoc de
+     * {@link Pending}.
      */
     private static final boolean ENABLED = "1".equals(System.getenv("LANTERNE_GREEDY_MESH"));
 
-    /** Un quad mis de côté, en attendant de savoir avec quoi le fusionner. */
+    /**
+     * Un quad mis de côté, en attendant de savoir avec quoi le fusionner.
+     *
+     * <p><b>{@code colors}/{@code lights} sont un INSTANTANÉ, jamais une référence vivante vers
+     * {@link QuadInstance}.</b> Vérifié par {@code javap -c} sur le vrai jar patché
+     * ({@code ModelBlockRenderer}) : {@code quadInstance} y est un champ {@code private final}, une
+     * SEULE instance allouée au constructeur, MUTÉE EN PLACE pour CHAQUE quad (via
+     * {@code BlockModelLighter.prepareQuadFlat}/{@code prepareQuadAmbientOcclusion}) juste avant
+     * d'être "put". C'était la vraie cause du carré gris/jaune (voir
+     * {@code notes/etat-fusion-faces-20260918.md}) : une passe précédente gardait ici une référence
+     * vivante vers cet objet partagé — {@link #flush} la relisait bien plus tard, après que
+     * BEAUCOUP d'autres quads de la section aient muté ce même objet, lisant donc la couleur/lumière
+     * du DERNIER quad traité par le thread, pas celle du quad réellement mis en attente. Ça expliquait
+     * aussi pourquoi {@link #mergeable} ne bloquait jamais rien sur une différence de lumière : les
+     * deux côtés de la comparaison étaient littéralement le même objet au moment de la lecture.
+     */
     private static final class Pending {
         final float x;
         final float y;
         final float z;
         final BakedQuad quad;
-        final QuadInstance instance;
+        final int[] colors;
+        final int[] lights;
 
-        Pending(float x, float y, float z, BakedQuad quad, QuadInstance instance) {
+        Pending(float x, float y, float z, BakedQuad quad, int[] colors, int[] lights) {
             this.x = x;
             this.y = y;
             this.z = z;
             this.quad = quad;
-            this.instance = instance;
+            this.colors = colors;
+            this.lights = lights;
         }
     }
 
@@ -126,9 +158,19 @@ public final class Greedy {
         if (quad.materialInfo().layer() != ChunkSectionLayer.SOLID) {
             return false;
         }
+        // Instantané IMMÉDIAT — voir le Javadoc de Pending pour pourquoi ceci ne doit JAMAIS être
+        // remplacé par une simple référence vers `instance`.
+        int lightEmission = quad.materialInfo().lightEmission();
+        int[] colors = new int[4];
+        int[] lights = new int[4];
+        for (int i = 0; i < 4; i++) {
+            colors[i] = ARGB.multiply(instance.getColor(i), quad.bakedColors().color(i));
+            lights[i] = instance.getLightCoordsWithEmission(i, lightEmission);
+        }
+
         State state = STATE.get();
         state.solidBuffer = buffer;
-        state.upQuads.add(new Pending(x, y, z, quad, instance));
+        state.upQuads.add(new Pending(x, y, z, quad, colors, lights));
         return true;
     }
 
@@ -171,13 +213,13 @@ public final class Greedy {
                 Pending first = row.get(i);
                 if (runLength == 1) {
                     TerrainVertexFormat.putQuad(buffer, first.x, first.y, first.z, first.quad,
-                            first.instance);
+                            first.colors, first.lights);
                     out++;
                 } else {
                     Pending last = row.get(j - 1);
                     boolean merged = TerrainVertexFormat.putMergedRunAlongX(buffer,
-                            first.x, first.y, first.z, first.quad, first.instance,
-                            last.x, last.y, last.z, last.quad, last.instance, runLength);
+                            first.x, first.y, first.z, first.quad, first.colors, first.lights,
+                            last.x, last.y, last.z, last.quad, last.colors, last.lights, runLength);
                     if (merged) {
                         out++;
                     } else {
@@ -186,7 +228,7 @@ public final class Greedy {
                         // plutôt que de risquer une géométrie fausse.
                         for (int k = i; k < j; k++) {
                             Pending p = row.get(k);
-                            TerrainVertexFormat.putQuad(buffer, p.x, p.y, p.z, p.quad, p.instance);
+                            TerrainVertexFormat.putQuad(buffer, p.x, p.y, p.z, p.quad, p.colors, p.lights);
                             out++;
                         }
                     }
@@ -216,17 +258,11 @@ public final class Greedy {
                 return false;
             }
         }
-        int lightEmissionA = a.quad.materialInfo().lightEmission();
-        int lightEmissionB = b.quad.materialInfo().lightEmission();
         for (int i = 0; i < 4; i++) {
-            int colorA = ARGB.multiply(a.instance.getColor(i), a.quad.bakedColors().color(i));
-            int colorB = ARGB.multiply(b.instance.getColor(i), b.quad.bakedColors().color(i));
-            if (colorA != colorB) {
+            if (a.colors[i] != b.colors[i]) {
                 return false;
             }
-            int lightA = a.instance.getLightCoordsWithEmission(i, lightEmissionA);
-            int lightB = b.instance.getLightCoordsWithEmission(i, lightEmissionB);
-            if (lightA != lightB) {
+            if (a.lights[i] != b.lights[i]) {
                 return false;
             }
         }

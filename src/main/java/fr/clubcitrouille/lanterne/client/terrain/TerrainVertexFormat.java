@@ -216,6 +216,40 @@ public final class TerrainVertexFormat {
     }
 
     /**
+     * Variante de {@link #putQuad(VertexConsumer, float, float, float, BakedQuad, QuadInstance)} pour
+     * {@link Greedy} : couleur/lumière des 4 sommets DÉJÀ résolues (un instantané pris au moment où le
+     * quad a été mis en attente), plutôt que relues depuis un {@link QuadInstance} au moment de
+     * l'appel.
+     *
+     * <h2>Pourquoi cette surcharge existe</h2>
+     *
+     * <p>Vérifié par {@code javap -c} sur {@code ModelBlockRenderer} du vrai jar patché :
+     * {@code QuadInstance} y est un champ {@code private final} UNIQUE, réutilisé (muté en place) pour
+     * chaque quad d'une section avant d'être "put" — jamais réinstancié. {@link Greedy} retient des
+     * quads en attente au-delà de l'appel qui les a produits ; lire {@code QuadInstance} plus tard (à
+     * {@link Greedy#flush}) donnerait la couleur/lumière du DERNIER quad traité par le thread, pas
+     * celle de CE quad — la vraie cause du carré gris/jaune de ce chantier (voir le Javadoc de
+     * {@code Greedy.ENABLED}). Cette surcharge accepte donc directement les valeurs déjà figées.
+     */
+    public static void putQuad(VertexConsumer sink, float x, float y, float z, BakedQuad quad,
+            int[] colors, int[] lights) {
+        float[] bounds = spriteBounds(quad);
+        int packedSizeU = packSpan(bounds[2]);
+        int packedSizeV = packSpan(bounds[3]);
+        for (int i = 0; i < 4; i++) {
+            Vector3fc pos = quad.position(i);
+            float u = UVPair.unpackU(quad.packedUV(i));
+            float v = UVPair.unpackV(quad.packedUV(i));
+            sink.addVertex(x + pos.x(), y + pos.y(), z + pos.z())
+                    .setColor(colors[i])
+                    .setUv(u, v)
+                    .setLight(lights[i])
+                    .setUv1(packedSizeU, packedSizeV)
+                    .setUv3(bounds[0], bounds[1]);
+        }
+    }
+
+    /**
      * Les bornes de sprite d'un quad — {@code {minU, minV, sizeU, sizeV}}, non mises à l'échelle
      * (des flottants directement comparables). Extrait de {@link #putQuad} pour que {@link Greedy}
      * puisse comparer deux quads SANS dupliquer ce calcul — une clé de fusion qui diverge de ce que
@@ -260,8 +294,8 @@ public final class TerrainVertexFormat {
      *         correspondait pas aux hypothèses vérifiées ci-dessus (repli sûr pour l'appelant).
      */
     static boolean putMergedRunAlongX(VertexConsumer sink,
-            float firstX, float firstY, float firstZ, BakedQuad first, QuadInstance firstInstance,
-            float lastX, float lastY, float lastZ, BakedQuad last, QuadInstance lastInstance,
+            float firstX, float firstY, float firstZ, BakedQuad first, int[] firstColors, int[] firstLights,
+            float lastX, float lastY, float lastZ, BakedQuad last, int[] lastColors, int[] lastLights,
             int runLength) {
         Vector3fc[] fp = new Vector3fc[4];
         float[] fu = new float[4];
@@ -363,8 +397,6 @@ public final class TerrainVertexFormat {
             isHi[hi] = true;
         }
 
-        int lightEmission = first.materialInfo().lightEmission();
-        int lastLightEmission = last.materialInfo().lightEmission();
         float[] bounds = spriteBounds(first);
         int packedSizeU = packSpan(bounds[2]);
         int packedSizeV = packSpan(bounds[3]);
@@ -372,12 +404,10 @@ public final class TerrainVertexFormat {
         for (int i = 0; i < 4; i++) {
             if (!isHi[i]) {
                 Vector3fc pos = fp[i];
-                int color = ARGB.multiply(firstInstance.getColor(i), first.bakedColors().color(i));
-                int light = firstInstance.getLightCoordsWithEmission(i, lightEmission);
                 sink.addVertex(firstX + pos.x(), firstY + pos.y(), firstZ + pos.z())
-                        .setColor(color)
+                        .setColor(firstColors[i])
                         .setUv(fu[i], fv[i])
-                        .setLight(light)
+                        .setLight(firstLights[i])
                         .setUv1(packedSizeU, packedSizeV)
                         .setUv3(bounds[0], bounds[1]);
                 continue;
@@ -388,13 +418,11 @@ public final class TerrainVertexFormat {
             int lo = loOfHi[i];
             int k = (loIdx[0] == lo) ? 0 : 1;
             Vector3fc pos = lp[i];
-            int color = ARGB.multiply(lastInstance.getColor(i), last.bakedColors().color(i));
-            int light = lastInstance.getLightCoordsWithEmission(i, lastLightEmission);
             float mergedU = fu[lo] + runLength * deltaU[k];
             sink.addVertex(lastX + pos.x(), lastY + pos.y(), lastZ + pos.z())
-                    .setColor(color)
+                    .setColor(lastColors[i])
                     .setUv(mergedU, fv[i])
-                    .setLight(light)
+                    .setLight(lastLights[i])
                     .setUv1(packedSizeU, packedSizeV)
                     .setUv3(bounds[0], bounds[1]);
         }

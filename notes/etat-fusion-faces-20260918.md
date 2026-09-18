@@ -1,5 +1,13 @@
 # Greedy meshing terrain — état au 2026-09-18 17:5x, interrompu en cours d'investigation
 
+> **Suite et résolution (même jour, passe suivante) : cause trouvée et corrigée — voir la
+> section "Le vrai écart : le greedy meshing" de `notes/rendu-terrain-vs-sodium.md`.** Ce
+> n'était pas un bug de shader (toutes les pistes ci-dessous ont fini par être épuisées et
+> innocentées avec preuve) mais un `QuadInstance` mutable/réutilisé par `ModelBlockRenderer`
+> capturé par référence au lieu d'un instantané dans `Greedy.Pending`. Le reste de ce fichier
+> est laissé tel quel comme trace de l'investigation qui a permis d'éliminer les fausses
+> pistes ; ne pas rejouer les hypothèses 1/2/3 ci-dessous, déjà closes avant cette résolution.
+
 Reprise de la passe `679bd57`/`3199cdd` (carrés gris sur sol fusionné, cause non confirmée).
 Interrompu par l'utilisateur qui quitte son poste — **aucun code de correction commis dans
 cette passe**, seulement de nouvelles preuves qui réduisent fortement le champ des causes
