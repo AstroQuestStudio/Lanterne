@@ -61,6 +61,10 @@ public final class Pane {
             fr.clubcitrouille.lanterne.lab.Observe.frame();
         }
 
+        // La radiographie : demarre et s'arrete toute seule au rythme des mondes vus/quittes, ecrit
+        // son rapport sans qu'on le lui demande. Voir Radiographie pour le pourquoi.
+        fr.clubcitrouille.lanterne.lab.Radiographie.pulse();
+
         if (!Glass.armed()) {
             return;
         }
