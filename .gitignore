@@ -12,3 +12,7 @@ run/
 /Lanterne-mine/
 run-*/
 javac.*.args
+
+# Monde local importe pour tester Relief (carte 3D) avec des donnees riches - ~1 Go,
+# jamais versionne, jamais deploye en production.
+tools/testworld/
