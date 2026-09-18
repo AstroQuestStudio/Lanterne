@@ -151,3 +151,87 @@ ne le gagne).
 
 Ne pas retenter l'étape 4 sans avoir résolu ce point précis en premier — écrire
 le nuanceur et le mixin avant serait retravailler pour rien.
+
+## Mise à jour — le mécanisme `SamplerInfo` compris jusqu'au bout, piste 1 fermée proprement
+
+Reprise sur les deux pistes laissées ouvertes. Lu `net/minecraft/client/renderer/PostPass.class`
+en entier par `javap -p -c` (jamais `.mcsrc/`) pour comprendre précisément comment `SamplerInfo`
+échappe à la règle « figé à la construction » — et la réponse ferme la piste 1 plutôt que de
+l'ouvrir.
+
+**Ce qui se passe réellement, ligne par ligne** :
+- Le constructeur de `PostPass` prend un `Map<String, List<UniformValue>>` (les uniformes
+  *déclarés dans le JSON*, ex. `Tuning` pour RCAS) et crée pour CHACUN un `GpuBuffer` figé une
+  fois pour toutes — c'est `customUniforms`, et c'est exactement le blocage déjà documenté
+  ci-dessus. Rien de nouveau ici.
+- `SamplerInfo` n'en fait **pas partie**. C'est un champ séparé, `infoUbo`, un
+  `MappableRingBuffer` dimensionné à la construction (`(inputs.size()+1) * UBO_SIZE_PER_SAMPLER`)
+  mais dont le **contenu** est réécrit à chaque image, dans le lambda d'exécution
+  (`lambda$addToFrame$1`) : `infoUbo.currentBuffer().map(...)`, un `Std140Builder` qui écrit
+  `putVec2(largeur, hauteur)` de la cible de sortie puis un `putVec2` par texture d'entrée, la
+  vue mappée se referme, et **alors seulement** `renderPass.setUniform("SamplerInfo",
+  infoUbo.currentBuffer())` est appelé — juste avant `renderPass.draw(3,1,0,0)`.
+
+**Conclusion, sans ambiguïté** : `SamplerInfo` est un cas **spécial et câblé en dur** dans
+`PostPass` lui-même (le moteur sait qu'il porte des tailles de texture, rien d'autre) — ce n'est
+pas un point d'extension générique où un mod pourrait accrocher sa propre donnée par image. Le
+faire quand même demanderait de :
+1. rediriger la construction de `infoUbo` (taille) pour NOTRE passe spécifiquement (comparer
+   `this.name`/l'identifiant du pipeline dans le mixin, pour ne toucher à rien d'autre) ;
+2. rediriger l'écriture dans le lambda pour ajouter 16 flottants après les `putVec2` existants ;
+3. faire correspondre exactement la disposition std140 attendue côté `.fsh`.
+
+Techniquement faisable par mixin ciblé (deux `@Redirect`/`@ModifyExpressionValue`, conditionnés
+sur l'identité de la passe), mais ça revient à réécrire silencieusement le contrat interne d'une
+classe partagée par **toutes** les passes de post-traitement du jeu, EASU/RCAS inclus — un mixin
+mal contraint qui se déclenche sur la mauvaise passe casserait la remontée d'échelle existante,
+stable en production. Risque jugé disproportionné par rapport à la piste 2, qui n'a aucun tel
+risque de bord.
+
+**Piste 2 retenue, et maintenant équipée d'une vraie recette** — la séquence d'appels exacte pour
+construire et exécuter une passe plein écran à la main, lue directement dans le même
+désassemblage (`lambda$addToFrame$1` de `PostPass`, offsets 213-427) :
+
+```java
+var encoder = RenderSystem.getDevice().createCommandEncoder();
+try (var pass = encoder.createRenderPass(
+        () -> "lanterne temporal_accumulate",
+        outputTarget.getColorTextureView(),
+        Optional.empty(),          // pas de vidage de couleur, on écrit tout
+        null,                       // pas de cible de profondeur
+        OptionalDouble.empty())) {
+    pass.setPipeline(RenderSystem.getCompiledPipeline(NOTRE_PIPELINE));
+    RenderSystem.bindDefaultUniforms(pass);
+    pass.setUniform("Reproject", notreBufferReecritChaqueImage);   // NOTRE uniforme, à nous
+    pass.setUniform("SceneSampler", sceneView, sampler);
+    pass.setUniform("HistorySampler", historyView, sampler);
+    pass.draw(3, 1, 0, 0);   // triangle plein écran, convention déjà vue partout dans ce fichier
+}
+```
+
+`notreBufferReecritChaqueImage` : un `GpuBuffer` qu'on possède entièrement (créé une fois via
+`GpuDevice.createBuffer(...)`, comme `customUniforms` le fait déjà pour les uniformes statiques —
+sauf qu'on le réécrit nous-mêmes à chaque image avant `setUniform`, exactement comme `PostPass`
+réécrit `infoUbo`). Zéro dépendance sur le mécanisme interne de `PostPass`/`PostChain` : cette
+passe vit entièrement à côté, hors du système de chaînes JSON. EASU/RCAS n'en savent rien et
+continuent de passer par `PostChain` sans aucun changement.
+
+Le `RenderPipeline` lui-même (format de vertex trivial — pas de sommets, un triangle plein écran
+généré dans le vertex shader comme le fait déjà `PostPass` pour ses propres passes, voir le motif
+`draw(3,1,0,0)` sans tampon de sommets lié) se construit avec l'API publique
+`RenderPipeline.builder(...)` déjà utilisée ailleurs dans ce dépôt pour comprendre
+`RenderPipelines` — pas de mixin nécessaire pour ce point précis, juste de la construction
+d'objet.
+
+**Non fait, honnêtement, faute de budget de contexte dans cette passe** : écrire la classe qui
+porte ce code (probablement `client/upscale/Accumulate.java`, sœur de `Resolve`), le mixin de
+jitter (`@ModifyVariable` sur `GameRenderer.renderLevel`, point d'injection déjà confirmé plus
+haut dans ce fichier), la texture d'historique dans `Scene`, le branchement dans `Upscale`/`give`,
+et surtout la vérification sur un vrai client en mouvement. `lentille_temporelle` reste à `false`
+par défaut, aucun comportement joueur n'a changé dans cette passe.
+
+**Prochaine étape, sans ambiguïté restante** : écrire `Accumulate.java` en suivant la recette
+ci-dessus au caractère près (elle vient du bytecode réel, pas d'une supposition), puis les quatre
+autres pièces du plan original (mixin, historique, branchement, vérification en jeu). Le seul vrai
+inconnu technique de ce chantier — comment injecter une donnée par image sans passer par le JSON
+figé — est maintenant résolu et documenté ; ce qui reste est de l'assemblage, pas de la recherche.
