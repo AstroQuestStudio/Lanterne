@@ -113,6 +113,8 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue PREGEN_ASYNC;
     public static final ModConfigSpec.BooleanValue PREGEN_CONTINUOUS;
 
+    public static final ModConfigSpec.BooleanValue TREVE_BLUEMAP;
+
     public static final ModConfigSpec SPEC;
 
     static {
@@ -1050,6 +1052,26 @@ public final class Config {
                 "Eteint par defaut : correct par construction, jamais mesure sur un vrai hebergement",
                 "mutualise. Un module non mesure n'existe pas.")
                 .define("continu", false);
+
+        BUILDER.pop();
+
+        BUILDER.comment(
+                "LA TREVE : suspendre le rendu BlueMap tant qu'un joueur est connecte.",
+                "",
+                "Constate en conditions reelles sur cette base : BlueMap actif en fond (2 fils de",
+                "rendu) a fait tomber le serveur a 2068 ms (41 ticks) de retard 44 s apres la",
+                "connexion d'un joueur - le client a alors recu d'un coup les paquets accumules",
+                "pendant le retard, vu comme un arret quasi complet du rendu (0,4 image/seconde sur",
+                "une fenetre d'une seconde, mesure par Radiographie). BlueMap n'est pas fautif : il",
+                "fait ce qu'on lui demande, juste au mauvais moment.",
+                "",
+                "La treve suspend le rendu des la premiere connexion et le relance des le dernier",
+                "depart. Rien n'est perdu : BlueMap reprend une region deja rendue sans la refaire.")
+                .push("treve_bluemap");
+
+        TREVE_BLUEMAP = BUILDER.comment(
+                "Allumer la treve. Sans effet si BlueMap n'est pas installe.")
+                .define("actif", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();
