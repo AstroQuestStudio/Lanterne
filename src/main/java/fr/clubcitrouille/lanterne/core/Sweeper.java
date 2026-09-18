@@ -14,7 +14,8 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * Le même joueur, prévenu dix secondes plus tôt, va le ramasser. C'est la même suppression, et ce
  * n'est pas du tout la même expérience.
  *
- * <p>Deux avertissements : dix secondes, puis trois. Le premier laisse le temps de courir, le second
+ * <p>Trois avertissements : soixante secondes, dix, puis trois. Le premier laisse le temps de finir
+ * ce qu'on est en train de faire et de revenir ramasser, le second celui de courir, le troisième
  * celui de lâcher ce qu'on fait.
  *
  * <h2>Ce que la minuterie ne fait pas</h2>
@@ -28,7 +29,7 @@ public final class Sweeper {
     private static final int MINUTE = 1200;
 
     /** Avertissements, en ticks avant le passage. */
-    private static final int[] HERALDS = {200, 60};
+    private static final int[] HERALDS = {1200, 200, 60};
 
     private static long countdown = -1L;
     private static int lastWarned = -1;

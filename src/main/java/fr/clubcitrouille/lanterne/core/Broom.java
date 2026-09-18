@@ -6,13 +6,17 @@ import java.util.Locale;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.item.ItemStack;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 
@@ -39,6 +43,9 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *       est tenté de les effacer. Ils sont aussi le commerce d'un serveur entier.</li>
  *   <li><b>Ce qui est près d'un joueur.</b> Faire disparaître un tas d'objets sous les yeux de celui
  *       qui vient de le faire tomber est la seule faute qu'un joueur ne pardonne pas.</li>
+ *   <li><b>Ce qui est sur la liste blanche.</b> Minerais et armure par défaut, modifiable sans
+ *       recompiler — voir {@link Config#BROOM_ITEM_WHITELIST}. Un objet précieux tombé au sol reste
+ *       précieux même sans nom et même loin d'un joueur.</li>
  * </ul>
  *
  * <h2>Pourquoi ce mod en a un, alors qu'il passe son temps à dire que supprimer n'est pas optimiser</h2>
@@ -94,7 +101,10 @@ public final class Broom {
             if (!eligible(level, soul)) {
                 continue;
             }
-            if (items && soul instanceof ItemEntity) {
+            if (items && soul instanceof ItemEntity itemSoul) {
+                if (whitelisted(itemSoul.getItem())) {
+                    continue;
+                }
                 doomed.add(soul);
                 wipedItems++;
             } else if (arrows && soul instanceof Projectile) {
@@ -158,13 +168,50 @@ public final class Broom {
         return creature.getType().getCategory() == MobCategory.MONSTER;
     }
 
-    /** Prévient les joueurs, avec le compte à rebours. */
+    /**
+     * Cet objet est-il protégé par la liste blanche ?
+     *
+     * <p>Chaque entrée est soit un identifiant d'objet exact, soit un tag préfixé de {@code #}. La
+     * liste par défaut couvre les minerais et l'armure — voir {@link Config#BROOM_ITEM_WHITELIST} —
+     * mais reste modifiable sans toucher au code : c'est tout l'intérêt.
+     */
+    private static boolean whitelisted(ItemStack stack) {
+        for (String raw : Config.BROOM_ITEM_WHITELIST.get()) {
+            boolean isTag = raw.startsWith("#");
+            Identifier id = Identifier.tryParse(isTag ? raw.substring(1) : raw);
+            if (id == null) {
+                continue;
+            }
+            boolean match = isTag
+                    ? stack.is(holder -> holder.is(ItemTags.create(id)))
+                    : stack.is(holder -> holder.is(id));
+            if (match) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Prévient les joueurs, avec le compte à rebours.
+     *
+     * <p>Passe par la barre d'action, pas le chat : elle remplace toujours son propre message
+     * précédent au lieu de s'empiler, ce qui est exactement le comportement voulu pour un compte à
+     * rebours qui se resserre. La couleur suit l'urgence — doré au large, rouge quand ça presse, gras
+     * dans les toutes dernières secondes.
+     */
     public static void warn(MinecraftServer server, int seconds) {
+        ChatFormatting[] style = seconds >= 60
+                ? new ChatFormatting[] {ChatFormatting.GOLD}
+                : seconds >= 10
+                        ? new ChatFormatting[] {ChatFormatting.RED}
+                        : new ChatFormatting[] {ChatFormatting.RED, ChatFormatting.BOLD};
         var text = Component.literal(String.format(Locale.ROOT,
                         "Nettoyage du sol dans %d seconde%s.", seconds, seconds > 1 ? "s" : ""))
-                .withStyle(ChatFormatting.YELLOW);
+                .withStyle(style);
+        var packet = new ClientboundSetActionBarTextPacket(text);
         for (var soul : server.getPlayerList().getPlayers()) {
-            soul.sendSystemMessage(text);
+            soul.connection.send(packet);
         }
     }
 

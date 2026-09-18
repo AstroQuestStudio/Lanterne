@@ -1,5 +1,8 @@
 package fr.clubcitrouille.lanterne.core;
 
+import java.util.List;
+
+import net.minecraft.resources.Identifier;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -101,6 +104,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue BROOM_ITEMS;
     public static final ModConfigSpec.BooleanValue BROOM_MOBS;
     public static final ModConfigSpec.BooleanValue BROOM_ARROWS;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> BROOM_ITEM_WHITELIST;
 
     public static final ModConfigSpec.BooleanValue PREGEN_PAUSE_ON_JOIN;
     public static final ModConfigSpec.IntValue PREGEN_BUDGET_MS;
@@ -867,7 +871,7 @@ public final class Config {
         BROOM = BUILDER.comment("Allumer le nettoyage periodique.")
                 .define("actif", false);
         BROOM_PERIOD = BUILDER.comment(
-                "Minutes entre deux passages. Les joueurs sont prevenus 10 s puis 3 s avant.")
+                "Minutes entre deux passages. Les joueurs sont prevenus 60 s, 10 s puis 3 s avant.")
                 .defineInRange("periode_minutes", 15, 1, 720);
         BROOM_ITEMS = BUILDER.comment("Effacer les objets au sol.")
                 .define("objets_au_sol", true);
@@ -876,6 +880,35 @@ public final class Config {
                 .define("creatures_hostiles", false);
         BROOM_ARROWS = BUILDER.comment("Effacer les projectiles plantes.")
                 .define("projectiles", true);
+        BROOM_ITEM_WHITELIST = BUILDER.comment(
+                "Objets jamais effaces par le balai, meme sans nom et loin de tout joueur.",
+                "Un identifiant d'objet (\"minecraft:diamond\") ou un tag precede de # (\"#minecraft:ores\").",
+                "Retirer une ligne pour l'exposer au balai ; en ajouter pour proteger autre chose.")
+                .defineList("liste_blanche_objets", List.of(
+                        "#minecraft:ores",
+                        "#minecraft:head_armor",
+                        "#minecraft:chest_armor",
+                        "#minecraft:leg_armor",
+                        "#minecraft:foot_armor",
+                        "minecraft:diamond",
+                        "minecraft:emerald",
+                        "minecraft:raw_iron",
+                        "minecraft:raw_gold",
+                        "minecraft:raw_copper",
+                        "minecraft:iron_ingot",
+                        "minecraft:gold_ingot",
+                        "minecraft:copper_ingot",
+                        "minecraft:netherite_ingot",
+                        "minecraft:netherite_scrap",
+                        "minecraft:ancient_debris",
+                        "minecraft:coal",
+                        "minecraft:redstone",
+                        "minecraft:lapis_lazuli",
+                        "minecraft:quartz",
+                        "minecraft:nether_star",
+                        "minecraft:totem_of_undying"),
+                        entry -> entry instanceof String s
+                                && Identifier.tryParse(s.startsWith("#") ? s.substring(1) : s) != null);
 
         BUILDER.pop();
         BUILDER.pop();
