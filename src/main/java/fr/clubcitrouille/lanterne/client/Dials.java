@@ -18,6 +18,8 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import fr.clubcitrouille.lanterne.client.screen.Palette;
+import fr.clubcitrouille.lanterne.client.upscale.Nuancier;
 import fr.clubcitrouille.lanterne.client.upscale.Pivot;
 import fr.clubcitrouille.lanterne.client.upscale.Rival;
 import fr.clubcitrouille.lanterne.client.upscale.Upscale;
@@ -149,8 +151,23 @@ public final class Dials extends Screen {
     private final Fit fit = new Fit();
 
     public Dials(Screen parent) {
+        this(parent, 0);
+    }
+
+    /**
+     * Ouvre directement sur une famille donnée, plutôt que « Le Voile » par défaut.
+     *
+     * <p>Réservé aux vérifications automatiques (même esprit que
+     * {@code client.screen.Palette#testClick}) : une capture d'écran qui doit montrer la famille
+     * « L'image » n'a pas de souris pour cliquer l'onglet. La porte réelle,
+     * {@code mixin.VideoOptionsMixin}, n'appelle jamais que le constructeur à un argument ci-dessus,
+     * donc un joueur ouvre toujours sur « Le Voile » comme avant — ce second constructeur ne change
+     * rien pour lui.
+     */
+    public Dials(Screen parent, int startFamily) {
         super(Component.literal("Lanterne"));
         this.parent = parent;
+        this.picked = Math.max(0, startFamily);
     }
 
     @Override
@@ -267,6 +284,21 @@ public final class Dials extends Screen {
                         + " FSR donne donc quasiment les mêmes images/s que DLSS ; seule la tenue"
                         + " des fins détails en mouvement diffère un peu. Effet immédiat, et se"
                         + " juge à l'œil : la netteté baisse avec le facteur."));
+        // Un écran à part plutôt qu'un sélecteur de plus : la liste est de longueur variable — zéro
+        // nuancier déposé au premier lancement, un ou deux ensuite — et un simple cycle ne dirait ni
+        // combien il y en a, ni lequel est actif sans les faire tous défiler à l'aveugle. Même
+        // mécanique que « /lanterne nuancier » (voir client.upscale.Nuancier) : cette ligne-ci se
+        // contente d'ouvrir client.screen.Palette, qui appelle exactement les mêmes deux méthodes,
+        // Nuancier.listNames() et Upscale.setNuancier(String).
+        image.add(Dial.cycle("Nuanciers", Dials::nuancierLabel,
+                () -> Upscale.nuancierActif().isBlank() ? DIM : AMBER,
+                direction -> openPalette(),
+                "Une liste des nuanciers déposés sous config/lanterne/shaderpacks/, avec lequel est"
+                        + " actif — le même contenu que « /lanterne nuancier liste », en écran.",
+                "Un nuancier déposé REMPLACE la chaîne calculée par netteté et anticrénelage : les"
+                        + " deux réglages restent en mémoire mais n'agissent plus tant qu'un nuancier"
+                        + " est actif.",
+                "S'applique au clic, sans redémarrage — la prochaine image dessinée le montre déjà."));
         image.add(Dial.cycle("Anticrénelage", () -> Upscale.antialias() ? "actif" : "coupé",
                 () -> !Upscale.active() ? FAINT : Upscale.antialias() ? ON : OFF,
                 Dials::toggleAntialias,
@@ -657,6 +689,27 @@ public final class Dials extends Screen {
      */
     private static void cyclePivot(int ignoredDirection) {
         Pivot.toggle();
+    }
+
+    /**
+     * Ouvre {@link Palette}, en se passant elle-même comme parent — Échap y ramène ici plutôt que de
+     * fermer tous les menus d'un coup. Instance et non statique : c'est {@code this} qu'il faut
+     * passer, pas une classe qui ne sait pas d'où on l'a ouverte.
+     */
+    private void openPalette() {
+        if (this.minecraft != null) {
+            this.minecraft.gui.setScreen(new Palette(this));
+        }
+    }
+
+    /** L'étiquette de la ligne « Nuanciers » : le nom de celui actif, sinon combien sont trouvés. */
+    private static String nuancierLabel() {
+        String actif = Upscale.nuancierActif();
+        if (!actif.isBlank()) {
+            return actif;
+        }
+        int total = Nuancier.listNames().size();
+        return total == 0 ? "aucun trouvé" : total + (total > 1 ? " disponibles" : " disponible");
     }
 
     private static int pivotColour() {
