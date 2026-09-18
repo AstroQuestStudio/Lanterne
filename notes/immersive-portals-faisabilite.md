@@ -5,6 +5,13 @@
 > source primaire (`javap` sur le VRAI jar patché, jamais `.mcsrc/`) a été lue et citée, ou qu'une
 > recherche web réelle a été faite et sourcée ; **SUPPOSÉ** est signalé comme tel.
 
+> **Correction de mission, même soirée.** Les sections 1 à 6 ci-dessous répondent à la question
+> initiale — brancher le VRAI mod tiers — et son verdict négatif reste vrai et utile : c'est
+> justement ce qui a motivé la question suivante. La mission a été corrigée en cours de route :
+> l'utilisateur voulait qu'on **construise nous-mêmes** une fonctionnalité de portail native, pas
+> qu'on essaie de brancher le mod tiers. Voir **§7 « Le prototype maison »** pour ce qui a
+> effectivement été construit et vérifié cette passe.
+
 ---
 
 ## Verdict
@@ -208,3 +215,149 @@ Tant que ces conditions ne sont pas remplies, ce module **n'existe pas**, au sen
 l'entend — et c'est pour cela que le réglage construit cette passe est désactivé par défaut et ne
 fait rien de plus qu'un message de journal : un mécanisme désactivé qui prétendrait faire plus
 serait un décor, exactement ce que ce dépôt refuse ailleurs.
+
+---
+
+## 7. Le prototype maison — ce qui a été construit après la correction de mission
+
+**Périmètre de ce soir, explicitement réduit :** un seul portail statique, non récursif — un
+rectangle fixe dans le monde qui montre une vraie vue rendue depuis une seconde caméra, composée
+par-dessus la vue réelle, testée (mais pas écrite) contre la profondeur déjà présente. Pas de
+téléportation, pas de récursion, pas de multi-portails, pas de changement de dimension, pas
+d'occlusion/profondeur sophistiquée au-delà du test de profondeur simple. Ces limites sont un choix
+de périmètre, pas des trous — voir §7.4.
+
+### 7.1 Le mécanisme, et pourquoi §3 avait déjà vu juste
+
+Exactement l'esquisse de §3 point 3 : un `RenderPass` séparé, sur une `GpuTextureView` dédiée, sans
+mixiner l'idée du mod tiers — mais avec un détour que §3 n'anticipait pas complètement. Deux temps,
+chaque image, seulement si `PortailsConfig.TEST_PORTAL` est vrai :
+
+1. **`PortailRenderMixin`** (`@Mixin(GameRenderer.class)`, un seul `@Inject` à la QUEUE de
+   `renderLevel()`) rejoue **le vrai appel** `LevelRenderer.render(...)` — celui-là même que
+   `GameRenderer.renderLevel()` fait pour l'image normale, public et vérifié par `javap`
+   (`public void render(GraphicsResourceAllocator, boolean, CameraRenderState, GpuBufferSlice,
+   Vector4f, boolean, boolean)`) — avec la `CameraRenderState` PARTAGÉE temporairement déplacée
+   (translation seule, voir §7.3), et `mainRenderTarget` temporairement échangé pour une texture de
+   destination séparée — exactement la même substitution de champ que
+   `UpscaleGameRendererMixin`/`client.upscale.Scene` utilisent déjà pour la toile réduite, mais
+   **à un point d'accroche différent** (`renderLevel()`, pas `render()`) pour ne jamais entrer en
+   compétition avec les deux points d'accroche de ce mixin-là sur la même image.
+2. **`PortailPrototype.compositeQuad`** peint ensuite un rectangle texturé de cette destination,
+   dans la vue réelle (déjà restaurée), avec un pipeline construit à la main — même patron que
+   `Gbuffer`/`Accumulate` (`GpuDevice.compilePipeline`, jamais `RenderSystem.getCompiledPipeline`,
+   réservé aux pipelines du registre vanilla) — et un vrai précédent vanilla pour la géométrie
+   3D texturée composée dans la scène : `RenderPipelines.CELESTIAL` (le soleil/la lune) et sa
+   consommation réelle dans `SkyRenderer.drawCelestialBody` (source décompilée du vrai jar patché),
+   dont ce prototype reprend le patron exact (`RenderSystem.bindDefaultUniforms`,
+   `GpuBufferSlice` de transformée dynamique, `RenderPass.draw`) en le simplifiant à un pipeline
+   fait main pour éviter une inconnue de résolution d'inclusion GLSL non vérifiée cette passe (voir
+   la Javadoc de `portail_quad.vsh`).
+
+### 7.2 Un vrai défaut de re-entrance trouvé — et pourquoi il ne casse que la vue de destination
+
+Lu dans le corps décompilé de `LevelRenderer.render` (pas supposé) : `submitFeatures` **vide**
+`levelRenderState.entityRenderStates`/`blockEntityRenderStates`/etc. immédiatement après les avoir
+soumis — remplies une seule fois par image par l'extraction, qui a déjà eu lieu pour la caméra
+RÉELLE avant que ce mixin n'agisse. Une seconde image dans la même frame **ne peut pas** avoir sa
+propre extraction sans un chantier séparé (rejouer `LevelExtractor` pour une caméra arbitraire —
+hors budget de ce soir). Deux choix en découlent, tous deux délibérés :
+
+- **Le second appel passe toujours APRÈS le vrai**, jamais avant — c'est le point d'accroche à la
+  QUEUE de `renderLevel()` qui le garantit structurellement. Si l'ordre était inversé, ce serait le
+  jeu réel — celui que le joueur voit à chaque image — qui perdrait toutes ses entités. Avec cet
+  ordre, seule la vue de destination du portail en hérite.
+- **Aucune entité, bloc-entité ni particule n'apparaît donc dans la vue de destination.** Ce n'est
+  pas un bug caché : c'est écrit dans la Javadoc de `PortailPrototype`, avec la citation exacte du
+  mécanisme qui le cause.
+
+Second détail vérifié par lecture directe : `LevelRenderer.render` lit sa matrice de terrain (celle
+qui décide quelles sections sont candidates) sur `this.levelRenderState.cameraRenderState` — un
+champ propre au renderer, **pas** le paramètre `cameraState` qu'on lui passe (les deux sont le même
+objet dans l'usage normal, jamais vérifié comme substituable). D'où le choix de MUTER l'objet
+partagé en place (sauvegarde/mutation/restauration dans un bloc `try/finally`) plutôt que de lui en
+passer un autre — la seule façon de rendre cohérentes les deux lectures pour un second appel.
+
+### 7.3 Pourquoi une caméra de destination qui ne fait que translater
+
+Même orientation, même projection, même `Frustum` — repositionné via `Frustum.prepare(x, y, z)`
+(méthode publique dédiée, vérifiée par `javap`), pas reconstruit depuis deux matrices dont la
+convention exacte (quel argument porte quoi) n'a pas été vérifiée cette passe. Ce choix élimine tout
+le champ de mines des données dérivées d'une orientation différente, au prix d'un vrai portail
+« point de vue » : celui-ci déplace la caméra, il ne la réoriente pas encore selon le plan d'un cadre
+de destination différent de celui de la source. Lever cette limite demanderait de vérifier la
+convention `Frustum(Matrix4fc, Matrix4f)` et de reconstruire `FogData`/`entityRenderState` pour une
+orientation différente — un chantier réel, pas fait cette passe.
+
+Pour la vérification de ce soir uniquement (pas une contrainte du mécanisme), la position du
+rectangle et le décalage de la caméra de destination sont tous deux ancrés sur la position COURANTE
+du joueur plutôt que sur des coordonnées absolues — un monde fraîchement engendré (chaque
+`-Pbanc=` obtient son propre dossier, donc son propre monde) n'a pas de coordonnées de spawn connues
+à l'avance. Rattacher le rectangle à un vrai bloc placé, à une position choisie par le joueur, est
+un travail de registration NeoForge distinct (bloc + entité de rendu + modèle), délibérément hors
+budget de ce soir pour consacrer le temps disponible au vrai problème dur — le second rendu de
+niveau — plutôt qu'à de la plomberie d'enregistrement. Voir §7.5.
+
+### 7.4 Ce qui a été vérifié, et ce qui ne l'a PAS encore été
+
+**Vérifié :**
+- Compile proprement (`./gradlew compileJava`, deux fois, code de sortie 0 les deux fois), avec le
+  reste du dépôt tel qu'il était modifié en parallèle par les deux autres chantiers de ce soir
+  (`client/upscale/*`, `core/`).
+- `tools/verifie_mixins.py` passe : « Toutes les cibles de mixin existent dans le jar » — la classe
+  visée, la méthode `renderLevel`, et les quatre champs `@Shadow` (`mainRenderTarget`, `minecraft`,
+  `fogRenderer`, `gameRenderState()`) résolvent tous contre le vrai jar patché fusionné.
+- Chaque signature d'API citée dans ce document (`LevelRenderer.render`, `CameraRenderState`,
+  `Frustum`, `FogRenderer.FogMode`, `BindGroupLayouts`, `GraphicsResourceAllocator.UNPOOLED`,
+  `DefaultVertexFormat.POSITION_TEX`, `DepthStencilState`, `RenderPipeline.Builder`) a été lue par
+  `javap` sur `build/moddev/artifacts/minecraft-patched-26.3.0.3-beta.jar` — jamais supposée,
+  jamais reprise de `.mcsrc/`.
+
+**PAS encore vérifié, et c'est un manque honnête, pas une omission tue :**
+- **Aucune confirmation visuelle en jeu réel, malgré trois tentatives.** `run-portails`, trois
+  lancements cette nuit, chacun suivi par PID précis (jamais de `taskkill` large) :
+  1. Réglage éteint (valeur par défaut) — a rejoint un monde sans encombre, mais n'exerçait pas le
+     code du portail.
+  2. Réglage allumé — arrêté proprement pendant le chargement des ressources, avant de rejoindre un
+     monde.
+  3. Réglage allumé, `LANTERNE_AUTO_SCREENSHOT=1` — bloqué **avant même la sélection du backend
+     graphique**, sur l'écran-titre selon toute vraisemblance : le journal s'arrête net à
+     22:51:39, juste après le choix Vulkan/OpenGL, sans plus une ligne pendant plus de quatre
+     minutes, alors que les deux lancements précédents avaient franchi ce point en quelques
+     secondes. Le dossier `saves/New World` du lancement n°1 était toujours présent, et
+     `--quickPlaySingleplayer` pointait vers un nom (`banc`) qui n'existe pas dans ce dossier
+     isolé — l'hypothèse la plus probable est un blocage sur un écran nécessitant une confirmation
+     (monde déjà présent sous un autre nom, ou verrou de session résiduel), **avant tout code de ce
+     mod, avant même que `Minecraft.level` puisse être non nul** — donc un blocage d'infrastructure
+     de test, pas un indice contre le mécanisme lui-même. Arrêté proprement, PID précis.
+  Résultat net des trois : le code de rendu du portail n'a JAMAIS tourné dans un client réel cette
+  nuit. Zéro capture d'écran, zéro ligne de journal `[PORTAIL]` obtenue.
+- Aucun chiffre de performance : `Radiographie`/`Snap` n'ont jamais tourné avec le portail actif.
+  Et même si un lancement y était arrivé cette nuit précise, le chiffre aurait dû être marqué
+  non fiable — une autre application gourmande (War Thunder) tournait en parallèle sur la machine de
+  test, contention de GPU/CPU non contrôlée.
+- Conséquence directe des deux points ci-dessus : aucun défaut visuel silencieux (le risque que ce
+  dépôt nomme explicitly ailleurs — « un mur invisible ne crashe jamais ») n'a pu être exclu. Le
+  raisonnement de §7.1-7.3 est solide et sourcé, mais ce dépôt lui-même le dit ailleurs : un plan
+  vérifié par lecture n'est pas un plan vérifié à l'écran.
+
+### 7.5 Suite logique, pas un échec
+
+1. **Voir le résultat** — un lancement `run-portails` qui va jusqu'au bout, avec
+   `LANTERNE_AUTO_SCREENSHOT=1`, pour la toute première vue réelle de ce mécanisme. D'abord vider
+   `run-portails/saves/` (ou passer une vraie graine/nom de monde neuf) pour écarter l'hypothèse la
+   plus probable du blocage du §7.4 point 3 — un conflit entre `--quickPlaySingleplayer banc`
+   (nom qui n'existe pas dans ce dossier isolé) et le `New World` déjà présent du tout premier
+   lancement de ce soir.
+2. **Mesurer le coût** — une fois vu, `Radiographie` sur une scène reproductible, sur une machine
+   sans contention externe, pour un chiffre qui mérite d'être cité.
+3. **Un vrai cadre de destination** — vérifier la convention `Frustum(Matrix4fc, Matrix4f)` pour
+   permettre une caméra de destination qui réoriente, pas seulement translate.
+4. **Un bloc réel** — remplacer le rectangle ancré sur le joueur par un bloc + entité de rendu
+   NeoForge enregistrés, avec une position et une destination choisies en jeu.
+5. **Les entités à travers le portail** — rejouer l'extraction (`LevelExtractor`) pour une seconde
+   caméra ; le chantier que §7.2 identifie comme la vraie limite structurelle actuelle.
+
+Rien de tout cela n'est fait cette passe, et c'est écrit ici pour que la suite ne reparte pas de
+zéro — exactement la règle que ce dépôt applique déjà à `notes/moteur-rendu-maison.md` et à
+`notes/hiz-occlusion-entites.md`.
