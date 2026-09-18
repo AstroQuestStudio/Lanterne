@@ -96,6 +96,41 @@ public class CanvasRenderer extends EntityRenderer<Canvas, CanvasState> {
         // Les mains d'abord : c'est par elles que tout paquet descendant sera traite, et une classe
         // cliente ne doit etre nommee que depuis ici, derriere la garde de distribution.
         Hands.install();
+        // <h2>Charger Mosaic maintenant, avant que le chargeur de classes ne devienne suspect</h2>
+        //
+        // Si aucun tableau n'est jamais affiché pendant la partie — un monde tout neuf, ou un
+        // serveur sans image personnalisée — personne ne nomme jamais Mosaic pour de vrai : ni
+        // Hoard.accept (catalogue vide, la boucle ne tourne pas), ni extractRenderState (aucune
+        // entité Canvas à l'écran). La classe reste alors non chargée jusqu'à ce que
+        // Hoard.forget() l'appelle ci-dessous, à la déconnexion.
+        //
+        // Constaté en jeu (journal réel, run-lambdaform, 18/09 16:42:40) : quand cette déconnexion
+        // a lieu via Minecraft.exitWorldAndClose — c'est-à-dire qu'on quitte le JEU entier depuis
+        // une partie, pas seulement la partie — l'évènement se déclenche tout à la fin de
+        // Main.main, après que le chargeur de classes modulaire de FML a commencé à se refermer.
+        // Le tout premier chargement d'une classe à cet instant échoue :
+        //
+        //   java.lang.NoClassDefFoundError: fr/clubcitrouille/lanterne/content/painting/Mosaic
+        //     at Hoard.forget(Hoard.java:202)
+        //     at CanvasRenderer.lambda$register$0(CanvasRenderer.java:102)
+        //     ...at Minecraft.exitWorldAndClose(Minecraft.java:1128)
+        //     at Main.main(Main.java:297)
+        //   Caused by: java.lang.ClassNotFoundException: ...Mosaic
+        //     at ModuleClassLoader.loadClass(ModuleClassLoader.java:254)
+        //
+        // Hoard et CanvasRenderer, eux, sont déjà chargés à ce moment (c'est justement pour ça
+        // qu'ils continuent de fonctionner) : seule une classe encore JAMAIS touchée est exposée.
+        // La ligne suivante ne fait que résoudre et lier la classe — pas l'initialiser au sens de
+        // la JLS, encore moins construire une instance : Mosaic.get() reste le seul endroit qui
+        // touche la carte graphique, et sa Javadoc explique pourquoi ça doit rester ainsi. Une fois
+        // la classe chargée, elle reste résidente dans la JVM même si le chargeur qui l'a servie se
+        // referme ensuite : c'est cette résidence, et seulement elle, qui manquait.
+        try {
+            Class.forName(Mosaic.class.getName(), false, CanvasRenderer.class.getClassLoader());
+        } catch (ClassNotFoundException impossible) {
+            // Ne peut arriver : le nom vient de Mosaic.class lui-même, dans le même module.
+            throw new NoClassDefFoundError(impossible.getMessage());
+        }
         modBus.addListener(CanvasRenderer::onRegisterRenderers);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event)
