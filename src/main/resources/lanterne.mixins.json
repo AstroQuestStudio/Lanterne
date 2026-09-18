@@ -99,6 +99,8 @@
     "SouvenirReceiveMixin",
     "RenderPipelinesMixin",
     "SectionCompilerMixin",
-    "FluidRendererMixin"
+    "FluidRendererMixin",
+    "VulkanPhysicalDeviceMixin",
+    "VulkanFeatureSetsMixin"
   ]
 }
