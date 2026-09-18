@@ -69,6 +69,11 @@ public final class Pane {
         // jamais pour un joueur normal). Voir Snap.
         fr.clubcitrouille.lanterne.lab.Snap.pulse();
 
+        // Fait tourner la camera toute seule (LANTERNE_VERTIGE=1 uniquement) pour que Snap ait
+        // vraiment un mouvement a photographier - une camera immobile ne revele aucun ghosting
+        // temporel. Voir Vertige.
+        fr.clubcitrouille.lanterne.lab.Vertige.pulse();
+
         if (!Glass.armed()) {
             return;
         }
