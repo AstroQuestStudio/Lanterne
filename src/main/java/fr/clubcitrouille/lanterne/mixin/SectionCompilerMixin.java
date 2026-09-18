@@ -2,7 +2,9 @@ package fr.clubcitrouille.lanterne.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.QuadInstance;
@@ -10,6 +12,7 @@ import com.mojang.blaze3d.vertex.QuadInstance;
 import net.minecraft.client.renderer.chunk.SectionCompiler;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
 
+import fr.clubcitrouille.lanterne.client.terrain.Greedy;
 import fr.clubcitrouille.lanterne.client.terrain.TerrainVertexFormat;
 
 /**
@@ -57,6 +60,35 @@ public abstract class SectionCompilerMixin {
                             + "Lcom/mojang/blaze3d/vertex/QuadInstance;)V"))
     private void lanterne$putQuadWithSpriteBounds(BufferBuilder buffer, float x, float y, float z,
             BakedQuad quad, QuadInstance instance) {
-        TerrainVertexFormat.putQuad(buffer, x, y, z, quad, instance);
+        // Un quad UP/SOLID est mis de côté par Greedy pour une fusion éventuelle — voir son Javadoc.
+        // Tout le reste (faces latérales, DOWN, CUTOUT, TRANSLUCENT) part immédiatement, inchangé.
+        if (!Greedy.accept(buffer, x, y, z, quad, instance)) {
+            TerrainVertexFormat.putQuad(buffer, x, y, z, quad, instance);
+        }
+    }
+
+    /**
+     * Fusionne et vide les quads UP/SOLID mis de côté par {@link Greedy#accept} — juste après que
+     * {@code ClientHooks.addAdditionalGeometry} a fini d'ajouter la géométrie des mods tiers (donc
+     * après tout ce qui peut encore écrire dans le tampon SOLID) et AVANT la boucle qui appelle
+     * {@code BufferBuilder.build()} sur chaque couche (offset 430 du désassemblage — {@code build()}
+     * fige le tampon, écrire dedans après serait sans effet ni erreur visible, juste silencieusement
+     * perdu). Vérifié par {@code javap -c} cette passe : {@code addAdditionalGeometry} est le DERNIER
+     * appel avant cette boucle dans le bytecode réel.
+     */
+    @Inject(method = "compile(Lnet/minecraft/core/SectionPos;"
+            + "Lnet/minecraft/client/renderer/chunk/RenderSectionRegion;"
+            + "Lcom/mojang/blaze3d/vertex/VertexSorting;"
+            + "Lnet/minecraft/client/renderer/SectionBufferBuilderPack;"
+            + "Ljava/util/List;)Lnet/minecraft/client/renderer/chunk/SectionCompiler$Results;",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/neoforged/neoforge/client/ClientHooks;"
+                            + "addAdditionalGeometry(Ljava/util/List;Ljava/util/function/Function;"
+                            + "Lnet/minecraft/client/renderer/chunk/RenderSectionRegion;"
+                            + "Lnet/minecraft/client/renderer/block/ModelBlockRenderer;)V",
+                    shift = At.Shift.AFTER))
+    private void lanterne$flushGreedy(
+            CallbackInfoReturnable<SectionCompiler.Results> callback) {
+        Greedy.flush();
     }
 }
