@@ -97,6 +97,11 @@ public final class Lanterne {
         // marche engagent le serveur seul, et un client ne doit jamais pouvoir s'inventer une
         // amplitude de derive. Le nom de fichier est explicite parce que Config.SPEC occupe deja
         // le fichier SERVER par defaut.
+        // La carte 3D : fichier a part pour la meme raison que la boutique juste apres —
+        // Config.SPEC occupe deja le fichier SERVER par defaut.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                fr.clubcitrouille.lanterne.content.relief.ReliefConfig.SPEC, "lanterne-carte3d.toml");
+        modBus.addListener(fr.clubcitrouille.lanterne.content.relief.ReliefConfig::apply);
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
                 fr.clubcitrouille.lanterne.content.shop.Tariff.SPEC, "lanterne-boutique.toml");
         modBus.addListener(fr.clubcitrouille.lanterne.content.shop.Tariff::apply);
@@ -217,6 +222,9 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.lab.Pregen.tick(event.getServer());
         // Le service continu ne soumet rien tant que Pregen tourne — voir sa Javadoc de classe.
         fr.clubcitrouille.lanterne.lab.Lisiere.tick(event.getServer());
+        // La carte 3D : balayage des régions déjà écrites, budget borné, coupée si RELIEF est
+        // désactivé — voir sa Javadoc de classe pour pourquoi elle ne force jamais de génération.
+        fr.clubcitrouille.lanterne.content.relief.Relief.tick(event.getServer());
         // Les doublures accusent leurs lots de chunks — sans quoi le serveur leur en envoie neuf et
         // s'arrête. Ne coûte qu'une comparaison tant qu'aucun banc n'en a demandé.
         fr.clubcitrouille.lanterne.lab.Understudy.tick();
