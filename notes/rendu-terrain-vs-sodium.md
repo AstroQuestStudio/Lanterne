@@ -435,7 +435,7 @@ sur secteur) — sans signal net, la scène de test est dominée par du temps CP
 par le débit de sommets ; une scène avec beaucoup plus de terrain visible/de draw calls
 serait nécessaire pour isoler un gain FPS net à ce périmètre de fusion.
 
-### Pistes non explorées, toujours ouvertes
+### Pistes non explorées, toujours ouvertes (état avant cette passe)
 
 - Item #5 des passes précédentes, toujours pas corrigé : `mergeable()` ne vérifie pas que
   `first`/`last` partagent la même géométrie de quad (même modèle de bloc) — deux blocs
@@ -447,3 +447,153 @@ serait nécessaire pour isoler un gain FPS net à ce périmètre de fusion.
   restent non expliquées, jamais retestées depuis.
 - Le périmètre de fusion actuel (`UP` uniquement, axe X uniquement, couche `SOLID`
   uniquement) reste le plus simple délibérément.
+
+## Risque de géométrie traité, périmètre élargi à DOWN, mesure FPS empêchée par l'environnement
+
+Reprise avec mandat explicite : traiter le risque #5 ci-dessus, élargir le périmètre
+progressivement (autres directions, axe Z) avec vérification `Snap` à chaque étape, mesurer
+un vrai gain FPS sur une scène pertinente, et statuer honnêtement sur `Greedy.ENABLED` par
+défaut.
+
+### Risque #5 traité (`Greedy.mergeable`)
+
+`mergeable()` compare désormais, en plus des bornes de sprite/couleur/lumière déjà en place,
+les 4 coins locaux du quad (`BakedQuad.position(i)`, comparaison à epsilon `1e-4`) entre les
+deux quads adjacents. Ce n'était pas un axe théorique : `putMergedRunAlongX` n'utilise QUE
+les positions de `first`/`last` d'un run pour émettre le quad fusionné (les quads
+intermédiaires ne sont vérifiés qu'en apparence, jamais en position) — deux blocs de même
+texture/teinte/lumière mais de forme différente (bloc plein vs dalle, par exemple) auraient
+pu fusionner avec une géométrie incohérente sans ce garde-fou. `position(i)` est déjà relatif
+au bloc (voir `putQuad`, qui fait `x + pos.x()`), donc deux faces identiques ont des positions
+locales bit-identiques quel que soit le bloc — une égalité à epsilon suffit, sans avoir à
+soustraire l'axe de fusion. Compilé, vérifié pixel-identique par la suite (voir plus bas) :
+aucune régression sur le monde de test, comme attendu (terrain uniforme, le nouveau garde-fou
+ne change rien tant que la géométrie est bien identique).
+
+### Périmètre élargi : `DOWN` ajouté à côté de `UP`
+
+`Greedy.accept()` accepte maintenant `Direction.UP` ET `Direction.DOWN` (couche `SOLID`,
+toujours axe X uniquement). `Pending` porte désormais sa `Direction`, et la clé de
+regroupement par rangée dans `flush()` inclut la direction (pas seulement Y/Z) pour qu'un
+plafond DOWN ne se retrouve jamais dans le même groupe de tri qu'un sol UP occupant par
+coïncidence le même (Y, Z) local. Aucune généralisation de
+`TerrainVertexFormat.putMergedRunAlongX` n'a été nécessaire : sa documentation annonçait déjà
+gérer « les faces horizontales (UP/DOWN) » et c'est vérifié vrai — une face DOWN varie en X et
+Z exactement comme une face UP (seul Y diffère, 0 au lieu de 1), donc le même appariement
+lo/hi par Z (utilisé pour retrouver quel sommet « haut » correspond à quel sommet « bas »)
+convient sans changement.
+
+**`NORTH`/`SOUTH`/`EAST`/`WEST` et l'axe Z restent délibérément hors périmètre**, documenté en
+détail dans le Javadoc de classe de `Greedy` : une face `NORTH`/`SOUTH` varie en X et Y (Z
+quasi constant), donc l'appariement lo/hi de `putMergedRunAlongX` — câblé sur la comparaison
+de Z — apparierait n'importe quel sommet avec n'importe quel autre au lieu de rejeter
+proprement ou d'apparier juste. Une vraie généralisation (détecter dynamiquement si c'est Y ou
+Z qui varie entre les deux sommets « bas » du quad) est nécessaire AVANT d'ouvrir ces
+directions — pas juste retirer le filtre de direction, contrairement à ce qu'a permis
+l'ajout de DOWN. `EAST`/`WEST` sont encore plus loin : leur X ne varie PAS (le test
+`maxX - minX < epsilon` de `putMergedRunAlongX` les rejette déjà proprement), il leur faudrait
+un axe de fusion différent (Z), donc un chemin de code séparé. Sans suite de tests
+automatisés dans ce dépôt (aucun test JUnit n'existe ici — vérifié, `build.gradle` n'a aucune
+dépendance de test), la seule vérification disponible pour une généralisation pareille serait
+visuelle (`Snap`) — insuffisante pour prouver l'absence d'un mauvais appariement de sommets
+qui ne se verrait que sur une géométrie non uniforme, peu probable sur les scènes de test
+plates utilisées jusqu'ici. Décision : ne pas livrer une généralisation non vérifiable dans ce
+budget plutôt que de risquer exactement le genre de corruption de géométrie que le risque #5
+vient de fermer.
+
+### Vérification visuelle de l'extension DOWN
+
+Vérifiée par `Snap` sur DEUX lancements client indépendants (`LANTERNE_GREEDY_MESH=1`, monde
+réel « New World (1) », Vulkan) — six captures au total, toutes sur le même point de vue
+(plateau enneigé + falaises + surplombs), toutes rendues identiques entre elles et sans
+carré gris/jaune, sans texture décalée, sans trou. Limite honnête : la caméra fixe de ce
+protocole (`--quickPlaySingleplayer`, pas de contrôle interactif dans cette passe) ne cadre
+jamais un plafond de grotte de près — la fusion DOWN est donc confirmée « ne casse rien
+d'observable dans le champ de la caméra » et « traitée sans exception par `Radiographie`
+(compteur `UP+DOWN/SOLID` non nul, incluant des quads DOWN réels) », mais pas « visuellement
+isolée sur un surplomb DOWN fusionné identifié à l'œil ». Un futur passage avec un contrôle
+de caméra interactif (ou `Vertige`, la caméra automatique déjà présente pour le chantier FSR)
+pourrait cadrer un surplomb directement.
+
+### La mesure FPS : blocage technique réel, puis interruption par l'utilisateur
+
+Objectif de cette étape : reproduire la mesure précédente (-9,1 % de quads, aucun gain FPS
+visible, scène dominée par du temps CPU hors-rendu) mais sur une scène VRAIMENT limitée par
+le débit de sommets — la seule façon de savoir si la fusion vaut quelque chose en FPS.
+
+**Tentative d'augmenter la distance de rendu à 32 (au lieu de 16), pour de vrai.** Éditer
+`run/options.txt` (`renderDistance:32`) ne suffit pas : la distance de vue EFFECTIVE d'un
+monde solo est plafonnée par le SERVEUR intégré via `Options.setServerRenderDistance` +
+`Options.getEffectiveRenderDistance()` (`Math.min(renderDistance, serverRenderDistance)`,
+vérifié dans le vrai jar, `net/minecraft/client/Options.java` livré en source dans le jar
+patché) — pas seulement par la préférence du client. `core/Tide.java` (la « marée »,
+déjà connue de ce dépôt) y participe : `Tide.anchor(MinecraftServer)` fixe INCONDITIONNELLEMENT
+la distance de vue de départ du serveur à `maree_depart_vue` (5 par défaut) au moment où le
+monde apparaît, **sans vérifier `Settings.tide()`** — seule la boucle d'ajustement continu
+(`Tide.tick`) est gated par ce booléen. Avec `maree_depart_vue = 0` (« démarrer au plafond »)
+et `maree_vue_max = 32` posés dans `run/config/lanterne-server.toml`, le journal confirme
+bien `[MARÉE] Plafonds relevés — vue 32` — **mais la distance EFFECTIVEMENT appliquée par
+`IntegratedServer` reste bloquée à 16** (`Changing view distance to 16, from 10`), un plafond
+qui ne vient donc NI d'`options.txt`, NI de `server.properties`, NI de `Tide` (les trois
+vérifiés et poussés à 32/32/32 sans effet sur ce chiffre final). Piste non résolue dans le
+budget de cette passe : `Options.java` définit `RENDER_DISTANCE_REALLY_FAR = 16` à côté de
+`RENDER_DISTANCE_EXTREME = 32` — un troisième mécanisme (peut-être lié au préréglage graphique
+`"fancy"` plutôt que `"fabulous"`, ou une limite `IntegratedServer` spécifique à cette version,
+jamais confirmée par lecture de bytecode faute de temps) semble plafonner la distance de vue
+solo à `REALLY_FAR` indépendamment des trois réglages ci-dessus. **Pas résolu, documenté ici
+pour la prochaine passe** — la piste la plus probable non vérifiée : lire
+`IntegratedServer`/`PlayerList.setViewDistance` par `javap -c` pour trouver où `16` est
+injecté, plutôt que de continuer à pousser des réglages qui n'ont, un par un, montré aucun
+effet sur le chiffre final.
+
+**Interruption utilisateur.** Pendant cette investigation, le joueur a signalé (avec raison)
+que plusieurs clients de test tournaient en même temps que sa VRAIE partie sur la même
+machine, faussant sa propre mesure de FPS en jeu — jusqu'à quatre processus « Minecraft
+NeoForge » simultanés relevés à un moment (plusieurs forks parmi les sept autres travaillant
+sur ce dépôt lancent aussi des clients, dans leurs propres `run-<nom>/`). Tout client lancé
+par cette passe a été fermé immédiatement (par PID précis, jamais `taskkill` large) dès ce
+signalement, et aucune mesure FPS supplémentaire n'a été prise après. Une mesure de 292 s à
+distance 16 avait été obtenue juste avant (`greedy : 157208 quad(s) UP+DOWN/SOLID -> 143936
+quad(s) emis`, ×0,916, soit -8,4 % — cohérent avec la mesure UP-seule de la passe précédente,
+maintenant sur un périmètre et un échantillon plus larges) mais son chiffre de FPS moyen
+(58,5) est **invalidé** : découvert dans la foulée que `inactivityFpsLimit:"afk"`
+(l'option vanilla qui réduit le FPS quand aucune touche n'est pressée pendant un moment)
+contaminait toute mesure automatisée sans interaction clavier — `Unsafe.park` à 72,9 % du
+temps propre dans le rapport, signe d'un throttle actif, pas d'un signal de rendu. Corrigé
+pour la suite (`inactivityFpsLimit:"minimized"`, qui ne throttle que fenêtre réduite, jamais
+testé ici) mais aucune mesure propre n'a pu être relancée avant l'arrêt demandé.
+
+**Conséquence directe pour `run-vitrage/`** : un répertoire de jeu isolé (copie de « New World
+(1) », `options.txt`/`server.properties`/`lanterne-server.toml` déjà réglés — `maree_depart_vue
+= 0`, `maree_vue_max = 32`, `inactivityFpsLimit:"minimized"`) a été créé pendant cette passe
+pour éviter de se disputer `run/` avec les sept autres forks (`run/` s'est révélé activement
+utilisé en concurrence pendant cette passe — `DirectoryLock` refusée, `session.lock`
+« Device or resource busy », journal écrasé par un autre processus en cours de session).
+**Laissé en place, prêt à réemployer** pour la prochaine mesure FPS — évite de refaire tout ce
+travail de préparation, mais toujours borné par le plafond de distance 16 non résolu
+ci-dessus.
+
+### Décision honnête sur `Greedy.ENABLED` par défaut
+
+**Reste `false` par défaut (`LANTERNE_GREEDY_MESH=1` toujours nécessaire).** Les deux
+conditions posées par le mandat de cette passe sont : (1) rendu pixel-correct sur un périmètre
+élargi, ET (2) un vrai gain FPS mesuré. La condition (1) est remplie — UP+DOWN vérifiés sans
+artefact sur deux lancements indépendants, risque de géométrie #5 fermé. La condition (2) **ne
+l'est pas** : aucune mesure FPS propre n'a pu être obtenue cette passe (la seule mesure prise
+est invalidée par le throttle AFK), ni sur une scène vraiment limitée par les sommets (le
+plafond de distance 16 documenté ci-dessus a empêché d'atteindre ce régime). La passe
+précédente n'avait déjà trouvé aucun gain net à distance 16 (scène dominée par du CPU
+hors-rendu) — rien dans cette passe ne contredit ni ne confirme un gain à plus grande
+distance, la question reste ouverte. Activer par défaut sans preuve de gain serait exactement
+le pari à l'aveugle que ce dépôt refuse explicitement ailleurs (FSR, greedy meshing lui-même
+dans les passes précédentes). Le module reste donc un interrupteur opt-in, plus sûr qu'avant
+(risque de géométrie fermé, périmètre UP+DOWN) mais toujours sans gain FPS démontré.
+
+**Ce qu'il faudrait pour trancher, concrètement, pour la prochaine passe** :
+1. Résoudre le plafond de distance 16 (`javap -c` sur `IntegratedServer`/`PlayerList`, voir
+   ci-dessus) pour obtenir une vraie scène limitée par les sommets.
+2. Réemployer `run-vitrage/` (déjà préparé) pour un aller-retour ON/OFF propre, chacun sur une
+   fenêtre courte (60-90 s suffit une fois `inactivityFpsLimit` corrigé et la machine
+   dédiée), **en vérifiant D'ABORD qu'aucun autre client (le vrai jeu du joueur, ou un autre
+   fork) ne tourne** — la contention de cette passe (jusqu'à quatre clients simultanés) rend
+   toute mesure FPS prise sans cette vérification inutilisable par construction.

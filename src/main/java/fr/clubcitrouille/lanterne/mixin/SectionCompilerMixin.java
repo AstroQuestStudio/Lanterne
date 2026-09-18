@@ -60,7 +60,7 @@ public abstract class SectionCompilerMixin {
                             + "Lcom/mojang/blaze3d/vertex/QuadInstance;)V"))
     private void lanterne$putQuadWithSpriteBounds(BufferBuilder buffer, float x, float y, float z,
             BakedQuad quad, QuadInstance instance) {
-        // Un quad UP/SOLID est mis de côté par Greedy pour une fusion éventuelle — voir son Javadoc.
+        // Un quad UP+DOWN/SOLID est mis de côté par Greedy pour une fusion éventuelle — voir son Javadoc.
         // Tout le reste (faces latérales, DOWN, CUTOUT, TRANSLUCENT) part immédiatement, inchangé.
         if (!Greedy.accept(buffer, x, y, z, quad, instance)) {
             TerrainVertexFormat.putQuad(buffer, x, y, z, quad, instance);
@@ -68,7 +68,7 @@ public abstract class SectionCompilerMixin {
     }
 
     /**
-     * Fusionne et vide les quads UP/SOLID mis de côté par {@link Greedy#accept} — juste après que
+     * Fusionne et vide les quads UP+DOWN/SOLID mis de côté par {@link Greedy#accept} — juste après que
      * {@code ClientHooks.addAdditionalGeometry} a fini d'ajouter la géométrie des mods tiers (donc
      * après tout ce qui peut encore écrire dans le tampon SOLID) et AVANT la boucle qui appelle
      * {@code BufferBuilder.build()} sur chaque couche (offset 430 du désassemblage — {@code build()}

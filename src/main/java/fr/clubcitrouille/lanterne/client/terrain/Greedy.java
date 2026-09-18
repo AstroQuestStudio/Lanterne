@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.joml.Vector3fc;
+
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.QuadInstance;
 
@@ -21,35 +23,61 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * chantier. Voir {@link TerrainVertexFormat} pour le format de sommet qui la rend possible sans
  * étirer les textures, et {@code notes/rendu-terrain-vs-sodium.md} pour l'historique complet.
  *
- * <h2>Le périmètre choisi pour ce premier jalon</h2>
+ * <h2>Le périmètre : élargi une fois de {@code UP} seul à {@code UP}+{@code DOWN}</h2>
  *
- * <p>Uniquement les faces {@link Direction#UP} de la couche {@link ChunkSectionLayer#SOLID}, fusionnées
- * le long de l'axe X local, à l'intérieur d'une même rangée (Y, Z fixes). C'est délibérément le cas le
- * plus simple — un sol ou un plafond plat d'un seul type de bloc — avant d'envisager les faces
- * latérales, l'axe Z, ou un vrai balayage 2D. La consigne du chantier est explicite là-dessus :
- * vérifier un cas simple avant les cas complexes, pas les livrer tous à l'aveugle.
+ * <p>Les faces {@link Direction#UP} ET {@link Direction#DOWN} de la couche {@link ChunkSectionLayer#SOLID},
+ * fusionnées le long de l'axe X local, à l'intérieur d'une même rangée (Y, Z, ET direction fixes — voir
+ * {@link Pending#direction} et la clé de regroupement dans {@link #flush}, qui empêche explicitement un
+ * plafond DOWN de se mélanger avec un sol UP qui occuperait par coïncidence le même (Y, Z)). Le premier
+ * jalon de ce chantier ne couvrait que {@code UP} ; {@code DOWN} a été ajouté ensuite sans généralisation
+ * de {@link TerrainVertexFormat#putMergedRunAlongX} — sa doc de méthode annonçait déjà gérer « les faces
+ * horizontales (UP/DOWN) », vérifié vrai : une face DOWN varie en X et Z exactement comme une face UP (seul
+ * Y diffère, fixé à 0 plutôt qu'à 1), donc le même appariement lo/hi par Z convient sans changement.
+ *
+ * <p><b>Ce qui reste délibérément hors périmètre</b> : les faces latérales ({@code NORTH}/{@code SOUTH}/
+ * {@code EAST}/{@code WEST}) et la fusion le long de l'axe Z (un vrai balayage 2D). Pas ajoutées cette
+ * passe : une face {@code NORTH}/{@code SOUTH} varie en X et Y (Z fixe) — l'appariement lo/hi de
+ * {@code putMergedRunAlongX}, actuellement câblé sur Z, apparierait alors n'importe quel sommet avec
+ * n'importe quel autre (Z quasi constant des deux côtés) au lieu de rejeter proprement ou d'apparier
+ * juste — une vraie généralisation (détecter dynamiquement si c'est Y ou Z qui varie entre les deux
+ * sommets « bas ») est nécessaire AVANT d'ouvrir ces directions, pas juste retirer le filtre de
+ * direction. Sans suite de tests automatisés dans ce dépôt (aucun test JUnit n'existe ici), la seule
+ * vérification possible resterait visuelle (Snap) — insuffisante pour prouver l'absence d'un mauvais
+ * appariement de sommets qui ne se verrait que sur une géométrie non uniforme (peu probable sur les
+ * mondes de test plats utilisés jusqu'ici). {@code EAST}/{@code WEST} sont encore plus loin : leur X ne
+ * varie PAS (rejetées net par le test {@code maxX - minX < epsilon} de {@code putMergedRunAlongX}), il
+ * leur faudrait un axe de fusion différent (Z), donc un chemin de code séparé, pas une simple extension
+ * du filtre de direction. La consigne du chantier reste explicite là-dessus : vérifier un cas simple
+ * avant les cas complexes, pas les livrer tous à l'aveugle.
  *
  * <h2>Comment ça s'articule avec {@code SectionCompilerMixin}</h2>
  *
  * <p>{@code SectionCompilerMixin} appelle {@link #accept} à la place d'émettre directement. Un quad
- * UP/SOLID est mis de côté (pas encore écrit dans le tampon) ; tout le reste (faces latérales, DOWN,
- * CUTOUT, TRANSLUCENT) part immédiatement par {@link TerrainVertexFormat#putQuad} comme avant cette
- * passe — le périmètre non couvert ici n'est donc pas dégradé, juste pas encore fusionné.
+ * UP/SOLID ou DOWN/SOLID est mis de côté (pas encore écrit dans le tampon) ; tout le reste (faces
+ * latérales, CUTOUT, TRANSLUCENT) part immédiatement par {@link TerrainVertexFormat#putQuad} comme avant
+ * cette passe — le périmètre non couvert ici n'est donc pas dégradé, juste pas encore fusionné.
  *
  * <p>{@link #flush} est appelé une fois par section, juste avant que son tampon SOLID ne soit figé
  * ({@code BufferBuilder.build()}) — voir le point d'injection exact dans {@code SectionCompilerMixin}.
- * Il regroupe les quads mis de côté par rangée (Y, Z), les trie par X, fusionne les runs consécutifs
- * qui partagent la même clé ({@link #mergeable}), et émet soit un quad unique (run de longueur 1) soit
- * un quad fusionné ({@link TerrainVertexFormat#putMergedRunAlongX}) — avec repli individuel si cette
- * dernière refuse la géométrie.
+ * Il regroupe les quads mis de côté par rangée (direction, Y, Z), les trie par X, fusionne les runs
+ * consécutifs qui partagent la même clé ({@link #mergeable}), et émet soit un quad unique (run de
+ * longueur 1) soit un quad fusionné ({@link TerrainVertexFormat#putMergedRunAlongX}) — avec repli
+ * individuel si cette dernière refuse la géométrie.
  *
  * <h2>Sécurité de fusion : à l'identique, jamais à l'approximatif</h2>
  *
- * <p>{@link #mergeable} exige une correspondance EXACTE des bornes de sprite (même texture) et de la
- * couleur finale ET de la lumière des 4 sommets entre les deux quads comparés. Un seul sommet qui
- * diffère (occlusion ambiante différente au bord d'un bloc voisin, teinte de biome légèrement
- * différente) bloque la fusion pour cette paire — un repli sûr : la pire conséquence d'un refus de
- * fusion est un gain plus faible que possible, jamais un artefact visuel.
+ * <p>{@link #mergeable} exige une correspondance EXACTE des bornes de sprite (même texture), de la
+ * couleur finale ET de la lumière des 4 sommets, ET de la géométrie locale des 4 coins du quad
+ * ({@link BakedQuad#position(int)}) entre les deux quads comparés. Ce dernier point ferme un risque
+ * resté latent plusieurs passes : deux blocs différents (mod tiers, ou une dalle vs un bloc plein en
+ * vanilla) peuvent par coïncidence partager sprite/couleur/lumière identiques tout en ayant une face
+ * UP de forme différente (hauteur, empan) — sans comparer la géométrie, ces deux quads auraient pu
+ * fusionner avec un indexage de sommet incohérent, {@code putMergedRunAlongX} n'utilisant que les
+ * positions de {@code first}/{@code last} du run (les quads intermédiaires ne sont vérifiés qu'en
+ * apparence, jamais en position). Un seul sommet qui diffère sur n'importe lequel de ces quatre
+ * critères (occlusion ambiante différente au bord d'un bloc voisin, teinte de biome légèrement
+ * différente, forme de face différente) bloque la fusion pour cette paire — un repli sûr : la pire
+ * conséquence d'un refus de fusion est un gain plus faible que possible, jamais un artefact visuel.
  */
 public final class Greedy {
     /**
@@ -104,14 +132,16 @@ public final class Greedy {
         final float x;
         final float y;
         final float z;
+        final Direction direction;
         final BakedQuad quad;
         final int[] colors;
         final int[] lights;
 
-        Pending(float x, float y, float z, BakedQuad quad, int[] colors, int[] lights) {
+        Pending(float x, float y, float z, Direction direction, BakedQuad quad, int[] colors, int[] lights) {
             this.x = x;
             this.y = y;
             this.z = z;
+            this.direction = direction;
             this.quad = quad;
             this.colors = colors;
             this.lights = lights;
@@ -121,7 +151,7 @@ public final class Greedy {
     /** État accumulé pour UNE section en cours de compilation sur CE thread. */
     private static final class State {
         BufferBuilder solidBuffer;
-        final List<Pending> upQuads = new ArrayList<>();
+        final List<Pending> pendingQuads = new ArrayList<>();
         long quadsIn;
         long quadsOut;
     }
@@ -152,7 +182,8 @@ public final class Greedy {
         if (!ENABLED) {
             return false;
         }
-        if (quad.direction() != Direction.UP) {
+        Direction direction = quad.direction();
+        if (direction != Direction.UP && direction != Direction.DOWN) {
             return false;
         }
         if (quad.materialInfo().layer() != ChunkSectionLayer.SOLID) {
@@ -170,7 +201,7 @@ public final class Greedy {
 
         State state = STATE.get();
         state.solidBuffer = buffer;
-        state.upQuads.add(new Pending(x, y, z, quad, colors, lights));
+        state.pendingQuads.add(new Pending(x, y, z, direction, quad, colors, lights));
         return true;
     }
 
@@ -182,21 +213,27 @@ public final class Greedy {
      */
     public static void flush() {
         State state = STATE.get();
-        if (state.upQuads.isEmpty()) {
+        if (state.pendingQuads.isEmpty()) {
             return;
         }
         BufferBuilder buffer = state.solidBuffer;
 
-        // Regroupe par rangée (Y, Z fixes) — la fusion de ce jalon ne balaie que X à l'intérieur d'une
-        // rangée. Clé entière : x/y/z passés à putBlockBakedQuad sont les coordonnées locales d'un
-        // bloc dans la section, toujours entières en valeur (même si portées en float).
+        // Regroupe par rangée (direction, Y, Z fixes) — la fusion de ce jalon ne balaie que X à
+        // l'intérieur d'une rangée. La direction fait PARTIE de la clé : sans elle, un plafond DOWN et
+        // un sol UP qui occuperaient par coïncidence le même (Y, Z) local (sections différentes ou
+        // géométrie non standard) se retrouveraient dans le même groupe de tri, et rien dans le tri par
+        // X seul ne les distinguerait avant `mergeable()` — qui les bloquerait bien via la comparaison
+        // de géométrie (voir son Javadoc), mais autant ne jamais les faire cohabiter dans le même run.
+        // Clé entière : x/y/z passés à putBlockBakedQuad sont les coordonnées locales d'un bloc dans la
+        // section, toujours entières en valeur (même si portées en float).
         Map<Long, List<Pending>> rows = new HashMap<>();
-        for (Pending p : state.upQuads) {
-            long key = (Math.round(p.y) & 0xFFFFL) << 16 | (Math.round(p.z) & 0xFFFFL);
+        for (Pending p : state.pendingQuads) {
+            long key = (p.direction == Direction.UP ? 0L : 1L) << 32
+                    | (Math.round(p.y) & 0xFFFFL) << 16 | (Math.round(p.z) & 0xFFFFL);
             rows.computeIfAbsent(key, k -> new ArrayList<>()).add(p);
         }
 
-        long in = state.upQuads.size();
+        long in = state.pendingQuads.size();
         long out = 0;
 
         for (List<Pending> row : rows.values()) {
@@ -237,7 +274,7 @@ public final class Greedy {
             }
         }
 
-        state.upQuads.clear();
+        state.pendingQuads.clear();
         state.solidBuffer = null;
         state.quadsIn += in;
         state.quadsOut += out;
@@ -248,6 +285,28 @@ public final class Greedy {
     /**
      * Deux quads consécutifs le long de X peuvent-ils fusionner sans changement visible ? Voir le
      * Javadoc de classe pour pourquoi c'est une correspondance EXACTE, jamais approximative.
+     *
+     * <h2>Risque latent traité ici : la géométrie, pas seulement l'apparence</h2>
+     *
+     * <p>Avant cette vérification, {@code mergeable()} ne comparait que sprite/couleur/lumière — trois
+     * propriétés purement visuelles. Deux blocs DIFFÉRENTS (mod tiers, ou même vanilla — une dalle et
+     * un bloc plein partagent parfois une texture identique) pourraient par coïncidence avoir le même
+     * sprite/couleur/lumière tout en ayant une face UP de forme différente (hauteur, empan). Sans
+     * vérifier la géométrie, {@link #flush} aurait pu fusionner leurs quads : {@code putMergedRunAlongX}
+     * n'utilise QUE les positions de {@code first} et {@code last} du run pour émettre le quad fusionné
+     * — les quads intermédiaires du run sont ignorés en position (seuls sprite/couleur/lumière sont
+     * vérifiés pas à pas), donc une forme différente au milieu d'un run disparaîtrait silencieusement du
+     * rendu, et même {@code first}/{@code last} pourraient différer entre eux sans qu'aucun garde-fou
+     * existant ne le remarque.
+     *
+     * <p>Corrigé en comparant directement les 4 coins locaux du quad ({@link BakedQuad#position(int)}) —
+     * la géométrie de face réellement dessinée — plutôt que de supposer que même texture implique même
+     * forme. {@code position(i)} est déjà relatif au bloc (voir {@link TerrainVertexFormat#putQuad}, qui
+     * fait {@code x + pos.x()}), donc deux faces UP pleines et identiques ont des positions locales
+     * BIT-IDENTIQUES quel que soit le bloc auquel elles appartiennent ou sa position dans le monde — une
+     * simple égalité à epsilon suffit, aucune notion d'axe de fusion à soustraire. Comparer indice par
+     * indice (pas seulement min/max) couvre aussi les quads non rectangulaires (faces pivotées) qu'une
+     * comparaison de boîte englobante seule laisserait passer.
      */
     private static boolean mergeable(Pending a, Pending b) {
         float[] boundsA = TerrainVertexFormat.spriteBounds(a.quad);
@@ -266,6 +325,16 @@ public final class Greedy {
                 return false;
             }
         }
+        float geomEpsilon = 1.0e-4f;
+        for (int i = 0; i < 4; i++) {
+            Vector3fc pa = a.quad.position(i);
+            Vector3fc pb = b.quad.position(i);
+            if (Math.abs(pa.x() - pb.x()) > geomEpsilon
+                    || Math.abs(pa.y() - pb.y()) > geomEpsilon
+                    || Math.abs(pa.z() - pb.z()) > geomEpsilon) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -274,17 +343,17 @@ public final class Greedy {
         long in = TOTAL_IN.get();
         long out = TOTAL_OUT.get();
         if (in == 0) {
-            return "greedy : aucun quad UP/SOLID vu";
+            return "greedy : aucun quad UP+DOWN/SOLID vu";
         }
         double ratio = out / (double) in;
         return String.format(java.util.Locale.ROOT,
-                "greedy : %d quad(s) UP/SOLID -> %d quad(s) emis (x%.3f), cumule depuis le demarrage",
+                "greedy : %d quad(s) UP+DOWN/SOLID -> %d quad(s) emis (x%.3f), cumule depuis le demarrage",
                 in, out, ratio);
     }
 
     static {
         if (ENABLED) {
-            Lanterne.LOG.info("[GREEDY] fusion de faces armee (UP/SOLID, axe X) — "
+            Lanterne.LOG.info("[GREEDY] fusion de faces armee (UP+DOWN/SOLID, axe X) — "
                     + "LANTERNE_GREEDY_MESH=0 pour comparer sans elle.");
         }
     }
