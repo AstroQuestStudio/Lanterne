@@ -170,10 +170,13 @@ public final class Nuancier {
             Files.createDirectories(shaders);
             Files.createDirectories(post);
 
+            // 97 = resource_major reel de cette version, lu dans version.json du jar client
+            // (pas suppose) : un pack_format errone fait apparaitre un avertissement
+            // d'incompatibilite, voire un refus de charger selon la config du joueur.
             Files.writeString(exemple.resolve("pack.mcmeta"), """
                     {
                       "pack": {
-                        "pack_format": 46,
+                        "pack_format": 97,
                         "description": "Nuancier d'exemple Lanterne — teinte sepia"
                       }
                     }
