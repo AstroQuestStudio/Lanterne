@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.google.common.net.InetAddresses;
@@ -15,6 +16,8 @@ import com.google.common.net.InetAddresses;
 import net.minecraft.client.multiplayer.resolver.ResolvedServerAddress;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.client.multiplayer.resolver.ServerNameResolver;
+
+import fr.clubcitrouille.lanterne.Lanterne;
 
 /**
  * Pas de résolution DNS inversée pour une adresse qui est déjà une IP littérale.
@@ -46,21 +49,43 @@ import net.minecraft.client.multiplayer.resolver.ServerNameResolver;
  */
 @Mixin(ServerNameResolver.class)
 public abstract class ServerNameResolverMixin {
+
+    // Instrumentation temporaire : le joueur rapporte toujours plusieurs secondes de délai
+    // malgré ce correctif. Ces logs isolent où passe le temps réellement — à retirer une fois
+    // la cause confirmée (voir Lanterne.LOG au démarrage pour le contexte de session).
+    private static final ThreadLocal<Long> lanterne$entree = new ThreadLocal<>();
+
+    @Inject(method = "resolveAddress", at = @At("HEAD"))
+    private void lanterne$chrono_debut(ServerAddress address, CallbackInfoReturnable<Optional<ResolvedServerAddress>> callback) {
+        lanterne$entree.set(System.nanoTime());
+        Lanterne.LOG.info("[CHRONO-PING] resolveAddress() debute pour hote='{}'", address.getHost());
+    }
+
     @Inject(method = "resolveAddress", at = @At("RETURN"), cancellable = true)
     private void lanterne$skipReverseDnsForLiteralIp(ServerAddress address,
             CallbackInfoReturnable<Optional<ResolvedServerAddress>> callback) {
+        Long debut = lanterne$entree.get();
+        long avantPatchMs = debut != null ? (System.nanoTime() - debut) / 1_000_000 : -1;
+        Lanterne.LOG.info("[CHRONO-PING] resolveAddress() vanilla termine en {} ms (avant notre patch)", avantPatchMs);
+
         Optional<ResolvedServerAddress> result = callback.getReturnValue();
         if (result.isEmpty() || !InetAddresses.isInetAddress(address.getHost())) {
+            Lanterne.LOG.info("[CHRONO-PING] patch ignore : resultat vide={} ou hote pas une IP litterale='{}'",
+                    result.isEmpty(), address.getHost());
             return;
         }
         InetSocketAddress resolved = result.get().asInetSocketAddress();
         try {
+            long t0 = System.nanoTime();
             InetAddress patched = InetAddress.getByAddress(address.getHost(), resolved.getAddress().getAddress());
             callback.setReturnValue(Optional.of(
                     ResolvedServerAddress.from(new InetSocketAddress(patched, resolved.getPort()))));
+            long patchMs = (System.nanoTime() - t0) / 1_000_000;
+            Lanterne.LOG.info("[CHRONO-PING] patch applique en {} ms, hostName desormais precharge a '{}'", patchMs, address.getHost());
         } catch (UnknownHostException ignored) {
-            // Tableau d'octets de longueur inattendue : on garde le résultat d'origine, tant pis
-            // pour le gain — jamais de connexion cassée pour économiser une recherche DNS.
+            Lanterne.LOG.warn("[CHRONO-PING] patch ECHOUE (tableau d'octets inattendu), adresse d'origine conservee");
         }
+        long totalMs = debut != null ? (System.nanoTime() - debut) / 1_000_000 : -1;
+        Lanterne.LOG.info("[CHRONO-PING] resolveAddress() (avec notre mixin) termine en {} ms au total", totalMs);
     }
 }
