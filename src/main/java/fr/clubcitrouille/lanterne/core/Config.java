@@ -115,6 +115,8 @@ public final class Config {
 
     public static final ModConfigSpec.BooleanValue TREVE_BLUEMAP;
 
+    public static final ModConfigSpec.BooleanValue ETALON_AUTO;
+
     public static final ModConfigSpec SPEC;
 
     static {
@@ -1072,6 +1074,42 @@ public final class Config {
         TREVE_BLUEMAP = BUILDER.comment(
                 "Allumer la treve. Sans effet si BlueMap n'est pas installe.")
                 .define("actif", true);
+
+        BUILDER.pop();
+
+        BUILDER.comment(
+                "ETALON : accorder ce qui peut l'etre au verdict de Machine, pas au nombre de",
+                "coeurs affiche par la JVM.",
+                "",
+                "Machine.appraise() ne se contente pas de lire availableProcessors() : elle CHRONOMETRE",
+                "un travail identique seul puis a plusieurs, au demarrage, et en tire un gain reel et",
+                "un verdict (voir sa Javadoc de classe pour l'incident qui l'a fait passer d'une",
+                "mesure unique a une mediane de cinq essais - un facteur douze entre deux demarrages",
+                "identiques en production, sur la meme VM 4 OCPU).",
+                "",
+                "Ce reglage ne branche AUJOURD'HUI qu'une seule chose : le bassin de decodage de",
+                "ChunkDecode. Si Machine juge que paralleliser ne vaut pas son ordonnancement sur",
+                "cette machine, le bassin reste a un seul fil - quel que soit ce que Quota.cores()",
+                "aurait sinon accorde - et le journal dit pourquoi. Les autres bassins de ce depot ne",
+                "sont PAS concernes : ChunkDecode.POOL suivait deja Quota.cores() - 1 sans jamais",
+                "consulter Machine ; les trois bassins a un seul fil (magot des tableaux, plateau des",
+                "disques, courses de telechargement) sont a un fil par construction - contention de",
+                "disque ou d'ecran unique, pas faute de coeurs - et les grossir ne les accelererait",
+                "pas ; et Threads (le budget de Util.BACKGROUND_EXECUTOR de vanilla) a deja essaye une",
+                "formule automatique et l'a retiree APRES l'avoir mesuree inutile ou nuisible - voir sa",
+                "Javadoc de classe. Ce reglage ne les reintroduit pas.",
+                "",
+                "A false, ce module ne touche plus a rien : ChunkDecode.POOL redevient exactement ce",
+                "que Quota.cores() - 1 dicte, comme avant que Machine soit consulte. C'est le moyen de",
+                "garder la main quand on sait, sur son propre hebergeur, que ce banc s'est trompe.")
+                .push("etalon");
+
+        ETALON_AUTO = BUILDER.comment(
+                "Laisser Machine reduire un bassin de fils si elle juge la parallelisation",
+                "contre-productive sur cette machine. Vrai par defaut.",
+                "A false : la valeur explicite (ou, a defaut, Quota.cores()) prime sans etre corrigee -",
+                "aucune surprise silencieuse, et le journal dit dans quel cas on se trouve.")
+                .define("auto", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

@@ -15,6 +15,8 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 
+import fr.clubcitrouille.lanterne.Lanterne;
+
 /**
  * La restitution : lire un chunk déjà écrit ne devrait pas coûter un fil entier à lui tout seul.
  *
@@ -102,9 +104,36 @@ public final class ChunkDecode {
      * doit s'y rabattre. Sur une machine à un seul cœur logique confirmé, ceci rend toujours {@code 1}
      * — le bassin existe mais ne peut jamais faire mieux qu'exécuter les décodages l'un après
      * l'autre, exactement comme le ferait le fil unique de vanilla.
+     *
+     * <h2>Machine a le dernier mot, si {@link Config#ETALON_AUTO} le permet</h2>
+     *
+     * <p>Dimensionner sur le nombre de cœurs suppose que paralléliser aide <em>ici</em> —
+     * {@link Machine} le vérifie par une mesure chronométrée plutôt que de le supposer ; voir sa
+     * Javadoc de classe pour l'incident de production qui a rendu cette mesure fiable (un facteur
+     * douze entre deux démarrages identiques, avant correctif). Si son verdict dit que ça ne vaut
+     * pas le coup sur cette machine, le bassin est ramené à un seul fil quel que soit ce que
+     * {@link Quota} promet : plusieurs fils qui se disputent un gain absent n'ajoutent que de la
+     * contention à un décodage déjà correct en série. {@link Config#ETALON_AUTO} à {@code false}
+     * rend la main entière au calcul ci-dessus, sans correction — voir sa Javadoc pour pourquoi
+     * aucun autre bassin de ce dépôt n'est concerné par ce réglage.
      */
     private static int threads() {
-        return Mth.clamp(Quota.cores() - 1, 1, 16);
+        int quotaBased = Mth.clamp(Quota.cores() - 1, 1, 16);
+        if (!Config.ETALON_AUTO.get()) {
+            return quotaBased;
+        }
+        // Idempotent — voir la Javadoc de Machine.appraise(). Cet appel ne fait que garantir un
+        // verdict déjà mesuré ; en pratique le constructeur du mod l'a toujours appelé avant que ce
+        // bassin ne se charge, puisque ChunkDecode n'est touché qu'à la première lecture d'un chunk.
+        Machine.appraise();
+        if (Machine.worthParallelising()) {
+            return quotaBased;
+        }
+        Lanterne.LOG.info("[CHUNKDECODE] Machine juge la parallélisation contre-productive sur "
+                + "cette machine (gain réel ×{}) : bassin ramené à 1 fil — Quota en promettait {}. "
+                + "ETALON_AUTO=false pour l'imposer quand même.",
+                String.format(java.util.Locale.ROOT, "%.2f", Machine.speedup()), quotaBased);
+        return 1;
     }
 
     /**

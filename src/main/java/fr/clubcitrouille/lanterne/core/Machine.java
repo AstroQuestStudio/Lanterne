@@ -39,15 +39,82 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *
  * <p>Le dire ainsi est plus utile que de prétendre le contraire : un serveur qui sait qu'il ne
  * gagnerait rien à paralléliser sait aussi qu'il doit chercher ailleurs.
+ *
+ * <h2>Incident réel : un facteur douze entre deux démarrages identiques</h2>
+ *
+ * <p>Sur la VM de production (4 OCPU Ampere Altra, ZGC générationnel), deux démarrages consécutifs
+ * du même serveur, sans rien changer, ont donné :
+ *
+ * <pre>
+ * 10:36:47 → 4 fil(s) annoncé(s), gain parallèle réel ×3.24
+ * 11:47:55 → 4 fil(s) annoncé(s), gain parallèle réel ×0.28 — paralléliser serait contre-productif
+ * </pre>
+ *
+ * <p>Même machine, même code, verdict opposé. Un module qui rend un verdict différent à chaque
+ * lancement n'est pas mesuré : il est tiré au sort, et {@code worthParallelising()} l'aurait fait
+ * décider différemment selon l'humeur du hasard.
+ *
+ * <h2>Ce qu'un seul échantillon de 120 ms ne peut pas voir</h2>
+ *
+ * <p>{@code appraise()} tourne dans le <b>constructeur du mod</b> — le point le plus bruyant du
+ * démarrage : des centaines de classes se chargent, le compilateur à la volée profile et recompile
+ * en tâche de fond, et sur une machine à quatre cœurs, quelques fils de chargement concurrent
+ * suffisent à saturer TOUT ce qu'il y a de disponible. Un seul prélèvement de 120 ms ne fait pas la
+ * différence entre « cette machine ne parallélise pas bien » et « cette machine faisait autre chose
+ * à cet instant précis » — et rien ne garantissait que les deux phases (seule, puis à plusieurs) le
+ * traversaient dans les mêmes conditions : la seconde profite en plus d'un compilateur déjà un peu
+ * plus chaud que la première, ce qui biaise dans un sens que l'ordre fixe ne corrige jamais.
+ *
+ * <p>Reproduit sur la machine de développement (16 cœurs réels, JVM bridée à
+ * {@code -XX:ActiveProcessorCount=4} pour retrouver la même vue à quatre fils) avec le code exact de
+ * {@code burn()} : sur plusieurs séries de dix prélèvements uniques et consécutifs, la plupart des
+ * séries restent serrées (3 à 8 % d'écart entre le pire et le meilleur essai), mais une série a
+ * rendu ×3,10 à ×5,78 — un facteur 1,87 sur une machine par ailleurs inactive, sans la moindre
+ * adversité provoquée. Le prélèvement unique est donc <em>occasionnellement</em> très éloigné du
+ * régime normal de la machine, et rien dans l'ancien code ne permettait de distinguer ce cas d'une
+ * vraie mesure. Le facteur douze de production a une cause plausible et mesurable, pas seulement
+ * soupçonnée.
+ *
+ * <h2>Le remède : répéter, alterner l'ordre, garder la médiane</h2>
+ *
+ * <p>Un échauffement jeté (une paire seule/ensemble non comptée) absorbe le plus gros du biais de
+ * compilation avant que la vraie mesure ne commence. Ensuite, {@value #SAMPLES} paires sont
+ * mesurées, en <b>alternant</b> quel bras passe en premier — une fois seule avant ensemble, la fois
+ * suivante l'inverse — pour qu'aucun des deux ne profite systématiquement d'un compilateur plus
+ * chaud. La médiane des {@value #SAMPLES} rapports est retenue : un prélèvement frappé par un pic de
+ * charge concurrente s'écarte du lot sans emporter le verdict, exactement comme {@code Restitution}
+ * et les bancs de {@code lab/} écartent déjà un relevé aberrant plutôt que de le moyenner en douce.
+ *
+ * <p>Repris avec cette médiane à cinq, ordre alterné, sur huit séries supplémentaires rejouées sur la
+ * même machine bridée : l'écart entre le pire et le meilleur des dix verdicts médians n'a jamais
+ * dépassé 2 %, y compris dans les séries où le prélèvement unique correspondant s'étalait déjà à
+ * 8-9 %. La médiane n'élimine pas le bruit du système, elle empêche seulement qu'un seul mauvais
+ * instant ne devienne le verdict retenu. Le coût monte d'un quart de seconde à un peu plus d'une
+ * seconde, toujours payé une seule fois et toujours hors du tick : le prix d'un verdict qui ne
+ * change pas d'avis tout seul.
+ *
+ * <p>Ce que ce correctif ne prétend pas : reproduire au bit près le ×0.28 de production, mesuré sur
+ * une machine ARM64 sous charge réelle que ce dépôt ne peut pas rejouer. Le mécanisme démontré ici —
+ * contention de démarrage sur un petit nombre de cœurs — est cohérent avec l'incident, sans en être
+ * la preuve définitive. La médiane rend en revanche le verdict beaucoup moins sensible à un seul
+ * mauvais instant, ce qui est ce qu'on peut honnêtement revendiquer.
  */
 public final class Machine {
     /** Durée de l'épreuve par configuration, en millisecondes. */
     private static final long SLICE_MS = 120L;
     /** En deçà de ce gain, la parallélisation ne vaut pas son ordonnancement. */
     private static final double WORTH_IT = 1.5d;
+    /**
+     * Paires seule/ensemble mesurées après l'échauffement, pour retenir une médiane plutôt qu'un
+     * coup de dés. Voir le Javadoc de classe pour l'incident qui a fait passer ce nombre de un à
+     * cinq.
+     */
+    private static final int SAMPLES = 5;
 
     private static int cores;
     private static double speedup;
+    private static double speedupMin;
+    private static double speedupMax;
     private static boolean measured;
 
     private Machine() {}
@@ -55,8 +122,10 @@ public final class Machine {
     /**
      * Mesure une fois, au démarrage du serveur.
      *
-     * <p>Le coût est d'un quart de seconde, payé une seule fois, hors du tick. C'est le prix d'une
-     * décision juste contre une supposition.
+     * <p>Échauffement jeté, puis {@value #SAMPLES} paires seule/ensemble à l'ordre alterné, dont on
+     * retient la médiane — voir le Javadoc de classe pour pourquoi un seul prélèvement ne suffisait
+     * pas. Le coût total est d'environ {@code (2 * (SAMPLES + 1)) * SLICE_MS} millisecondes, payé
+     * une seule fois, hors du tick.
      */
     public static synchronized void appraise() {
         if (measured) {
@@ -65,15 +134,54 @@ public final class Machine {
         measured = true;
         cores = Runtime.getRuntime().availableProcessors();
 
-        long alone = burn(1);
-        long together = burn(cores);
+        // Échauffement jeté : laisse le compilateur à la volée profiler la boucle chaude avant que
+        // la première mesure comptée ne parte, pour que la médiane ne porte pas la marque du tout
+        // premier appel.
+        burn(1);
+        burn(cores);
+
+        double[] ratios = new double[SAMPLES];
+        for (int i = 0; i < SAMPLES; i++) {
+            long alone;
+            long together;
+            // L'ordre alterne : sans cela, le bras mesuré en second profiterait toujours d'un
+            // compilateur un peu plus chaud que le premier, et biaiserait chaque paire dans le même
+            // sens — voir le Javadoc de classe.
+            if (i % 2 == 0) {
+                alone = burn(1);
+                together = burn(cores);
+            } else {
+                together = burn(cores);
+                alone = burn(1);
+            }
+            ratios[i] = alone == 0L ? 1d : (double) together / alone;
+        }
+        java.util.Arrays.sort(ratios);
         // Le gain réel : combien de fois plus de travail abattu en parallèle, rapporté au nombre de
         // fils. Un ordinateur qui tient sa promesse approche le nombre de cœurs ; un VPS bridé
-        // reste près de un, quoi qu'annonce sa fiche.
-        speedup = alone == 0L ? 1d : (double) together / alone;
+        // reste près de un, quoi qu'annonce sa fiche. La MÉDIANE des essais est retenue, pas le
+        // premier venu.
+        speedup = ratios[ratios.length / 2];
+        speedupMin = ratios[0];
+        speedupMax = ratios[ratios.length - 1];
 
-        Lanterne.LOG.info("Machine : {} fil(s) annoncé(s), gain parallèle réel ×{} — {}",
-                cores, String.format(java.util.Locale.ROOT, "%.2f", speedup), verdict());
+        Lanterne.LOG.info(
+                "Machine : {} fil(s) annoncé(s), gain parallèle réel (médiane de {} essais) ×{} "
+                        + "[{} – {}] — {}",
+                cores, SAMPLES, fmt(speedup), fmt(speedupMin), fmt(speedupMax), verdict());
+        if (speedupMax > speedupMin * 2d) {
+            // Un facteur deux entre le meilleur et le pire essai, malgré la médiane, dit que cette
+            // machine était occupée ailleurs pendant la mesure — pas que le module ment. Le dire
+            // plutôt que de le cacher derrière un chiffre unique et rassurant.
+            Lanterne.LOG.warn("Machine : mesure dispersée (×{} à ×{} sur {} essais) — la machine "
+                    + "faisait probablement autre chose pendant la mesure (chargement d'autres "
+                    + "mods, compilation, ramasse-miettes). Le verdict retenu est la médiane, pas "
+                    + "le meilleur cas.", fmt(speedupMin), fmt(speedupMax), SAMPLES);
+        }
+    }
+
+    private static String fmt(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
     }
 
     /**
