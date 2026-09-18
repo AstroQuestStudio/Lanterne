@@ -4,6 +4,8 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.renderpearl.api.GpuFormat;
 
+import net.minecraft.client.Minecraft;
+
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.mixin.RenderTargetAccessor;
 
@@ -97,6 +99,55 @@ public final class Scene {
     /** Voir {@link #consumeSkyStale()}. */
     private static boolean skyStale;
 
+    /**
+     * Instant du premier appel de {@link #borrow} avec un monde présent, ou zéro tant qu'aucun monde
+     * n'a été vu. Voir {@link #withinJoinGrace()}.
+     */
+    private static long worldSeenAtNanos;
+
+    /**
+     * Délai avant la toute première tentative de compilation de la chaîne, après l'apparition d'un
+     * monde.
+     *
+     * <h2>Le vrai coupable du "premier join échoue, le second marche"</h2>
+     *
+     * <p>Reproduit en jeu réel : la toute première tentative de {@link Resolve#chain()} après un
+     * chargement de monde échoue de façon déterministe — {@code PipelineBuilder} (thread
+     * {@code Worker-Main}, pas le thread de rendu) journalise {@code Couldn't find source for
+     * FRAGMENT shader}, et {@link Upscale#fail} coupe le module pour le reste de la session.
+     *
+     * <p>{@code ShaderManager.getOrLoadPostChain} met l'échec en cache de façon <b>permanente</b> —
+     * lu en bytecode, pas supposé : une entrée absente déclenche {@code loadPostChain}, mais une
+     * entrée déjà présente (même un échec, encodé {@code Optional.empty()}) est retournée telle
+     * quelle, sans jamais retenter. Retenter sur le même identifiant après un échec ne changerait donc
+     * rien : c'est la case vide du cache qu'on relirait, pas une vraie nouvelle tentative.
+     *
+     * <p>Plutôt que de vider ce cache privé par réflexion — fragile, et une fausse bonne idée pour un
+     * problème de <em>moment</em> — on évite simplement la première tentative pendant que le
+     * chargement du monde bat son plein : compilation de maillages, tourbillon de blocs-entités,
+     * rafale de paquets. Cinq secondes de rendu natif, invisibles pour le joueur, contre un module
+     * éteint pour toute la session.
+     */
+    private static final long JOIN_GRACE_NANOS = 5_000_000_000L;
+
+    /**
+     * Vrai tant que le monde vient d'apparaître depuis moins de {@link #JOIN_GRACE_NANOS}.
+     *
+     * <p>Le chronomètre repart de zéro à chaque disparition du monde (retour au menu, déconnexion) :
+     * un rejoin est une nouvelle charge de démarrage, pas une continuation.
+     */
+    private static boolean withinJoinGrace() {
+        var level = Minecraft.getInstance().level;
+        if (level == null) {
+            worldSeenAtNanos = 0L;
+            return false;
+        }
+        if (worldSeenAtNanos == 0L) {
+            worldSeenAtNanos = System.nanoTime();
+        }
+        return System.nanoTime() - worldSeenAtNanos < JOIN_GRACE_NANOS;
+    }
+
     private Scene() {}
 
     /**
@@ -119,6 +170,14 @@ public final class Scene {
         // risquer une image fausse : voir Rival, qui porte le raisonnement et la façon de changer
         // d'avis le jour où quelqu'un aura regardé le résultat.
         if (Rival.stands()) {
+            release();
+            return null;
+        }
+
+        // Voir withinJoinGrace() : la toute première tentative de compilation, prise pendant la
+        // tempête de chargement d'un monde qui vient d'apparaître, échoue de façon déterministe et
+        // coupe le module pour de bon. On attend que ça se tasse avant d'essayer.
+        if (withinJoinGrace()) {
             release();
             return null;
         }

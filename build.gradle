@@ -36,9 +36,13 @@ neoForge {
             //
             // Conditionnée à la variable d'environnement pour ne pas imposer ce monde à un lancement
             // ordinaire du client pendant le développement.
-            if (System.getenv('LANTERNE_GLASS') == '1') {
+            //
+            // LANTERNE_SAVE seule ouvre un monde donné sans armer le banc d'images (Glass) : utile
+            // pour observer une vraie partie (un monde importé, richement construit) sans que Glass
+            // n'y bâtisse sa scène synthétique par-dessus.
+            if (System.getenv('LANTERNE_GLASS') == '1' || System.getenv('LANTERNE_SAVE') != null) {
                 programArgument '--quickPlaySingleplayer'
-                programArgument 'banc'
+                programArgument System.getenv('LANTERNE_SAVE') ?: 'banc'
             }
         }
         server {

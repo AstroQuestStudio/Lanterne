@@ -54,6 +54,13 @@ public final class Pane {
         Gauge.note();
         Foliage.refresh(net.minecraft.client.Minecraft.getInstance());
 
+        // Instrumentation temporaire de diagnostic (450->130 FPS, lentille, flashs) : journalise
+        // periodiquement le temps d'image reel et l'etat de la lentille sur une vraie partie, sans
+        // armer Glass et sans construire de scene synthetique. A retirer une fois la cause confirmee.
+        if ("1".equals(System.getenv("LANTERNE_OBSERVE"))) {
+            fr.clubcitrouille.lanterne.lab.Observe.frame();
+        }
+
         if (!Glass.armed()) {
             return;
         }
