@@ -129,27 +129,58 @@ public final class Loterie {
      * positions avant de trouver son rang, ce qui commence à peser à plusieurs milliers de coups par
      * tick.
      *
-     * <h2>Re-mesuré depuis, sur la même charge {@code FARM} : ni régression, ni gain net établi</h2>
+     * <h2>Remesuré proprement le 18 septembre 2026 : régression nette, pas du bruit</h2>
      *
-     * <p>Quatre passages du banc {@code Billet} le 18 septembre 2026, ce seuil en place, ont rendu
-     * ×1,09, ×1,00, ×0,57 et un cinquième interrompu avant conclusion (processus externe, pas ce
+     * <p>Les quatre passages qui suivent, pour mémoire, tournaient tous sur la machine de
+     * développement Windows de l'auteur — partagée, au moment de ces mesures, avec sept autres agents
+     * actifs sur le même dépôt. Ce bruit n'a jamais été isolé ni éliminé sur cette machine ; il l'a
+     * été ailleurs. La mesure qui suit a tourné sur la VM de production Oracle Cloud (Ampere Altra
+     * ARM64, 4 OCPU réels, ZGC générationnel — la cible réelle de ce mod), sur une instance
+     * {@code lanterne-bench} entièrement isolée du serveur en jeu : répertoire, monde et ports séparés,
+     * jamais le monde des joueurs ni le service {@code minecraft.service}, mais le jar exact déployé
+     * en production ce jour-là.
+     *
+     * <p>Dix passages du banc {@code Billet} (charge {@code FARM}, {@code LANTERNE_MODULES=tirage}
+     * pour isoler ce seul module), le même monde chargé d'un passage à l'autre à partir du deuxième —
+     * exactement le protocole que le paragraphe suivant réclamait. Le premier passage, sur un monde
+     * encore fraîchement généré, est resté à part (×1,15, 33 % puis 25 % travaillé) et confirme, une
+     * fois de plus, qu'un monde frais fausse la comparaison — voir la remarque plus haut sur ce même
+     * biais. Les NEUF passages suivants, sur le même monde désormais chargé depuis le disque à chaque
+     * fois, sont serrés : ×0,93 / ×0,90 / ×0,98 / ×0,95 / ×0,91 / ×0,94 / ×0,86 / ×0,91 / ×0,91 —
+     * médiane <b>×0,91</b>, c'est-à-dire un tick <b>9 % plus lent</b> avec ce module qu'avec vanilla
+     * seul, sur le matériel cible réel. Zéro incohérence sur les dix passages, {@code sectionsRares}
+     * toujours largement non nul (jusqu'à 271 145 sections rares vues, 608 486 coups) : le seuil est
+     * franchi, le module travaille bien, et c'est précisément ce travail qui coûte plus qu'il ne
+     * rapporte sur cette charge.
+     *
+     * <p>La cause tient à ce que {@link #SEUIL_COUCHE} documente déjà : un champ de blé concentre ses
+     * positions éligibles dans une ou deux couches plutôt que de les disperser sur les seize — le cas
+     * précis où {@link #localise} doit scruter le plus, et où la comptabilité par couche
+     * ({@link Section#lanterne$parCouche()}, mise à jour à chaque pose et chaque casse pendant que le
+     * champ pousse) paie un coût que vanilla n'a jamais eu à payer. Le profil des dix passages le
+     * confirme : {@code LevelReader.getChunk}, {@code RegularImmutableMap.get} et
+     * {@code ServerChunkCache.getChunk} pèsent sensiblement plus lourd « avec » que « sans » — le prix
+     * de la comptabilité par section et par couche, pas celui du tirage lui-même.
+     *
+     * <p><b>Verdict</b> : sur la charge que ce module a été conçu pour accélérer — un champ de blé, le
+     * cas même que Lithium documente — il ralentit le tick d'environ 9 % sur le matériel cible réel,
+     * une fois le bruit de mesure éliminé. {@link fr.clubcitrouille.lanterne.core.Config#LOTERIE} reste
+     * à {@code false} par défaut, cette fois sur la base d'un chiffre établi et non d'un doute. Le
+     * module reste correct ({@link #autoTest} le prouve toujours, indépendamment de ce chiffre) ; il
+     * n'est simplement pas rentable sur cette charge, sur cette architecture.
+     *
+     * <h2>Les quatre passages précédents, pour mémoire — machine partagée, non fiables</h2>
+     *
+     * <p>Quatre passages du banc {@code Billet} le 18 septembre 2026, ce seuil déjà en place, avaient
+     * rendu ×1,09, ×1,00, ×0,57 et un cinquième interrompu avant conclusion (processus externe, pas ce
      * module — voir les notes de session). Le premier était mesuré sur un monde déjà généré (chargé
      * depuis le disque, 10 à 12 % du temps serveur réellement travaillé) ; les deux suivants sur un
      * monde neuf, fraîchement généré (14 à 47 % travaillé selon la contention de la machine à ce
-     * moment). L'écart n'est pas du seul bruit de mesure : le profil du dernier passage montre {@code
-     * Loterie.tick} et {@link #coucheLaPlusChargee} apparaître comme postes mesurables à part entière
-     * (respectivement 2,9 % et 2,2 % du tick), et {@code PalettedContainer.get} monter malgré tout
-     * (1,52 → 2,41 ms) — signe que le second seuil, en excluant justement les sections denses de blé
-     * (le cas le plus fréquent d'un champ), fait payer son propre coût de vérification à des sections
-     * qui finissent de toute façon rendues à vanilla, sans toucher au gain qu'il protège par ailleurs.
-     *
-     * <p>Ce que ceci ferme : la régression de comptage (blocs oubliés ou sur-tickés) — voir {@link
-     * #autoTest}, qui la prouve close par construction, pas par mesure de temps. Ce que ceci n'établit
-     * PAS : que ce module accélère un champ de blé réel sur cette machine. {@link
-     * fr.clubcitrouille.lanterne.core.Config#LOTERIE} reste à {@code false} par défaut pour cette
-     * raison précise — un module correct n'est pas encore un module qui vaut sa promesse de vitesse.
-     * Remesurer proprement (monde chargé identique entre passages, machine non partagée) avant d'y
-     * toucher.
+     * moment). Ce que ces quatre passages avaient déjà vu juste, et qui reste vrai : {@code
+     * PalettedContainer.get} montait malgré tout (1,52 → 2,41 ms) — signe, déjà à l'époque, que le
+     * coût de vérification ne s'effaçait pas devant le gain qu'il protège par ailleurs. Ce qu'ils
+     * n'avaient pas pu établir, faute d'une machine non partagée, c'est un chiffre : c'est fait
+     * ci-dessus.
      */
     static final int SEUIL_COUCHE = 48;
 
