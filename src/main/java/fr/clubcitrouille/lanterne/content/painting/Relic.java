@@ -283,7 +283,7 @@ public final class Relic {
     private record Lore(String name, int width, int height) {}
 
     /**
-     * Relit {@code data/immersive_paintings.dat} pour retrouver noms et tailles.
+     * Relit {@code data/immersive_paintings/immersive_paintings.dat} pour retrouver noms et tailles.
      *
      * <h2>Pourquoi lire le fichier d'un autre mod plutôt que de deviner</h2>
      *
@@ -297,12 +297,24 @@ public final class Relic {
      * envers le mod étranger : on ne connaît que des noms de champs, et un champ manquant se solde
      * par une valeur par défaut. Si le format change ou si le fichier est absent, on retombe
      * proprement sur les proportions.
+     *
+     * <h2>Le sous-dossier n'est pas une erreur d'écriture</h2>
+     *
+     * <p>Vanilla range désormais chaque {@code SavedData} sous
+     * {@code data/<espace-de-noms-de-l'identifiant>/<chemin>.dat} — {@code SavedDataStorage.getDataFile}
+     * résout un {@link net.minecraft.resources.Identifier} et non plus un simple nom de fichier, et la
+     * sauvegarde du monde le montre pour ses propres données ({@code data/minecraft/scoreboard.dat},
+     * pas {@code data/scoreboard.dat}). Immersive Paintings identifie la sienne par
+     * {@code immersive_paintings:immersive_paintings}, ce qui écrit
+     * {@code data/immersive_paintings/immersive_paintings.dat} — un dossier, pas un fichier plat. Une
+     * version antérieure de cette méthode cherchait {@code data/immersive_paintings.dat} directement :
+     * ce fichier n'existe jamais, et la lecture échouait silencieusement sur toute sauvegarde réelle.
      */
     private static Map<String, Lore> readLore(MinecraftServer server) {
         if (server == null) {
             return Map.of();
         }
-        Path file = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(FOREIGN + ".dat");
+        Path file = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(FOREIGN).resolve(FOREIGN + ".dat");
         if (!Files.isRegularFile(file)) {
             return Map.of();
         }
