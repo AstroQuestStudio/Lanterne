@@ -44,6 +44,15 @@ neoForge {
                 programArgument '--quickPlaySingleplayer'
                 programArgument System.getenv('LANTERNE_SAVE') ?: 'banc'
             }
+            // Même isolement que runServer (voir plus bas) : deux clients lancés en même temps —
+            // deux agents qui travaillent sur ce dépôt en parallèle — se disputent sinon le même
+            // session.lock et le même run/logs/latest.log, avec des écritures concurrentes qui
+            // corrompent ce dernier. Constaté en pratique, pas supposé.
+            //
+            //   ./gradlew runClient -Pbanc=duel
+            if (project.hasProperty('banc')) {
+                gameDirectory = project.file("run-${project.property('banc')}")
+            }
         }
         server {
             server()

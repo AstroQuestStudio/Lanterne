@@ -65,6 +65,10 @@ public final class Pane {
         // son rapport sans qu'on le lui demande. Voir Radiographie pour le pourquoi.
         fr.clubcitrouille.lanterne.lab.Radiographie.pulse();
 
+        // Capture d'ecran automatique de verification (LANTERNE_AUTO_SCREENSHOT=1 uniquement,
+        // jamais pour un joueur normal). Voir Snap.
+        fr.clubcitrouille.lanterne.lab.Snap.pulse();
+
         if (!Glass.armed()) {
             return;
         }
