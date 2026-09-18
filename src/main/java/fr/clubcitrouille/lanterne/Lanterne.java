@@ -120,6 +120,14 @@ public final class Lanterne {
                 fr.clubcitrouille.lanterne.client.screen.Consent.SPEC,
                 "lanterne-projecteur-client.toml");
         modBus.addListener(fr.clubcitrouille.lanterne.client.screen.Consent::apply);
+        // Portails immersifs (compagnon optionnel, qouteall/iPortalTeam) : fichier a part, meme
+        // raison que le projecteur juste au-dessus — voir client.portals.PortailsConfig et
+        // notes/immersive-portals-faisabilite.md. N'installe rien : voir Portail.verifie() plus
+        // bas, dans le bloc client uniquement.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
+                fr.clubcitrouille.lanterne.client.portals.PortailsConfig.SPEC,
+                "lanterne-portails-client.toml");
+        modBus.addListener(fr.clubcitrouille.lanterne.client.portals.PortailsConfig::apply);
         fr.clubcitrouille.lanterne.content.screen.Screens.register(modBus);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.screen.Screens::onRegisterCommands);
@@ -163,6 +171,9 @@ public final class Lanterne {
             // nommer aucune de ces classes : voir client.screen.Projection pour le plantage exact
             // que la garde evite, et pourquoi il n'existe qu'une porte.
             fr.clubcitrouille.lanterne.client.screen.Projection.register(modBus);
+            // Portails immersifs : detection seule, journalisee si le reglage est allume — rien
+            // n'est installe. Voir client.portals.Portail et notes/immersive-portals-faisabilite.md.
+            fr.clubcitrouille.lanterne.client.portals.Portail.verifie();
         }
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,
