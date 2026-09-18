@@ -19,6 +19,7 @@ import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackSource;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.core.ClientConfig;
 
 /**
  * Des nuanciers de shaders déposés à la main, chargés comme un pack de ressources.
@@ -131,26 +132,35 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * }
  * }</pre>
  *
- * <p>Un second nuancier de démonstration, {@code demo_ao_normales/}, est écrit automatiquement à
- * côté de {@code exemple_teinte/} par {@link #creerExempleGbuffer} — même schéma minimal que
- * ci-dessus, sous l'identifiant inerte {@code lanterne:demo_ao_normales} (jamais demandé par
- * {@link Upscale}, donc <b>sans aucun effet tant qu'on ne le renomme pas</b> — même prudence que
- * {@code exemple_teinte/}, pour qu'un joueur qui n'a rien demandé ne voie jamais son rendu changer
- * au premier lancement).
+ * <p>Un second nuancier de démonstration, {@code club_citrouille/}, est écrit automatiquement à
+ * côté de {@code exemple_teinte/} par {@link #creerClubCitrouille} — même schéma minimal que
+ * ci-dessus, sous l'identifiant {@code lanterne:club_citrouille}. Ni l'un ni l'autre n'est demandé
+ * par défaut par {@link Upscale} — même prudence que {@code exemple_teinte/}, pour qu'un joueur qui
+ * n'a rien demandé ne voie jamais son rendu changer au premier lancement —, mais {@code
+ * club_citrouille} n'est plus <em>structurellement</em> inerte comme il l'était sous son ancien nom
+ * {@code demo_ao_normales} : {@link ClientConfig#LENS_NUANCIER} (réglage {@code
+ * lentille_nuancier_actif} de {@code lanterne-client.toml}) choisit désormais un nuancier déposé
+ * <b>par nom</b>, lu par {@link Resolve#chain()}. Avant ce réglage, la seule façon de rendre un
+ * nuancier actif était de faire coïncider, par hasard de nommage, le nom de son JSON avec
+ * l'identifiant que {@link Upscale#chainPath()} calcule depuis la netteté et l'anticrénelage —
+ * un mécanisme réel (voir la vérification ci-dessous) mais jamais un vrai sélecteur.
  *
- * <p><b>Vérification réellement effectuée cette passe</b> (pas seulement en théorie) : le même
- * algorithme d'AO, avec les mêmes noms d'échantillonneur, a été branché en quatrième passe d'une
- * copie de {@code upscale_aa_moyenne.json} (la chaîne réellement demandée par défaut — netteté
- * {@code MOYENNE}, anticrénelage actif), déposée dans {@code config/lanterne/shaderpacks/} d'une
- * instance de jeu réelle. Capture {@code Snap} à l'appui : {@code [ÉCHELLE] Pipeline de
- * reconstruction des normales compilé.} au chargement, puis chaîne à quatre passes (
- * {@code aa_edge} → {@code fsr_easu} → {@code fsr_rcas} → la passe AO ci-dessus) exécutée sans
- * exception pendant plus de vingt images consécutives, image finale valide (pas d'écran noir, pas
- * de {@code NaN} rose). Pour reproduire : renommer une copie de {@code demo_ao_normales.json} en
- * {@code post_effect/upscale_aa_moyenne.json} dans un nuancier déposé (en adaptant ses noms de
- * cible d'entrée à ceux du vrai fichier, voir le jar principal), activer la lentille
- * ({@code lentille = true} dans la configuration client), lancer avec
- * {@code LANTERNE_AUTO_SCREENSHOT=1}.
+ * <p><b>Vérification réellement effectuée, la première fois sous l'ancien nom</b> (pas seulement en
+ * théorie) : le même algorithme d'AO, avec les mêmes noms d'échantillonneur, a été branché en
+ * quatrième passe d'une copie de {@code upscale_aa_moyenne.json} (la chaîne réellement demandée
+ * par défaut — netteté {@code MOYENNE}, anticrénelage actif), déposée dans
+ * {@code config/lanterne/shaderpacks/} d'une instance de jeu réelle. Capture {@code Snap} à
+ * l'appui : {@code [ÉCHELLE] Pipeline de reconstruction des normales compilé.} au chargement, puis
+ * chaîne à quatre passes ({@code aa_edge} → {@code fsr_easu} → {@code fsr_rcas} → la passe AO
+ * ci-dessus) exécutée sans exception pendant plus de vingt images consécutives, image finale
+ * valide (pas d'écran noir, pas de {@code NaN} rose).
+ *
+ * <p>{@link #creerClubCitrouille} écrit désormais <b>exactement</b> cette chaîne à quatre passes
+ * vérifiée — plus besoin de la reconstituer à la main pour la reproduire : {@code
+ * lentille_nuancier_actif = "club_citrouille"} dans {@code lanterne-client.toml}, avec
+ * {@code lentille = true}, suffit. Voir l'historique de {@code Nuancier.java} pour la vérification
+ * en jeu réel refaite sous le nom {@code club_citrouille} avec ce sélecteur, capture {@code Snap}
+ * à l'appui elle aussi.
  *
  * <h2>Ce que ce format N'offre PAS encore, honnêtement</h2>
  *
@@ -179,10 +189,13 @@ public final class Nuancier {
      * Enregistre chaque sous-dossier de {@code shaderpacks/} comme pack de ressources séparé.
      *
      * <p>Plusieurs nuanciers peuvent cohabiter — celui qui définit effectivement
-     * {@code lanterne:<chemin demandé par Upscale>} (sous {@code assets/lanterne/post_effect/},
-     * voir la section « Format attendu » ci-dessus) l'emporte, les autres n'ont simplement aucun
-     * effet tant que leur JSON n'est pas référencé. Pas de sélecteur « actif » à ce stade : le
-     * premier besoin réel est que le chargement fonctionne du tout, pas un panneau de choix.
+     * {@code lanterne:<chemin demandé>} (sous {@code assets/lanterne/post_effect/}, voir la
+     * section « Format attendu » ci-dessus) l'emporte, les autres n'ont simplement aucun effet
+     * tant que leur JSON n'est pas référencé. Cette méthode-ci ne choisit rien : elle ne fait que
+     * charger chaque dossier comme un pack de ressources de plus. Le choix du chemin demandé
+     * — donc, indirectement, du nuancier actif — appartient à {@link Resolve#chain()}, qui lit
+     * {@link ClientConfig#LENS_NUANCIER} pour ça (voir le Javadoc de classe, section format
+     * étendu).
      */
     @SubscribeEvent
     public static void onAddPackFinders(AddPackFindersEvent event) {
@@ -192,7 +205,7 @@ public final class Nuancier {
         Path racine = dossier();
         if (!Files.isDirectory(racine)) {
             creerExemple(racine);
-            creerExempleGbuffer(racine);
+            creerClubCitrouille(racine);
             return;
         }
         try (var entrees = Files.list(racine)) {
@@ -349,26 +362,35 @@ public final class Nuancier {
     }
 
     /**
-     * Écrit un second nuancier de démonstration, sous {@code lanterne:demo_ao_normales} — un
-     * identifiant qu'{@link Upscale} ne demande jamais, donc sans aucun effet sur le rendu d'un
-     * joueur qui n'y touche pas, exactement comme {@link #creerExemple}. Preuve, committée avec le
-     * reste du module, que {@code lanterne:normal} (voir le Javadoc de classe) fonctionne pour un
-     * nuancier qui n'écrit que du JSON + GLSL — aucune ligne de Java spécifique à ce fichier.
+     * Écrit le nuancier « Club Citrouille », sous {@code lanterne:club_citrouille} — le rebranding
+     * de l'ancien {@code demo_ao_normales} (voir l'historique de ce fichier pour la version
+     * d'origine), avec le même mécanisme technique exact : {@link Gbuffer}/{@link CameraUniforms}
+     * ne changent pas d'une ligne, seul l'habillage change.
      *
-     * <h2>Pourquoi ce n'est PAS le fichier réellement vérifié via {@code Snap}</h2>
+     * <p>Contrairement à l'ancien nom, celui-ci n'est <b>plus</b> inerte par construction : voir
+     * {@link ClientConfig#LENS_NUANCIER}. Il reste néanmoins inactif tant qu'un joueur — ou
+     * l'administrateur qui prépare une instance — ne pose pas {@code lentille_nuancier_actif =
+     * "club_citrouille"} (avec {@code lentille = true}) dans {@code lanterne-client.toml} :
+     * l'écrire sur le disque au premier lancement ne suffit toujours pas à l'activer, exactement
+     * la même prudence que {@link #creerExemple}.
      *
-     * <p>La vérification en jeu réel de cette passe a branché ce même algorithme comme
-     * <b>quatrième passe</b> d'une copie de {@code upscale_aa_moyenne.json} — la chaîne réellement
-     * demandée par défaut — pour l'observer sur le rendu véritablement à l'écran plutôt que sur un
-     * identifiant que personne ne charge. Reproduire cette variante précise exigerait de recopier
-     * ici les trois passes {@code aa_edge}/{@code fsr_easu}/{@code fsr_rcas} du jar principal, pour
-     * un gain pédagogique nul : le contrat que ce fichier illustre (les noms d'échantillonneur, le
-     * décodage RGB+A) est identique dans les deux cas, et une seule passe le montre aussi bien que
-     * quatre. La différence entre les deux est documentée dans le Javadoc de classe, pas cachée.
+     * <h2>La chaîne écrite est la variante à quatre passes, pas la version à une seule</h2>
+     *
+     * <p>La toute première vérification en jeu réel de cet algorithme d'AO (voir le Javadoc de
+     * classe) l'avait branché comme <b>quatrième passe</b> d'une copie de
+     * {@code upscale_aa_moyenne.json} — {@code aa_edge} → {@code fsr_easu} → {@code fsr_rcas} → AO
+     * — précisément pour l'observer sur un rendu qui ressemble à ce qu'un joueur voit vraiment,
+     * anticrénelage et remontée FSR compris, plutôt que sur une image brute. Cette méthode écrit
+     * désormais cette même chaîne à quatre passes telle quelle, au lieu d'une seule passe qu'il
+     * fallait auparavant recombiner à la main pour la reproduire : les trois premières passes
+     * référencent les nuanceurs {@code aa_edge}/{@code fsr_easu}/{@code fsr_rcas} déjà présents
+     * dans le jar principal du mod (résolus par la pile de packs de ressources — voir le Javadoc de
+     * classe, {@link #onAddPackFinders} — sans qu'il faille les recopier ici), et seule la
+     * quatrième référence un nuanceur propre à ce dossier.
      */
-    private static void creerExempleGbuffer(Path racine) {
+    private static void creerClubCitrouille(Path racine) {
         try {
-            Path exemple = racine.resolve("demo_ao_normales");
+            Path exemple = racine.resolve("club_citrouille");
             Path shaders = exemple.resolve("assets").resolve(Lanterne.ID).resolve("shaders").resolve("post");
             Path post = exemple.resolve("assets").resolve(Lanterne.ID).resolve("post_effect");
             Files.createDirectories(shaders);
@@ -380,19 +402,21 @@ public final class Nuancier {
                         "pack_format": 97,
                         "min_format": 97,
                         "max_format": 97,
-                        "description": "Lanterne -- demo G-buffer : AO ecran-espace a partir de lanterne:normal"
+                        "description": "Lanterne -- Club Citrouille : AO ecran-espace a partir de lanterne:normal, activable via lentille_nuancier_actif"
                       }
                     }
                     """);
 
-            // Meme algorithme que la variante a quatre passes reellement executee en jeu pour
-            // cette verification (voir le Javadoc de la methode) : occlusion par comparaison de
-            // profondeur/normale entre le fragment courant et huit voisins fixes. Volontairement
-            // simple -- "un effet simple, genre AO ecran-espace basique" -- pas une reconstruction
-            // en vraie distance 3D, qui demanderait les matrices camera qu'un nuancier PostChain
-            // ne peut justement pas recevoir (voir le Javadoc de classe, section "ce que ce format
-            // n'offre pas encore").
-            Files.writeString(shaders.resolve("demo_ao.fsh"), """
+            // Meme algorithme que la version d'origine (demo_ao_normales) : occlusion par
+            // comparaison de profondeur/normale entre le fragment courant et huit voisins fixes.
+            // Volontairement simple -- "un effet simple, genre AO ecran-espace basique" -- pas une
+            // reconstruction en vraie distance 3D, qui demanderait les matrices camera qu'un
+            // nuancier PostChain ne peut justement pas recevoir (voir le Javadoc de classe, section
+            // "ce que ce format n'offre pas encore"). Seule addition sur ce rebranding : une teinte
+            // chaude sur l'ombrage de contact plutot qu'un simple assombrissement neutre -- signature
+            // visuelle discrete de Club Citrouille, qui ne touche a aucune ligne du calcul d'AO
+            // lui-meme.
+            Files.writeString(shaders.resolve("club_citrouille_ao.fsh"), """
                     #version 410
 
                     uniform sampler2D ColorSampler;
@@ -401,6 +425,11 @@ public final class Nuancier {
                     layout(location = 0) in vec2 texCoord;
 
                     layout(location = 0) out vec4 fragColor;
+
+                    // La teinte du contact-shadow : legerement orange plutot que grise, pour que
+                    // l'AO de ce nuancier se reconnaisse a l'oeil. Le calcul d'occlusion lui-meme,
+                    // en dessous, est identique a celui de la toute premiere version.
+                    const vec3 TEINTE_CITROUILLE = vec3(0.55, 0.32, 0.10);
 
                     void main() {
                         vec4 gbuf = texture(NormalSampler, texCoord);
@@ -434,18 +463,57 @@ public final class Nuancier {
                         occlusion /= float(SAMPLES);
 
                         float strength = 0.9;
-                        fragColor = vec4(color * (1.0 - occlusion * strength), 1.0);
+                        vec3 shaded = mix(color, color * TEINTE_CITROUILLE, occlusion * strength);
+                        fragColor = vec4(shaded, 1.0);
                     }
                     """);
 
-            Files.writeString(post.resolve("demo_ao_normales.json"), """
+            // La chaine a quatre passes reellement verifiee en jeu (voir le Javadoc de la methode) :
+            // les trois premieres sont EXACTEMENT celles de upscale_aa_moyenne.json (jar principal),
+            // rejouees ici pour que club_citrouille se comporte, hors AO, comme la chaine par
+            // defaut -- pas de regression de nettete/anticrenelage a activer ce nuancier. La
+            // quatrieme ajoute l'AO en lisant lanterne:normal.
+            Files.writeString(post.resolve("club_citrouille.json"), """
                     {
+                      "targets": {
+                        "swap": { "persistent": true },
+                        "preao": { "persistent": true }
+                      },
                       "passes": [
                         {
                           "vertex_shader": "minecraft:core/screenquad",
-                          "fragment_shader": "lanterne:post/demo_ao",
+                          "fragment_shader": "lanterne:post/aa_edge",
                           "inputs": [
-                            { "sampler_name": "ColorSampler", "target": "lanterne:scene" },
+                            { "sampler_name": "In", "target": "lanterne:scene", "bilinear": false }
+                          ],
+                          "output": "lanterne:aa"
+                        },
+                        {
+                          "vertex_shader": "minecraft:core/screenquad",
+                          "fragment_shader": "lanterne:post/fsr_easu",
+                          "inputs": [
+                            { "sampler_name": "In", "target": "lanterne:aa", "bilinear": false }
+                          ],
+                          "output": "swap"
+                        },
+                        {
+                          "vertex_shader": "minecraft:core/screenquad",
+                          "fragment_shader": "lanterne:post/fsr_rcas",
+                          "inputs": [
+                            { "sampler_name": "In", "target": "swap", "bilinear": false }
+                          ],
+                          "output": "preao",
+                          "uniforms": {
+                            "RcasConfig": [
+                              { "name": "Tuning", "type": "vec4", "value": [0.6, 0.0, 0.0, 0.0] }
+                            ]
+                          }
+                        },
+                        {
+                          "vertex_shader": "minecraft:core/screenquad",
+                          "fragment_shader": "lanterne:post/club_citrouille_ao",
+                          "inputs": [
+                            { "sampler_name": "ColorSampler", "target": "preao" },
                             { "sampler_name": "NormalSampler", "target": "lanterne:normal" }
                           ],
                           "output": "minecraft:main"
@@ -454,11 +522,11 @@ public final class Nuancier {
                     }
                     """);
 
-            Lanterne.LOG.info("[NUANCIER] dossier {} cree avec un second exemple (AO depuis lanterne:normal) — "
-                    + "inerte tant que son JSON n'est pas renomme pour remplacer une chaine active, voir le "
-                    + "Javadoc de Nuancier pour reproduire la verification", racine);
+            Lanterne.LOG.info("[NUANCIER] dossier {} cree (Club Citrouille -- AO depuis lanterne:normal) -- "
+                    + "pose \"lentille_nuancier_actif = 'club_citrouille'\" (et \"lentille = true\") dans "
+                    + "lanterne-client.toml pour l'activer", racine);
         } catch (IOException problem) {
-            Lanterne.LOG.warn("[NUANCIER] impossible de creer l'exemple de G-buffer dans {}", racine, problem);
+            Lanterne.LOG.warn("[NUANCIER] impossible de creer le nuancier Club Citrouille dans {}", racine, problem);
         }
     }
 }

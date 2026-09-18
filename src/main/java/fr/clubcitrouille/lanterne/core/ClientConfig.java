@@ -54,6 +54,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue LENS_AA;
     public static final ModConfigSpec.BooleanValue LENS_SWELL;
     public static final ModConfigSpec.BooleanValue LENS_TEMPORAL;
+    public static final ModConfigSpec.ConfigValue<String> LENS_NUANCIER;
     public static final ModConfigSpec.BooleanValue TAMPON;
     public static final ModConfigSpec.BooleanValue DIN;
     public static final ModConfigSpec.IntValue DIN_REGION;
@@ -322,6 +323,28 @@ public final class ClientConfig {
                 "ACTIVE PAR DEFAUT depuis cette verification, independant du reglage FSR",
                 "ci-dessus (n'a d'effet que si lentille l'est aussi).")
                 .define("lentille_temporelle", true);
+        LENS_NUANCIER = BUILDER.comment(
+                "NUANCIER ACTIF : le nom d'un dossier depose sous config/lanterne/shaderpacks/",
+                "dont la chaine de post-traitement remplace celle calculee depuis la nettete et",
+                "l'anticrenelage ci-dessus.",
+                "",
+                "Avant ce reglage, un nuancier depose ne devenait actif QUE si le nom de son JSON",
+                "tombait par hasard sur l'identifiant que la nettete courante aurait demande",
+                "(\"upscale_aa_moyenne\", par exemple) - un mecanisme reel mais indirect, qui ne",
+                "permettait pas de choisir un nuancier PAR NOM. Celui-ci le permet : la chaine",
+                "demandee est \"lanterne:<ce que tu ecris ici>\", quels que soient par ailleurs les",
+                "reglages de nettete et d'anticrenelage ci-dessus (qui ne servent alors plus qu'a",
+                "la chaine integree, ignoree tant que ce reglage n'est pas vide).",
+                "",
+                "VIDE (defaut) : rien ne change, la chaine integree au mod reste utilisee.",
+                "\"club_citrouille\" : le nuancier de demonstration ecrit automatiquement au premier",
+                "lancement dans config/lanterne/shaderpacks/club_citrouille/ - occlusion ambiante",
+                "ecran-espace depuis lanterne:normal, posee en quatrieme passe derriere le meme",
+                "aa_edge/fsr_easu/fsr_rcas que la chaine par defaut. Voir Nuancier.java.",
+                "",
+                "N'a d'effet que si la lentille (ci-dessus) est active : ce reglage choisit QUELLE",
+                "chaine tourne, pas si la mise a l'echelle tourne du tout.")
+                .define("lentille_nuancier_actif", "");
         TAMPON = BUILDER.comment(
                 "LE TAMPON : immuable chez Mojang, mutable chez NVIDIA.",
                 "",

@@ -73,11 +73,21 @@ final class Resolve {
 
     /** La chaîne correspondant à la netteté choisie, ou {@code null} si elle n'a pas pu se charger. */
     static PostChain chain() {
-        // La variante anticrénelée n'est demandée que si sa cible existe vraiment : une allocation
-        // refusée fait redescendre sur la chaîne sans anticrénelage, et non échouer la remontée.
-        boolean aa = Upscale.antialias() && Scene.antialiasTarget() != null;
-        Identifier id = Identifier.fromNamespaceAndPath(Lanterne.ID,
-                aa ? Upscale.chainPath() : Upscale.edge().path());
+        Identifier id;
+        String nuancier = Upscale.nuancierActif();
+        if (!nuancier.isBlank()) {
+            // Un nuancier déposé a été choisi par nom (voir ClientConfig.LENS_NUANCIER) : sa
+            // chaîne remplace entièrement celle calculée depuis la netteté et l'anticrénelage
+            // ci-dessous, qui ne s'appliquent qu'à la chaîne intégrée au mod.
+            id = Identifier.fromNamespaceAndPath(Lanterne.ID, nuancier);
+        } else {
+            // La variante anticrénelée n'est demandée que si sa cible existe vraiment : une
+            // allocation refusée fait redescendre sur la chaîne sans anticrénelage, et non
+            // échouer la remontée.
+            boolean aa = Upscale.antialias() && Scene.antialiasTarget() != null;
+            id = Identifier.fromNamespaceAndPath(Lanterne.ID,
+                    aa ? Upscale.chainPath() : Upscale.edge().path());
+        }
         PostChain chain;
         try {
             chain = Minecraft.getInstance().getShaderManager().getPostChain(id, ALLOWED);

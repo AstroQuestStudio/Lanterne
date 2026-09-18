@@ -1,6 +1,10 @@
 package fr.clubcitrouille.lanterne.client.portals;
 
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModList;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 
@@ -30,7 +34,25 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * (qouteall/ImmersivePortalsMod, iPortalTeam/ImmersivePortalsModForNeo, le port Modrinth de
  * Nick1st) et sont donc SUPPOSÉS, pas VÉRIFIÉS au sens où ce dépôt l'entend d'habitude ailleurs —
  * marqués ainsi pour qu'on ne les confonde jamais avec une certitude tirée du bytecode.
+ *
+ * <h2>Pourquoi {@code FMLClientSetupEvent}, et pas le constructeur du mod</h2>
+ *
+ * <p>Cette classe appelait {@link #verifie()} directement depuis {@code Lanterne.<init>} jusqu'à ce
+ * qu'un vrai lancement de client — le premier de ce chantier de nuanciers, voir {@code Nuancier} et
+ * {@code notes/} — le fasse planter à coup sûr : {@code PortailsConfig.ACTIVE.get()} lève
+ * {@code IllegalStateException: Cannot get config value before config is loaded}, systématiquement,
+ * parce qu'un fichier {@code CLIENT} de {@code ModConfigSpec} n'est chargé qu'après la construction
+ * des mods — jamais pendant. Pas une course, un ordre : aucun réessai ni fichier pré-écrit sur le
+ * disque n'y change rien, vérifié en relançant deux fois de suite.
+ *
+ * <p>{@code fr.clubcitrouille.lanterne.client.Doorway#onClientSetup} pose déjà le même point
+ * d'ancrage pour la même raison (« le point d'extension doit être enregistré sur le conteneur, et
+ * ce moment-là est celui où NeoForge garantit que le côté client est prêt ») : cette classe suit
+ * désormais exactement le même patron,
+ * {@code @EventBusSubscriber(value = Dist.CLIENT)} compris, plutôt que d'inventer un second moyen de
+ * résoudre le même problème.
  */
+@EventBusSubscriber(modid = Lanterne.ID, value = Dist.CLIENT)
 public final class Portail {
 
     /** SUPPOSÉ : identifiant historique du jar « all-in-one » (Fabric/Forge/NeoForge). */
@@ -42,10 +64,12 @@ public final class Portail {
     private Portail() {}
 
     /**
-     * Appelée une fois au démarrage du client, uniquement si {@link PortailsConfig#ACTIVE} est
-     * vrai. N'installe rien, ne mixine rien : journalise, et s'arrête là.
+     * Appelée une fois au démarrage du client — {@code FMLClientSetupEvent}, jamais le constructeur
+     * du mod, voir le Javadoc de classe — uniquement si {@link PortailsConfig#ACTIVE} est vrai.
+     * N'installe rien, ne mixine rien : journalise, et s'arrête là.
      */
-    public static void verifie() {
+    @SubscribeEvent
+    public static void verifie(FMLClientSetupEvent event) {
         if (!PortailsConfig.ACTIVE.get()) {
             return;
         }

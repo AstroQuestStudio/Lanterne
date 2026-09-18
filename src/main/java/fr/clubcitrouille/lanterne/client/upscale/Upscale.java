@@ -104,6 +104,17 @@ public final class Upscale {
     private static boolean swell;
 
     /**
+     * Le nom d'un nuancier déposé qui remplace la chaîne calculée depuis {@link #edge} et
+     * {@link #antialias()}, ou vide pour garder le comportement d'avant ce réglage.
+     *
+     * <p>Voir {@link ClientConfig#LENS_NUANCIER} pour pourquoi ce champ existe : sans lui, un
+     * nuancier tiers ne pouvait devenir actif qu'en renommant son JSON pour qu'il coïncide, par
+     * coïncidence de nom, avec l'identifiant que {@link #chainPath()} aurait demandé — jamais un
+     * vrai sélecteur par nom. {@link Resolve#chain()} est l'unique lecteur de ce champ.
+     */
+    private static String nuancierActif = "";
+
+    /**
      * Le module a échoué et ne réessaiera pas de la session.
      *
      * <h2>Pourquoi un échec est définitif et non retenté</h2>
@@ -153,6 +164,11 @@ public final class Upscale {
 
     public static boolean swell() {
         return swell;
+    }
+
+    /** Le nuancier déposé actif, ou vide si aucun ne remplace la chaîne intégrée. */
+    public static String nuancierActif() {
+        return nuancierActif;
     }
 
     /**
@@ -219,10 +235,14 @@ public final class Upscale {
      *
      * <p>La houle repart du natif : elle jugerait sinon son premier palier sur des durées d'image
      * relevées dans une autre session, sur une autre scène.
+     *
+     * @param savedNuancier voir {@link #nuancierActif}. {@code null} traité comme vide, pour ne
+     *                       pas obliger chaque appelant à connaître ce détail de {@code ModConfigSpec}.
      */
-    public static void restore(Edge savedEdge, boolean savedSwell) {
+    public static void restore(Edge savedEdge, boolean savedSwell, String savedNuancier) {
         edge = savedEdge;
         swell = savedSwell;
+        nuancierActif = savedNuancier == null ? "" : savedNuancier;
         Swell.reset();
     }
 
@@ -289,7 +309,8 @@ public final class Upscale {
         if (!active()) {
             return "";
         }
-        return String.format(Locale.ROOT, "lentille-%d%%%s-%s",
-                pixelPercent(), swell ? "-houle" : "", edge.path);
+        return String.format(Locale.ROOT, "lentille-%d%%%s-%s%s",
+                pixelPercent(), swell ? "-houle" : "", edge.path,
+                nuancierActif.isBlank() ? "" : "-nuancier:" + nuancierActif);
     }
 }

@@ -1621,7 +1621,8 @@ public final class Settings {
         // joueur qui regle la lentille la retrouvait a « moyenne, houle eteinte » a chaque
         // lancement — et finissait par croire que le reglage ne servait a rien.
         fr.clubcitrouille.lanterne.client.upscale.Upscale.restore(
-                ClientConfig.LENS_EDGE.get(), ClientConfig.LENS_SWELL.get());
+                ClientConfig.LENS_EDGE.get(), ClientConfig.LENS_SWELL.get(),
+                ClientConfig.LENS_NUANCIER.get());
         Din.tune(ClientConfig.DIN_REGION.get(), ClientConfig.DIN_ALLOWANCE.get(),
                 ClientConfig.DIN_WINDOW.get());
         Shroud.tune(ClientConfig.SHROUD_DELAY.get(), ClientConfig.SHROUD_NEAR.get(),

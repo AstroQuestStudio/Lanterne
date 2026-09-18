@@ -173,7 +173,10 @@ public final class Lanterne {
             fr.clubcitrouille.lanterne.client.screen.Projection.register(modBus);
             // Portails immersifs : detection seule, journalisee si le reglage est allume — rien
             // n'est installe. Voir client.portals.Portail et notes/immersive-portals-faisabilite.md.
-            fr.clubcitrouille.lanterne.client.portals.Portail.verifie();
+            // Plus d'appel direct ici : Portail s'enregistre desormais lui-meme aupres du bus
+            // d'evenements (@EventBusSubscriber) et journalise depuis FMLClientSetupEvent, pas
+            // depuis ce constructeur — lire PortailsConfig.ACTIVE ici plantait a coup sur, voir le
+            // Javadoc de Portail pour la trace complete.
         }
         SelfTest.arm();
         // Vérification d'environnement, et non curiosité : si Tracy est disponible,
