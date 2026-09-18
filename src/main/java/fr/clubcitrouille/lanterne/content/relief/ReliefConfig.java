@@ -26,8 +26,11 @@ public final class ReliefConfig {
                 "panel web affiche. Lit les régions déjà écrites sur disque, n'en génère aucune",
                 "nouvelle. Budget par tick, comme PRÉGÉN : ne vole jamais de temps au jeu.");
         ACTIVE = BUILDER.comment(
-                "Coupe tout le module si faux. Aucun coût, aucune tuile écrite ou mise à jour.")
-                .define("actif", true);
+                "Coupe tout le module si faux. Aucun coût, aucune tuile écrite ou mise à jour.",
+                "Mis en pause par défaut (décision du 18 septembre 2026) : le joueur préfère",
+                "déployer BlueMap plutôt que de continuer ce rendu maison pour l'instant. Le",
+                "code reste en place, prêt à être réactivé.")
+                .define("actif", false);
         BUDGET_MS = BUILDER.comment(
                 "Millisecondes maximum passées à décoder des chunks par tick serveur. Une valeur",
                 "basse ralentit la mise à jour de la carte mais reste invisible en jeu ; une valeur",
