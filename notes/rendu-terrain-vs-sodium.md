@@ -317,3 +317,96 @@ d'injection exact et documenté que trois morceaux à moitié écrits.
 seuils `MINIMUM_ADVANCED_CULLING_DISTANCE`/`_SECTION_DISTANCE` — un système mature et déjà
 non-trivial. Rien d'évident à améliorer sans risquer de dégrader un système qui fonctionne
 déjà bien, et certainement pas dans le temps d'un audit rapide.
+
+## Le format étendu implémenté et vérifié, la fusion elle-même écrite mais cassée — première passe avec Snap réellement utilisé
+
+Reprise avec `lab/Snap.java` disponible (capture d'écran automatique, committée en
+`bc06642` avant cette passe) — le blocage qui a arrêté toutes les passes précédentes
+(« aucun moyen de vérifier visuellement ») est donc levé. Trois commits produits :
+`a20546b`, `679bd57`, `3199cdd`.
+
+### Ce qui est fait, vérifié à l'œil, et sain (`a20546b`)
+
+Le format de sommet du binding 0 des pipelines terrain (`SOLID_TERRAIN`/`CUTOUT_TERRAIN`/
+`TRANSLUCENT_TERRAIN` + variantes `_MULTIDRAW`) porte désormais deux attributs de plus, en
+réutilisant `UV1`/`UV3` — deux emplacements que `DefaultVertexFormat.BLOCK` n'utilise jamais
+mais que `BufferBuilder` sait déjà écrire (`setUv1`/`setUv3`, vérifié par `javap`) — plutôt
+qu'un binding 2 séparé. Voir `TerrainVertexFormat.java` pour le raisonnement complet
+(pourquoi binding 0 et pas binding 2 : la piste binding-2 des passes précédentes aurait
+exigé de refaire la plomberie d'upload/dessin sur plusieurs classes, aucune ne gérant
+aujourd'hui plus d'un `MeshData` par couche).
+
+`RenderPipelinesMixin` patche `<clinit>` de `RenderPipelines` aux deux ordinaux exacts de
+`withFragmentShader("core/terrain")` (0 et 1, reconfirmés par `javap -c` cette passe, pas
+seulement repris des notes). `SectionCompilerMixin` redirige `putBlockBakedQuad` dans
+`lambda$compile$0`/`lambda$compile$1` vers `TerrainVertexFormat.putQuad`. `terrain.fsh`
+recalcule l'UV échantillonné via `sprite.min + fract((uv-min)/size) * size` — tant qu'aucune
+face n'est fusionnée, ça retombe exactement sur un échantillonnage direct.
+
+**Deux crashes réels trouvés et corrigés par le premier vrai lancement client** (aucun des
+deux n'était prévisible par la seule lecture de bytecode) :
+
+- Les pipelines OIT partagent `core/terrain` mais pas `TERRAIN_SNIPPET` —
+  `ShaderCompileException` au chargement des ressources. Corrigé en rendant `UV1`/`UV3`
+  conditionnels à un define de shader (`LANTERNE_TERRAIN_EXT`) posé uniquement sur les
+  pipelines patchés.
+- `FluidRenderer` (eau/lave) écrit dans le même tampon par couche sans passer par
+  `putBlockBakedQuad` — `IllegalStateException: Missing elements in vertex` (UV3 jamais
+  rempli) à la première section contenant de l'eau. Corrigé par `FluidRendererMixin`
+  (sentinelle `UV1=UV3=(0,0)`, que le fragment shader traite déjà comme « pas de fusion,
+  échantillonner tel quel »).
+
+Vérifié à l'œil (Snap, monde réel `New World (1)`) : terrain enneigé + eau + arbres, aucun
+trou, aucun artefact, aucune texture décalée. **C'est allé plus loin que toutes les passes
+précédentes réunies** — la première fois que du code de ce chantier tourne réellement dans
+un client et rend correctement.
+
+### Ce qui est écrit mais cassé et désactivé par défaut (`679bd57`, `3199cdd`)
+
+`Greedy.java` implémente une vraie fusion : accumule les quads `UP`/`SOLID` par rangée
+(Y, Z fixes), fusionne les runs consécutifs le long de X qui partagent exactement les mêmes
+bornes de sprite + couleur + lumière sur les 4 sommets, avec repli individuel si la
+géométrie ne correspond pas aux hypothèses vérifiées par `TerrainVertexFormat
+.putMergedRunAlongX` (jamais de sommet inventé à l'aveugle — voir son Javadoc pour la
+méthode de correspondance bas/haut par comparaison de position, pas par ordre supposé).
+
+**Vu à l'œil : cassé.** Un sol de neige fusionné se rendait en larges carrés gris/jaunes
+selon le shader de diagnostic utilisé, pas blancs. Deux hypothèses testées :
+
+1. **Confirmée et corrigée** : `sampleNearest`/`sampleRGSS` (`texture_sampling.glsl`,
+   vanilla) calculent `dFdx`/`dFdy` sur l'UV DÉJÀ enroulé par `fract()`. À chaque bord de
+   tuile fusionnée, `fract()` saute de ~1 à ~0 — une discontinuité lue par le matériel comme
+   une minification extrême, donc un mip flou/gris. Corrigé en calculant les dérivées sur la
+   coordonnée continue `local = (uv-min)/size` (linéaire, sans discontinuité) AVANT
+   d'appliquer `fract()`, passées explicitement à `sampleNearest` via sa surcharge à 6
+   arguments. Coût : RGSS désactivé sur le terrain patché (pas de variante à dérivées
+   explicites dans le fichier partagé) — régression mineure de qualité, documentée.
+2. **Infirmée** : après ce correctif, le défaut persistait (carrés nets, pas flous) — donc
+   pas *seulement* un problème de mip. Un shader de diagnostic temporaire (non commité,
+   retiré après usage) qui affichait `lanterneSpriteSize` directement comme couleur a montré
+   que cette valeur se lit en fait **correctement** sur la grande majorité du terrain fusionné
+   — l'hypothèse « UV1 illisible côté shader » ne tient donc pas. Une anomalie localisée
+   (zones en marge rouge sur les pentes dans la visualisation, signe d'un `spriteSize.y`
+   proche de zéro par endroits) reste non expliquée.
+
+**La cause exacte du carré gris/jaune n'est PAS confirmée.** `Greedy.ENABLED` exige
+maintenant `LANTERNE_GREEDY_MESH=1` explicitement (inversé par rapport à l'intention
+initiale) — aucun client normal ne peut afficher ce défaut. Un journal de diagnostic
+(`LANTERNE_GREEDY_DIAG=1`, gelé à 6 lignes) trace bornes de sprite/UV/delta pour les
+premières fusions réelles — utile pour reprendre l'investigation sans tout réinstrumenter.
+
+### Pistes non explorées pour la prochaine passe
+
+- Vérifier si le bogue est spécifique aux runs de longueur ≥ 3 (le seul cas tracé à la main
+  dans cette passe était `run=2`) — un run plus long pourrait révéler une divergence que
+  `run=2` masque.
+- Vérifier par un shader de diagnostic ciblé si c'est `mergedU` (le calcul lui-même) ou la
+  reconstruction `fract()` en aval qui produit la mauvaise couleur — cette passe a vérifié
+  les DONNÉES en amont (`spriteSize` lisible) mais pas le résultat de `lanterneSample` lui-même
+  pixel par pixel.
+- Les traînées rouges (marges de pente) mériteraient d'être isolées : sont-elles corrélées à
+  des quads réellement fusionnés, ou à un tout autre chemin de rendu (feuilles, blocs
+  partiels) qui partage aussi le format étendu ?
+- Le périmètre de fusion actuel (`UP` uniquement, axe X uniquement, couche `SOLID`
+  uniquement) reste le plus simple délibérément — ne pas étendre avant d'avoir un cas simple
+  qui rend correctement.
