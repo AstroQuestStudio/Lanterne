@@ -106,6 +106,56 @@ public final class Vigie {
     private static final AtomicBoolean RAPPORTE = new AtomicBoolean(false);
 
     /**
+     * Le backend actif est-il Vulkan ? {@code null} tant que personne ne l'a encore demandé et
+     * qu'aucun périphérique graphique n'existait pour répondre.
+     *
+     * <h2>Pourquoi ce champ existe — le rendu avancé disponible, en un seul endroit</h2>
+     *
+     * <p>Avant ce champ, {@link fr.clubcitrouille.lanterne.client.upscale.Deep#probe()} et
+     * {@link fr.clubcitrouille.lanterne.client.upscale.Pivot#onVulkan()} interrogeaient chacun
+     * {@code RenderSystem.getDevice().getDeviceInfo().backendName()} de leur côté, avec chacun son
+     * propre {@code try/catch}. Trois lectures indépendantes de la même vérité, qui ne peuvent pas se
+     * contredire aujourd'hui mais qui pourraient diverger le jour où l'une des trois copies serait
+     * corrigée sans que les deux autres le soient. {@link #vulkanActif()} est désormais l'unique
+     * source : les deux classes ci-dessus la consultent plutôt que de refaire la mesure.
+     *
+     * <p>La mise en cache est sûre parce que le backend actif ne change <b>jamais</b> en cours de
+     * session — seul un redémarrage complet en choisit un autre. Une fois {@link #vulkanActif()}
+     * répondu une première fois avec succès, la réponse reste vraie jusqu'à la fermeture du
+     * processus, exactement comme {@link fr.clubcitrouille.lanterne.core.Machine#appraise()} mesure
+     * le gain parallèle une fois puis le sert de mémoire.
+     */
+    private static @Nullable Boolean backendVulkan;
+
+    /**
+     * Le backend actif est-il Vulkan ? Relevé une seule fois puis mis en cache — voir
+     * {@link #backendVulkan}. Le reste du mod doit consulter cette méthode plutôt que d'interroger
+     * {@code RenderSystem.getDevice()} lui-même, pour que le point de vérité reste unique.
+     *
+     * <p>Rend {@code false} tant qu'aucun périphérique graphique n'existe encore pour répondre — sans
+     * mettre ce résultat en cache, pour que l'appel suivant, une fois la fenêtre construite, obtienne
+     * la vraie réponse plutôt qu'un {@code false} figé pour le reste de la session.
+     */
+    public static boolean vulkanActif() {
+        Boolean cached = backendVulkan;
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            GpuDevice device = RenderSystem.tryGetDevice();
+            if (device == null) {
+                return false;
+            }
+            boolean value = "Vulkan".equalsIgnoreCase(device.getDeviceInfo().backendName());
+            backendVulkan = value;
+            return value;
+        } catch (Throwable problem) {
+            Lanterne.LOG.debug("[VIGIE] Relevé du backend graphique impossible.", problem);
+            return false;
+        }
+    }
+
+    /**
      * À appeler une seule fois, tôt dans la construction du mod, côté client — juste après
      * {@link Reveil#install()} pour lire l'état final qu'il a éventuellement posé. Ne modifie jamais
      * le fichier ; une panne de lecture laisse simplement les deux champs à {@code null}, et
@@ -148,7 +198,10 @@ public final class Vigie {
             return; // Rien à comparer — ne devrait pas arriver si le jeu a fini de démarrer.
         }
         DeviceInfo info = device.getDeviceInfo();
-        boolean actifEstVulkan = "Vulkan".equalsIgnoreCase(info.backendName());
+        // Même valeur que vulkanActif() calculerait, mais sans la recalculer : device est déjà en
+        // main ici, et vulkanActif() se charge lui-même de mettre ce résultat en cache pour tous les
+        // appelants suivants (Deep, Pivot).
+        boolean actifEstVulkan = vulkanActif();
 
         boolean preferenceEtaitVulkan = "vulkan".equals(preferenceAvantMinecraft);
         boolean preferenceEtaitDefault = preferenceAvantMinecraft == null

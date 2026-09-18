@@ -1,8 +1,5 @@
 package fr.clubcitrouille.lanterne.client.upscale;
 
-import com.mojang.renderpearl.api.device.DeviceInfo;
-import com.mojang.blaze3d.systems.RenderSystem;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.PreferredGraphicsApi;
@@ -148,14 +145,15 @@ public final class Pivot {
         }
     }
 
-    /** Le jeu tourne-t-il sur Vulkan à cette seconde ? */
+    /**
+     * Le jeu tourne-t-il sur Vulkan à cette seconde ?
+     *
+     * <p>Délègue à {@link fr.clubcitrouille.lanterne.client.Vigie#vulkanActif()}, l'unique source
+     * pour cette question — voir sa Javadoc. Cette classe interrogeait auparavant
+     * {@code RenderSystem.getDevice()} elle-même, en double de {@link Vigie} et de {@link Deep}.
+     */
     public static boolean onVulkan() {
-        try {
-            DeviceInfo info = RenderSystem.getDevice().getDeviceInfo();
-            return "Vulkan".equalsIgnoreCase(info.backendName());
-        } catch (Throwable problem) {
-            return false;
-        }
+        return fr.clubcitrouille.lanterne.client.Vigie.vulkanActif();
     }
 
     /**

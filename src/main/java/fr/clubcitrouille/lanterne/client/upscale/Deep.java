@@ -218,7 +218,10 @@ public final class Deep {
         }
         try {
             DeviceInfo info = RenderSystem.getDevice().getDeviceInfo();
-            if (!"Vulkan".equalsIgnoreCase(info.backendName())) {
+            // Vigie.vulkanActif() est l'unique source pour cette question — voir sa Javadoc, section
+            // « le rendu avancé disponible, en un seul endroit ». On garde ici la lecture directe de
+            // DeviceInfo pour vendorName()/name(), que Vigie n'expose pas.
+            if (!fr.clubcitrouille.lanterne.client.Vigie.vulkanActif()) {
                 verdict = Verdict.SANS_VULKAN;
             } else if (!looksLikeRtx(info)) {
                 verdict = Verdict.SANS_RTX;
