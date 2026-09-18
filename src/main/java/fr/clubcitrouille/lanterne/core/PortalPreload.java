@@ -57,18 +57,57 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * temps de la marche d'approche, ce qui peut ne pas suffire sur un point d'arrivée jamais visité —
  * dans ce cas, on retombe simplement sur le chargement vanilla habituel, jamais sur un blocage.
  *
- * <h2>Ce qui n'est vérifiable qu'en jouant</h2>
+ * <h2>Ce qui a depuis été éprouvé pour de vrai</h2>
  *
- * <p>Tout ce qui précède est vérifié contre les sources décompilées de la 26.3 et compile. Ce qui ne
- * l'est PAS, faute de client lancé dans ce laboratoire : que le préchargement ait réellement terminé
- * à temps pour un joueur donné, et le ressenti de fluidité lui-même. À éprouver en jeu.
+ * <p>Tout ce qui précède a depuis été éprouvé pour de vrai, hors client — voir {@code lab/Traversee}
+ * et son verdict dans {@code README.md} : une doublure franchit un portail réel vers une destination
+ * jamais visitée, bras SANS puis bras AVEC, sur le monde réel du dépôt et non un monde vide. C'est ce
+ * chiffre, et lui seul, qui a fixé la valeur par défaut de {@link Settings#portalPreload()} — voir
+ * {@code Config.PORTAL_PRELOAD} pour le détail.
+ *
+ * <h2>L'interrupteur</h2>
+ *
+ * <p>{@link Settings#portalPreload()} — <b>par défaut selon ce que la mesure a tranché</b>, comme
+ * tout module de ce dépôt. Rien ici ne dépend du maître général {@link Settings#enabled()} : comme
+ * {@code Emballage} et {@code Ecluse}, c'est un module de chargement, pas de dégradation d'entité, et
+ * les deux catégories ont des interrupteurs séparés dans ce dépôt.
  */
 public final class PortalPreload {
     /** Rayon de détection d'un portail proche, en blocs. */
     private static final int SCAN_RADIUS = 3;
     /** Ticks entre deux passages de détection — inutile de scruter chaque tick. */
     private static final int SCAN_INTERVAL = 10;
-    /** Rayon du ticket posé autour du point d'arrivée — identique à celui de vanilla. */
+    /**
+     * Rayon du ticket posé autour du point d'arrivée — identique à celui de vanilla, et ce n'est pas
+     * faute d'avoir essayé plus grand.
+     *
+     * <h2>Le plan qui semblait évident, et que la mesure a démoli</h2>
+     *
+     * <p>{@code TicketStorage.addTicketWithRadius} ne pose <b>pas</b> un ticket « plein » sur chaque
+     * chunk d'un carré de ce rayon : elle pose un <b>seul</b> ticket, au centre, de niveau
+     * {@code ChunkLevel.byStatus(FULL) - radius} — et c'est la propagation par distance de
+     * {@code DistanceManager} qui étale ensuite un statut <em>dégressif</em> autour, jusqu'à ce
+     * rayon. Élargir le rayon n'ajoute donc pas plus de chunks en statut complet : cela dilue le
+     * même ticket sur une pénombre plus large, à statut plus faible en bordure — plus de travail de
+     * fond déclenché, pas plus de chunks réellement prêts pour la livraison.
+     *
+     * <p>{@code lab/Traversee} a mesuré les deux, sur le monde réel de ce dépôt, destination jamais
+     * visitée :
+     *
+     * <pre>
+     * rayon 3 (vanilla)  : recherche 1773/129/110 ms → 0,5/0,6 ms à chaque fois (fiable)
+     *                      livraison  4864→4830 / 1475→1625 ms (neutre, un coup chacun)
+     * rayon 5            : recherche 110 ms → 0,6 ms (fiable, comme toujours)
+     *                      livraison  1264 → 2098 ms  →  PERTE ×0,66
+     * </pre>
+     *
+     * <p>Le rayon cinq a été essayé précisément parce que {@link fr.clubcitrouille.lanterne.core.Tide}
+     * démarre un serveur à cette distance de vue — l'idée semblait raisonnable avant d'être mesurée.
+     * Elle ne l'était pas : le rayon reste donc celui de vanilla, celui que
+     * {@code Entity.placePortalTicket} pose déjà après coup. Le gain de ce module n'est PAS sur la
+     * livraison complète — voir le verdict de {@code lab/Traversee} dans {@code README.md} — il est
+     * sur la recherche de destination, qui elle ne dépend pas de ce rayon.
+     */
     private static final int TICKET_RADIUS = 3;
 
     /** Le dernier portail préchargé par joueur, pour ne pas recalculer à chaque passage. */
@@ -84,6 +123,9 @@ public final class PortalPreload {
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
+        if (!Settings.portalPreload()) {
+            return;
+        }
         if (++tickCounter % SCAN_INTERVAL != 0) {
             return;
         }

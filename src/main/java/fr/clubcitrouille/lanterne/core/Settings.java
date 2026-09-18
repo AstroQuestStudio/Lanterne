@@ -713,6 +713,14 @@ public final class Settings {
      */
     private static boolean ecluse;
     /**
+     * Le préchargement de la destination d'un portail, avant même le franchissement. Voir
+     * {@link fr.clubcitrouille.lanterne.core.PortalPreload}.
+     *
+     * <p>Réglage posé par {@code lab/Traversee} — voir son rapport et {@code Config.PORTAL_PRELOAD}
+     * pour le chiffre qui a décidé de la valeur par défaut ci-dessous.
+     */
+    private static boolean portalPreload = true;
+    /**
      * Le retrait des messages publicitaires de l'hébergeur. Voir {@code core.Reclame}.
      *
      * <p>Ne rend rien en performances, et ce module ne prétend pas le contraire : c'est un message
@@ -1342,6 +1350,21 @@ public final class Settings {
         return ecluse;
     }
 
+    /** Le préchargement de la destination d'un portail. Voir {@link fr.clubcitrouille.lanterne.core.PortalPreload}. */
+    public static boolean portalPreload() {
+        return portalPreload;
+    }
+
+    /**
+     * Arme ou désarme le préchargement de portail en cours de partie.
+     *
+     * <p>Réservé à l'épreuve {@code lab/Traversee}, qui doit relever le bras SANS et le bras AVEC
+     * dans la même exécution — même raison que {@link #setElastique}.
+     */
+    public static void setPortalPreload(boolean value) {
+        portalPreload = value;
+    }
+
     /** Le retrait des réclames de l'hébergeur. Voir {@code core.Reclame}. */
     public static boolean reclame() {
         return reclame;
@@ -1706,6 +1729,7 @@ public final class Settings {
         mining = Config.MINING.get();
         burin = Config.BURIN.get();
         ecluse = Config.ECLUSE.get();
+        portalPreload = Config.PORTAL_PRELOAD.get();
         reclame = Config.RECLAME.get();
         ciel = Config.CIEL.get();
         climat = Config.CLIMAT.get();

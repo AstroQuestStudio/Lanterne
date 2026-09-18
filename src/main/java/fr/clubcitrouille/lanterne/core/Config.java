@@ -79,6 +79,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue MINING;
     public static final ModConfigSpec.BooleanValue BURIN;
     public static final ModConfigSpec.BooleanValue ECLUSE;
+    public static final ModConfigSpec.BooleanValue PORTAL_PRELOAD;
     public static final ModConfigSpec.BooleanValue RECLAME;
     public static final ModConfigSpec.BooleanValue CIEL;
     public static final ModConfigSpec.BooleanValue CLIMAT;
@@ -628,6 +629,40 @@ public final class Config {
                 "eteint. A rallumer si vous voulez l'eprouver sur VOTRE machine - et merci de",
                 "publier le chiffre.")
                 .define("ecluse", false);
+
+        PORTAL_PRELOAD = BUILDER.comment(
+                "LE PRECHARGEMENT DE PORTAIL : la destination est calculee et ses chunks demandes",
+                "des qu'un joueur approche a moins de trois blocs d'un portail actif - avant meme",
+                "qu'il ne le franchisse. Voir core/PortalPreload.java pour le mecanisme (le meme",
+                "appel que vanilla fait deja, Portal.getPortalDestination, seulement plus tot,",
+                "et le meme ticket que vanilla pose deja apres coup, TicketType.PORTAL rayon 3).",
+                "",
+                "ALLUME PAR DEFAUT - mesure par lab/Traversee, sur le monde REEL de ce depot (une",
+                "copie du monde importe, pas un monde vide), destination jamais visitee des deux",
+                "cotes. Trois releves, franchissement complet (recherche + teleportation + livraison",
+                "des chunks de destination) :",
+                "  releve 1 : 6662 ms sans -> 4840 ms avec   (x1,38, -27 %)",
+                "  releve 2 : 1631 ms sans -> 1633 ms avec   (neutre, sous le bruit)",
+                "  releve 3 : 1896 ms sans -> 1524 ms avec   (x1,24, -20 %)",
+                "Aucune perte sur les trois. La recherche de destination, elle, est reguliere et",
+                "spectaculaire a chaque fois - 1773/129/146 ms -> 0,5/0,6/0,3 ms : le second appel a",
+                "Portal.getPortalDestination retrouve un portail deja cree au lieu d'en creer un,",
+                "PortalForcer.createPortal (le balayage en spirale qui force la generation) ne",
+                "s'execute donc qu'une fois, en tache de fond, jamais au moment ou le joueur attend.",
+                "",
+                "ESSAYE ET REFUSE : elargir le rayon du ticket a 5 (pour couvrir toute la livraison,",
+                "pas seulement le coeur) a ete mesure et a PERDU - 1264 ms -> 2098 ms, x0,66. La",
+                "raison tient a TicketStorage.addTicketWithRadius : elle ne pose pas un ticket plein",
+                "sur chaque chunk du rayon, mais UN SEUL ticket dont le niveau decroit avec la",
+                "distance - agrandir le rayon dilue le meme ticket sur une penombre plus large a",
+                "statut plus faible, ca ne charge pas plus de chunks en entier. Rayon 3, donc,",
+                "exactement celui de vanilla.",
+                "",
+                "Ne peut JAMAIS rendre une position de sortie fausse : c'est Portal.getPortalDestination",
+                "lui-meme qui la calcule, pas une reimplementation. Au pire (destination trop loin",
+                "pour finir de charger avant le vrai franchissement), on retombe sur le chargement",
+                "vanilla habituel - jamais sur un blocage.")
+                .define("precharge_portail", true);
 
         TIDE_MIN_VIEW = BUILDER.comment(
                 "Distance de VUE minimale : la maree ne descend jamais en dessous.",

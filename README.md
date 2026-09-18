@@ -1115,6 +1115,59 @@ un chunk de pierre et une base construite diffèrent d'un ordre de grandeur).
 > changer le dénominateur de tous les bancs d'un coup invaliderait en silence les chiffres déjà
 > publiés.
 
+### Franchir un portail vers une destination jamais visitée
+
+Le banc du seuil le dit lui-même : « le changement de dimension est relevé par une téléportation
+directe, sans portail […] pas la recherche du portail de destination, qui est un tout autre poste ».
+`lab/Traversee` mesure ce poste-là, précisément — le vrai coût ressenti par un joueur qui explore et
+franchit un portail vers une zone que personne n'a jamais chargée, pas un aller-retour vers un monde
+déjà écrit.
+
+**Ce que la lecture du code a montré avant même la première mesure** : `PortalForcer.createPortal`
+balaie une spirale de rayon seize (`BlockPos.spiralAround`) et interroge `level.getHeight(…)` colonne
+par colonne pour trouver où poser le portail de sortie — donc **force la génération des chunks qu'elle
+inspecte**, sur le fil principal, avant même que le joueur n'ait quitté sa dimension d'origine.
+« Recherche de portail » et « génération de chunks à la destination » ne sont donc pas deux postes
+séparés : c'est le même poste. Ce que **Radiographie**, un profileur d'échantillonnage embarqué (voir
+plus bas), aurait vu comme un pic au moment du transit.
+
+**La mesure, sur le monde réel de ce dépôt** — une copie du monde importé, pas un monde vide, chargée
+sous `run-seuil` — deux bras dont la destination n'a **jamais** été visitée ni côté Surmonde ni côté
+Nether (coordonnées à x = ±50 000, trois à quatre ordres de grandeur au-delà de ce que les fichiers de
+région du monde réel couvrent) :
+
+| relevé | SANS préchargement | AVEC préchargement | verdict |
+|---|---|---|---|
+| 1 | 6662 ms (recherche 1773 ms) | 4840 ms (recherche 0,5 ms) | ×1,38 · **-27 %** |
+| 2 | 1631 ms (recherche 129 ms) | 1633 ms (recherche 0,6 ms) | neutre, sous le bruit |
+| 3 | 1896 ms (recherche 146 ms) | 1524 ms (recherche 0,3 ms) | ×1,24 · **-20 %** |
+
+Aucune perte sur les trois relevés. La **recherche de destination**, elle, s'effondre systématiquement
+— 1773/129/146 ms à froid contre 0,5/0,6/0,3 ms préchargée : le second appel à
+`Portal.getPortalDestination` (le même appel exact que vanilla, pas une réimplémentation) retrouve un
+portail déjà créé par le préchargement au lieu de relancer le balayage en spirale qui force la
+génération. C'est le poste le plus cher et le plus irrégulier du bras froid — le pic que ressent un
+joueur en explorant, au moment précis où il ne peut plus bouger.
+
+**Le mécanisme** — `core/PortalPreload.java` — pose, dès qu'un joueur s'approche d'un portail actif à
+moins de trois blocs, le même ticket que vanilla pose déjà *après coup* (`Entity.placePortalTicket`,
+`TicketType.PORTAL`, rayon trois), mais *avant* le franchissement. Le délai de portail en survie
+(quatre-vingts ticks par défaut) laisse largement le temps de finir ; au pire — portail jamais visité,
+délai trop court — on retombe simplement sur le chargement vanilla habituel, jamais sur un blocage :
+la destination vient toujours du vrai `Portal.getPortalDestination`, jamais d'une position devinée.
+
+**Un plan démoli au passage** : élargir le rayon du ticket à cinq, pour couvrir toute la vue livrée à
+l'arrivée (`Marée` démarre justement un serveur à cette distance) et pas seulement son cœur, semblait
+raisonnable — et a **perdu à la mesure** : 1264 ms sans contre 2098 ms avec, ×0,66. La cause tient à
+`TicketStorage.addTicketWithRadius` : elle ne pose pas un ticket plein sur chaque chunk du rayon
+demandé, mais **un seul** ticket dont le niveau décroît avec la distance — élargir le rayon dilue le
+même ticket sur une pénombre plus large à statut plus faible, ça ne charge pas plus de chunks en
+entier, ça déclenche juste plus de travail de fond pour rien. Le rayon reste donc celui de vanilla.
+
+**Réglage** : `precharge_portail` dans `lanterne-server.toml`, **allumé par défaut** — deux gains nets,
+un neutre, aucune perte, sur le monde réel de ce dépôt. Comme `Emballage` et `Ecluse`, il ne dépend pas
+de l'interrupteur général `master` : c'est un module de chargement, pas de dégradation d'entité.
+
 ---
 
 ## 🧱 Le remblai — `/fill`, et le minage intensif

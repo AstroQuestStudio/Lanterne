@@ -123,6 +123,8 @@ public final class SelfTest {
     private static boolean restitution;
     /** Vrai si l'on éprouve la moitié serveur du cache de chunks client. Voir {@code lab.Rappel}. */
     private static boolean rappel;
+    /** Vrai si l'on éprouve le préchargement de portail. Voir {@code lab.Traversee}. */
+    private static boolean traversee;
     private static int pregenRadius;
 
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
@@ -509,6 +511,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve du rappel (moitié serveur du cache de chunks client) armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_TRAVERSEE"))) {
+            traversee = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de la traversée (préchargement de portail) armée.");
+            return;
+        }
 
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
@@ -541,7 +550,7 @@ public final class SelfTest {
                     && !wits && !reap && !surge && !bourg && !grove && !duel && !levee
                     && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel && !billet
                     && !loterieTest
-                    && !seuil && !terrassement && !coince && !restitution && !rappel
+                    && !seuil && !terrassement && !coince && !restitution && !rappel && !traversee
                     && pregenRadius <= 0)) {
             return;
         }
@@ -593,7 +602,8 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Billet.running()
                 && !fr.clubcitrouille.lanterne.lab.Seuil.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running()
-                && !fr.clubcitrouille.lanterne.lab.Terrassement.running() && waiting-- > 0) {
+                && !fr.clubcitrouille.lanterne.lab.Terrassement.running()
+                && !fr.clubcitrouille.lanterne.lab.Traversee.running() && waiting-- > 0) {
             return;
         }
 
@@ -679,6 +689,17 @@ public final class SelfTest {
                 step = Step.LAUNCHED;
             } else if (step == Step.LAUNCHED) {
                 server.halt(false);
+            }
+            return;
+        }
+        if (traversee) {
+            // Deux doublures, l'une après l'autre : Traversee.tick gère lui-même son arrêt du
+            // serveur en fin d'épreuve, comme Terrassement.
+            if (fr.clubcitrouille.lanterne.lab.Traversee.running()) {
+                fr.clubcitrouille.lanterne.lab.Traversee.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Traversee.begin(server);
+                step = Step.LAUNCHED;
             }
             return;
         }
