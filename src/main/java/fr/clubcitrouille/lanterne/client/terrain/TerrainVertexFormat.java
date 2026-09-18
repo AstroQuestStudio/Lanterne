@@ -98,6 +98,14 @@ public final class TerrainVertexFormat {
     private static final float MIN_SPAN = 1.0f / 8192.0f;
 
     /**
+     * Diagnostic temporaire (LANTERNE_GREEDY_DIAG=1) — journalise les 6 premières fusions en détail
+     * pour trouver le bogue de carré gris. À retirer une fois la cause confirmée.
+     */
+    private static final boolean DEBUG_ARMED = "1".equals(System.getenv("LANTERNE_GREEDY_DIAG"));
+    private static final java.util.concurrent.atomic.AtomicInteger DEBUG_LOGGED =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
      * Le format de sommet du terrain : les quatre éléments de {@code DefaultVertexFormat.BLOCK}
      * (Position, Color, UV0, UV2) plus les deux réutilisés ci-dessus (UV1, UV3). Un seul binding,
      * interleaved, exactement comme {@code BLOCK} — voir le Javadoc de classe pour pourquoi.
@@ -322,6 +330,22 @@ public final class TerrainVertexFormat {
             }
             partnerOfLo[k] = match;
             deltaU[k] = fu[match] - fu[lo];
+        }
+
+        if (DEBUG_ARMED && DEBUG_LOGGED.get() < 6) {
+            DEBUG_LOGGED.incrementAndGet();
+            float[] b = spriteBounds(first);
+            fr.clubcitrouille.lanterne.Lanterne.LOG.info(
+                    "[GREEDY-DIAG] run={} first=({},{},{}) last=({},{},{}) "
+                            + "spriteMin=({},{}) spriteSize=({},{}) "
+                            + "fu={} fv={} loIdx={} hiIdx={} deltaU={} "
+                            + "farU_k0={} farU_k1={}",
+                    runLength, firstX, firstY, firstZ, lastX, lastY, lastZ,
+                    b[0], b[1], b[2], b[3],
+                    java.util.Arrays.toString(fu), java.util.Arrays.toString(fv),
+                    java.util.Arrays.toString(loIdx), java.util.Arrays.toString(hiIdx),
+                    java.util.Arrays.toString(deltaU),
+                    fu[loIdx[0]] + runLength * deltaU[0], fu[loIdx[1]] + runLength * deltaU[1]);
         }
 
         // Émis dans l'ordre ORIGINAL des sommets (0,1,2,3), jamais regroupé bas-bas-haut-haut : un
