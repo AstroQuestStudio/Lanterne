@@ -140,6 +140,11 @@ public final class Lanterne {
         // client. L'appel est donc gardé : un serveur dédié ne doit jamais charger ces classes, et
         // la garde suffit — une classe n'est chargée qu'au moment où l'on s'en sert.
         if (net.neoforged.fml.loading.FMLEnvironment.getDist().isClient()) {
+            // Avant tout le reste : options.txt doit être en place avant que Minecraft.<init>
+            // ne le lise, ce qui a lieu bien après la fin de cette construction — voir la Javadoc
+            // de Reveil pour la preuve tirée du journal réel. L'ordre à l'intérieur de ce bloc
+            // n'a donc pas d'importance pour la correction, seulement la garde de distribution.
+            fr.clubcitrouille.lanterne.client.Reveil.install();
             fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
             // Apres Compass : la touche de la boutique reutilise la categorie de
             // raccourcis qu'il declare, et NeoForge refuse un identifiant en double.
