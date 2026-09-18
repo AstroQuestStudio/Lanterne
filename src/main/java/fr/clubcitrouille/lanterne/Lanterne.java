@@ -145,6 +145,9 @@ public final class Lanterne {
             // de Reveil pour la preuve tirée du journal réel. L'ordre à l'intérieur de ce bloc
             // n'a donc pas d'importance pour la correction, seulement la garde de distribution.
             fr.clubcitrouille.lanterne.client.Reveil.install();
+            // Juste après : capture l'état final d'options.txt (posé par Reveil, ou déjà présent)
+            // avant que Minecraft.<init> ne le charge et ne le mute — voir la Javadoc de Vigie.
+            fr.clubcitrouille.lanterne.client.Vigie.capture();
             fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
             // Apres Compass : la touche de la boutique reutilise la categorie de
             // raccourcis qu'il declare, et NeoForge refuse un identifiant en double.
