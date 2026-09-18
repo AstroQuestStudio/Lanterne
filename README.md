@@ -268,6 +268,140 @@ Moins allouer, c'est ramasser moins souvent — le seul levier réel sur la mém
 
 ---
 
+## 🖥️ Le pipeline de rendu — Vulkan, l'image temporelle, le maillage
+
+*Ajouté le 18 septembre 2026. Ce moteur (« Minecraft 26.3 ») a un vrai rendu Vulkan natif
+(`com.mojang.renderpearl.backend.vulkan`), pas une couche de compatibilité — ce qui suit n'a de sens
+que parce que c'est vrai, vérifié par lecture directe du bytecode du jar patché à chaque étape, jamais
+par les sources décompilées obsolètes qui traînent dans `.mcsrc/`.*
+
+### Le repli silencieux vers l'iGPU — trouvé par accident, corrigé pour de bon
+
+Le moteur choisissait **OpenGL sur le circuit graphique intégré** au lieu de Vulkan sur la carte
+dédiée, sur trois lancements de suite, sans la moindre erreur visible en jeu. Une première explication
+semblait tenir : un garde-fou vanilla repasse en OpenGL après un arrêt sale (`"Detected unexpected
+shutdown during last game startup"`). Elle était fausse — la chaîne exacte n'apparaissait dans aucun
+journal, et les trois `options.txt` en cause portaient `startedCleanly:true`.
+
+La vraie cause, trouvée en lisant `PreferredGraphicsApi#getBackendsToTry` :
+
+```java
+return this == VULKAN ? new GpuBackend[]{vulkan, gl} : new GpuBackend[]{gl, vulkan};
+```
+
+Tant que `preferredGraphicsBackend` vaut `"default"` dans `options.txt` — ce qu'il vaut sur toute
+installation qui n'a jamais réglé la vidéo à la main — **OpenGL est toujours essayé en premier**,
+indépendamment de tout historique de plantage. La ligne de journal qui semblait confirmer Vulkan
+(`Preferring discrete GPU: NVIDIA GeForce RTX 3080 Laptop GPU`) venait d'une sonde jetable qui repère
+le GPU puis jette l'instance sans jamais rendre une image avec.
+
+**Corrigé par `Reveil`** : au tout premier lancement — et seulement si aucun `options.txt` n'existe
+encore, jamais en écrasant un choix déjà fait — le mod écrit `preferredGraphicsBackend:"vulkan"`.
+Confirmé sur la machine de test : `Using graphics backend Vulkan, using drivers: 1.4.351 NVIDIA
+616.92` et `Using graphics device: NVIDIA GeForce RTX 3080 Laptop GPU`, contre l'iGPU AMD avant le
+correctif.
+
+### La vraie liste d'extensions du driver — capturée, pas devinée
+
+`VulkanFeatureSets` filtre les extensions qu'il active, et `deviceInfo.underlyingExtensions()` ne
+reflétait donc que ce que le moteur *demandait*, pas ce que le driver *supporte*. Un mixin dédié capte
+maintenant la sortie brute de `vkEnumerateDeviceExtensionProperties`, avant tout filtrage :
+
+> Sur la RTX 3080 Laptop de test, **287 extensions Vulkan brutes**, dont `VK_EXT_mesh_shader`,
+> `VK_NV_mesh_shader`, `VK_KHR_ray_tracing_pipeline`, `VK_KHR_acceleration_structure`,
+> `VK_KHR_ray_query` et `VK_KHR_deferred_host_operations`.
+
+Le point d'extension mod-facing existe désormais (`VulkanFeatureSetsMixin`, activation strictement
+optionnelle — ne bloque jamais le démarrage si le driver ne suit pas). **Aucun rendu ne les utilise
+encore** : c'est la porte ouverte pour un futur chantier de rendu piloté GPU, pas un moteur mesh
+shader/ray tracing livré.
+
+### L'overhead invisible — 13,8 % de temps de frame caché dans un nom de hash
+
+Le profileur `Radiographie` désignait `java.lang.invoke.LambdaForm$MH/0x...invoke` comme le poste le
+plus coûteux du rendu client — un nom qui ne dit rien de son origine, et qu'un premier audit avait
+classé « non actionnable ». Il l'était : `EntityCullMixin` utilisait `@WrapOperation` (MixinExtras)
+sur `shouldRender`, appelé une fois par entité et par image. Vérifié par `javap` sur le mixin compilé
+**et** sur le jar de MixinExtras lui-même : chaque appel allouait un `Object[7]`, boxait trois
+`double` et un `float`, puis dispatchait par `invokedynamic` — la source exacte du hash opaque.
+
+Remplacé par un `@Redirect` classique (même comportement, vérifié contre le vrai bytecode vanilla, y
+compris le cas passager) : zéro tableau, zéro boxing.
+
+| Scène (1 000 entités, reproductible) | `LambdaForm$MH` avant | après |
+|---|---:|---:|
+| Session 1 | 3,1 % | **0,5 %** |
+| Session 2 | 2,6 % | **0,5 %** |
+
+Le coût réel réapparaît sous son vrai nom, `LevelExtractor.redirect$...$veil`, à 0,7 % — visible
+et mesurable au lieu de caché.
+
+### L'image temporelle — le flou trouvé, et corrigé en deux gestes
+
+Le pipeline d'accumulation temporelle (FSR2-like) était écrit et compilé depuis des semaines sans
+jamais avoir été *vu* : le monde de test était systématiquement verrouillé par un autre chantier à
+chaque tentative. Une caméra immobile — l'état par défaut d'un lancement automatisé — ne produit aucun
+mouvement, donc aucun artefact temporel à photographier ; il a fallu construire `Vertige`, une caméra
+qui tourne toute seule, pour que `Snap` ait quelque chose à capturer.
+
+Une fois vu : du flou réel sur les bords en mouvement (nuages, panoramique), présent avec
+l'accumulation active, absent sans. Deux causes, deux remèdes, tous deux côté shader :
+
+- **Rejet de voisinage 3×3** — écarte un échantillon d'historique franchement faux (une zone
+  démasquée par la caméra).
+- **Poids de mélange adaptatif au mouvement** — même un échantillon *valide* adoucissait l'image par
+  ré-échantillonnage bilinéaire répété d'image en image ; le poids décroît maintenant avec le
+  déplacement de reprojection.
+
+À un panoramique réaliste (90°/s), le résultat est indiscernable du FSR seul. À un panoramique
+volontairement extrême (220°/s, hors de toute utilisation réelle), un léger flou résiduel subsiste —
+gardé tel quel plutôt que masqué. `lentille_temporelle` est désormais **activée par défaut**.
+
+### Le maillage de terrain — la vraie cause d'un carré gris
+
+Neuf passes se sont arrêtées sur ce chantier avant qu'un carré gris/bleu, visible dès qu'on fusionnait
+deux faces coplanaires, ne soit compris. Trois d'entre elles soupçonnaient le shader ; toutes les
+pistes shader ont fini par être closes une à une avec preuve (bandes de test, échantillonnage
+pixel-exact, appel direct de gradient de texture) — le défaut restait identique, exonérant le shader.
+
+La vraie cause n'était pas dans un shader : `ModelBlockRenderer` réutilise un seul objet
+`QuadInstance` **mutable**, alloué une fois, pour toutes les faces d'une section. Le code de fusion
+gardait une référence vivante vers cet objet au lieu d'une copie — au moment de composer la face
+fusionnée, il lisait donc la couleur et la lumière de la *dernière* face traitée dans toute la section,
+pour chaque face en attente. D'où une teinte uniforme mais fausse, mesurée à environ moitié moins
+lumineuse et virée vers le bleu.
+
+Corrigé en capturant couleur et lumière dans des tableaux, immédiatement, avant que l'objet partagé ne
+soit muté pour la face suivante. Rendu fusionné et non-fusionné **pixel-identiques** à chaque point
+échantillonné, sur le vrai monde importé.
+
+| Périmètre mesuré (faces du dessus, fusion sur l'axe X seulement) | Avant | Après | Gain |
+|---|---:|---:|:---:|
+| Sommets/faces émis | 134 345 | 122 057 | **×0,91** (-9,1 %) |
+
+**Aucun gain d'image par seconde mesuré** sur la scène de test : elle est limitée par le CPU, pas par
+le nombre de sommets, à ce périmètre encore étroit. Reste en activation manuelle
+(`LANTERNE_GREEDY_MESH=1`) — un risque connu (la fusion ne vérifie pas encore l'égalité de géométrie
+entre deux blocs de même texture) doit être traité avant d'envisager une activation par défaut.
+
+### Ce qui a été tenté et honnêtement abandonné
+
+**Le culling d'occlusion Hi-Z** (pyramide de profondeur GPU, façon rendu piloté GPU moderne) : le
+moteur n'a **aucune capacité de compute shader** — vérifié par bytecode, `ShaderType` ne connaît que
+vertex et fragment. Une pyramide resterait constructible par cascade de fragment shaders, mais le
+culling d'entités s'exécute avant que la frame courante ne soit rendue : la seule profondeur
+disponible serait celle de la frame précédente, ce qui exigerait une lecture GPU→CPU asynchrone sans
+garantie de synchronisation dans ce code. Non implémenté — un module non vérifié qui ferait
+disparaître des entités visibles serait pire que rien.
+
+**Le tirage aléatoire par section** (`Loterie`, économiser une lecture de palette sur les sections
+presque vides) : correction prouvée exacte par un auto-test déterministe en jeu, mais mesuré
+proprement — dix passes sur la VM de production, médiane **×0,91** — le module rend le tick **9 %
+plus lent**, pas plus rapide, sur la charge même pour laquelle il a été conçu. Le coût de la
+comptabilité par couche dépasse l'économie. Reste désactivé.
+
+---
+
 ## 🧭 Pré-génération — ×15 sur l'exploration
 
 Deux façons de fournir un chunk à un joueur qui avance, mesurées sur la même machine :
