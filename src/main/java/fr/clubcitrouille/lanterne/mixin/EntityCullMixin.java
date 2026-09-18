@@ -1,11 +1,9 @@
 package fr.clubcitrouille.lanterne.mixin;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.client.Camera;
@@ -54,6 +52,36 @@ import fr.clubcitrouille.lanterne.core.Shroud;
  * jeu élimine ainsi tout ce qui est hors champ — la grande majorité des entités d'un monde chargé —
  * pour un coût de quelques comparaisons de boîte, bien moindre qu'un parcours de grille. Inverser
  * les deux ferait payer un lancer de rayon à des créatures situées derrière le joueur.
+ *
+ * <h2>{@code @Redirect}, et non {@code @WrapOperation} — un poste du profil qui a une cause</h2>
+ *
+ * <p>Ce point d'accroche appelait jusqu'ici {@code @WrapOperation} (MixinExtras), qui passe
+ * l'appel enveloppé par une interface générique, {@code Operation<R> { R call(Object...) }}. Le
+ * bytecode réellement compilé de {@code lanterne$veil} (vérifié au {@code javap} du
+ * {@code .class} produit, pas supposé) le montrait noir sur blanc : chaque appel allouait un
+ * {@code Object[7]}, boîtait trois {@code double} et un {@code float} en {@code Double}/
+ * {@code Float}, puis franchissait {@code Operation.call} — une méthode d'interface. Et la
+ * bibliothèque MixinExtras elle-même ({@code OperationUtils}, dans le jar
+ * {@code mixinextras-neoforge}) tisse cette indirection dans la classe CIBLE — ici
+ * {@code LevelExtractor} — sous la forme d'un vrai {@code invokedynamic} : une nouvelle
+ * {@code InvokeDynamicInsnNode} générée à l'endroit exact de l'appel remplacé.
+ *
+ * <p>Ce point est appelé une fois par entité, par image — jusqu'à plusieurs dizaines de milliers
+ * de fois par seconde avec un troupeau dense. Une radiographie réelle, prise sur une scène de
+ * grange synthétique et reproductible ({@code lab/Glass}), montrait {@code LambdaForm$MH/0x...}
+ * parmi les méthodes les plus coûteuses en temps propre (3,1 % puis 2,6 % sur deux sessions
+ * indépendantes), aux côtés de {@code Entity.shouldRender} — exactement la forme de coût qu'un
+ * site {@code invokedynamic} chaud, lié une fois puis retraversé à chaque appel par la machinerie
+ * {@code java.lang.invoke}, laisse dans un tel profil.
+ *
+ * <p>{@code @Redirect} (Mixin de base, pas MixinExtras) remplace la même instruction
+ * {@code INVOKE} par le même genre de méthode statique — {@code tools/verifie_mixins.py} contrôle
+ * sa cible de la même façon qu'il contrôlait celle de {@code @WrapOperation} — mais le
+ * gestionnaire reçoit les arguments <em>typés directement</em>, sans tableau, sans boîtage, sans
+ * {@code invokedynamic}. Le comportement est identique bit à bit : le gestionnaire appelle
+ * l'original avec les mêmes arguments, dans le même ordre, et le résultat substitué reprend sa
+ * place exacte dans le bytecode de {@code isEntityVisible} — la suite de repli du jeu vanilla
+ * (passager indirect de la caméra) n'est donc ni court-circuitée ni dupliquée.
  */
 @Mixin(LevelExtractor.class)
 public abstract class EntityCullMixin {
@@ -68,7 +96,7 @@ public abstract class EntityCullMixin {
         }
     }
 
-    @WrapOperation(
+    @Redirect(
             method = "isEntityVisible",
             at = @At(
                     value = "INVOKE",
@@ -76,8 +104,8 @@ public abstract class EntityCullMixin {
                             + "shouldRender(Lnet/minecraft/world/entity/Entity;"
                             + "Lnet/minecraft/client/renderer/culling/Frustum;DDDF)Z"))
     private boolean lanterne$veil(EntityRenderDispatcher dispatcher, Entity entity, Frustum frustum,
-            double camX, double camY, double camZ, float partialTicks, Operation<Boolean> original) {
-        if (!original.call(dispatcher, entity, frustum, camX, camY, camZ, partialTicks)) {
+            double camX, double camY, double camZ, float partialTicks) {
+        if (!dispatcher.shouldRender(entity, frustum, camX, camY, camZ, partialTicks)) {
             return false;
         }
         if (Settings.shroud() && Shroud.hidden(entity, camX, camY, camZ)) {
