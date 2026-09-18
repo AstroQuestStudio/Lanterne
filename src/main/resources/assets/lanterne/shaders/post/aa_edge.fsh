@@ -1,4 +1,4 @@
-#version 330
+#version 410
 
 // -----------------------------------------------------------------------------
 // Anticrenelage de contour, applique AVANT la remontee d'echelle.

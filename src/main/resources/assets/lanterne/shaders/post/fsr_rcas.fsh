@@ -1,4 +1,4 @@
-#version 330
+#version 410
 
 // -----------------------------------------------------------------------------
 // FSR 1.0 -- RCAS (Robust Contrast Adaptive Sharpening)

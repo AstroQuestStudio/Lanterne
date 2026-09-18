@@ -1,4 +1,9 @@
-#version 330
+#version 410
+// 410, pas 330 : "layout(location = N)" sur une entree/sortie de fragment shader
+// n'est standardise qu'a partir de GLSL 410 (ARB_separate_shader_objects devenu
+// coeur). Sous 330, meme avec le qualificateur ecrit correctement, le compilateur
+// le rejette avec "not supported for this version" -- constate en conditions
+// reelles sous Vulkan (RTX 3080), pas suppose.
 
 // -----------------------------------------------------------------------------
 // FSR 1.0 -- EASU (Edge Adaptive Spatial Upsampling)
