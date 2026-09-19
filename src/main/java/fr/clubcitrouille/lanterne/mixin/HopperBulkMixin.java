@@ -1,11 +1,9 @@
 package fr.clubcitrouille.lanterne.mixin;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -110,12 +108,21 @@ public abstract class HopperBulkMixin {
      * <p>Sans cette ligne, le module serait une duplication de débit et non une optimisation. C'est
      * elle qui rend le transfert par lots <b>exactement</b> équivalent à vanilla en moyenne, et c'est
      * elle qu'une épreuve de débit doit vérifier.
+     *
+     * <h2>{@code @Redirect}, et non {@code @WrapOperation}</h2>
+     *
+     * <p>Appelé à chaque transfert d'entonnoir réussi — un chemin chaud du tick serveur, pas un
+     * évènement rare (chargement, configuration) : voir le profil réel qui a motivé la conversion du
+     * même défaut sur {@code EntityCullMixin} ({@code git log} de ce fichier). Cette substitution ne
+     * fait jamais qu'appeler l'original UNE fois, avec un second argument recalculé — exactement le
+     * genre de site que {@code @Redirect} couvre sans passer par {@code Operation<Void>.call(Object...)}
+     * (tableau alloué, boîtage, {@code invokedynamic}) : {@code @Redirect} le remplace par un appel
+     * statique typé direct, comportement identique bit à bit.
      */
-    @WrapOperation(method = "tryMoveItems",
+    @Redirect(method = "tryMoveItems",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;setCooldown(I)V"))
-    private static void lanterne$payForTheLot(HopperBlockEntity entity, int ticks,
-                                              Operation<Void> original) {
-        original.call(entity, Settings.bulk() ? ticks * Bulk.owed() : ticks);
+    private static void lanterne$payForTheLot(HopperBlockEntity entity, int ticks) {
+        entity.setCooldown(Settings.bulk() ? ticks * Bulk.owed() : ticks);
     }
 }

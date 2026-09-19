@@ -201,6 +201,61 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * seule forme cohérente avec le bytecode lu et avec {@code aa_edge}/{@code fsr_easu}/
  * {@code fsr_rcas}, qui n'ont eux jamais cessé de fonctionner.
  *
+ * <h2>Cause réelle confirmée du plantage en jeu du 19/09 — un gabarit qui ne se resynchronise
+ * jamais</h2>
+ *
+ * <p>Le message affiché au joueur (« [ÉCHELLE] Mise à l'échelle abandonnée pour cette session »)
+ * et le {@code FileNotFoundException} sur {@code lanterne:shaders/post/club_citrouille_ao.fsh}
+ * juste avant lui dans le journal font une piste tentante — un bug d'indexation de
+ * {@link PathPackResources} qui exposerait {@code post_effect/} mais pas {@code shaders/post/}.
+ * Cette piste a été vérifiée par lecture du vrai bytecode source de {@code PathPackResources},
+ * {@code FallbackResourceManager} et {@code MultiPackResourceManager} (décompilés depuis le vrai
+ * jar patché, pas supposés) : rien n'y traite {@code shaders/} différemment de
+ * {@code post_effect/} — les deux listings partagent exactement le même code, symétrique, pour le
+ * même pack. Fausse piste.
+ *
+ * <p>Le vrai journal, non tronqué, contient une ligne <b>avant</b> celle-là qui donne la vraie
+ * cause : {@code [Worker-Main-1/ERROR]: Couldn't compile pipeline (lanterne:club_citrouille/3):}
+ * suivi de {@code com.mojang.renderpearl.util.ShaderCompileException: Unable to find shader
+ * defined uniform (NormalSampler)}, levée par {@code PipelineBuilder.generateBackendCreateInfo}
+ * <b>pendant la première tentative</b> de compilation du pipeline — celle qui trouve bel et bien
+ * la source du shader (la réflexion SPIR-V qui suit n'est atteignable qu'après une compilation
+ * réussie). C'est exactement le bug de convention {@code sampler_name} documenté dans la section
+ * précédente de ce Javadoc — sauf que {@link #creerClubCitrouille} l'écrit déjà correctement
+ * aujourd'hui (voir plus bas, {@code "Color"}/{@code "Normal"}, sans suffixe). Le contenu
+ * <b>réellement présent sur le disque</b> de l'instance « test 1 » — vérifié côte-à-côte, jamais
+ * supposé — est celui d'une version du code antérieure à cette correction :
+ * {@code club_citrouille.json} y référence encore {@code lanterne:post/club_citrouille_ao} (le
+ * nom d'avant le passage à six passes) avec {@code "sampler_name": "ColorSampler"}, et
+ * {@code club_citrouille_ao.fsh} y déclare {@code uniform sampler2D ColorSampler;}. La
+ * {@code BindGroupLayout} construite par {@code PostChain.createPass} demande donc un uniforme
+ * {@code ColorSamplerSampler} (suffixe ajouté deux fois), introuvable dans un GLSL qui n'en
+ * déclare qu'un seul — la compilation échoue, {@link Resolve#chain()} reçoit {@code null}, et la
+ * mise à l'échelle est abandonnée pour la session. Le {@code FileNotFoundException} qui suit dans
+ * le journal n'est qu'une conséquence en cascade : une fois cette compilation en échec, une
+ * seconde tentative passe par le cache de secours construit dans
+ * {@code GameRenderer.preloadUiShader} ({@code GameRenderer.java:265}), prévu pour les pipelines
+ * d'interface ({@code RenderPipelines.GUI}…) et non pour un pipeline de post-traitement
+ * arbitraire — il échoue donc lui aussi, sans rapport avec la cause réelle.
+ *
+ * <p>La vraie cause, donc : {@code club_citrouille/}, sur cette instance, a été écrit par
+ * {@link #creerClubCitrouille} lors du tout premier lancement, à une époque où cette méthode
+ * écrivait encore l'ancienne convention — et n'a plus jamais été retouché depuis, parce que
+ * {@link #onAddPackFinders} n'appelait {@link #creerExemple}/{@link #creerClubCitrouille} que
+ * lorsque {@code shaderpacks/} n'existait pas <em>du tout</em> encore. Toute correction ultérieure
+ * du gabarit embarqué (celle-ci, ou le renommage {@code club_citrouille_ao.fsh} →
+ * {@code club_citrouille_final.fsh}) restait donc invisible pour toute instance déjà
+ * provisionnée — un défaut structurel, pas un accident isolé de « test 1 ».
+ *
+ * <p><b>Correctif</b> : {@link #onAddPackFinders} appelle désormais {@link #creerExemple} et
+ * {@link #creerClubCitrouille} à <b>chaque</b> déclenchement de {@code AddPackFindersEvent}, plus
+ * seulement quand {@code shaderpacks/} est absent. Les deux méthodes sont pures pour une version
+ * de code donnée et idempotentes ({@code Files.writeString} écrase) : les deux dossiers que le mod
+ * possède lui-même restent donc toujours synchronisés avec le gabarit du code chargé, sans jamais
+ * toucher un nuancier tiers déposé par un joueur (ces deux méthodes ne connaissent que leurs deux
+ * noms de dossier à elles). {@code repareMetaSiPerime}, qui ne réparait que {@code pack.mcmeta}
+ * pour ce même symptôme structurel, devient de ce fait entièrement redondante et a été retirée.
+ *
  * <h2>Ce que ce format N'offre PAS encore, honnêtement</h2>
  *
  * <p>{@link CameraUniforms} — le mécanisme qui rend {@code lanterne:normal} correcte — reste un
@@ -266,22 +321,30 @@ public final class Nuancier {
             return;
         }
         Path racine = dossier();
-        if (!Files.isDirectory(racine)) {
-            // NE PAS "return" ici : c'était la vraie cause (bytecode-vérifiée séparément, voir
-            // registerPack) d'un nuancier "introuvable" sur le TOUT PREMIER lancement d'une
-            // instance. creerExemple/creerClubCitrouille n'écrivent que des FICHIERS sur le
-            // disque -- rien de tout cela n'appelle event.addRepositorySource, la seule chose qui
-            // rend un dossier visible à Pack.readMetaAndCreate/ShaderManager POUR CETTE SESSION.
-            // Un "return" immédiat après l'écriture laissait donc le nuancier flambant neuf
-            // invisible jusqu'au PROCHAIN démarrage du client -- reproduit en jeu réel (run
-            // "lambdaform", dossier shaderpacks/ absent au lancement) : "club_citrouille charge
-            // comme pack de ressources" n'apparaissait JAMAIS dans ce journal-là, et
-            // ShaderManager échouait avec exactement "Attempted to load a non-existent post
-            // effect lanterne:club_citrouille". On laisse donc tomber dans la branche
-            // d'enregistrement ci-dessous, sur le dossier qu'on vient d'écrire.
-            creerExemple(racine);
-            creerClubCitrouille(racine);
-        }
+        // Appelées INCONDITIONNELLEMENT, à CHAQUE déclenchement de cet évènement -- pas seulement
+        // quand "racine" est absente. C'est le correctif de la vraie cause (voir le Javadoc de
+        // classe, section "Cause réelle confirmée du plantage en jeu du 19/09") : ces deux
+        // méthodes n'écrivaient jusqu'ici leurs fichiers qu'au tout premier lancement d'une
+        // instance, jamais resynchronisées ensuite -- une instance déjà provisionnée avant une
+        // correction du gabarit (ex: la convention sampler_name réparée plus bas dans
+        // creerClubCitrouille, ou le renommage club_citrouille_ao.fsh -> club_citrouille_final.fsh)
+        // gardait pour toujours l'ancien contenu périmé. Exactement reproduit en jeu réel sur
+        // l'instance "test 1" : ShaderCompileException: Unable to find shader defined uniform
+        // (NormalSampler), club_citrouille/ de cette instance ayant été écrit par une version du
+        // code d'avant la correction du nom d'uniforme. Les deux méthodes sont pures pour une
+        // version de code donnée et idempotentes (Files.writeString écrase) : les rappeler à
+        // chaque fois resynchronise silencieusement les deux dossiers que le mod possède
+        // lui-même, sans jamais toucher un nuancier tiers déposé par un joueur (elles ne
+        // connaissent que leurs deux noms de dossier à elles -- voir leur code plus bas). Un
+        // dossier tiers sans pack.mcmeta reste protégé par le "return" de la boucle ci-dessous,
+        // exactement comme avant.
+        //
+        // NE PAS "return" avant cet appel non plus, pour la même raison qu'avant ce correctif :
+        // rien ici n'appelle event.addRepositorySource, la seule chose qui rend un dossier
+        // visible à Pack.readMetaAndCreate/ShaderManager POUR CETTE SESSION -- il faut tomber
+        // dans la branche d'enregistrement ci-dessous, sur les dossiers qu'on vient d'écrire.
+        creerExemple(racine);
+        creerClubCitrouille(racine);
         try (var entrees = Files.list(racine)) {
             entrees.filter(Files::isDirectory).forEach(nuancierDir -> {
                 if (!Files.isRegularFile(nuancierDir.resolve("pack.mcmeta"))) {
@@ -289,60 +352,11 @@ public final class Nuancier {
                             nuancierDir.getFileName());
                     return;
                 }
-                repareMetaSiPerime(nuancierDir);
                 verifierAvertissement(nuancierDir);
                 registerPack(event, nuancierDir);
             });
         } catch (IOException problem) {
             Lanterne.LOG.warn("[NUANCIER] lecture de {} impossible", racine, problem);
-        }
-    }
-
-    /**
-     * Répare un {@code pack.mcmeta} périmé pour les deux nuanciers que ce module écrit lui-même.
-     *
-     * <p>{@link #creerExemple}/{@link #creerClubCitrouille} n'écrivent leurs fichiers qu'au tout
-     * premier lancement, quand {@code shaderpacks/} n'existe pas encore — voir
-     * {@link #onAddPackFinders}. Une instance créée avant l'ajout de {@code min_format}/
-     * {@code max_format} à ces gabarits garde donc, de lancement en lancement, l'ancien
-     * {@code pack.mcmeta} : c'est le cas réellement observé sur {@code exemple_teinte/} de
-     * l'instance « test 1 » (journal : {@code Error reading pack metadata, attempting fallback
-     * type} à chaque démarrage). Sans conséquence fonctionnelle pour {@code exemple_teinte}
-     * lui-même — {@code Pack.readPackMetadata} retombe sur un type minimal et le pack se charge
-     * quand même — mais un journal qui crie au premier lancement pour un fichier que ce module a
-     * écrit lui-même, avec le mauvais contenu, n'a pas de raison de continuer à le faire : ce n'est
-     * réparé QUE pour les deux dossiers que {@link #creerExemple}/{@link #creerClubCitrouille}
-     * possèdent, jamais pour un nuancier tiers déposé par un joueur, dont le {@code pack.mcmeta} lui
-     * appartient.
-     */
-    private static void repareMetaSiPerime(Path nuancierDir) {
-        String nom = nuancierDir.getFileName().toString();
-        if (!nom.equals("exemple_teinte") && !nom.equals("club_citrouille")) {
-            return;
-        }
-        Path meta = nuancierDir.resolve("pack.mcmeta");
-        try {
-            String contenu = Files.readString(meta);
-            if (contenu.contains("min_format")) {
-                return; // déjà à jour
-            }
-            String description = nom.equals("exemple_teinte")
-                    ? "Nuancier d'exemple Lanterne — teinte sepia"
-                    : "Lanterne -- Club Citrouille : activable via lentille_nuancier_actif";
-            Files.writeString(meta, """
-                    {
-                      "pack": {
-                        "pack_format": 97,
-                        "min_format": 97,
-                        "max_format": 97,
-                        "description": "%s"
-                      }
-                    }
-                    """.formatted(description));
-            Lanterne.LOG.info("[NUANCIER] {} : pack.mcmeta périmé (min_format/max_format absents) régénéré",
-                    nom);
-        } catch (IOException problem) {
-            Lanterne.LOG.warn("[NUANCIER] {} : lecture/réparation de pack.mcmeta impossible", nom, problem);
         }
     }
 
@@ -422,12 +436,16 @@ public final class Nuancier {
     }
 
     /**
-     * Écrit un nuancier de démonstration minimal (teinte sépia) au premier lancement, pour que la
-     * mécanique de chargement soit vérifiable sans attendre qu'un joueur dépose quoi que ce soit.
+     * Écrit — et réécrit à chaque lancement, voir {@link #onAddPackFinders} — le nuancier de
+     * démonstration minimal (teinte sépia), pour que la mécanique de chargement soit vérifiable
+     * sans attendre qu'un joueur dépose quoi que ce soit, et pour que ce gabarit ne puisse plus
+     * jamais rester périmé sur une instance déjà provisionnée (voir le Javadoc de classe, section
+     * "Cause réelle confirmée du plantage en jeu du 19/09").
      */
     private static void creerExemple(Path racine) {
         try {
             Path exemple = racine.resolve("exemple_teinte");
+            boolean nouveau = !Files.isDirectory(exemple);
             Path shaders = exemple.resolve("assets").resolve(Lanterne.ID).resolve("shaders").resolve("post");
             // "post_effect", PAS "post" : voir le Javadoc de classe, section format étendu, pour
             // la preuve par bytecode. Ecrire dans "post" produirait un nuancier silencieusement
@@ -507,8 +525,10 @@ public final class Nuancier {
                     }
                     """);
 
-            Lanterne.LOG.info("[NUANCIER] dossier {} cree avec un exemple (teinte sepia) — depose d'autres "
-                    + "sous-dossiers a cote pour tes propres nuanciers", racine);
+            if (nouveau) {
+                Lanterne.LOG.info("[NUANCIER] dossier {} cree avec un exemple (teinte sepia) — depose d'autres "
+                        + "sous-dossiers a cote pour tes propres nuanciers", racine);
+            }
         } catch (IOException problem) {
             Lanterne.LOG.warn("[NUANCIER] impossible de creer {}", racine, problem);
         }
@@ -580,6 +600,7 @@ public final class Nuancier {
     private static void creerClubCitrouille(Path racine) {
         try {
             Path exemple = racine.resolve("club_citrouille");
+            boolean nouveau = !Files.isDirectory(exemple);
             Path shaders = exemple.resolve("assets").resolve(Lanterne.ID).resolve("shaders").resolve("post");
             Path post = exemple.resolve("assets").resolve(Lanterne.ID).resolve("post_effect");
             Files.createDirectories(shaders);
@@ -862,9 +883,11 @@ public final class Nuancier {
                     }
                     """);
 
-            Lanterne.LOG.info("[NUANCIER] dossier {} cree (Club Citrouille -- AO deux rayons + bloom leger + "
-                    + "brume + etalonnage cinematographique) -- pose \"lentille_nuancier_actif = "
-                    + "'club_citrouille'\" (et \"lentille = true\") dans lanterne-client.toml pour l'activer", racine);
+            if (nouveau) {
+                Lanterne.LOG.info("[NUANCIER] dossier {} cree (Club Citrouille -- AO deux rayons + bloom leger + "
+                        + "brume + etalonnage cinematographique) -- pose \"lentille_nuancier_actif = "
+                        + "'club_citrouille'\" (et \"lentille = true\") dans lanterne-client.toml pour l'activer", racine);
+            }
         } catch (IOException problem) {
             Lanterne.LOG.warn("[NUANCIER] impossible de creer le nuancier Club Citrouille dans {}", racine, problem);
         }
