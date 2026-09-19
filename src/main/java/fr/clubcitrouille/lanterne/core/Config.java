@@ -98,6 +98,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
     public static final ModConfigSpec.BooleanValue VIGIL;
+    public static final ModConfigSpec.BooleanValue RUMEUR;
     public static final ModConfigSpec.BooleanValue WAYPOINTS;
     public static final ModConfigSpec.IntValue WAYPOINT_QUOTA;
     public static final ModConfigSpec.IntValue WAYPOINT_SHARED_CAP;
@@ -870,6 +871,45 @@ public final class Config {
                 "Ne touche ni aux generateurs de creatures, ni aux raids, ni aux animaux.",
                 "Coupee, le bloc reste posable et eclaire - il ne garde simplement plus rien.")
                 .define("lanterne_de_veille", true);
+        RUMEUR = BUILDER.comment(
+                "RUMEUR : la reputation gagnee en guerissant un villageois zombifie profite a TOUS",
+                "les joueurs connectes, pas seulement a celui qui a tenu la pomme d'or.",
+                "",
+                "VANILLA, lu au javap sur le jar reellement compile, pas devine : ZombieVillager",
+                ".finishConversion appelle ServerLevel.onReputationEvent(ZOMBIE_VILLAGER_CURED, ...)",
+                "pour UN SEUL joueur - celui dont l'UUID a soigne la conversion (faiblesse puis pomme",
+                "d'or). Villager.onReputationEventFrom ecrit alors deux ragots sur ce villageois pour",
+                "cet UUID seul : GossipType.MAJOR_POSITIVE (+20, plafond 20) et MINOR_POSITIVE (+25,",
+                "plafond 25). C'est ce ragot-la qui baisse les prix - Villager.getPlayerReputation",
+                "additionne les ragots PAR UUID.",
+                "",
+                "En coop, le reste de l'equipe reste inconnu de CE villageois precis : chacun doit",
+                "trouver et guerir SON PROPRE zombie pour toucher son propre rabais. Ce module",
+                "accroche LivingConversionEvent.Post (NeoForge, publie par EventHooks.onLivingConvert",
+                "juste apres l'appel vanilla ci-dessus - aucun mixin necessaire) et, si l'entite",
+                "d'origine est un ZombieVillager et le resultat un Villager, rejoue SIMPLEMENT le meme",
+                "appel - villager.onReputationEventFrom(ZOMBIE_VILLAGER_CURED, joueur) - pour chaque",
+                "joueur CONNECTE au serveur. Aucune valeur n'est recopiee a la main : si Mojang change",
+                "un jour 20 ou 25, ce module suit sans qu'une ligne d'ici ne bouge.",
+                "",
+                "SANS RISQUE DE DOUBLON pour le guerisseur lui-meme, rejoue avec les autres : lu au",
+                "javap sur GossipContainer.mergeValuesForAddition, add() SOMME l'ancienne et la",
+                "nouvelle valeur puis plafonne au maximum du type si la somme le depasse. Le",
+                "guerisseur est deja au plafond des deux types apres l'appel vanilla ; le rejouer pour",
+                "lui est un NO-OP exact, pas un second bonus. Ce module n'a donc pas besoin de savoir",
+                "QUI a tenu la pomme d'or pour l'exclure - ce champ est prive dans ZombieVillager, sans",
+                "accesseur, et une reflexion pour si peu n'aurait rien apporte.",
+                "",
+                "PORTEE : tous les joueurs CONNECTES au moment de la guerison, pas seulement ceux deja",
+                "connus du villageois. Un villageois neuf ne connait, a cet instant, que le guerisseur",
+                "(et les ragots herites s'il portait deja un GossipContainer avant d'etre zombifie -",
+                "vanilla le transfere tel quel) : se limiter aux joueurs deja connus aurait donc",
+                "laisse de cote precisement celui qu'on veut servir.",
+                "",
+                "ETEINT PAR DEFAUT : c'est un changement D'EQUILIBRAGE, pas une optimisation, et",
+                "vanilla reserve ce rabais a qui a fait l'effort. A l'administrateur de decider si sa",
+                "coop veut le partager.")
+                .define("rumeur_villageois_partagee", false);
 
         BUILDER.comment(
                 "",

@@ -90,6 +90,7 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.content.disc.Retrack.register();
         fr.clubcitrouille.lanterne.core.PortalPreload.register();
         fr.clubcitrouille.lanterne.core.Treve.register();
+        fr.clubcitrouille.lanterne.core.Rumeur.register();
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.painting.Easel::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(
