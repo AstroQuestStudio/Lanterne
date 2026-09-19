@@ -107,9 +107,12 @@
     "SectionCompilerMixin",
     "FluidRendererMixin",
     "VulkanPhysicalDeviceMixin",
+    "VulkanQueueFamiliesMixin",
     "VulkanFeatureSetsMixin",
     "VulkanPresentDiagMixin",
     "VulkanSubmitDiagMixin",
+    "VulkanDeviceMixin",
+    "VulkanRenderPipelineMixin",
     "PortailRenderMixin"
   ]
 }
