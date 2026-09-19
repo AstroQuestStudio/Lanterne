@@ -46,8 +46,8 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *
  * <p>Il est écrit au démarrage du <b>serveur</b>, comme le mot d'accueil. En solo, c'est le serveur
  * intégré : la liste est celle du joueur, et elle est juste. Sur un serveur dédié, elle est celle du
- * serveur — quatre des cinq compagnons de ce modpack sont des mods de client, et l'administrateur
- * lira donc surtout une liste courte. C'est correct : le serveur ne <em>peut pas</em> savoir ce que
+ * serveur — cinq des six compagnons de ce modpack sont des mods de client (AutoMiner y compris), et
+ * l'administrateur lira donc surtout une liste courte. C'est correct : le serveur ne <em>peut pas</em> savoir ce que
  * ses joueurs ont installé, et prétendre le contraire serait pire que se taire.
  */
 public final class Compagnons {
@@ -68,6 +68,14 @@ public final class Compagnons {
 
     /** JEI — la liste des objets. Voir {@code client.ponder.Hint}. */
     public static final String JEI = "jei";
+
+    /**
+     * Club Citrouille AutoMiner — le bot de minage automatique du serveur. Strictement client, sans
+     * paquet propre : voir son {@code neoforge.mods.toml} ({@code clientSideOnly = "true"}, aucune
+     * dépendance {@code side="SERVER"}). C'est justement pour ça que ce bloc ne le voit qu'en solo —
+     * voir la javadoc de classe sur ce que {@link #present} ne peut pas savoir sur un serveur dédié.
+     */
+    public static final String AUTOMINER = "autominer";
 
     private Compagnons() {}
 
@@ -131,6 +139,13 @@ public final class Compagnons {
             say(lines, "le guide illustré passe par l'infobulle, pas par une");
             say(lines, "greffe : il marche dans sa liste comme à l'inventaire");
         }
+        if (present(AUTOMINER)) {
+            head(lines, "AutoMiner", version(AUTOMINER));
+            say(lines, "le burin (core.Burin) le protège déjà : la marge de");
+            say(lines, "portée s'élargit avec TA latence mesurée, et la place de");
+            say(lines, "rattrapage change de main au lieu de se coincer sur un");
+            say(lines, "bloc abandonné — /lanterne burin en dit l'état exact");
+        }
 
         for (String warning : warnings()) {
             lines.add("  ⚠  " + warning);
@@ -157,7 +172,7 @@ public final class Compagnons {
      *
      * <p>{@code notes/mine-mods-26-2.md} §4.1 a établi la règle : deux boucles d'asservissement sur
      * la même grandeur oscillent, et trois régulateurs de distance de simulation valent moins qu'un.
-     * Appliquée à ce modpack, la règle ne trouve <b>presque rien</b> — les cinq compagnons ont été
+     * Appliquée à ce modpack, la règle ne trouve <b>presque rien</b> — les six compagnons ont été
      * choisis sur des postes disjoints. Ce qui reste est écrit ici, et rien de plus : un
      * avertissement qui crie pour rien n'est plus lu quand il a raison.
      */
