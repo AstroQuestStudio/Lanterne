@@ -114,11 +114,16 @@ public final class ClientConfig {
                 "limite jusqu'a revenir dans le budget, sans jamais descendre sous 32 blocs - une",
                 "bete avec laquelle on peut interagir ne disparait donc jamais.",
                 "",
-                "ETEINT PAR DEFAUT, et ce n'est pas un oubli : ce depot ne peut pas lancer de client,",
-                "ce module n'a donc AUCUNE mesure derriere lui. La regle du projet est qu'un module",
-                "non mesure n'existe pas. A allumer si vous voulez l'eprouver, et merci de publier",
-                "le chiffre.")
-                .define("horizon", false);
+                "MESURE EN JEU le 19 septembre 2026 (banc lab/Glass.java, scene RING, 10000 vaches",
+                "a decouvert, mesure AVEC/SANS sur la meme session) :",
+                "  - OpenGL : 7,4 -> 92,1 images/seconde, soit x12,41.",
+                "  - Vulkan (backend reellement force, pas suppose) : 8,1 -> 30,1 images/seconde,",
+                "    soit x3,71 - le gain brut de rendu est comparable (x13 environ dans les deux",
+                "    cas), mais une fois le rendu debloque, le tick serveur de dix mille creatures",
+                "    devient le nouveau plafond sous Vulkan. Piste ouverte, pas encore chiffree :",
+                "    Cadence/Foule visent deja la decision d'IA, pas le tick brut de mouvement.",
+                "ACTIVE PAR DEFAUT sur la base de cette mesure.")
+                .define("horizon", true);
         SHROUD_DELAY = BUILDER.comment(
                 "Delai avant de reexaminer une meme creature, en millisecondes.",
                 "100 (defaut) : une verification toutes les six images a 60 images par seconde.",

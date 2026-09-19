@@ -4,7 +4,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -80,9 +82,26 @@ public abstract class AureoleMixin {
         }
     }
 
+    @Shadow
+    @Final
+    private static Set<Holder<MobEffect>> VALID_EFFECTS;
+
+    /**
+     * <h2>Une lecture de champ statique se redirige sans argument</h2>
+     *
+     * <p>{@code @Redirect} sur un {@code getstatic} remplace l'instruction elle-même — il n'y a pas
+     * de valeur "en cours" à recevoir en paramètre, contrairement à une redirection d'appel ou à un
+     * champ d'instance (qui reçoit {@code this}). Passer {@code Set<Holder<MobEffect>> vanilla} en
+     * paramètre visait une signature qui n'existe pas ({@code (Set)Set} au lieu de {@code ()Set}) et
+     * faisait échouer Mixin au chargement de {@code Blocks}, donc tout lancement du client — trouvé en
+     * testant en jeu, pas par la vérification statique des mixins (qui ne contrôle pas la forme des
+     * redirections de champ). La vraie valeur vanilla se lit via le {@code @Shadow} ci-dessus, qui ne
+     * boucle pas : cette lecture-ci se trouve dans une méthode absente de la liste {@code method},
+     * donc jamais elle-même redirigée.
+     */
     @Redirect(method = {"filterEffect", "loadEffect"}, at = @At(value = "FIELD",
             target = "Lnet/minecraft/world/level/block/entity/BeaconBlockEntity;VALID_EFFECTS:Ljava/util/Set;"))
-    private static Set<Holder<MobEffect>> lanterne$widenValidEffects(Set<Holder<MobEffect>> vanilla) {
-        return Aureole.widenedValidEffects(vanilla);
+    private static Set<Holder<MobEffect>> lanterne$widenValidEffects() {
+        return Aureole.widenedValidEffects(VALID_EFFECTS);
     }
 }

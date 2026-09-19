@@ -109,9 +109,36 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         this.inventoryLabelY = IMAGE_HEIGHT - 94;
     }
 
+    /**
+     * <h2>{@code register} refuse tout ce que vanilla a déjà pris</h2>
+     *
+     * <p>Vérifié en jeu, pas seulement lu : {@code MenuScreens.init()} enregistre
+     * {@code MenuType.BEACON -> BeaconScreen::new} pour son propre compte, PUIS seulement fait feu de
+     * {@code RegisterMenuScreensEvent} — et {@code register()} lève {@code IllegalStateException} dès
+     * que la clé existe déjà dans sa carte (`javap` sur {@code RegisterMenuScreensEvent.class} :
+     * {@code containsKey} suivi d'un {@code athrow} sans aucune voie de remplacement). Écran d'erreur
+     * au lancement du client — l'hypothèse d'origine (cet évènement sert à *remplacer* un écran
+     * vanilla) était fausse : il ne sert qu'à en ENREGISTRER un nouveau qui n'existe pas encore.
+     *
+     * <p>La carte que reçoit l'évènement est la MÊME que celle de {@code MenuScreens} — passée par
+     * référence à son constructeur, pas une copie. Écrire dedans directement, en contournant le garde-
+     * fou de {@code register()}, obtient donc exactement l'effet voulu (remplacer l'écran de
+     * {@code MenuType.BEACON} par {@link Phare}) sans dupliquer tout {@code MenuScreens.init()} dans
+     * un mixin pour un seul type de menu.
+     */
+    @SuppressWarnings("unchecked")
     @SubscribeEvent
     public static void onRegisterScreens(RegisterMenuScreensEvent event) {
-        event.register(MenuType.BEACON, Phare::new);
+        try {
+            var champ = RegisterMenuScreensEvent.class.getDeclaredField("registeredScreens");
+            champ.setAccessible(true);
+            var carte = (java.util.Map<net.minecraft.world.inventory.MenuType<?>,
+                    net.minecraft.client.gui.screens.MenuScreens.ScreenConstructor<?, ?>>) champ.get(event);
+            carte.put(MenuType.BEACON, (net.minecraft.client.gui.screens.MenuScreens.ScreenConstructor<BeaconMenu, Phare>) Phare::new);
+        } catch (ReflectiveOperationException erreur) {
+            Lanterne.LOG.error("[PHARE] remplacement de l'ecran du beacon impossible, "
+                    + "l'ecran vanilla reste actif : {}", erreur.toString());
+        }
     }
 
     @Override
