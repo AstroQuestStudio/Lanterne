@@ -124,6 +124,10 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue WAYPOINTS;
     public static final ModConfigSpec.IntValue WAYPOINT_QUOTA;
     public static final ModConfigSpec.IntValue WAYPOINT_SHARED_CAP;
+
+    public static final ModConfigSpec.BooleanValue LEURRE;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> LEURRE_BLOCKS;
+
     public static final ModConfigSpec.BooleanValue MECHE;
     public static final ModConfigSpec.BooleanValue BROOM;
     public static final ModConfigSpec.IntValue BROOM_PERIOD;
@@ -1087,6 +1091,63 @@ public final class Config {
                 "Reperes publics du serveur entier. Un repere public est visible de tous sans",
                 "cesser d'appartenir a celui qui l'a pose : lui seul peut le retirer.")
                 .defineInRange("publics_maximum", 32, 0, 256);
+
+        BUILDER.pop();
+
+        BUILDER.comment(
+                "",
+                "LE LEURRE - anti x-ray : un minerai non expose ne quitte jamais le serveur.",
+                "",
+                "Un pack de ressources x-ray ne peut rendre transparent que ce qu'il RECOIT. Ce module",
+                "ne change rien au rendu ni au pack du joueur - il change ce que le serveur envoie : un",
+                "bloc protege (voir la liste ci-dessous) dont les six faces touchent une autre case",
+                "protegee ou opaque - jamais d'air, d'eau ou de tout ce qui laisse voir a travers - est",
+                "remplace par une case de remplissage plausible avant meme d'etre serialise dans le",
+                "paquet de chunk. Le client ne recoit alors litteralement pas le minerai : aucune",
+                "texture, aussi transparente soit-elle, ne peut montrer une donnee qu'il n'a pas.",
+                "",
+                "Des qu'une case protegee devient exposee - un joueur creuse a cote, une explosion",
+                "ouvre une poche - le mecanisme normal de mise a jour de bloc envoie la vraie donnee,",
+                "comme pour n'importe quel autre bloc. Rien n'est cache a un joueur qui joue normalement,",
+                "y compris a l'AutoMiner du Club Citrouille : voir core/Leurre.java pour la verification",
+                "faite sur son code reel, et la tension de conception qu'elle a mise au jour (son cache de",
+                "filons LIT LA SECTION ENTIERE, pas seulement ce qui est expose - ce module le rend donc",
+                "aveugle aux filons pas encore exposes, exactement comme un joueur ordinaire).",
+                "",
+                "Cout : calcule UNE FOIS par section au moment de l'envoi, mis en cache par section, et",
+                "jamais recalcule tant que rien de pertinent n'a change dans elle ou sa voisine directe.",
+                "Voir lab/Palissade.java pour la mesure.").push("leurre");
+
+        LEURRE = BUILDER.comment(
+                "Allumer l'anti x-ray. A false, le serveur envoie exactement ce que Mojang enverrait.")
+                .define("actif", true);
+        LEURRE_BLOCKS = BUILDER.comment(
+                "Blocs proteges : caches tant qu'aucune de leurs six faces ne touche une case non",
+                "opaque. Un identifiant de bloc par ligne (\"minecraft:diamond_ore\"). Defaut : tous les",
+                "minerais vanilla et leurs variantes deepslate, plus le debris antique.",
+                "Retirer une ligne pour l'exposer sans obfuscation ; en ajouter pour proteger un bloc",
+                "de mod (un coffre de fin de donjon, par exemple).")
+                .defineList("blocs_proteges", List.of(
+                        "minecraft:coal_ore",
+                        "minecraft:deepslate_coal_ore",
+                        "minecraft:iron_ore",
+                        "minecraft:deepslate_iron_ore",
+                        "minecraft:copper_ore",
+                        "minecraft:deepslate_copper_ore",
+                        "minecraft:gold_ore",
+                        "minecraft:deepslate_gold_ore",
+                        "minecraft:nether_gold_ore",
+                        "minecraft:redstone_ore",
+                        "minecraft:deepslate_redstone_ore",
+                        "minecraft:lapis_ore",
+                        "minecraft:deepslate_lapis_ore",
+                        "minecraft:diamond_ore",
+                        "minecraft:deepslate_diamond_ore",
+                        "minecraft:emerald_ore",
+                        "minecraft:deepslate_emerald_ore",
+                        "minecraft:nether_quartz_ore",
+                        "minecraft:ancient_debris"),
+                        entry -> entry instanceof String s && Identifier.tryParse(s) != null);
 
         BUILDER.pop();
 

@@ -125,6 +125,8 @@ public final class SelfTest {
     private static boolean rappel;
     /** Vrai si l'on éprouve le préchargement de portail. Voir {@code lab.Traversee}. */
     private static boolean traversee;
+    /** Vrai si l'on éprouve l'anti x-ray (conformité puis coût). Voir {@code lab.Palissade}. */
+    private static boolean palissade;
     private static int pregenRadius;
 
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
@@ -518,6 +520,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de la traversée (préchargement de portail) armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_PALISSADE"))) {
+            palissade = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de la palissade (anti x-ray) armée.");
+            return;
+        }
 
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
@@ -551,6 +560,7 @@ public final class SelfTest {
                     && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel && !billet
                     && !loterieTest
                     && !seuil && !terrassement && !coince && !restitution && !rappel && !traversee
+                    && !palissade
                     && pregenRadius <= 0)) {
             return;
         }
@@ -1004,6 +1014,16 @@ public final class SelfTest {
                 fr.clubcitrouille.lanterne.lab.Rappel.tick(server);
             } else if (step == Step.SETTLING) {
                 fr.clubcitrouille.lanterne.lab.Rappel.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (palissade) {
+            if (fr.clubcitrouille.lanterne.lab.Palissade.running()) {
+                fr.clubcitrouille.lanterne.lab.Palissade.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Palissade.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

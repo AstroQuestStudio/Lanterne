@@ -751,6 +751,14 @@ public final class Settings {
     /** Le carnet de repères. Voir {@code content.waypoint.Waypoint} — et l'absence de téléportation. */
     private static boolean waypoints = true;
     /**
+     * L'anti x-ray : un bloc protégé non exposé ne quitte jamais le serveur. Voir {@code core.Leurre}.
+     *
+     * <p>Allumé par défaut — contrairement aux modules de performance neufs de ce fichier, celui-ci
+     * n'a rien à prouver par une mesure pour justifier sa valeur par défaut : c'est une protection,
+     * pas une optimisation, et son coût est mesuré séparément par {@code lab/Palissade}.
+     */
+    private static boolean leurre = true;
+    /**
      * Le repos posé, retiré DEUX fois après mesure — quatorzième plan démoli, et le seul que ce
      * projet ait éprouvé à nouveau après avoir corrigé sa cause d'échec.
      *
@@ -1439,7 +1447,29 @@ public final class Settings {
         return waypoints;
     }
 
+    /**
+     * L'anti x-ray. Voir {@code core.Leurre}.
+     *
+     * <p>Ne dépend PAS de l'interrupteur général, pour la même raison que {@link #waypoints()} juste
+     * au-dessus : ce n'est pas une optimisation qu'un banc doit pouvoir éteindre en bloc pour comparer
+     * à vanilla, c'est une garantie envers le joueur. {@code /lanterne off} ne doit pas rouvrir la
+     * porte qu'on vient de fermer.
+     */
+    public static boolean leurre() {
+        return leurre;
+    }
 
+    /**
+     * Arme ou désarme l'anti x-ray en cours de partie. Réservé à l'épreuve {@code lab/Palissade},
+     * qui doit relever le bras SANS et le bras AVEC dans la même exécution — même raison que {@link
+     * #setPortalPreload}.
+     */
+    public static void setLeurre(boolean value) {
+        if (leurre != value) {
+            epoch++;
+        }
+        leurre = value;
+    }
 
     /**
      * La Lanterne ne dépend pas non plus de l'interrupteur général — pour la raison inverse du balai.
@@ -1585,6 +1615,9 @@ public final class Settings {
         vigil = wanted.contains("vigil") || wanted.contains("garde");
         waypoints = wanted.contains("waypoint") || wanted.contains("reperes");
         regard = wanted.contains("regard");
+        // « leurre » n'appartient qu'à ce module : aucun autre mot-clé de ce fichier ne le contient,
+        // et il ne contient aucun d'eux.
+        leurre = wanted.contains("leurre");
         // Les réglages viennent de changer en bloc : les modules à état jettent le leur. Voir epoch().
         epoch++;
         // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
@@ -1766,6 +1799,7 @@ public final class Settings {
         foule = Config.FOULE.get();
         loterie = Config.LOTERIE.get();
         waypoints = Config.WAYPOINTS.get();
+        leurre = Config.LEURRE.get();
         rationing = Config.RATIONING.get();
         scratchPos = Config.SCRATCH_POS.get();
         strictYield = Config.STRICT_YIELD.get();
