@@ -99,6 +99,28 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ANCHOR;
     public static final ModConfigSpec.BooleanValue VIGIL;
     public static final ModConfigSpec.BooleanValue RUMEUR;
+
+    public static final ModConfigSpec.BooleanValue BEACON_OVERHAUL;
+    public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_1;
+    public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_2;
+    public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_3;
+    public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_4;
+    public static final ModConfigSpec.DoubleValue BEACON_MULT_IRON;
+    public static final ModConfigSpec.DoubleValue BEACON_MULT_GOLD;
+    public static final ModConfigSpec.DoubleValue BEACON_MULT_EMERALD;
+    public static final ModConfigSpec.DoubleValue BEACON_MULT_DIAMOND;
+    public static final ModConfigSpec.DoubleValue BEACON_MULT_NETHERITE;
+    public static final ModConfigSpec.BooleanValue BEACON_VERTICAL_UNLIMITED;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_NIGHT_VISION;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_WATER_BREATHING;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_SLOW_FALLING;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_FIRE_RESISTANCE;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_LUCK;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_SATURATION;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_DOLPHINS_GRACE;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_HEALTH_BOOST;
+    public static final ModConfigSpec.BooleanValue BEACON_EFFECT_ABSORPTION;
+
     public static final ModConfigSpec.BooleanValue WAYPOINTS;
     public static final ModConfigSpec.IntValue WAYPOINT_QUOTA;
     public static final ModConfigSpec.IntValue WAYPOINT_SHARED_CAP;
@@ -911,6 +933,133 @@ public final class Config {
                 "vanilla reserve ce rabais a qui a fait l'effort. A l'administrateur de decider si sa",
                 "coop veut le partager.")
                 .define("rumeur_villageois_partagee", false);
+
+        BUILDER.comment(
+                "",
+                "LA BALISE - portee, verticalite et sorts d'une balise (beacon), repenses.",
+                "",
+                "Vanilla, verifie au javap sur le jar reellement compile (BeaconBlockEntity",
+                ".applyEffects) : la portee horizontale vaut niveau*10+10 blocs (50 au niveau 4), et",
+                "la boite d'effet est un cube centre sur la balise, gonfle de cette meme portee sur",
+                "les trois axes PUIS etire vers le haut de la hauteur entiere du monde",
+                "(AABB.expandTowards, qui n'agit que vers le haut). Le dessus est donc DEJA quasi",
+                "illimite aujourd'hui ; seuls le dessous et l'horizontale restent bornes.",
+                "",
+                "Les materiaux de pyramide valides sont le tag data-driven",
+                "minecraft:beacon_base_blocks (teste par BlockState.is), pas une liste codee en dur -",
+                "et dans ce moteur il contient DEJA le bloc de netherite en plus des quatre blocs",
+                "vanilla habituels (fer, or, emeraude, diamant). Verifie par le contenu reel du tag",
+                "dans le jar patche : aucune extension n'a ete necessaire ici.",
+                "",
+                "ETEINT, ce module rend exactement le calcul vanilla ci-dessus - formule, forme de",
+                "boite, et liste d'effets. Chaque reglage ci-dessous reste lisible meme eteint.")
+                .push("balise");
+
+        BEACON_OVERHAUL = BUILDER.comment(
+                "Allumer la refonte. A false, la balise se comporte exactement comme Mojang l'a",
+                "ecrite - tous les reglages qui suivent sont alors ignores.")
+                .define("actif", true);
+
+        BEACON_RANGE_LEVEL_1 = BUILDER.comment(
+                "Portee horizontale au niveau 1, en blocs, AVANT le multiplicateur de materiau.",
+                "Vanilla : 20. Quarante ici, parce qu'un serveur de quelques joueurs n'a aucune",
+                "raison de se contenter du minimum vanilla des le premier etage de pyramide.")
+                .defineInRange("portee_niveau_1", 40, 10, 2000);
+        BEACON_RANGE_LEVEL_2 = BUILDER.comment(
+                "Portee horizontale au niveau 2, en blocs. Vanilla : 30.")
+                .defineInRange("portee_niveau_2", 80, 10, 2000);
+        BEACON_RANGE_LEVEL_3 = BUILDER.comment(
+                "Portee horizontale au niveau 3, en blocs. Vanilla : 40.")
+                .defineInRange("portee_niveau_3", 120, 10, 2000);
+        BEACON_RANGE_LEVEL_4 = BUILDER.comment(
+                "Portee horizontale au niveau 4 (pyramide complete), en blocs. Vanilla : 50 - le",
+                "chiffre que ce module existe pour depasser.")
+                .defineInRange("portee_niveau_4", 160, 10, 2000);
+
+        BEACON_MULT_IRON = BUILDER.comment(
+                "Multiplicateur de portee horizontale pour une pyramide de fer. Reference a 1 :",
+                "c'est le materiau le plus faible du tag vanilla, les autres se jugent par rapport",
+                "a lui.")
+                .defineInRange("multiplicateur_fer", 1.0d, 0.1d, 20.0d);
+        BEACON_MULT_GOLD = BUILDER.comment(
+                "Multiplicateur pour l'or. Entre le fer et l'emeraude - un premier palier qui",
+                "recompense sans exiger une ressource rare.")
+                .defineInRange("multiplicateur_or", 1.5d, 0.1d, 20.0d);
+        BEACON_MULT_EMERALD = BUILDER.comment(
+                "Multiplicateur pour l'emeraude - monnaie d'echange des villageois, plus rare que",
+                "l'or sans etre un objectif de fin de jeu.")
+                .defineInRange("multiplicateur_emeraude", 2.0d, 0.1d, 20.0d);
+        BEACON_MULT_DIAMOND = BUILDER.comment(
+                "Multiplicateur pour le diamant. Fixe a 3 : c'est la valeur demandee pour ce",
+                "projet, pas une mesure.")
+                .defineInRange("multiplicateur_diamant", 3.0d, 0.1d, 20.0d);
+        BEACON_MULT_NETHERITE = BUILDER.comment(
+                "Multiplicateur pour la netherite. Fixe a 4, meme origine que le diamant ci-dessus.",
+                "La netherite est DEJA un materiau de pyramide valide dans ce moteur (voir la note",
+                "de tete de section) : ce reglage se contente de la recompenser a la hauteur de sa",
+                "raretee, il n'a pas fallu l'ajouter au tag.")
+                .defineInRange("multiplicateur_netherite", 4.0d, 0.1d, 20.0d);
+
+        BEACON_VERTICAL_UNLIMITED = BUILDER.comment(
+                "Portee verticale sans plafond : la boite d'effet couvre alors TOUTE la hauteur du",
+                "monde, du fond au ciel, quel que soit le niveau de la pyramide.",
+                "",
+                "Vanilla degage deja tout le dessus (voir la note de tete de section) ; ce reglage",
+                "retire en plus le plafond du DESSOUS, qui lui reste borne en vanilla.",
+                "",
+                "A false : la balise reprend la forme vanilla exacte (symetrie verticale autour",
+                "d'elle-meme), mais avec LA portee de ce module - pour qui veut la nouvelle portee",
+                "sans la verticalite illimitee.")
+                .define("portee_verticale_illimitee", true);
+
+        BUILDER.comment(
+                "",
+                "Sorts supplementaires, chacun desactivable independamment. Un effet coupe ici",
+                "redevient immediatement invalide - une balise qui l'avait choisi le perd au",
+                "prochain chargement, exactement comme vanilla invalide deja un effet retire d'un",
+                "tag de donnees.").push("effets");
+
+        BEACON_EFFECT_NIGHT_VISION = BUILDER.comment(
+                "Vision nocturne, au meme palier que Vitesse/Hate (niveau 1). Utilite pure, aucun",
+                "risque d'equilibrage pour une coop.")
+                .define("vision_nocturne", true);
+        BEACON_EFFECT_WATER_BREATHING = BUILDER.comment(
+                "Respiration aquatique, au palier de Resistance/Saut (niveau 2). Pensee pour les",
+                "bases sous-marines et l'exploration d'epaves.")
+                .define("respiration_aquatique", true);
+        BEACON_EFFECT_SLOW_FALLING = BUILDER.comment(
+                "Chute ralentie, meme palier (niveau 2). Complement naturel de la respiration",
+                "aquatique pour qui construit en hauteur autour de sa balise.")
+                .define("chute_ralentie", true);
+        BEACON_EFFECT_FIRE_RESISTANCE = BUILDER.comment(
+                "Resistance au feu, au palier de Force (niveau 3) : aussi utile en expedition au",
+                "Nether qu'un vrai gain de combat, sans etre plus fort que Force elle-meme.")
+                .define("resistance_au_feu", true);
+        BEACON_EFFECT_LUCK = BUILDER.comment(
+                "Chance, meme palier (niveau 3). Touche la peche et le butin sans jamais toucher",
+                "au combat - un troisieme choix a cote de Force pour qui prefere la recolte.")
+                .define("chance", true);
+        BEACON_EFFECT_SATURATION = BUILDER.comment(
+                "Saturation, au palier du second effet (niveau 4, comme Regeneration en vanilla) :",
+                "libere un emplacement de coffre en base en rendant la faim rare.")
+                .define("saturation", true);
+        BEACON_EFFECT_DOLPHINS_GRACE = BUILDER.comment(
+                "Grace du dauphin, meme palier (niveau 4). Pour une base cotiere ou aquatique :",
+                "nager vite est a la mer ce que Vitesse est a la terre.")
+                .define("grace_du_dauphin", true);
+        BEACON_EFFECT_HEALTH_BOOST = BUILDER.comment(
+                "Regain de sante, meme palier (niveau 4). Des coeurs supplementaires plutot qu'un",
+                "soin continu - une alternative a Regeneration pour affronter un boss d'un seul",
+                "tenant.")
+                .define("regain_de_sante", true);
+        BEACON_EFFECT_ABSORPTION = BUILDER.comment(
+                "Absorption, meme palier (niveau 4). Des coeurs tampons plutot que des coeurs",
+                "reels : ils se vident avec le temps, contrairement au regain de sante ci-dessus -",
+                "un choix plus prudent qu'agressif.")
+                .define("absorption", true);
+
+        BUILDER.pop();
+        BUILDER.pop();
 
         BUILDER.comment(
                 "",

@@ -58,6 +58,7 @@
     "EmballageBiomeMixin",
     "MiningMixin",
     "BurinMixin",
+    "AureoleMixin",
     "ClimatMixin",
     "ChunkSenderMixin",
     "CielAquiferAccessor",
