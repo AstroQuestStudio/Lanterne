@@ -145,6 +145,16 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.Machine.appraise();
         fr.clubcitrouille.lanterne.content.waypoint.Waypoints.register(modBus);
         fr.clubcitrouille.lanterne.core.network.SouvenirNet.register(modBus);
+        // La mèche : le mod se met à jour lui-même. Enregistrée inconditionnellement, des deux
+        // côtés — même raison que SouvenirNet juste au-dessus, sauf que Lanterne est OBLIGATOIRE sur
+        // client et serveur : voir la Javadoc de MecheNet sur pourquoi ce fichier-ci ne porte pas la
+        // même garde défensive contre un client qui ignorerait le canal.
+        fr.clubcitrouille.lanterne.core.network.MecheNet.register(modBus);
+        // Le consentement du joueur a la mise a jour automatique : fichier CLIENT, enregistre des
+        // deux cotes — meme raison que ClientConfig et Consent juste en dessous.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
+                fr.clubcitrouille.lanterne.client.MecheConsent.SPEC, "lanterne-maj-client.toml");
+        modBus.addListener(fr.clubcitrouille.lanterne.client.MecheConsent::apply);
         // Le Regard : l'inspection bloc/entite. Le paquet reseau s'enregistre des deux cotes —
         // meme raison que les reperes juste au-dessus — la tooltip elle-meme (client.regard.Sight)
         // ne s'enregistre que dans le bloc CLIENT ci-dessous.

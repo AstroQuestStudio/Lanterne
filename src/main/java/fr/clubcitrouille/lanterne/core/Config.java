@@ -102,6 +102,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue WAYPOINTS;
     public static final ModConfigSpec.IntValue WAYPOINT_QUOTA;
     public static final ModConfigSpec.IntValue WAYPOINT_SHARED_CAP;
+    public static final ModConfigSpec.BooleanValue MECHE;
     public static final ModConfigSpec.BooleanValue BROOM;
     public static final ModConfigSpec.IntValue BROOM_PERIOD;
     public static final ModConfigSpec.BooleanValue BROOM_ITEMS;
@@ -937,6 +938,29 @@ public final class Config {
                 "Reperes publics du serveur entier. Un repere public est visible de tous sans",
                 "cesser d'appartenir a celui qui l'a pose : lui seul peut le retirer.")
                 .defineInRange("publics_maximum", 32, 0, 256);
+
+        BUILDER.pop();
+
+        BUILDER.comment(
+                "",
+                "LA MECHE - le mod se met a jour lui-meme, plutot que de laisser un joueur tourner",
+                "avec un jar perime sans le savoir. Voir core/Meche.java pour le mecanisme complet.",
+                "",
+                "ETEINT PAR DEFAUT, et double prudence ici : ce reglage decide si LE SERVEUR propose",
+                "un telechargement, mais c'est TOUJOURS le client qui decide d'accepter (reglage",
+                "personnel « auto_maj » dans lanterne-maj-client.toml, refuse par defaut lui aussi).",
+                "Un administrateur qui allume celui-ci sans que le joueur allume le sien ne provoque",
+                "rien de plus qu'un message dans la discussion.",
+                "",
+                "Ce que ce mecanisme ne fait JAMAIS : remplacer a chaud le jar en cours d'execution,",
+                "executer quoi que ce soit qu'il recoit, ou faire venir un octet d'ailleurs que de CE",
+                "serveur, sur la connexion de jeu deja ouverte.").push("maj");
+
+        MECHE = BUILDER.comment(
+                "Annoncer aux clients l'empreinte du jar de Lanterne que CE serveur fait tourner, et",
+                "leur proposer de le telecharger s'ils n'ont pas la meme.",
+                "Preuve de concept : seul Lanterne lui-meme est concerne pour l'instant.")
+                .define("proposer_maj", false);
 
         BUILDER.pop();
 

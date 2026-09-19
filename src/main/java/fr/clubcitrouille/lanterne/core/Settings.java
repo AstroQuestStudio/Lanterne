@@ -976,6 +976,15 @@ public final class Settings {
      */
     private static boolean hush;
 
+    /**
+     * La mèche : le serveur propose-t-il aux clients de mettre à jour le jar de Lanterne ? Voir
+     * {@link fr.clubcitrouille.lanterne.core.Meche}.
+     *
+     * <p>N'obéit PAS au maître — voir {@link #meche()}, et la même raison que {@link #tide()} donne
+     * pour elle-même.
+     */
+    private static boolean meche;
+
     private Settings() {}
 
     /**
@@ -1072,6 +1081,15 @@ public final class Settings {
      */
     public static boolean tide() {
         return tide;
+    }
+
+    /**
+     * La mèche, qui n'obéit pas non plus au maître — même raison que {@link #tide()} : un banc qui
+     * bascule {@code master} vingt fois par mesure ne doit pas, au passage, armer et désarmer un
+     * téléchargement vers chaque client connecté.
+     */
+    public static boolean meche() {
+        return meche;
     }
 
     /** Met la maree en sommeil pendant une mesure, et la rend ensuite. */
@@ -1753,6 +1771,7 @@ public final class Settings {
         strictYield = Config.STRICT_YIELD.get();
         clump = Config.CLUMP.get();
         anchor = Config.ANCHOR.get();
+        meche = Config.MECHE.get();
     }
 
     /** Ce qui est actif, pour l'en-tête du rapport. */
