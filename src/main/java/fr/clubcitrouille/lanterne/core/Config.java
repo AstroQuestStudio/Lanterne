@@ -1026,19 +1026,20 @@ public final class Config {
                 "recompense sans exiger une ressource rare.")
                 .defineInRange("multiplicateur_or", 1.5d, 0.1d, 20.0d);
         BEACON_MULT_EMERALD = BUILDER.comment(
-                "Multiplicateur pour l'emeraude - monnaie d'echange des villageois, plus rare que",
-                "l'or sans etre un objectif de fin de jeu.")
-                .defineInRange("multiplicateur_emeraude", 2.0d, 0.1d, 20.0d);
+                "Multiplicateur pour l'emeraude - monnaie d'echange des villageois, placee au-dessus",
+                "du diamant dans ce classement : c'est la valeur demandee pour ce projet, pas une",
+                "mesure de rarete brute.")
+                .defineInRange("multiplicateur_emeraude", 2.5d, 0.1d, 20.0d);
         BEACON_MULT_DIAMOND = BUILDER.comment(
-                "Multiplicateur pour le diamant. Fixe a 3 : c'est la valeur demandee pour ce",
+                "Multiplicateur pour le diamant. Fixe a 2 : c'est la valeur demandee pour ce",
                 "projet, pas une mesure.")
-                .defineInRange("multiplicateur_diamant", 3.0d, 0.1d, 20.0d);
+                .defineInRange("multiplicateur_diamant", 2.0d, 0.1d, 20.0d);
         BEACON_MULT_NETHERITE = BUILDER.comment(
-                "Multiplicateur pour la netherite. Fixe a 4, meme origine que le diamant ci-dessus.",
+                "Multiplicateur pour la netherite. Fixe a 3, meme origine que le diamant ci-dessus.",
                 "La netherite est DEJA un materiau de pyramide valide dans ce moteur (voir la note",
                 "de tete de section) : ce reglage se contente de la recompenser a la hauteur de sa",
                 "raretee, il n'a pas fallu l'ajouter au tag.")
-                .defineInRange("multiplicateur_netherite", 4.0d, 0.1d, 20.0d);
+                .defineInRange("multiplicateur_netherite", 3.0d, 0.1d, 20.0d);
 
         BEACON_VERTICAL_UNLIMITED = BUILDER.comment(
                 "Portee verticale sans plafond : la boite d'effet couvre alors TOUTE la hauteur du",
