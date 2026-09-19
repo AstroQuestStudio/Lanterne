@@ -1,7 +1,7 @@
 package fr.clubcitrouille.lanterne.content.regard;
 
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -9,6 +9,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
@@ -54,15 +55,16 @@ public final class Regard {
     private static final String PROTOCOL = "1";
 
     /**
-     * Piles envoyées au plus, par réponse.
+     * Articles dominants envoyés au plus, par réponse — voir {@link RegardTell#dominant}.
      *
-     * <p>Douze : assez pour une grille de deux rangées de six dans le panneau du Regard, jamais
-     * assez pour qu'un coffre double de cinquante-quatre emplacements pleins pèse sur le réseau à
-     * chaque rafraîchissement. {@link RegardTell#filled} porte le compte RÉEL au-delà de ce plafond,
-     * pour que l'affichage puisse dire « +42 » plutôt que de laisser croire que le coffre est vide
-     * au-delà de la douzième pile.
+     * <p>Trois : assez pour dire ce qui pèse vraiment dans un coffre, jamais assez pour reconstituer
+     * un inventaire. La version précédente envoyait les douze premières piles trouvées en fouillant
+     * les cases dans l'ordre — une grille illisible dès qu'un coffre de bazar rangeait trente-deux
+     * objets différents. Celle-ci additionne les quantités par TYPE sur le conteneur entier et ne
+     * garde que les plus gros tas ; {@link RegardTell#filled} continue de porter le compte RÉEL
+     * d'emplacements occupés, indépendamment de ce plafond.
      */
-    static final int PREVIEW_CAP = 12;
+    static final int DOMINANT_CAP = 3;
 
     /**
      * Portée au-delà de laquelle une demande est refusée, en blocs.
@@ -131,22 +133,29 @@ public final class Regard {
             // de bloc-entité, jamais une construction de réponse.
             lastAnswered.put(player.getUUID(), now);
 
-            List<ItemStack> preview = new ArrayList<>();
-            int filled = 0;
             int total = container.getContainerSize();
+            int filled = 0;
+            // Additionné par TYPE d'objet, pas par case : un coffre qui range 768 pierres réparties
+            // sur douze piles doit compter comme UN article de 768, pas douze lignes identiques.
+            Map<Item, Integer> counts = new LinkedHashMap<>();
             for (int slot = 0; slot < total; slot++) {
                 ItemStack stack = container.getItem(slot);
                 if (stack.isEmpty()) {
                     continue;
                 }
                 filled++;
-                if (preview.size() < PREVIEW_CAP) {
-                    preview.add(stack.copy());
-                }
+                counts.merge(stack.getItem(), stack.getCount(), Integer::sum);
             }
+            List<ItemStack> dominant = counts.entrySet().stream()
+                    .sorted(Map.Entry.<Item, Integer>comparingByValue().reversed())
+                    .limit(DOMINANT_CAP)
+                    .map(entry -> new ItemStack(entry.getKey(), entry.getValue()))
+                    .toList();
 
             int cookPercent = -1;
             int fuelPercent = -1;
+            ItemStack furnaceInput = ItemStack.EMPTY;
+            ItemStack furnaceFuel = ItemStack.EMPTY;
             if (blockEntity instanceof AbstractFurnaceBlockEntity furnace) {
                 FurnaceProgressAccessor access = (FurnaceProgressAccessor) furnace;
                 int cookTotal = access.lanterne$cookingTotalTime();
@@ -159,10 +168,14 @@ public final class Regard {
                     fuelPercent = Math.min(100,
                             (int) (100L * access.lanterne$litTimeRemaining() / litTotal));
                 }
+                // Cases fixes d'un four (voir la Javadoc de RegardTell) : nommées, pas classées.
+                furnaceInput = furnace.getItem(0).copy();
+                furnaceFuel = furnace.getItem(1).copy();
             }
 
             PacketDistributor.sendToPlayer(player,
-                    new RegardTell(pos, preview, filled, total, cookPercent, fuelPercent));
+                    new RegardTell(pos, dominant, filled, total, cookPercent, fuelPercent,
+                            furnaceInput, furnaceFuel));
         });
     }
 }
