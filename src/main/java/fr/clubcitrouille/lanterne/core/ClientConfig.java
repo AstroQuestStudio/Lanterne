@@ -49,6 +49,9 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
     public static final ModConfigSpec.BooleanValue GAUGE;
     public static final ModConfigSpec.BooleanValue REGARD;
+    public static final ModConfigSpec.BooleanValue ZOOM;
+    public static final ModConfigSpec.IntValue ZOOM_FACTOR;
+    public static final ModConfigSpec.IntValue ZOOM_SPEED;
     public static final ModConfigSpec.BooleanValue LENS;
     public static final ModConfigSpec.EnumValue<Lens.Preset> LENS_PRESET;
     public static final ModConfigSpec.EnumValue<Upscale.Edge> LENS_EDGE;
@@ -258,6 +261,43 @@ public final class ClientConfig {
                 "requete reseau toutes les quelques images UNIQUEMENT quand la cible est un conteneur",
                 "reel - voir Radiographie pour la mesure. Desactive : cout nul, rien n'est evalue.")
                 .define("regard", true);
+        ZOOM = BUILDER.comment(
+                "LA LONGUEVUE : touche C maintenue, comme Sodium - le champ de vision se reduit",
+                "progressivement pour zoomer la camera sans avoir besoin d'une longue-vue en main,",
+                "et remonte progressivement au relachement.",
+                "",
+                "S'interrompt proprement des qu'un ecran s'ouvre (inventaire, coffre, etabli...) :",
+                "le champ de vision ne reste jamais bloque en zoom apres la fermeture d'un ecran,",
+                "meme si la touche C est restee physiquement enfoncee pendant que l'ecran etait",
+                "ouvert.",
+                "",
+                "La sensibilite de la souris baisse dans la meme proportion pendant le zoom -",
+                "verifie par javap sur le vrai jar patche que la longue-vue vanilla fait deja",
+                "exactement cela (MouseHandler.turnPlayer divise la sensibilite par huit en visee",
+                "premiere personne) : regarder au loin avec la sensibilite normale donnerait une",
+                "camera hypernerveuse dans l'image zoomee.",
+                "",
+                "Branche sur les evenements NeoForge ComputeFovModifierEvent (meme point d'accroche",
+                "que le tremblement du FOV a la course ou au tir a l'arc) et CalculatePlayerTurnEvent -",
+                "aucun mixin sur GameRenderer/Camera/MouseHandler, donc aucun risque de conflit avec",
+                "un autre module de ce depot qui toucherait par ailleurs au rendu ou a la camera.",
+                "",
+                "N'utilise PAS le mecanisme de longue-vue vanilla (LocalPlayer.isScoping) : celui-ci",
+                "est attache a \"isUsingItem\", qui ralentit aussi le deplacement et coupe la course -",
+                "un comportement voulu pour l'objet longue-vue, pas pour une simple touche de zoom.")
+                .define("longuevue", true);
+        ZOOM_FACTOR = BUILDER.comment(
+                "Facteur de zoom : le champ de vision est divise par cette valeur en zoom complet.",
+                "4 (defaut) : le meme facteur que Sodium et OptiFine appliquent par defaut.")
+                .defineInRange("longuevue_facteur", 4, 2, 10);
+        ZOOM_SPEED = BUILDER.comment(
+                "Vitesse de la transition : fraction de l'ecart restant comblee a CHAQUE TICK (un",
+                "vingtieme de seconde), a l'entree comme a la sortie du zoom - le meme principe que",
+                "le lissage des barres de vie du Regard.",
+                "",
+                "35 (defaut) : le zoom est visuellement installe en un peu moins d'un quart de",
+                "seconde. Plus haut : transition plus vive. Plus bas : plus lente.")
+                .defineInRange("longuevue_vitesse_transition", 35, 1, 100);
         LENS = BUILDER.comment(
                 "LA LENTILLE : rendre le monde plus petit que l'ecran, puis l'y etaler.",
                 "",

@@ -619,6 +619,12 @@ public final class Settings {
     private static boolean gauge;
     /** Le Regard : la tooltip d'inspection bloc/entité. Voir {@code client.regard.Sight}. */
     private static boolean regard = true;
+    /** La Longuevue : le zoom tenu au clavier. Voir {@code client.regard.Longuevue}. */
+    private static boolean zoom = true;
+    /** Le champ de vision est divisé par cette valeur en zoom complet. */
+    private static int zoomFactor = 4;
+    /** Fraction de l'écart restant comblée à chaque tick — même idiome que {@code Sight.smooth}. */
+    private static int zoomSpeedPercent = 35;
     private static boolean lens;
     private static boolean din = true;
     /**
@@ -1336,6 +1342,21 @@ public final class Settings {
         return regard;
     }
 
+    /** La Longuevue. Comme {@link #regard()} : un geste du joueur, pas de {@code master &&}. */
+    public static boolean zoom() {
+        return zoom;
+    }
+
+    /** Toujours au moins un : un facteur de un annulerait la division sans planter. */
+    public static int zoomFactor() {
+        return Math.max(1, zoomFactor);
+    }
+
+    /** La fraction de l'écart comblée à chaque tick, entre zéro et un. */
+    public static float zoomTransitionRate() {
+        return Math.max(1, Math.min(100, zoomSpeedPercent)) / 100f;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -1705,6 +1726,9 @@ public final class Settings {
         din = ClientConfig.DIN.get();
         gauge = ClientConfig.GAUGE.get();
         regard = ClientConfig.REGARD.get();
+        zoom = ClientConfig.ZOOM.get();
+        zoomFactor = ClientConfig.ZOOM_FACTOR.get();
+        zoomSpeedPercent = ClientConfig.ZOOM_SPEED.get();
         lens = ClientConfig.LENS.get();
         Lens.tune(ClientConfig.LENS_PRESET.get());
         // La nettete et la houle survivent desormais au redemarrage. Sans ces deux lignes, un

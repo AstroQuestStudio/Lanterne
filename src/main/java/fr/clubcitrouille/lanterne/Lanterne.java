@@ -183,6 +183,8 @@ public final class Lanterne {
             fr.clubcitrouille.lanterne.client.ponder.Hint.register(modBus);
             fr.clubcitrouille.lanterne.client.Gauge.register(modBus);
             fr.clubcitrouille.lanterne.client.regard.Sight.register(modBus);
+            // Meme raison encore : la touche de zoom reutilise elle aussi cette categorie.
+            fr.clubcitrouille.lanterne.client.regard.Longuevue.register(modBus);
             // Le rendu des tableaux : la mosaïque, le magot et le dessin n'existent que côté client
             // et ne doivent jamais être chargés par un serveur dédié.
             fr.clubcitrouille.lanterne.content.painting.CanvasRenderer.register(modBus);

@@ -18,6 +18,7 @@
   "item.lanterne.coeur_de_repere": "Waypoint Heart",
   "block.lanterne.portail_repere": "Waypoint Portal",
   "key.lanterne.guide": "Illustrated guide (over an item)",
+  "key.lanterne.longuevue": "Zoom",
   "lanterne.guide.infobulle": "Hold %s for the illustrated guide",
   "lanterne.guide.hors_jeu": "The illustrated guide opens once you are in game.",
   "lanterne.guide.titre": "Illustrated guide",

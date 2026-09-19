@@ -18,6 +18,7 @@
   "item.lanterne.coeur_de_repere": "Cœur de repère",
   "block.lanterne.portail_repere": "Portail de repère",
   "key.lanterne.guide": "Guide illustré (sur un objet)",
+  "key.lanterne.longuevue": "Longue-vue (zoom)",
   "lanterne.guide.infobulle": "Maintiens %s pour le guide illustré",
   "lanterne.guide.hors_jeu": "Le guide illustré s'ouvre une fois en jeu.",
   "lanterne.guide.titre": "Guide illustré",
