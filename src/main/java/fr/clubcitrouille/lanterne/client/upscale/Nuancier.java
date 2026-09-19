@@ -132,14 +132,29 @@ import fr.clubcitrouille.lanterne.core.Settings;
  *       "vertex_shader": "minecraft:core/screenquad",
  *       "fragment_shader": "lanterne:post/mon_ao",
  *       "inputs": [
- *         { "sampler_name": "ColorSampler",  "target": "lanterne:scene" },
- *         { "sampler_name": "NormalSampler", "target": "lanterne:normal" }
+ *         { "sampler_name": "Color",  "target": "lanterne:scene" },
+ *         { "sampler_name": "Normal", "target": "lanterne:normal" }
  *       ],
  *       "output": "minecraft:main"
  *     }
  *   ]
  * }
  * }</pre>
+ *
+ * <p><b>{@code sampler_name} n'est PAS le nom de l'uniforme GLSL — {@code PostChain} lui ajoute
+ * toujours {@code "Sampler"}</b>, vérifié par {@code javap -v} sur le vrai jar patché
+ * ({@code PostChain.createPass}, bloc {@code BootstrapMethods} : un {@code invokedynamic
+ * makeConcatWithConstants} de gabarit littéral {@code "Sampler"}, appliqué à
+ * {@code Input.samplerName()} avant {@code BindGroupLayout.Builder.withUniform(...,
+ * COMBINED_IMAGE_SAMPLER)}). {@code "sampler_name": "Color"} exige donc un
+ * {@code uniform sampler2D ColorSampler;} côté GLSL — jamais {@code ColorSamplerSampler}, et jamais
+ * un uniforme nommé littéralement {@code Color}. C'est la convention déjà suivie par
+ * {@code aa_edge}/{@code fsr_easu}/{@code fsr_rcas} du jar principal ({@code "sampler_name": "In"}
+ * ↔ {@code InSampler}) — <b>découverte cette passe</b> après un échec réel en jeu
+ * ({@code ShaderCompileException: Unable to find shader defined uniform}) sur les nouvelles passes
+ * de bloom de {@link #creerClubCitrouille}, qui avaient écrit {@code "sampler_name": "InSampler"}
+ * (le nom GLSL complet, déjà suffixé) au lieu du nom de base attendu. Voir l'historique de ce
+ * fichier pour la version fautive.</p>
  *
  * <p>Un second nuancier de démonstration, {@code club_citrouille/}, est écrit automatiquement à
  * côté de {@code exemple_teinte/} par {@link #creerClubCitrouille} — même schéma minimal que
@@ -164,12 +179,27 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * ci-dessus) exécutée sans exception pendant plus de vingt images consécutives, image finale
  * valide (pas d'écran noir, pas de {@code NaN} rose).
  *
- * <p>{@link #creerClubCitrouille} écrit désormais <b>exactement</b> cette chaîne à quatre passes
- * vérifiée — plus besoin de la reconstituer à la main pour la reproduire : {@code
- * lentille_nuancier_actif = "club_citrouille"} dans {@code lanterne-client.toml}, avec
- * {@code lentille = true}, suffit. Voir l'historique de {@code Nuancier.java} pour la vérification
- * en jeu réel refaite sous le nom {@code club_citrouille} avec ce sélecteur, capture {@code Snap}
- * à l'appui elle aussi.
+ * <p>{@link #creerClubCitrouille} écrivait jusqu'à cette passe <b>exactement</b> cette chaîne à
+ * quatre passes vérifiée. Voir l'historique de {@code Nuancier.java} pour la vérification en jeu
+ * réel refaite sous le nom {@code club_citrouille} avec ce sélecteur, capture {@code Snap} à
+ * l'appui elle aussi.
+ *
+ * <p><b>Correction apportée cette passe, après un vrai échec en jeu</b> : les deux paragraphes
+ * ci-dessus donnent {@code "sampler_name": "ColorSampler"}/{@code "NormalSampler"} comme la
+ * convention qui aurait été vérifiée fonctionnelle. Une tentative d'ajouter deux passes de bloom à
+ * cette chaîne (voir plus bas) a échoué au chargement, en jeu réel, avec
+ * {@code ShaderCompileException: Unable to find shader defined uniform} — et la lecture du
+ * bytecode de {@code PostChain.createPass} qui a suivi (voir la note sur {@code sampler_name}
+ * au-dessus de l'exemple JSON du Javadoc de classe) montre que {@code sampler_name} n'est
+ * <b>jamais</b> le nom d'uniforme GLSL tel quel : {@code "Sampler"} y est toujours concaténé. Sous
+ * cette lecture, {@code "sampler_name": "ColorSampler"} demanderait un uniforme
+ * {@code ColorSamplerSampler}, que le GLSL de {@code club_citrouille_ao.fsh}/
+ * {@code club_citrouille_final.fsh} n'a jamais déclaré. Il n'a pas été possible de retester la
+ * chaîne d'origine telle quelle pour trancher si la vérification historique ci-dessus portait sur
+ * un jar différent ou était simplement erronée — mais {@link #creerClubCitrouille} utilise
+ * désormais {@code "sampler_name": "Color"}/{@code "Normal"}/{@code "Bloom"} (sans le suffixe),
+ * seule forme cohérente avec le bytecode lu et avec {@code aa_edge}/{@code fsr_easu}/
+ * {@code fsr_rcas}, qui n'ont eux jamais cessé de fonctionner.
  *
  * <h2>Ce que ce format N'offre PAS encore, honnêtement</h2>
  *
@@ -455,6 +485,13 @@ public final class Nuancier {
             // precedente de ce fichier utilisait "name"/"input"/{"target":...} -- un schema qui
             // n'a jamais correspondu au Codec reel, donc un JSON que ShaderManager n'aurait jamais
             // pu charger. Corrige cette passe, en meme temps que le repertoire post/ -> post_effect/.
+            //
+            // "sampler_name": "In", PAS "InSampler" -- PostChain.createPass concatene toujours
+            // "Sampler" au nom donne ici pour batir l'uniforme GLSL attendu (verifie par javap -v,
+            // BootstrapMethods de PostChain.class : invokedynamic makeConcatWithConstants de gabarit
+            // "Sampler"). "InSampler" ici aurait demande un uniforme "InSamplerSampler", absent de
+            // teinte.fsh -- exactement le bug trouve et corrige cette passe sur club_citrouille, ici
+            // corrige par la meme occasion avant qu'il ne soit exerce. Voir le Javadoc de classe.
             Files.writeString(post.resolve("teinte.json"), """
                     {
                       "passes": [
@@ -462,7 +499,7 @@ public final class Nuancier {
                           "vertex_shader": "minecraft:core/screenquad",
                           "fragment_shader": "lanterne:post/teinte",
                           "inputs": [
-                            { "sampler_name": "InSampler", "target": "lanterne:scene" }
+                            { "sampler_name": "In", "target": "lanterne:scene" }
                           ],
                           "output": "minecraft:main"
                         }
@@ -490,19 +527,55 @@ public final class Nuancier {
      * l'écrire sur le disque au premier lancement ne suffit toujours pas à l'activer, exactement
      * la même prudence que {@link #creerExemple}.
      *
-     * <h2>La chaîne écrite est la variante à quatre passes, pas la version à une seule</h2>
+     * <h2>La chaîne écrite est désormais une variante à six passes, pas quatre</h2>
      *
-     * <p>La toute première vérification en jeu réel de cet algorithme d'AO (voir le Javadoc de
+     * <p>La toute première vérification en jeu réel de l'algorithme d'AO seul (voir le Javadoc de
      * classe) l'avait branché comme <b>quatrième passe</b> d'une copie de
      * {@code upscale_aa_moyenne.json} — {@code aa_edge} → {@code fsr_easu} → {@code fsr_rcas} → AO
-     * — précisément pour l'observer sur un rendu qui ressemble à ce qu'un joueur voit vraiment,
-     * anticrénelage et remontée FSR compris, plutôt que sur une image brute. Cette méthode écrit
-     * désormais cette même chaîne à quatre passes telle quelle, au lieu d'une seule passe qu'il
-     * fallait auparavant recombiner à la main pour la reproduire : les trois premières passes
-     * référencent les nuanceurs {@code aa_edge}/{@code fsr_easu}/{@code fsr_rcas} déjà présents
-     * dans le jar principal du mod (résolus par la pile de packs de ressources — voir le Javadoc de
-     * classe, {@link #onAddPackFinders} — sans qu'il faille les recopier ici), et seule la
-     * quatrième référence un nuanceur propre à ce dossier.
+     * — précisément pour l'observer sur un rendu qui ressemble à ce qu'un joueur voit vraiment.
+     * Cette passe-là (renommée {@code club_citrouille_final}) reste la dernière de la chaîne, mais
+     * deux passes de plus s'intercalent désormais avant elle : {@code club_citrouille_bloom_h} puis
+     * {@code club_citrouille_bloom_v}, un flou gaussien séparable à 5 coefficients (poids
+     * {@code 0.227/0.195/0.122/0.054/0.016}, formule générique — voir par ex. learnopengl.com,
+     * « Bloom » — pas empruntée à un shaderpack précis) sur un seuil de luminance doux
+     * ({@code smoothstep(0.68, 0.92, luma)}), appliqué avec un PAS de deux texels entre échantillons
+     * pour porter le flou plus loin sans multiplier les lectures. Ce n'est PAS le flou HDR en
+     * pyramide de mip d'un vrai moteur : la toile composée ici est déjà LDR (bornée {@code 0..1}
+     * par {@code fsr_rcas}), donc ce halo n'éclate que ce qui est déjà proche de blanc à l'écran
+     * (soleil, lave, lanternes, feu) — un « bloom léger », pas un bloom physiquement correct.
+     *
+     * <h2>Ce qu'ajoute {@code club_citrouille_final} par rapport à la version AO-seule</h2>
+     *
+     * <p>Inspiré, dans les limites honnêtes de ce pipeline (couleur + normales + profondeur
+     * reconstruite, aucune matrice caméra, aucun G-buffer d'albédo/position monde — voir la section
+     * « Ce que ce format n'offre PAS encore » du Javadoc de classe), par les techniques les plus
+     * visibles de <i>Complementary Reimagined</i> (étudié en lecture seule depuis une copie de
+     * {@code ComplementaryReimagined_r5.9.zip}, jamais son code copié — voir {@code NOTICE.md}) :
+     * <ul>
+     *   <li><b>AO à deux rayons</b> (2,5 et 5,5 texels, 16 échantillons au lieu de 8) — un résultat
+     *       plus doux que l'anneau unique d'origine, toujours écran-espace, toujours sans matrices
+     *       caméra.</li>
+     *   <li><b>Bloom léger</b> — voir ci-dessus.</li>
+     *   <li><b>Brume de distance</b> — la profondeur brute déjà portée par {@code lanterne:normal}
+     *       (alpha, proche = 1, lointain = 0) mélange une teinte chaude sur la géométrie réelle
+     *       lointaine ({@code sky} exclu : le ciel est déjà coloré par vanilla, pas besoin de
+     *       brume par-dessus). Aucune distance linéaire réelle n'est disponible dans une passe
+     *       {@code PostChain} JSON (voir la section citée) : c'est une courbe {@code smoothstep} sur
+     *       la profondeur NON linéaire, calibrée à l'œil via {@code Snap}, pas une brume physique.</li>
+     *   <li><b>Étalonnage cinématographique</b> — une courbe filmique bon marché (Hejl/Burgess-Dawson,
+     *       {@code (x·(6.2x+0.5))⁄(x·(6.2x+1.7)+0.06)}, formule publique largement diffusée, pas
+     *       propre à un shaderpack), une saturation légèrement relevée, et un virage bicolore
+     *       (« teal & orange » — ombres tirant vers le froid, hautes lumières vers le chaud), une
+     *       technique générique de retouche, écrite ici avec ses propres coefficients.</li>
+     *   <li><b>Vignette</b> légère et <b>tramage</b> (dither) pour ne pas faire bander le dégradé
+     *       ajouté par l'étalonnage.</li>
+     * </ul>
+     *
+     * <p><b>Ce qui n'est délibérément PAS tenté</b>, pour ne pas sur-vendre : ombres dynamiques
+     * (aucun shadow map, ce pipeline n'en a pas), eau animée avancée (aucune passe {@code gbuffers_water}
+     * à intercepter), éclairage volumétrique (demanderait une marche à pas dans le view-space depuis
+     * une source de lumière connue, hors de portée sans matrices caméra exposées à ce nuancier) —
+     * voir le Javadoc de classe pour ce qui manque structurellement.
      */
     private static void creerClubCitrouille(Path racine) {
         try {
@@ -518,82 +591,216 @@ public final class Nuancier {
                         "pack_format": 97,
                         "min_format": 97,
                         "max_format": 97,
-                        "description": "Lanterne -- Club Citrouille : AO ecran-espace a partir de lanterne:normal, activable via lentille_nuancier_actif"
+                        "description": "Lanterne -- Club Citrouille : AO deux rayons + bloom leger + brume + etalonnage cinematographique, depuis lanterne:normal, activable via lentille_nuancier_actif"
                       }
                     }
                     """);
 
-            // Meme algorithme que la version d'origine (demo_ao_normales) : occlusion par
-            // comparaison de profondeur/normale entre le fragment courant et huit voisins fixes.
-            // Volontairement simple -- "un effet simple, genre AO ecran-espace basique" -- pas une
-            // reconstruction en vraie distance 3D, qui demanderait les matrices camera qu'un
-            // nuancier PostChain ne peut justement pas recevoir (voir le Javadoc de classe, section
-            // "ce que ce format n'offre pas encore"). Seule addition sur ce rebranding : une teinte
-            // chaude sur l'ombrage de contact plutot qu'un simple assombrissement neutre -- signature
-            // visuelle discrete de Club Citrouille, qui ne touche a aucune ligne du calcul d'AO
-            // lui-meme.
-            Files.writeString(shaders.resolve("club_citrouille_ao.fsh"), """
+            // Seuil de luminance doux + flou gaussien separable 5 coefficients, PREMIERE moitie
+            // (horizontale). Poids 0.227027/0.1945946/0.1216216/0.054054/0.016216 : coefficients
+            // generiques d'un flou gaussien a 9 echantillons repandu (voir par ex. learnopengl.com,
+            // chapitre "Bloom") -- pas empruntes a un shaderpack donne. Le PAS de deux texels entre
+            // echantillons (au lieu d'un) porte le flou deux fois plus loin sans ajouter de lectures :
+            // c'est ce qui donne un vrai halo visible autour du soleil/de la lave/des citrouilles
+            // allumees plutot qu'un flou d'un ou deux pixels, invisible a l'echelle de l'ecran.
+            Files.writeString(shaders.resolve("club_citrouille_bloom_h.fsh"), """
                     #version 410
 
-                    uniform sampler2D ColorSampler;
-                    uniform sampler2D NormalSampler;
+                    uniform sampler2D InSampler;
 
                     layout(location = 0) in vec2 texCoord;
 
                     layout(location = 0) out vec4 fragColor;
 
-                    // La teinte du contact-shadow : legerement orange plutot que grise, pour que
-                    // l'AO de ce nuancier se reconnaisse a l'oeil. Le calcul d'occlusion lui-meme,
-                    // en dessous, est identique a celui de la toute premiere version.
+                    float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+                    void main() {
+                        vec2 texel = 1.0 / vec2(textureSize(InSampler, 0));
+                        float weights[5] = float[](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+                        float stride = 2.0;
+
+                        vec3 center = texture(InSampler, texCoord).rgb;
+                        vec3 sum = center * smoothstep(0.68, 0.92, luma(center)) * weights[0];
+
+                        for (int i = 1; i < 5; i++) {
+                            float off = float(i) * stride * texel.x;
+                            vec3 a = texture(InSampler, texCoord + vec2(off, 0.0)).rgb;
+                            vec3 b = texture(InSampler, texCoord - vec2(off, 0.0)).rgb;
+                            sum += a * smoothstep(0.68, 0.92, luma(a)) * weights[i];
+                            sum += b * smoothstep(0.68, 0.92, luma(b)) * weights[i];
+                        }
+
+                        fragColor = vec4(sum, 1.0);
+                    }
+                    """);
+
+            // Seconde moitie (verticale) du meme flou. Le seuil de luminance n'est PAS reapplique
+            // ici : la passe horizontale l'a deja fait, la reappliquer assombrirait le bord du halo
+            // au lieu de l'etaler proprement.
+            Files.writeString(shaders.resolve("club_citrouille_bloom_v.fsh"), """
+                    #version 410
+
+                    uniform sampler2D InSampler;
+
+                    layout(location = 0) in vec2 texCoord;
+
+                    layout(location = 0) out vec4 fragColor;
+
+                    void main() {
+                        vec2 texel = 1.0 / vec2(textureSize(InSampler, 0));
+                        float weights[5] = float[](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+                        float stride = 2.0;
+
+                        vec3 sum = texture(InSampler, texCoord).rgb * weights[0];
+                        for (int i = 1; i < 5; i++) {
+                            float off = float(i) * stride * texel.y;
+                            sum += texture(InSampler, texCoord + vec2(0.0, off)).rgb * weights[i];
+                            sum += texture(InSampler, texCoord - vec2(0.0, off)).rgb * weights[i];
+                        }
+
+                        fragColor = vec4(sum, 1.0);
+                    }
+                    """);
+
+            // La passe finale : AO deux rayons (16 echantillons au lieu de 8), brume de distance sur
+            // la geometrie reelle, ajout du bloom, puis un etalonnage cinematographique complet
+            // (courbe filmique + saturation + virage bicolore + vignette + tramage). Voir le Javadoc
+            // de la methode pour le detail et les sources de chaque technique -- rien ici n'est copie
+            // de Complementary Reimagined, seulement inspire de ses effets les plus visibles dans les
+            // limites reelles de ce pipeline (pas de matrices camera exposees a un nuancier tiers).
+            Files.writeString(shaders.resolve("club_citrouille_final.fsh"), """
+                    #version 410
+
+                    uniform sampler2D ColorSampler;
+                    uniform sampler2D NormalSampler;
+                    uniform sampler2D BloomSampler;
+
+                    layout(location = 0) in vec2 texCoord;
+
+                    layout(location = 0) out vec4 fragColor;
+
+                    // La teinte du contact-shadow et de la brume lointaine : chaudes plutot que
+                    // grises/bleues, pour que la signature visuelle de Club Citrouille se reconnaisse
+                    // a l'oeil aussi bien de pres (AO) que de loin (brume).
                     const vec3 TEINTE_CITROUILLE = vec3(0.55, 0.32, 0.10);
+                    const vec3 FOG_TEINTE = vec3(0.58, 0.42, 0.30);
+
+                    float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+                    // Courbe filmique bon marche (Hejl/Burgess-Dawson) : formule publique largement
+                    // diffusee, pas propre a un shaderpack particulier -- comprime les hautes lumieres
+                    // sans les ecreter brutalement, ce que fait aussi le tonemap de Complementary,
+                    // avec sa propre formule bien plus lourde (voir program/composite5.glsl du
+                    // shaderpack, jamais copiee ici).
+                    vec3 filmicTonemap(vec3 c) {
+                        vec3 x = max(vec3(0.0), c - 0.004);
+                        return (x * (6.2 * x + 0.5)) / (x * (6.2 * x + 1.7) + 0.06);
+                    }
+
+                    vec3 grade(vec3 c) {
+                        c *= 1.05;
+                        c = filmicTonemap(c);
+
+                        float l = luma(c);
+                        c = mix(vec3(l), c, 1.14);
+
+                        // Virage bicolore "teal & orange" : ombres legerement froides, hautes lumieres
+                        // legerement chaudes -- technique generique de retouche cinema, coefficients
+                        // propres a ce fichier.
+                        vec3 shadowTint = vec3(0.965, 1.0, 1.035);
+                        vec3 highTint = vec3(1.06, 1.0, 0.90);
+                        c *= mix(shadowTint, highTint, smoothstep(0.05, 0.85, l));
+
+                        c = (c - 0.5) * 1.05 + 0.5;
+                        return clamp(c, 0.0, 1.0);
+                    }
 
                     void main() {
                         vec4 gbuf = texture(NormalSampler, texCoord);
                         vec3 n0 = gbuf.rgb;
                         float d0 = gbuf.a;
+                        bool sky = d0 < 0.001 || dot(n0, n0) < 0.001;
 
                         vec3 color = texture(ColorSampler, texCoord).rgb;
+                        vec3 bloom = texture(BloomSampler, texCoord).rgb;
 
-                        if (d0 < 0.001 || dot(n0, n0) < 0.001) {
-                            fragColor = vec4(color, 1.0);
-                            return;
-                        }
-
-                        vec2 texel = 1.0 / vec2(textureSize(NormalSampler, 0));
-                        const int SAMPLES = 8;
-                        vec2 kernel[8] = vec2[](
-                            vec2( 1.0,  0.0), vec2(-1.0,  0.0), vec2( 0.0,  1.0), vec2( 0.0, -1.0),
-                            vec2( 0.7071,  0.7071), vec2(-0.7071,  0.7071),
-                            vec2( 0.7071, -0.7071), vec2(-0.7071, -0.7071)
-                        );
-
-                        float radiusTexels = 3.0;
+                        // --- AO ecran-espace a deux rayons : plus doux que l'unique anneau d'origine,
+                        //     toujours sans reconstruction 3D reelle (pas de matrices camera ici). ---
                         float occlusion = 0.0;
-                        for (int i = 0; i < SAMPLES; i++) {
-                            vec2 uv = texCoord + kernel[i] * texel * radiusTexels;
-                            vec4 s = texture(NormalSampler, uv);
-                            float depthDelta = s.a - d0;
-                            float agree = max(dot(n0, s.rgb), 0.0);
-                            occlusion += agree * smoothstep(0.0015, 0.02, depthDelta);
+                        if (!sky) {
+                            vec2 texel = 1.0 / vec2(textureSize(NormalSampler, 0));
+                            vec2 kernel[8] = vec2[](
+                                vec2( 1.0,  0.0), vec2(-1.0,  0.0), vec2( 0.0,  1.0), vec2( 0.0, -1.0),
+                                vec2( 0.7071,  0.7071), vec2(-0.7071,  0.7071),
+                                vec2( 0.7071, -0.7071), vec2(-0.7071, -0.7071)
+                            );
+                            float radii[2] = float[](2.5, 5.5);
+                            float ringWeights[2] = float[](0.6, 0.4);
+                            for (int ring = 0; ring < 2; ring++) {
+                                float ringOcclusion = 0.0;
+                                for (int i = 0; i < 8; i++) {
+                                    vec2 uv = texCoord + kernel[i] * texel * radii[ring];
+                                    vec4 s = texture(NormalSampler, uv);
+                                    float depthDelta = s.a - d0;
+                                    float agree = max(dot(n0, s.rgb), 0.0);
+                                    ringOcclusion += agree * smoothstep(0.0015, 0.02, depthDelta);
+                                }
+                                occlusion += (ringOcclusion / 8.0) * ringWeights[ring];
+                            }
                         }
-                        occlusion /= float(SAMPLES);
 
-                        float strength = 0.9;
-                        vec3 shaded = mix(color, color * TEINTE_CITROUILLE, occlusion * strength);
-                        fragColor = vec4(shaded, 1.0);
+                        // --- Brume de distance, geometrie reelle seulement (le ciel est deja colore
+                        //     par vanilla) : courbe sur la profondeur BRUTE, non lineaire, calibree a
+                        //     l'oeil via Snap -- aucune distance 3D vraie n'est disponible ici. ---
+                        float fog = sky ? 0.0 : (1.0 - smoothstep(0.0, 0.18, d0));
+
+                        vec3 shaded = mix(color, color * TEINTE_CITROUILLE, occlusion * 0.75);
+                        shaded = mix(shaded, FOG_TEINTE * max(luma(shaded), 0.35), fog * 0.32);
+
+                        // Le bloom s'ajoute a TOUS les pixels, ciel compris : c'est lui qui rend le
+                        // soleil/la lune/la lave visiblement plus lumineux, sans lui aucun effet de ce
+                        // nuancier ne touchait jamais le ciel (l'ancienne version s'arretait net sur
+                        // "sky", voir l'historique de ce fichier).
+                        shaded += bloom * 0.85;
+
+                        shaded = grade(shaded);
+
+                        float vig = 1.0 - dot(texCoord - 0.5, texCoord - 0.5) * 0.55;
+                        shaded *= vig;
+
+                        // Tramage : la courbe filmique et le virage bicolore ci-dessus introduisent un
+                        // gradient plus marque qu'une simple teinte d'AO -- sans ce bruit, un ciel de
+                        // jour uniforme bande visiblement en bandes de 1-2 niveaux.
+                        float dither = fract(sin(dot(texCoord * vec2(1920.0, 1080.0), vec2(12.9898, 78.233))) * 43758.5453);
+                        shaded += (dither - 0.5) * (1.0 / 255.0);
+
+                        fragColor = vec4(clamp(shaded, 0.0, 1.0), 1.0);
                     }
                     """);
 
-            // La chaine a quatre passes reellement verifiee en jeu (voir le Javadoc de la methode) :
-            // les trois premieres sont EXACTEMENT celles de upscale_aa_moyenne.json (jar principal),
-            // rejouees ici pour que club_citrouille se comporte, hors AO, comme la chaine par
-            // defaut -- pas de regression de nettete/anticrenelage a activer ce nuancier. La
-            // quatrieme ajoute l'AO en lisant lanterne:normal.
+            // La chaine a six passes : les trois premieres sont EXACTEMENT celles de
+            // upscale_aa_moyenne.json (jar principal), rejouees ici pour que club_citrouille se
+            // comporte, hors effets propres, comme la chaine par defaut -- pas de regression de
+            // nettete/anticrenelage a activer ce nuancier. Les deux suivantes construisent le bloom
+            // leger (horizontal puis vertical) a partir de la couleur post-FSR. La sixieme combine
+            // tout : AO, brume, bloom, etalonnage.
+            //
+            // "sampler_name" ci-dessous est TOUJOURS le nom de base ("In", "Color", "Normal",
+            // "Bloom"), JAMAIS le nom d'uniforme GLSL complet : PostChain.createPass concatene
+            // "Sampler" dessus avant de batir le BindGroupLayout demande au pilote (verifie par
+            // javap -v sur PostChain.class -- BootstrapMethods : invokedynamic
+            // makeConcatWithConstants, gabarit litteral "Sampler"). Un premier essai de cette passe
+            // avait ecrit "InSampler"/"ColorSampler"/"NormalSampler"/"BloomSampler" ici (le nom GLSL
+            // complet, deja suffixe) -- plante reel en jeu (ShaderCompileException: Unable to find
+            // shader defined uniform) sur la premiere passe de bloom, corrige ici. Voir le Javadoc de
+            // classe pour la preuve complete et son historique pour la version fautive.
             Files.writeString(post.resolve("club_citrouille.json"), """
                     {
                       "targets": {
                         "swap": { "persistent": true },
-                        "preao": { "persistent": true }
+                        "preao": { "persistent": true },
+                        "bloomh": { "persistent": true },
+                        "bloomv": { "persistent": true }
                       },
                       "passes": [
                         {
@@ -627,10 +834,27 @@ public final class Nuancier {
                         },
                         {
                           "vertex_shader": "minecraft:core/screenquad",
-                          "fragment_shader": "lanterne:post/club_citrouille_ao",
+                          "fragment_shader": "lanterne:post/club_citrouille_bloom_h",
                           "inputs": [
-                            { "sampler_name": "ColorSampler", "target": "preao" },
-                            { "sampler_name": "NormalSampler", "target": "lanterne:normal" }
+                            { "sampler_name": "In", "target": "preao", "bilinear": true }
+                          ],
+                          "output": "bloomh"
+                        },
+                        {
+                          "vertex_shader": "minecraft:core/screenquad",
+                          "fragment_shader": "lanterne:post/club_citrouille_bloom_v",
+                          "inputs": [
+                            { "sampler_name": "In", "target": "bloomh", "bilinear": true }
+                          ],
+                          "output": "bloomv"
+                        },
+                        {
+                          "vertex_shader": "minecraft:core/screenquad",
+                          "fragment_shader": "lanterne:post/club_citrouille_final",
+                          "inputs": [
+                            { "sampler_name": "Color", "target": "preao" },
+                            { "sampler_name": "Normal", "target": "lanterne:normal" },
+                            { "sampler_name": "Bloom", "target": "bloomv" }
                           ],
                           "output": "minecraft:main"
                         }
@@ -638,9 +862,9 @@ public final class Nuancier {
                     }
                     """);
 
-            Lanterne.LOG.info("[NUANCIER] dossier {} cree (Club Citrouille -- AO depuis lanterne:normal) -- "
-                    + "pose \"lentille_nuancier_actif = 'club_citrouille'\" (et \"lentille = true\") dans "
-                    + "lanterne-client.toml pour l'activer", racine);
+            Lanterne.LOG.info("[NUANCIER] dossier {} cree (Club Citrouille -- AO deux rayons + bloom leger + "
+                    + "brume + etalonnage cinematographique) -- pose \"lentille_nuancier_actif = "
+                    + "'club_citrouille'\" (et \"lentille = true\") dans lanterne-client.toml pour l'activer", racine);
         } catch (IOException problem) {
             Lanterne.LOG.warn("[NUANCIER] impossible de creer le nuancier Club Citrouille dans {}", racine, problem);
         }
