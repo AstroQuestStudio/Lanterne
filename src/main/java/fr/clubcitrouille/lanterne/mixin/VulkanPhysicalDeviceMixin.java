@@ -15,6 +15,7 @@ import org.lwjgl.vulkan.VkPhysicalDevice;
 import com.mojang.renderpearl.backend.vulkan.VulkanPhysicalDevice;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.client.Sonde;
 
 /**
  * La vraie liste d'extensions Vulkan que le pilote expose — avant tout filtrage du moteur.
@@ -57,6 +58,14 @@ import fr.clubcitrouille.lanterne.Lanterne;
  *
  * <p>Il ne change aucun comportement — uniquement un {@code @Inject} en lecture seule qui journalise.
  * Aucun risque de régression sur la sélection du device ou la création du backend.
+ *
+ * <h2>Second point d'accroche, ajouté au même endroit</h2>
+ *
+ * <p>{@link #lanterne$logDescriptorIndexingSupport} est un second {@code @Inject} INDÉPENDANT sur ce
+ * même {@code <init>}/{@code RETURN} — pas une modification du premier. Voir
+ * {@link fr.clubcitrouille.lanterne.client.Sonde} pour ce qu'il journalise et pourquoi (le support
+ * matériel réel de l'indexation de descripteurs, jamais interrogé ailleurs dans ce moteur pour ces
+ * bits précis) et le verdict complet sur pourquoi ce chantier ne va pas plus loin qu'un diagnostic.
  */
 @Mixin(VulkanPhysicalDevice.class)
 public abstract class VulkanPhysicalDeviceMixin {
@@ -80,5 +89,10 @@ public abstract class VulkanPhysicalDeviceMixin {
         Lanterne.LOG.info("[LANTERNE][VK] Extensions BRUTES du pilote pour {} ({}) — {} au total, "
                         + "AVANT tout filtrage par VulkanFeatureSets : {}",
                 this.deviceName(), this.vendorName(), this.vkDeviceExtensions.capacity(), extensions);
+    }
+
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void lanterne$logDescriptorIndexingSupport(VkPhysicalDevice vkPhysicalDevice, CallbackInfo ci) {
+        Sonde.logDescriptorIndexingSupport(vkPhysicalDevice, this.deviceName(), this.vendorName());
     }
 }

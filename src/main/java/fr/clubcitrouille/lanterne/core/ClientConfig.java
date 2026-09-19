@@ -63,6 +63,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue DIN_WINDOW;
     public static final ModConfigSpec.BooleanValue EMPREINTE;
     public static final ModConfigSpec.BooleanValue GUET;
+    public static final ModConfigSpec.BooleanValue SONDE_INDEXATION;
 
     public static final ModConfigSpec SPEC;
 
@@ -493,6 +494,40 @@ public final class ClientConfig {
                 "",
                 "NON MESURE : eteint par defaut, comme tout module non mesure dans ce depot.")
                 .define("guet", false);
+
+        SONDE_INDEXATION = BUILDER.comment(
+                "LA SONDE : constate, SANS RIEN CHANGER AU RENDU, si le pilote de CETTE machine",
+                "supporte reellement les quatre bits Vulkan qu'exigerait un rendu de textures",
+                "bindless (indexation de descripteurs, VK_EXT_descriptor_indexing) :",
+                "shaderSampledImageArrayNonUniformIndexing, descriptorBindingPartiallyBound,",
+                "runtimeDescriptorArray, descriptorBindingSampledImageUpdateAfterBind.",
+                "",
+                "POURQUOI CE MODULE EXISTE SANS RENDU BINDLESS DERRIERE. Enquete complete, verifiee",
+                "par lecture de bytecode/code reel (jamais suppose) : ce moteur n'a CE SOIR aucun",
+                "point d'application ou le bindless apporterait un gain net mesurable en theorie.",
+                "Le terrain lie l'atlas de blocs comme UNE SEULE texture pour tout le rendu",
+                "solide/decoupe/translucide (RenderTypes.java, vanilla) et ses sections sont deja",
+                "regroupees en vkCmdDrawIndexedIndirect par lots (voir Guet ci-dessus) - rien a",
+                "indexer dynamiquement, rien a regrouper de plus. Les entites/objets lient deja leur",
+                "texture au RenderType/pipeline lui-meme (RenderSetup, vanilla) : en changer appelle",
+                "deja VulkanRenderPass.setPipeline, qui force un descriptor set entierement neuf",
+                "QUOI QU'IL ARRIVE - le bindless n'evite donc pas cet appel, il n'en reduit que la",
+                "taille. Et le mecanisme actuel (VulkanRenderPass.pushDescriptors, verifie par",
+                "lecture de code) tourne deja sur VK_KHR_push_descriptor - extension REQUISE de ce",
+                "moteur - PAS sur un VkDescriptorPool classique : aucun vkAllocateDescriptorSets ni",
+                "vkCreateDescriptorPool n'existe nulle part dans ce moteur pour les descripteurs de",
+                "rendu, donc le cout que le bindless supprime habituellement (allocation/pool/rebind)",
+                "est deja structurellement absent ici.",
+                "",
+                "CE QUE CE MODULE NE FAIT PAS : aucun tableau de descripteurs, aucune modification de",
+                "VulkanRenderPipeline.compile (le pipeline layout PARTAGE par chaque pipeline du",
+                "moteur), aucun shader touche, aucune extension ni fonctionnalite demandee a la",
+                "creation du device. Une requete vkGetPhysicalDeviceFeatures2 separee et jetable, sur",
+                "une structure allouee sur la pile - voir Sonde.java (package client).",
+                "",
+                "NON MESURE, sans consommateur en aval : eteint par defaut, comme tout module non",
+                "mesure dans ce depot.")
+                .define("sonde_indexation", false);
 
         BUILDER.pop();
         SPEC = BUILDER.build();
