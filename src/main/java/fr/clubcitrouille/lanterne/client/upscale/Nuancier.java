@@ -237,9 +237,20 @@ public final class Nuancier {
         }
         Path racine = dossier();
         if (!Files.isDirectory(racine)) {
+            // NE PAS "return" ici : c'était la vraie cause (bytecode-vérifiée séparément, voir
+            // registerPack) d'un nuancier "introuvable" sur le TOUT PREMIER lancement d'une
+            // instance. creerExemple/creerClubCitrouille n'écrivent que des FICHIERS sur le
+            // disque -- rien de tout cela n'appelle event.addRepositorySource, la seule chose qui
+            // rend un dossier visible à Pack.readMetaAndCreate/ShaderManager POUR CETTE SESSION.
+            // Un "return" immédiat après l'écriture laissait donc le nuancier flambant neuf
+            // invisible jusqu'au PROCHAIN démarrage du client -- reproduit en jeu réel (run
+            // "lambdaform", dossier shaderpacks/ absent au lancement) : "club_citrouille charge
+            // comme pack de ressources" n'apparaissait JAMAIS dans ce journal-là, et
+            // ShaderManager échouait avec exactement "Attempted to load a non-existent post
+            // effect lanterne:club_citrouille". On laisse donc tomber dans la branche
+            // d'enregistrement ci-dessous, sur le dossier qu'on vient d'écrire.
             creerExemple(racine);
             creerClubCitrouille(racine);
-            return;
         }
         try (var entrees = Files.list(racine)) {
             entrees.filter(Files::isDirectory).forEach(nuancierDir -> {
@@ -248,11 +259,60 @@ public final class Nuancier {
                             nuancierDir.getFileName());
                     return;
                 }
+                repareMetaSiPerime(nuancierDir);
                 verifierAvertissement(nuancierDir);
                 registerPack(event, nuancierDir);
             });
         } catch (IOException problem) {
             Lanterne.LOG.warn("[NUANCIER] lecture de {} impossible", racine, problem);
+        }
+    }
+
+    /**
+     * Répare un {@code pack.mcmeta} périmé pour les deux nuanciers que ce module écrit lui-même.
+     *
+     * <p>{@link #creerExemple}/{@link #creerClubCitrouille} n'écrivent leurs fichiers qu'au tout
+     * premier lancement, quand {@code shaderpacks/} n'existe pas encore — voir
+     * {@link #onAddPackFinders}. Une instance créée avant l'ajout de {@code min_format}/
+     * {@code max_format} à ces gabarits garde donc, de lancement en lancement, l'ancien
+     * {@code pack.mcmeta} : c'est le cas réellement observé sur {@code exemple_teinte/} de
+     * l'instance « test 1 » (journal : {@code Error reading pack metadata, attempting fallback
+     * type} à chaque démarrage). Sans conséquence fonctionnelle pour {@code exemple_teinte}
+     * lui-même — {@code Pack.readPackMetadata} retombe sur un type minimal et le pack se charge
+     * quand même — mais un journal qui crie au premier lancement pour un fichier que ce module a
+     * écrit lui-même, avec le mauvais contenu, n'a pas de raison de continuer à le faire : ce n'est
+     * réparé QUE pour les deux dossiers que {@link #creerExemple}/{@link #creerClubCitrouille}
+     * possèdent, jamais pour un nuancier tiers déposé par un joueur, dont le {@code pack.mcmeta} lui
+     * appartient.
+     */
+    private static void repareMetaSiPerime(Path nuancierDir) {
+        String nom = nuancierDir.getFileName().toString();
+        if (!nom.equals("exemple_teinte") && !nom.equals("club_citrouille")) {
+            return;
+        }
+        Path meta = nuancierDir.resolve("pack.mcmeta");
+        try {
+            String contenu = Files.readString(meta);
+            if (contenu.contains("min_format")) {
+                return; // déjà à jour
+            }
+            String description = nom.equals("exemple_teinte")
+                    ? "Nuancier d'exemple Lanterne — teinte sepia"
+                    : "Lanterne -- Club Citrouille : activable via lentille_nuancier_actif";
+            Files.writeString(meta, """
+                    {
+                      "pack": {
+                        "pack_format": 97,
+                        "min_format": 97,
+                        "max_format": 97,
+                        "description": "%s"
+                      }
+                    }
+                    """.formatted(description));
+            Lanterne.LOG.info("[NUANCIER] {} : pack.mcmeta périmé (min_format/max_format absents) régénéré",
+                    nom);
+        } catch (IOException problem) {
+            Lanterne.LOG.warn("[NUANCIER] {} : lecture/réparation de pack.mcmeta impossible", nom, problem);
         }
     }
 
@@ -262,10 +322,33 @@ public final class Nuancier {
             PackLocationInfo info = new PackLocationInfo(nom,
                     Component.literal("Lanterne — " + nuancierDir.getFileName()),
                     PackSource.DEFAULT, Optional.empty());
+            // required = true, et non false : la vraie cause du "Attempted to load a non-existent
+            // post effect lanterne:<nom>" observe en jeu reel (session du 19/09, instance "test 1",
+            // nuancier club_citrouille). Verifie par javap sur le VRAI jar client patche
+            // (net/minecraft/server/packs/repository/PackRepository.class, methode
+            // rebuildSelected) : la liste "selected" (celle qui alimente vraiment le
+            // ResourceManager) part des identifiants deja connus de options.txt
+            // ("resourcePacks:[]" sur cette instance -- jamais peuple pour un nuancier depose a la
+            // main), PUIS n'ajoute en plus que les packs dont Pack.isRequired() vaut vrai. Un pack
+            // non "required" reste donc seulement "available" (visible dans Options > Packs de
+            // ressources, d'ou le "... charge comme pack de ressources" au journal, qui ne prouve
+            // que la construction de l'objet Pack, jamais sa selection) mais n'est JAMAIS fusionne
+            // dans le ResourceManager tant qu'un joueur ne l'active pas a la main dans cet ecran --
+            // ce que ni la documentation de ce module ni /lanterne nuancier ne mentionnent, et que
+            // rien n'automatise. ShaderManager cherche alors assets/lanterne/post_effect/<nom>.json
+            // dans un ResourceManager qui n'a jamais recu ce pack : "non-existent" est donc litteral,
+            // pas une erreur de chemin ni de compilation GLSL -- le fichier existe bel et bien sur
+            // le disque, verifie cote-a-cote avec cette meme instance. required = true force son
+            // inclusion dans "selected" a chaque reload, quel que soit resourcePacks.txt, exactement
+            // comme le pack de ressources du mod lui-meme (mod/lanterne, toujours actif sans geste du
+            // joueur) -- cohérent avec la conception documentee plus haut : le nuancier ACTIF se
+            // choisit par /lanterne nuancier ou lanterne-client.toml, jamais par l'ecran Options >
+            // Packs de ressources, qui n'a donc aucune raison de gouverner si ses fichiers sont
+            // seulement visibles au jeu.
             Pack pack = Pack.readMetaAndCreate(info,
                     new PathPackResources.PathResourcesSupplier(nuancierDir),
                     PackType.CLIENT_RESOURCES,
-                    new PackSelectionConfig(false, Pack.Position.TOP, false));
+                    new PackSelectionConfig(true, Pack.Position.TOP, false));
             if (pack != null) {
                 consumer.accept(pack);
                 Lanterne.LOG.info("[NUANCIER] {} charge comme pack de ressources", nuancierDir.getFileName());
