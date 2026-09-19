@@ -61,6 +61,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue DIN_REGION;
     public static final ModConfigSpec.IntValue DIN_ALLOWANCE;
     public static final ModConfigSpec.IntValue DIN_WINDOW;
+    public static final ModConfigSpec.BooleanValue EMPREINTE;
 
     public static final ModConfigSpec SPEC;
 
@@ -423,6 +424,44 @@ public final class ClientConfig {
         DIN_WINDOW = BUILDER.comment(
                 "Duree de la fenetre glissante, en millisecondes.")
                 .defineInRange("vacarme_fenetre_ms", 250, 20, 5000);
+
+        EMPREINTE = BUILDER.comment(
+                "L'EMPREINTE : le cache de pipeline Vulkan (VkPipelineCache) garde d'un lancement a",
+                "l'autre, pour que le pilote reutilise le travail de compilation deja fait au lieu de",
+                "tout refaire a froid.",
+                "",
+                "CE QUE CE MODULE CORRIGE. Verifie par javap sur le vrai jar patche : ce moteur appelle",
+                "vkCreateGraphicsPipelines avec VK_NULL_HANDLE en cache pour LES TROIS variantes de",
+                "chaque pipeline (avec profondeur+stencil, avec profondeur seule, sans profondeur) -",
+                "pour vanilla comme pour Lanterne, RenderPipeline est le seul chemin de compilation de",
+                "ce moteur entier. Rien n'est jamais garde d'un lancement au suivant : chaque pipeline",
+                "est recompile a froid, a chaque fois. C'est ce qui a gele le rendu la nuit ou la",
+                "premiere compilation reelle du Gbuffer d'Echelle a pris plusieurs minutes sur un",
+                "pilote qui partait d'une feuille blanche (voir Config du meme depot, chantier",
+                "Echelle) - corrige ce soir-la par un delai borne et un thread d'arriere-plan, mais",
+                "le probleme de fond restait entier pour tous les pipelines du mod.",
+                "",
+                "ROBUSTESSE. Un cache absent, tronque ou ecrit par un autre pilote (ou une autre",
+                "version de pilote) est traite par Vulkan lui-meme, pas reinvente ici : la",
+                "specification impose au pilote de verifier l'en-tete du cache et d'ignorer",
+                "silencieusement ce qui ne correspond pas, plutot que d'echouer. Le fichier est en",
+                "plus nomme d'apres l'identifiant de pilote que Vulkan expose exactement pour cet",
+                "usage (pipelineCacheUUID), donc un iGPU et un GPU dedie sur la meme machine, ou un",
+                "pilote mis a jour, obtiennent chacun leur propre fichier au lieu de se marcher",
+                "dessus.",
+                "",
+                "OU C'EST RANGE. config/lanterne/empreinte/<identifiant-pilote>.cache - jamais dans la",
+                "sauvegarde d'un monde, jamais partage entre deux machines differentes : un fichier",
+                "invalide pour CETTE machine est simplement ignore par le pilote, jamais un risque.",
+                "",
+                "ETEINT PAR DEFAUT : correct par construction (verifie par javap sur le vrai jar",
+                "patche, comme l'exige la premiere regle de ce depot), mais jamais passe par un vrai",
+                "lancement client - interdit a qui a ecrit ce module, reserve au coordinateur. Voir",
+                "Empreinte.java (package client) pour le protocole de verification en jeu : comparer,",
+                "avec et sans fichier de cache present au demarrage, le temps entre \"Vulkan actif et",
+                "confirme\" et la ligne de compilation du premier pipeline d'Echelle (Gbuffer) au",
+                "journal.")
+                .define("empreinte", false);
 
         BUILDER.pop();
         SPEC = BUILDER.build();
