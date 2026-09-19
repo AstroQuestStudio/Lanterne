@@ -162,7 +162,23 @@ public final class Empreinte {
      * classe.
      */
     public static void onDeviceReady(VkDevice vkDevice, VkPhysicalDeviceProperties properties) {
-        if (!ClientConfig.EMPREINTE.get()) {
+        // <h2>Trop tot pour lire la config, et ce n'est pas une supposition</h2>
+        //
+        // VulkanDevice se construit pendant l'amorcage du moteur, bien avant que NeoForge ne
+        // charge les fichiers de config (verifie par javap sur ModConfigSpec$ConfigValue.getRaw :
+        // Preconditions.checkState(loadedConfig != null, "Cannot get config value before config
+        // is loaded.") -- une IllegalStateException, pas un repli silencieux sur la valeur par
+        // defaut). Aucun autre module de ce depot ne lit sa config aussi tot ; Empreinte est le
+        // premier a le faire, precisement parce qu'il doit agir au moment ou le device nait.
+        // Le contrat de cette methode ("n'echoue jamais bruyamment") s'applique aussi a ce cas :
+        // config pas encore chargee equivaut a config eteinte pour CE lancement, pas a un plantage.
+        boolean actif;
+        try {
+            actif = ClientConfig.EMPREINTE.get();
+        } catch (IllegalStateException configPasEncoreChargee) {
+            return;
+        }
+        if (!actif) {
             return;
         }
         Path target = resolveFile(properties);
