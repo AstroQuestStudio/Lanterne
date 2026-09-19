@@ -4,6 +4,14 @@
 > veut dire qu'une commande a été lancée et qu'une source primaire (jar réel présent sur la machine,
 > inspecté par `unzip`/`javap`) a été lue et citée ; **SUPPOSÉ** est signalé comme tel.
 
+> **⚠️ VERDICT CI-DESSOUS DÉPASSÉ — voir l'addendum en fin de document.** Quelques minutes après la
+> recherche exhaustive qui a produit le verdict initial, l'utilisateur a lui-même installé
+> `DistantHorizons-3.3.0-26.3-fabric-neoforge.jar` dans `test 1\mods\` — un vrai build qui n'existait
+> tout simplement pas encore sur le disque au moment de la recherche (dossiers internes du jar datés du
+> 17 septembre, mais absent de la machine jusqu'à aujourd'hui). Le fork n'a pas eu tort : il a cherché
+> exhaustivement ce qui existait à l'instant T et a correctement rapporté qu'il n'y avait rien. Lisez
+> l'addendum avant de vous fier au verdict "aucun jar ne charge" ci-dessous.
+
 > **Correction de périmètre, en cours de mission.** La demande initiale envisageait une intégration
 > côté Lanterne (mixins, adaptation à `renderpearl`). L'utilisateur a corrigé : Distant Horizons doit
 > rester un mod compagnon **indépendant**, ajouté tel quel au modpack (comme BlueMap aujourd'hui), sans
@@ -118,3 +126,36 @@ et donc, potentiellement, un jar Distant Horizons réel — rejoint un jour le n
 projet, soit ce dépôt migre vers une version que Distant Horizons couvre déjà. Rien à faire ici en
 attendant ; **ce n'est pas un échec, c'est un constat daté**, comme le reste de ce dépôt le fait déjà
 ailleurs pour les modules non mesurés.
+
+---
+
+## Addendum du 19 septembre 2026, quelques minutes plus tard — le blocage vient de se lever
+
+L'utilisateur a installé lui-même `DistantHorizons-3.3.0-26.3-fabric-neoforge.jar` dans
+`C:\Users\trufa\curseforge\minecraft\Instances\test 1\mods\`. Inspection directe (`unzip` +
+`META-INF/neoforge.mods.toml`, pas de supposition) :
+
+- `versionRange = "[26.3]"` — cible exactement cette version, contrairement aux builds 26.1.2/26.2
+  trouvés plus tôt.
+- Auteurs, dépôt GitLab, licence LGPL, description : identiques au vrai projet Distant Horizons —
+  rien qui ressemble à un fichier factice.
+- Un commentaire du fichier lui-même, `iconFile = "..." #// needed for MC 26.3 and newer`, indique que
+  ce build connaît et cible spécifiquement cette version.
+
+**Vérification Vulkan refaite sur CE jar précisément** (balayage binaire des `.class` extraits,
+`com/mojang/renderpearl` vs `com/mojang/blaze3d`) — résultat inversé par rapport au build 26.1.2
+inspecté plus haut :
+
+| | build 3.2.0-b (26.1.2, inspecté plus haut) | build 3.3.0 (26.3, ce jar) |
+|---|---:|---:|
+| Classes référençant `com/mojang/renderpearl` | 0 | **35** |
+| Classes référençant `com/mojang/blaze3d` | 42 | 30 |
+
+Ce build-ci **parle bien à `renderpearl`** — le second blocage architectural documenté en §3 ne
+s'applique donc plus à cette version précise. Le blocage de version (§2) est levé par construction
+(`[26.3]` correspond exactement à `test 1`).
+
+**Ce qui n'est PAS encore vérifié** : que le mod charge réellement sans planter aux côtés de Lanterne
+(résolution des mixins, absence de conflit), et qu'il rend effectivement du terrain lointain sans
+dégrader les FPS. Personne n'a encore lancé le jeu avec les deux mods actifs ensemble. Prochaine étape
+honnête : un vrai lancement, avec les logs regardés pour de vrai plutôt que supposés propres.
