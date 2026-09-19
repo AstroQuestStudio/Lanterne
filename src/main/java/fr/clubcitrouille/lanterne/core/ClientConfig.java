@@ -69,6 +69,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue SONDE_INDEXATION;
     public static final ModConfigSpec.BooleanValue RESERVE;
     public static final ModConfigSpec.IntValue RESERVE_CAPACITE;
+    public static final ModConfigSpec.BooleanValue JOINTURE;
 
     public static final ModConfigSpec SPEC;
 
@@ -628,6 +629,37 @@ public final class ClientConfig {
                 "(defaut) est deja une puissance de deux, donc inchangee. Sans effet si le reglage",
                 "\"reserve\" ci-dessus est eteint.")
                 .defineInRange("reserve_capacite", 256, 2, 8192);
+
+        JOINTURE = BUILDER.comment(
+                "JOINTURE : texture connectee sur le verre plein (verre, verre teinte, les seize",
+                "couleurs de verre teinte) - la bordure interne entre deux blocs de MEME type qui se",
+                "touchent s'efface, comme Continuity/OptiFine CTM.",
+                "",
+                "SANS ce reglage : un mur de verre affiche une grille - chaque bloc garde son cadre",
+                "complet, meme colle a un voisin identique. AVEC : la surface devient continue la ou",
+                "deux blocs du MEME type (meme couleur) se touchent ; deux couleurs differentes",
+                "gardent leur bordure l'une contre l'autre, un verre colore contre un verre simple",
+                "aussi.",
+                "",
+                "METHODE : variante a 16 tuiles (4 bits, un par bord Haut/Droite/Bas/Gauche selon les",
+                "quatre voisins immediats de CETTE face - pas la variante a 47 tuiles qui distingue",
+                "aussi les coins). Les 16 textures par couleur sont RECADREES depuis la texture",
+                "vanilla reelle (tools/GenerateJointureTextures.java), aucun dessin invente.",
+                "",
+                "NE COUVRE PAS LES VITRES (glass_pane) : leur modele est un assemblage de cinq pieces",
+                "(poteau + jusqu'a quatre bras) qui echantillonnent deja la meme texture a des UV",
+                "differents - les connecter en texture demanderait de remapper chaque piece",
+                "separement, un chantier a part. Leur connexion de FORME (les bras qui rejoignent un",
+                "voisin) reste celle de vanilla, inchangee.",
+                "",
+                "ETEINT PAR DEFAUT : plomberie verifiee par lecture de bytecode reelle (le systeme de",
+                "modele de ce moteur, BlockStateModel/collectParts avec contexte de voisinage, le",
+                "point d'accroche NeoForge ModelEvent.ModifyBakingResult, et le format reel de",
+                "BakedQuad/packedUV), mais jamais passe par un vrai lancement client - voir",
+                "client/terrain/Jointure.java pour le protocole de verification en jeu.",
+                "RECONSTRUCTION - en realite plus fort : le modele est choisi au CHARGEMENT DES",
+                "RESSOURCES (F3+T ou redemarrage), pas seulement a la prochaine section de chunk.")
+                .define("jointure", false);
 
         BUILDER.pop();
         SPEC = BUILDER.build();
