@@ -1119,8 +1119,15 @@ public final class Config {
                 "Voir lab/Palissade.java pour la mesure.").push("leurre");
 
         LEURRE = BUILDER.comment(
-                "Allumer l'anti x-ray. A false, le serveur envoie exactement ce que Mojang enverrait.")
-                .define("actif", true);
+                "Allumer l'anti x-ray. A false, le serveur envoie exactement ce que Mojang enverrait.",
+                "",
+                "ETEINT PAR DEFAUT pour l'instant : ce module rend l'AutoMiner du Club Citrouille",
+                "aveugle aux filons pas encore exposes (voir plus haut, son cache de filons lit la",
+                "section entiere sans condition d'exposition - exactement le comportement qu'un x-ray",
+                "donnerait). L'utilisateur n'a pas encore tranche entre corriger AutoMiner pour qu'il ne",
+                "lise que l'expose, ou accepter qu'il perde cette detection a distance. A remettre a",
+                "true une fois ce choix fait - le module lui-meme est fini, mesure, et sans danger.")
+                .define("actif", false);
         LEURRE_BLOCKS = BUILDER.comment(
                 "Blocs proteges : caches tant qu'aucune de leurs six faces ne touche une case non",
                 "opaque. Un identifiant de bloc par ligne (\"minecraft:diamond_ore\"). Defaut : tous les",
