@@ -64,6 +64,8 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue EMPREINTE;
     public static final ModConfigSpec.BooleanValue GUET;
     public static final ModConfigSpec.BooleanValue SONDE_INDEXATION;
+    public static final ModConfigSpec.BooleanValue RESERVE;
+    public static final ModConfigSpec.IntValue RESERVE_CAPACITE;
 
     public static final ModConfigSpec SPEC;
 
@@ -528,6 +530,64 @@ public final class ClientConfig {
                 "NON MESURE, sans consommateur en aval : eteint par defaut, comme tout module non",
                 "mesure dans ce depot.")
                 .define("sonde_indexation", false);
+
+        RESERVE = BUILDER.comment(
+                "LA RESERVE : demarre le tampon dynamique \"Dynamic Transforms UBO\" avec une",
+                "capacite plus genereuse, au lieu de la capacite de DEUX que ce moteur choisit lui-meme.",
+                "",
+                "CONSTAT VERIFIE PAR JAVAP SUR LE VRAI JAR PATCHE (jamais suppose). Logs reels, session",
+                "en jeu : des lignes repetees",
+                "\"[DynamicGpuDataStorageMapped] Resizing Dynamic Transforms UBO, capacity limit of N",
+                "reached during a single frame. New capacity will be N*2\", plusieurs fois DANS LA MEME",
+                "IMAGE, a chaque chargement de monde ou scene dense. Cause retrouvee dans",
+                "DynamicGpuData.<init> (desassemblage) : \"transforms\" est construit par",
+                "\"new DynamicGpuDataStorageMapped(\\\"Dynamic Transforms UBO\\\", TRANSFORM_UBO_SIZE, 128, 2)\"",
+                "- une capacite de DEPART figee a DEUX (iconst_2, un seul litteral de cette valeur dans",
+                "tout le constructeur). DynamicGpuDataStorageMapped double cette capacite (ou saute a la",
+                "prochaine puissance de deux qui suffit) a chaque depassement, SANS jamais recopier",
+                "l'ancien tampon - il est simplement abandonne. Depuis une capacite de deux, une image",
+                "chargee qui a besoin de quelques centaines de transforms (base dense, spawn) enchaine",
+                "SEPT doublements consecutifs (2->4->8->16->32->64->128->256), soit jusqu'a 21 creations",
+                "de VkBuffer (le tampon est triple, voir MappableRingBuffer) jetees a la volee dans la",
+                "meme image - exactement ce que le journal montre. Une fois la capacite stabilisee, le",
+                "regime permanent (ecriture/lecture par bloc deja alloue) N'EST PAS le probleme : ce",
+                "reglage ne change rien a lui.",
+                "",
+                "VRAI UBO, PAS UN SSBO DEGUISE - verifie, pas suppose. GpuBuffer.USAGE_UNIFORM vaut 128 ;",
+                "VulkanConst.bufferUsageToVk (desassemble) ne fait jamais correspondre le bit 128 qu'au",
+                "bit reel VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT (16) - jamais a",
+                "VK_BUFFER_USAGE_STORAGE_BUFFER_BIT (32), qu'aucun chemin de cette fonction ne produit",
+                "pour aucun des usages que ce moteur connait. Le glsl le confirme :",
+                "assets/minecraft/shaders/include/dynamictransforms.glsl declare bien",
+                "\"layout(std140) uniform DynamicTransforms\". Passer a un grand SSBO persistant indexe",
+                "demanderait donc d'ajouter un usage de tampon qui n'existe nulle part dans ce moteur",
+                "(aucun GpuBuffer.USAGE_STORAGE, aucune emission de ce bit Vulkan) ET de reecrire ce glsl",
+                "en layout(std430) buffer indexe sur chaque pipeline qui l'inclut - une refonte moteur,",
+                "pas une extension sure par mixin, et injouable sans client ce soir. Piste ecartee pour",
+                "cette raison, pas ignoree.",
+                "",
+                "CE QUE CE REGLAGE FAIT : un seul @ModifyConstant sur DynamicGpuData.<init>, qui remplace",
+                "le litteral 2 par la valeur ci-dessous - Mth.smallestEncompassingPowerOfTwo() et la",
+                "logique de croissance restent EXACTEMENT celles de vanilla, seul le plancher change. Cout",
+                "memoire trivial : la taille d'un bloc est deja arrondie a minUniformOffsetAlignment du",
+                "pilote (quelques centaines d'octets au plus), fois ce reglage, fois trois exemplaires -",
+                "quelques centaines de kilo-octets au pire, contre des dizaines de creations de VkBuffer",
+                "en rafale evitees.",
+                "",
+                "CE QUE CE REGLAGE NE TOUCHE PAS : \"Terrain UBO\" (capacite de UN), \"Chunk Sections UBO\"",
+                "et \"Chunk Sections Command Buffer\" (capacite de DEUX chacun) partagent exactement le",
+                "meme defaut dans DynamicGpuData - mais le journal de ce soir ne nomme que \"Dynamic",
+                "Transforms UBO\". Laisses tels quels, pour une passe future avec sa propre preuve.",
+                "",
+                "NON MESURE EN JEU (aucun client lance pour cette passe) : eteint par defaut, comme tout",
+                "module non mesure dans ce depot.")
+                .define("reserve", false);
+        RESERVE_CAPACITE = BUILDER.comment(
+                "Capacite de depart du tampon \"Dynamic Transforms UBO\", en nombre de transforms.",
+                "Arrondie par le moteur lui-meme a la puissance de deux superieure ou egale - 256",
+                "(defaut) est deja une puissance de deux, donc inchangee. Sans effet si le reglage",
+                "\"reserve\" ci-dessus est eteint.")
+                .defineInRange("reserve_capacite", 256, 2, 8192);
 
         BUILDER.pop();
         SPEC = BUILDER.build();
