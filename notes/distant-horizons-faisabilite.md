@@ -159,3 +159,17 @@ s'applique donc plus à cette version précise. Le blocage de version (§2) est 
 (résolution des mixins, absence de conflit), et qu'il rend effectivement du terrain lointain sans
 dégrader les FPS. Personne n'a encore lancé le jeu avec les deux mods actifs ensemble. Prochaine étape
 honnête : un vrai lancement, avec les logs regardés pour de vrai plutôt que supposés propres.
+
+---
+
+## Addendum du 19 septembre 2026, plus tard le même soir — le vrai lancement a eu lieu, et a crashé
+
+Le lancement appelé de mes vœux juste au-dessus a eu lieu : le jeu a chargé, a tourné 464 ticks
+(23,2 s), puis a crashé (`IllegalStateException: Close the existing render pass before performing
+additional commands`, dans `FrontendCommandEncoder.writeToBuffer`, déclenché depuis le fondu de
+terrain LOD de Distant Horizons). Investigation bytecode complète, verdict et protocole de
+reproduction : `notes/incident-distanthorizons-renderpass-20260919.md`. Verdict court : **ni un bug
+Lanterne, ni un bug interne à DH** — une collision entre le point où le moteur patché poste
+`RenderLevelStageEvent.AfterOpaqueFeatures` (encore à l'intérieur d'une passe Vulkan ouverte) et
+l'usage par ailleurs standard que DH fait de cet évènement. Rien touché côté `src/main/java` de ce
+dépôt.
