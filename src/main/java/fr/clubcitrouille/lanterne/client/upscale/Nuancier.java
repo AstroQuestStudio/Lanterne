@@ -814,10 +814,21 @@ public final class Nuancier {
             // avait ecrit "InSampler"/"ColorSampler"/"NormalSampler"/"BloomSampler" ici (le nom GLSL
             // complet, deja suffixe) -- plante reel en jeu (ShaderCompileException: Unable to find
             // shader defined uniform) sur la premiere passe de bloom, corrige ici. Voir le Javadoc de
+            //
+            // La cible de sortie de la premiere passe (l'anticrenelage d'entree) est nommee "aa",
+            // SANS le prefixe "lanterne:" -- deuxieme plante reel en jeu (IllegalArgumentException:
+            // Missing target with id lanterne:aa, PostChain$TargetBundle.getOrThrow) trouve en testant
+            // ce correctif meme. "lanterne:aa" designe une cible EXTERNE que Resolve.Bundle ne peuple
+            // que si Scene.antialiasTarget() n'est pas nul, lui-meme conditionne par le reglage
+            // Upscale.antialias() -- un reglage qui n'a rien a voir avec ce nuancier precis, dont la
+            // propre passe d'anticrenelage tourne toujours. La cible locale "aa", comme "swap" et
+            // "preao" juste en dessous, est batie par PostChain lui-meme a partir de la sortie de la
+            // passe : elle existe toujours, sans dependre d'aucun reglage externe.
             // classe pour la preuve complete et son historique pour la version fautive.
             Files.writeString(post.resolve("club_citrouille.json"), """
                     {
                       "targets": {
+                        "aa": { "persistent": true },
                         "swap": { "persistent": true },
                         "preao": { "persistent": true },
                         "bloomh": { "persistent": true },
@@ -830,13 +841,13 @@ public final class Nuancier {
                           "inputs": [
                             { "sampler_name": "In", "target": "lanterne:scene", "bilinear": false }
                           ],
-                          "output": "lanterne:aa"
+                          "output": "aa"
                         },
                         {
                           "vertex_shader": "minecraft:core/screenquad",
                           "fragment_shader": "lanterne:post/fsr_easu",
                           "inputs": [
-                            { "sampler_name": "In", "target": "lanterne:aa", "bilinear": false }
+                            { "sampler_name": "In", "target": "aa", "bilinear": false }
                           ],
                           "output": "swap"
                         },
