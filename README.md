@@ -4,12 +4,12 @@
 
 **La citrouille qui éclaire sans brûler.**
 
-*Mod d'optimisation serveur et client pour NeoForge 26.1.2 — il ne cherche pas à rendre le jeu plus rapide, mais à lui éviter le travail qui ne sert à rien.*
+*Mod d'optimisation serveur et client pour NeoForge 26.3, sur le moteur de rendu Vulkan natif — il ne cherche pas à rendre le jeu plus rapide, mais à lui éviter le travail qui ne sert à rien.*
 
 <br>
 
-![Version](https://img.shields.io/badge/version-2.8.0-brightgreen?style=for-the-badge)
-![NeoForge](https://img.shields.io/badge/NeoForge-26.1.2-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-26.3.15-brightgreen?style=for-the-badge)
+![NeoForge](https://img.shields.io/badge/NeoForge-26.3.0.3--beta-orange?style=for-the-badge)
 ![Java](https://img.shields.io/badge/Java-21-blue?style=for-the-badge)
 ![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue?style=for-the-badge)
 
@@ -17,8 +17,8 @@
 
 ### Chaque chiffre de ce document sort d'un banc automatique.
 
-**Aucun n'a été saisi à la main.** **Seize modules** ont été écrits puis **retirés** après mesure, et
-**onze bancs** réparés parce qu'ils mentaient. C'est cette moitié-là qui rend l'autre croyable.
+**Aucun n'a été saisi à la main.** **Treize modules** ont été écrits puis **retirés** après mesure, et
+**dix bancs** réparés parce qu'ils mentaient. C'est cette moitié-là qui rend l'autre croyable.
 
 *Et le défaut le plus grave de la version 2.0 n'a été trouvé par aucun banc : un joueur l'a vu en
 jouant.*
@@ -27,6 +27,59 @@ jouant.*
 
 ---
 
+## 📖 Sommaire
+
+**Démarrer**
+[🧭 Par où commencer](#par-ou-commencer)
+
+**Performance & rendu**
+[⚡ Les gains, charge par charge](#les-gains-charge-par-charge) ·
+[🖥️ Le pipeline de rendu (Vulkan)](#le-pipeline-de-rendu-vulkan-l-image-temporelle-le-maillage) ·
+[🧭 Pré-génération](#pre-generation-15-sur-l-exploration) ·
+[🪨 La génération de chunks](#la-generation-de-chunks-11-2-12-9-sur-la-vraie-machine) ·
+[🧱 Le remblai](#le-remblai-fill-et-le-minage-intensif) ·
+[🐄 La foule](#la-foule-ce-qui-reste-quadratique-quand-les-entites-s-entassent) ·
+[📡 La compression réseau](#la-compression-reseau-et-le-bloc-qui-ne-cassait-pas) ·
+[🌊 La Marée](#la-maree-elle-part-a-5-et-monte-sans-jamais-lager)
+
+**Blocs & mécaniques ajoutées**
+[⚓ L'Ancre de chunk](#l-ancre-de-chunk) ·
+[🏮 La Lanterne de Veille](#la-lanterne-de-veille) ·
+[🔦 L'Aureole — la balise, repensée](#l-aureole-la-balise-repensee) ·
+[💰 La Manne — stock infini des villageois](#la-manne-le-stock-infini-des-villageois)
+
+**Confort joueur**
+[🧭 Les repères et la Boussole d'Ancre](#les-reperes-et-la-boussole-d-ancre) ·
+[🔭 La Longuevue — zoom façon Sodium](#la-longuevue-le-zoom-tenu-facon-sodium) ·
+[🖼️ Les Tableaux](#les-tableaux-tes-images-sur-tes-murs) ·
+[💿 Les Disques](#les-disques-ta-musique-dans-le-jukebox)
+
+**Économie**
+[🛒 La Boutique et l'Économie](#la-boutique-et-l-economie)
+
+**Administration & déploiement**
+[🧹 Le balai](#le-balai-et-pourquoi-il-est-eteint-par-defaut) ·
+[🚫 La réclame de l'hébergeur](#la-reclame-de-l-hebergeur) ·
+[⚙️ Configuration](#configuration) ·
+[🕯️ La Mèche — mise à jour automatique](#la-meche-le-mod-se-met-a-jour-lui-meme)
+
+**Rigueur & méthode**
+[✅ Conformité](#conformite-ce-qu-aucun-autre-mod-ne-mesure) ·
+[💡 La thèse](#la-these) ·
+[🔬 Le laboratoire](#le-laboratoire) ·
+[🗑️ Treize modules retirés](#treize-modules-ecrits-mesures-puis-retires) ·
+[🔍 Ce que vanilla fait déjà](#ce-que-vanilla-26-1-fait-deja) ·
+[🧰 Outils pour modpack lourd](#outils-pour-modpack-lourd) ·
+[🧾 Les trois règles d'instrument](#les-trois-regles-d-instrument) ·
+[🚧 Ce qui ne se fera pas](#ce-qui-ne-se-fera-pas-et-pourquoi)
+
+**Aide**
+[🛡️ « Mon antivirus dit que Lanterne est un virus »](#mon-antivirus-dit-que-lanterne-est-un-virus) ·
+[🧩 Le modpack (Sodium, JourneyMap, Distant Horizons…)](#le-modpack-lanterne-jade-journeymap-sodium-distant-horizons-jei)
+
+---
+
+<a id="par-ou-commencer"></a>
 ## 🧭 Par où commencer
 
 ```
@@ -39,6 +92,7 @@ pour qui y a droit.
 
 ---
 
+<a id="les-gains-charge-par-charge"></a>
 ## ⚡ Les gains, charge par charge
 
 Serveur dédié NeoForge 26.1.2, Ryzen 7 5800H, monde pré-généré, distance de simulation 10.
@@ -268,6 +322,7 @@ Moins allouer, c'est ramasser moins souvent — le seul levier réel sur la mém
 
 ---
 
+<a id="le-pipeline-de-rendu-vulkan-l-image-temporelle-le-maillage"></a>
 ## 🖥️ Le pipeline de rendu — Vulkan, l'image temporelle, le maillage
 
 *Ajouté le 18 septembre 2026. Ce moteur (« Minecraft 26.3 ») a un vrai rendu Vulkan natif
@@ -384,6 +439,43 @@ le nombre de sommets, à ce périmètre encore étroit. Reste en activation manu
 (`LANTERNE_GREEDY_MESH=1`) — un risque connu (la fusion ne vérifie pas encore l'égalité de géométrie
 entre deux blocs de même texture) doit être traité avant d'envisager une activation par défaut.
 
+### Le cache de pipelines — l'Empreinte
+
+`javap -p -c -constants` sur le vrai jar patché montre que `VulkanRenderPipeline.compile` appelle
+`vkCreateGraphicsPipelines` avec `VK_NULL_HANDLE` en second argument, sur ses trois variantes, à
+**chaque lancement** : ce moteur ne garde nulle part, d'une session à l'autre, le travail qu'un pilote a
+déjà fait pour compiler un pipeline graphique. `com.mojang.blaze3d.pipeline.PipelineCache` — qui
+pourtant porte ce nom — n'est qu'une table en mémoire pour ne pas recompiler deux fois le même objet
+**dans la même session** ; rien qui survit à un redémarrage, rien qui parle au pilote.
+
+C'est très exactement ce qui a gelé le rendu la nuit du correctif `567e592` : la toute première
+compilation du Gbuffer de l'accumulation temporelle, jamais exercée avant qu'une vraie scène ne tourne,
+a pris plusieurs minutes sur un pilote qui partait d'une feuille blanche. Le correctif de cette nuit-là
+(thread d'arrière-plan borné) évite que **ça** gèle le rendu ; il ne change rien au fait que le pilote
+recompile tout, encore, à chaque lancement suivant.
+
+**L'Empreinte** sérialise le `VkPipelineCache` du moteur sur disque
+(`config/lanterne/empreinte/<identifiant-pilote>.cache`, un fichier par GPU/version de pilote — la
+spécification Vulkan garantit qu'un cache dont l'empreinte ne correspond plus au pilote qui le relit est
+silencieusement ignoré, jamais mal interprété) et le réinjecte à la place de `VK_NULL_HANDLE` aux trois
+points d'accroche. Éteint par défaut (`empreinte`) : c'est un module neuf, pas encore éprouvé sur la
+diversité des pilotes des joueurs.
+
+### La Réserve — le tampon qui ne redouble plus en cascade
+
+`DynamicGpuData` — la classe vanilla derrière le tampon d'instances « Dynamic Transforms UBO » — démarre
+avec une capacité codée en dur à **deux**. Sur une frame dense, chaque doublement de capacité réalloue
+et recopie le tampon entier ; atteindre quelques centaines d'entrées en partant de deux peut demander
+jusqu'à **sept doublements consécutifs** dans la même frame.
+
+La Réserve remplace cette constante par une capacité de départ configurable (`reserve_capacite`,
+défaut **256**) quand `reserve` est actif. Vérifié en jeu par le coordinateur sur une scène dense : plus
+aucune ligne de redimensionnement du « Dynamic Transforms UBO » dans les journaux, là où vanilla en
+produisait plusieurs par frame. Éteint par défaut, comme l'Empreinte.
+
+> Un défaut jumeau existe pour les tampons « Chunk Sections Command Buffer » / « Chunk Sections
+> Instanced » — même famille de starvation, pas encore traité.
+
 ### Ce qui a été tenté et honnêtement abandonné
 
 **Le culling d'occlusion Hi-Z** (pyramide de profondeur GPU, façon rendu piloté GPU moderne) : le
@@ -400,8 +492,16 @@ proprement — dix passes sur la VM de production, médiane **×0,91** — le mo
 plus lent**, pas plus rapide, sur la charge même pour laquelle il a été conçu. Le coût de la
 comptabilité par couche dépasse l'économie. Reste désactivé.
 
+> **Outils de diagnostic interne, hors gameplay.** Cinq modules n'apparaissent volontairement pas
+> ci-dessus parce qu'ils ne changent rien à ce que voit un joueur : `Guet` et `Sonde` constatent, sans
+> toucher au rendu, si le regroupement des sections de chunk et l'indexation bindless sont stables sur
+> le pilote de la machine ; trois mixins de diagnostic Vulkan (présentation, soumission, familles de
+> files) ne font que journaliser, la plupart derrière une variable d'environnement. Tous éteints par
+> défaut, tous lisibles dans `client/`, `mixin/` et `core/ClientConfig.java` pour qui veut creuser.
+
 ---
 
+<a id="pre-generation-15-sur-l-exploration"></a>
 ## 🧭 Pré-génération — ×15 sur l'exploration
 
 Deux façons de fournir un chunk à un joueur qui avance, mesurées sur la même machine :
@@ -431,6 +531,7 @@ Deux façons de fournir un chunk à un joueur qui avance, mesurées sur la même
 
 ---
 
+<a id="l-ancre-de-chunk"></a>
 ## ⚓ L'Ancre de chunk
 
 <div align="center">
@@ -466,6 +567,7 @@ de ce mod pour être rétabli.
 
 ---
 
+<a id="la-lanterne-de-veille"></a>
 ## 🏮 La Lanterne de Veille
 
 <div align="center">
@@ -513,6 +615,80 @@ l'optimisation, ce serait retirer le jeu.
 
 ---
 
+<a id="l-aureole-la-balise-repensee"></a>
+## 🔦 L'Aureole — la balise, repensée
+
+Vanilla, lu au `javap` sur le jar réellement compilé (`BeaconBlockEntity.applyEffects`) : la portée
+horizontale d'une balise vaut `niveau×10+10` blocs — 50 au niveau 4 — et sa boîte d'effet est gonflée de
+cette même portée sur les trois axes, **puis étirée vers le haut de la hauteur entière du monde**
+(`AABB.expandTowards`, qui n'agit que vers le haut). Le dessus est donc déjà quasi illimité aujourd'hui ;
+seuls le dessous et l'horizontale restent bornés. L'Aureole ne « débloque » donc pas une verticalité qui
+n'existait pas : elle retire le plafond du dessous, resté vanilla.
+
+**La portée, par niveau et par matériau.** Quatre paliers de portée horizontale, réglables et **doublés
+par rapport à vanilla par défaut** (40 / 80 / 120 / 160 blocs contre 20 / 30 / 40 / 50), puis mis à
+l'échelle par le matériau de pyramide **le plus faible réellement en place** — un seul bloc de fer glissé
+dans une pyramide de diamant ne vole pas le bonus du diamant pour le prix du fer :
+
+| Matériau | Multiplicateur | Réglage |
+|---|:---:|---|
+| Fer | ×1 | `multiplicateur_fer` |
+| Or | ×1,5 | `multiplicateur_or` |
+| Diamant | ×2 | `multiplicateur_diamant` |
+| Émeraude | ×2,5 | `multiplicateur_emeraude` |
+| Netherite | ×3 | `multiplicateur_netherite` |
+
+Ce moteur accepte déjà le bloc de netherite comme matériau de pyramide — le tag data-driven
+`minecraft:beacon_base_blocks` le porte nativement, aucune extension n'a été nécessaire.
+
+**La verticalité illimitée** (`portee_verticale_illimitee`, activée par défaut) retire aussi le plafond
+du dessous : la boîte d'effet couvre alors toute la hauteur du monde, du fond au ciel, quel que soit le
+niveau de la pyramide.
+
+**Neuf sorts que vanilla ne propose pas**, chacun désactivable indépendamment, aux mêmes paliers que les
+effets vanilla du même rang — y compris la règle qui réserve le palier 4 au choix secondaire :
+
+| Palier | Effets ajoutés |
+|:---:|---|
+| 1 | Vision nocturne |
+| 2 | Respiration aquatique · Chute ralentie |
+| 3 | Résistance au feu · Chance |
+| 4 | Saturation · Grâce du dauphin · Régain de santé · Absorption |
+
+L'écran de la balise (**le Phare**, `client/screen/Phare.java`) est entièrement redessiné pour montrer
+la portée réelle et cette grille étendue — vanilla n'affiche jamais la portée. `Aureole.active()` ramène
+tout au calcul vanilla exact, formule et forme de boîte comprises, dès que `balise.actif` passe à faux :
+chaque réglage reste lisible même éteint.
+
+---
+
+<a id="la-manne-le-stock-infini-des-villageois"></a>
+## 💰 La Manne — le stock infini des villageois
+
+Vanilla, lu au `javap` sur le jar réellement compilé : chaque `MerchantOffer` porte un compteur `uses`,
+incrémenté de un à chaque échange par `increaseUses()`, et `isOutOfStock()` renvoie vrai dès que `uses`
+atteint `maxUses` — l'échange reste visible mais refuse jusqu'à ce que le villageois se restocke en
+dormant chez lui, ou jusqu'au lendemain.
+
+```java
+@Inject(method = "increaseUses", at = @At("HEAD"), cancellable = true)
+private void lanterne$stockInfini(CallbackInfo ci) {
+    if (Config.MANNE.get()) {
+        ci.cancel();
+    }
+}
+```
+
+La Manne annule cet incrément dès la tête de la méthode — bit à bit exact, `increaseUses()` ne fait
+rien d'autre. Aucun autre calcul n'est touché : ni les prix, ni la demande, ni l'expérience versée.
+
+**Éteint par défaut** (`manne_villageois_stock_infini`) : c'est un changement d'équilibrage assumé, pas
+une optimisation — à l'administrateur de décider si son monde veut des marchands qui ne tarissent
+jamais.
+
+---
+
+<a id="la-compression-reseau-et-le-bloc-qui-ne-cassait-pas"></a>
 ## 📡 La compression réseau — et le bloc qui ne cassait pas
 
 ### Deflate niveau 1 au lieu de 6
@@ -562,6 +738,7 @@ souvent juste sous le seuil. Le bloc revient.
 
 ---
 
+<a id="les-reperes-et-la-boussole-d-ancre"></a>
 ## 🧭 Les repères et la Boussole d'Ancre
 
 ```
@@ -623,6 +800,38 @@ autre.
 
 ---
 
+<a id="la-longuevue-le-zoom-tenu-facon-sodium"></a>
+## 🔭 La Longuevue — le zoom tenu, façon Sodium
+
+```
+Touche C, maintenue
+```
+
+Aucun mixin : lu au `javap` sur le vrai jar patché, ce moteur calcule le champ de vision effectif par une
+chaîne qui **poste un évènement NeoForge officiel**, `ComputeFovModifierEvent` — le même point d'accroche
+que vanilla emploie déjà pour le tremblement du FOV à la course, au vol et au tir à l'arc. La Longuevue
+s'y accroche, plus `CalculatePlayerTurnEvent` pour la sensibilité de la souris, sans nommer ni toucher
+aucune classe des chantiers Vulkan de ce dépôt.
+
+**Pourquoi pas la vraie longue-vue vanilla.** Son mécanisme (`isScoping()`) court-circuite entièrement
+l'évènement de FOV et exige `isUsingItem()` — le même drapeau que tirer à l'arc ou manger, qui coupe la
+course. Correct pour l'objet longue-vue, où s'immobiliser pour viser est voulu ; pas pour une simple
+touche de zoom qui doit rester utilisable en marchant.
+
+| Réglage | Défaut | Ce qu'il fait |
+|---|:---:|---|
+| `longuevue` | activé | la fonctionnalité elle-même |
+| `longuevue_facteur` | 4 | le facteur de réduction du champ de vision au zoom complet |
+| `longuevue_vitesse_transition` | 35 | la vitesse du lissage entre relâché et zoomé |
+
+Le lissage tourne une fois par tick — la même cadence que `Camera.tickFov()` en vanilla — et l'état
+clavier est lu au niveau matériel (`InputConstants.isKeyDown`), jamais via `KeyMapping.isDown()` : ce
+moteur cesse de relayer les touches aux `KeyMapping` dès qu'un écran est ouvert, ce qui bloquerait sinon
+le zoom en position « appuyée » après avoir ouvert puis fermé un coffre en le maintenant.
+
+---
+
+<a id="les-tableaux-tes-images-sur-tes-murs"></a>
 ## 🖼️ Les Tableaux — tes images sur tes murs
 
 <div align="center">
@@ -773,6 +982,7 @@ tournés n'importe comment).
 
 ---
 
+<a id="les-disques-ta-musique-dans-le-jukebox"></a>
 ## 💿 Les Disques — ta musique dans le jukebox
 
 <div align="center">
@@ -913,6 +1123,7 @@ transmises : elles pèsent cent fois moins.
 
 ---
 
+<a id="le-balai-et-pourquoi-il-est-eteint-par-defaut"></a>
 ## 🧹 Le balai — et pourquoi il est éteint par défaut
 
 ```
@@ -942,6 +1153,7 @@ courir, le second celui de lâcher ce qu'on fait.
 
 ---
 
+<a id="la-maree-elle-part-a-5-et-monte-sans-jamais-lager"></a>
 ## 🌊 La Marée — elle part à 5 et monte, sans jamais lager
 
 Un administrateur choisit une distance de vue une fois pour toutes. À dix, son serveur est
@@ -1015,6 +1227,7 @@ reculer l'horizon d'un joueur dans les secondes suivant son arrivée.
 
 ---
 
+<a id="la-generation-de-chunks-11-2-12-9-sur-la-vraie-machine"></a>
 ## 🪨 La génération de chunks — 11,2 → 12,9 sur la vraie machine
 
 Mesuré sur la cible, pas sur la machine de développement : une **MyBox Free, un cœur dédié, 4 Go**,
@@ -1170,6 +1383,7 @@ de l'interrupteur général `master` : c'est un module de chargement, pas de dé
 
 ---
 
+<a id="le-remblai-fill-et-le-minage-intensif"></a>
 ## 🧱 Le remblai — `/fill`, et le minage intensif
 
 Même mécanique : beaucoup de modifications de blocs en peu de ticks.
@@ -1193,6 +1407,7 @@ l'atteindre. **L'ordre est observable.**
 
 ---
 
+<a id="la-foule-ce-qui-reste-quadratique-quand-les-entites-s-entassent"></a>
 ## 🐄 La foule — ce qui reste quadratique quand les entités s'entassent
 
 `EntitySection.getEntities` parcourt **tous** les habitants de la section et teste l'intersection sur
@@ -1221,6 +1436,7 @@ En deçà de **64 entités par section, rien n'est touché** : même code, même
 
 ---
 
+<a id="la-reclame-de-l-hebergeur"></a>
 ## 🚫 La réclame de l'hébergeur
 
 Un hébergement gratuit se paie autrement : le démon écrit une commande sur l'entrée standard du
@@ -1244,6 +1460,7 @@ deux minutes est indétectable. Ce qu'il retire est un message que le joueur n'a
 
 ---
 
+<a id="la-boutique-et-l-economie"></a>
 ## 🛒 La Boutique et l'Économie
 
 Deux onglets — **Acheter** et **Vendre** — un solde par joueur, et une boutique administrateur qui
@@ -1400,6 +1617,7 @@ moindre exploit ailleurs dans le modpack, et ne se compterait pas.
 
 ---
 
+<a id="configuration"></a>
 ## ⚙️ Configuration
 
 | Fichier | Ce qu'il commande | Qui décide |
@@ -1467,6 +1685,40 @@ mondes où il était posé : un interrupteur de performance n'a pas le droit de 
 
 ---
 
+<a id="la-meche-le-mod-se-met-a-jour-lui-meme"></a>
+## 🕯️ La Mèche — le mod se met à jour lui-même
+
+Un jar périmé ne prévient personne. La Mèche ferme cette brèche sans jamais rouvrir de connexion vers
+une adresse distante : à la connexion, le serveur annonce l'**empreinte SHA-256** du jar de Lanterne
+qu'il fait tourner, sur le canal réseau déjà ouvert. Un client dont l'empreinte diffère — et qui y a
+consenti — le redemande, le reçoit **par tranches sur cette même connexion de jeu**, vérifie l'empreinte
+reçue avant d'y toucher, puis l'écrit dans son dossier `mods/` sous un nom qui ne peut pas entrer en
+collision avec le jar en cours d'exécution.
+
+**Ce que ce mécanisme ne fait jamais** : il ne remplace rien à chaud, il n'exécute ni n'ouvre le jar
+reçu — seulement un message qui dit au joueur de relancer. S'il n'a pas pu effacer l'ancien jar (verrouillé
+par l'OS tant que le jeu tourne), il le dit explicitement plutôt que d'échouer en silence.
+
+**Pourquoi le canal de jeu plutôt qu'une URL.** Le fichier vient du serveur auquel on est déjà connecté :
+aucune raison de rouvrir une connexion ailleurs. Ce que le client reçoit vient donc *forcément* du
+serveur choisi, jamais d'un tiers — une garantie qu'une URL ne peut pas donner par construction. Le
+mécanisme de tranches est celui, déjà éprouvé, des images des Tableaux (`content.painting.PaintingShard`).
+
+**Double refus par défaut, des deux côtés :**
+
+| Réglage | Fichier | Défaut |
+|---|---|:---:|
+| `proposer_maj` | `config/lanterne-server.toml` | éteint |
+| `auto_maj` | `config/lanterne-maj-client.toml` (client) | éteint |
+
+Refusé côté client, rien ne change à ce que le mécanisme faisait avant d'exister : le serveur annonce son
+empreinte, le client la compare, et s'il diffère il se contente de le **dire** dans la discussion — un
+message, pas un octet téléchargé. C'est une preuve de concept : seul Lanterne lui-même est aujourd'hui
+un mod « géré » par ce mécanisme.
+
+---
+
+<a id="conformite-ce-qu-aucun-autre-mod-ne-mesure"></a>
 ## ✅ Conformité — ce qu'aucun autre mod ne mesure
 
 Un mod d'optimisation qui casse une ferme a échoué, même s'il double les TPS. Chaque mécanisme risqué
@@ -1501,6 +1753,7 @@ est **×2,99** — trois fois moins beau, et vrai.
 
 ---
 
+<a id="la-these"></a>
 ## 💡 La thèse
 
 > Rendre un travail deux fois plus rapide fait gagner un facteur deux.
@@ -1531,6 +1784,7 @@ dans le mot d'accueil du serveur, pas caché dans un fichier.
 
 ---
 
+<a id="le-laboratoire"></a>
 ## 🔬 Le laboratoire
 
 Le mod mesure ses propres effets, et **refuse de conclure** quand il ne peut pas.
@@ -1548,210 +1802,41 @@ LANTERNE_PROFILE_ALL=1        # profiler tous les fils, pas seulement le serveur
 LANTERNE_WATCH=<motif>        # qui appelle cette méthode ?
 ```
 
-### Dix bancs qui mentaient, et comment on l'a su
+### La rigueur du banc, en bref
 
-| Le banc disait | La vérité | Ce qui l'a révélé |
-|---|---|---|
-| TNT : **perte ×0,50** | ×1,64 de **gain** | La phase 1 creusait le décor de la phase 2 |
-| Projectiles : **×4,04** | ×2,99 | Le module supprimait le combat |
-| Client : **perte ×0,86** | ×1,25 de **gain** | Monde vide, puis phases inégales |
-| Fluides : **perte ×0,47** | Non mesurable | ×0,10 **sans le mod des deux côtés** |
-| Village : ×1,19 | ×1,90 | Les décors s'accumulaient depuis des mois |
-| Génération : ×15 | ×1,0 | Il relisait le disque au lieu de générer |
-| Entonnoirs : **débit ÷2** | Débit **exact** | 3 exécutions identiques : 18/30, 39/16, 16/16 |
-| Le monde entier : ~20 ms | ~10 ms | `random_tick_speed` resté à **256** depuis une autre charge |
-| Chaîne de 6 trémies : **288 944 objets** | 19 | Elle mesurait le chantier d'un autre banc |
-| Fusion au sol : ×1,08 | ×1,42 | Le nettoyage du décor semait 5 175 objets |
+Dix bancs se sont révélés menteurs avant de rendre un chiffre juste — un instrument cassé qui annonçait
+une perte là où il y avait un gain, un artefact de décor hérité d'un autre chantier, une méthode qui
+mesurait sa propre gigue au lieu du mod. **Le tir de contrôle** — relancer le banc avec le mod éteint
+des deux côtés — est devenu le premier réflexe devant un résultat surprenant, pas le dernier recours.
 
-**Le tir de contrôle** — lancer le banc avec le mod éteint **des deux côtés** — est devenu la
-première chose à faire devant un résultat surprenant. Sur les fluides, il a rendu ×0,10 alors que rien
-ne changeait : le banc mesurait la gigue de sa propre méthode.
-
-### Le défaut qu'aucun rapport ne montrait
-
-Les quatre derniers ont une famille commune : **ils ne se voyaient pas dans un résultat, mais dans un
-chiffre trop régulier.**
-
-`clearDecor` annonçait avoir effacé 58 081 blocs, puis 58 963 — identiques à un pour cent près, alors
-que douze mille cinq cents blocs de chantier auraient dû s'y ajouter. Un nettoyage qui ne voit pas ce
-qu'il devrait voir.
-
-La cause : l'altitude du chantier était gelée en lisant la carte des hauteurs **en (0,0)** — c'est-à-dire
-au milieu du chantier précédent, où elle répond l'altitude d'un coffre. Le sol montait donc de trois
-blocs à chaque exécution, le nettoyage passait **au-dessus** des ruines, et les charges s'empilaient.
-
-> C'est la même faute que la dalle de pierre qui montait de quatre blocs par reconstruction, revenue
-> ailleurs sous un autre visage. **Le sol se demande maintenant au générateur de terrain**, pas au
-> monde : une propriété du relief, que rien de ce qu'on bâtit dessus ne peut déplacer.
+Le détail des dix bancs, ligne par ligne, et la découverte du plus retors d'entre eux (un décor de
+chantier jamais recomparé à la même altitude d'une exécution à l'autre) : voir
+[NOTES-INGENIERIE.md](NOTES-INGENIERIE.md).
 
 ---
 
+<a id="treize-modules-ecrits-mesures-puis-retires"></a>
 ## 🗑️ Treize modules écrits, mesurés, puis retirés
 
-C'est la partie du projet dont il est le plus fier.
+C'est la partie du projet dont il est le plus fier : treize modules ont été écrits, mesurés au banc,
+puis retirés plutôt que gardés sur la foi d'un raisonnement qui semblait juste. Un profileur de temps
+qui surestimait une méthode courte et très appelée ; un profileur d'allocations qui s'est trompé d'un
+**facteur soixante-dix** sur un site qui allouait de tout petits objets très souvent ; un raccourci dont
+le taux de déclenchement réel était **nul** sur plus de trois millions d'appels examinés. Un module a
+même été retiré deux fois, pour deux raisons différentes, avant qu'un troisième module (l'enclos) ne
+corrige la cause commune aux trois.
 
-| Module | Pourquoi il devait marcher | Pourquoi il ne marchait pas |
-|---|---|---|
-| **Tirage aléatoire** | 12 % du profil | **Artefact d'attribution** — 151 M de raccourcis, 0 ms |
-| **Formes d'entité** | 1 M d'allocations par tick | Le JIT les éliminait déjà (analyse d'échappement) |
-| **Saut des sections vides** | 30 % dans `PalettedContainer` | Vanilla fait déjà le test, plus finement |
-| **Répartiteur de chunks** | Le tuyau est large de un | 39 633 voies ouvertes, **aucun effet** |
-| **Visibilité des explosions** | Coût quadratique | **0 déclenchement sur 3 019 explosions** |
-| **LOD client** | Sodium ne touche pas au tick | **Le tick produit l'état du rendu** — crash |
-| **Recherche d'eau** | 162 positions par appel | Décor résiduel — l'eau n'était jamais trouvée |
-| **Entonnoirs endormis** | Sept ticks sur huit ne font rien | Vrai, et sans valeur : ces sept ticks ne font qu'une décrémentation |
-| **Repos posé** | 15 % du profil part en gravité | Retiré **deux fois** — voir ci-dessous |
-| **Chute libre** | `Entity.move` = 52 % du profil TNT | **0 balayage évité sur 3 437 405** — granularité |
-| **Bordure retenue** | 2,9 % du profil TNT | **3,9 M de recherches épargnées, et 4 ms de PLUS** |
-| **Tableau vide des effets** | **44 % des allocations** (2,70 Go) | 2,4 M évités = **39 Mo**, pas 2 700 |
-| *…et cinq autres* | | |
+Les deux règles que ces échecs ont installées : un poste élevé sur une méthode **courte et très
+appelée** est un artefact d'attribution jusqu'à preuve du contraire — l'échantillonneur ne voit que le
+sommet de pile, et le JIT inline. Et compter des **allocations évitées** ne prouve rien tant qu'on n'a
+pas mesuré le tas : deux fois, ce projet a supprimé ce que la machine virtuelle supprimait déjà.
 
-### Le profileur d'allocations ment aussi
-
-Le profileur de temps attribuait 3 % à `applyEffectsFromBlocks` — la signature exacte d'un artefact,
-donc à écarter. Le profileur d'**allocations** en donnait une tout autre lecture :
-
-```
-44,1 %  InsideBlockEffectApplier$StepBasedCollector.flushStep → Object[]   2,70 Go
-```
-
-La cause était réelle : `ArrayList.addAll` appelle `toArray()` **avant** de regarder si la source est
-vide, et `Arrays.copyOf(données, 0)` alloue. Deux appels par type d'effet, par pas, par entité — pour
-des toiles et des buissons qui ne sont presque jamais là.
-
-```
-2 448 370 tableaux non fabriqués
-mémoire : 2,92 → 2,90 Go     (0,7 %)
-temps   : aucun effet
-```
-
-**L'arithmétique qu'il fallait poser avant de coder :** 2,4 M × 16 octets = **39 Mo**. Le profileur en
-annonçait 2 700. Il s'est trompé d'un facteur **soixante-dix**.
-
-> `ObjectAllocationSample` **échantillonne et extrapole** : le poids vient du taux d'échantillonnage,
-> pas de la taille des objets. Un site qui alloue de *tout petits* objets *très souvent* y est
-> surévalué d'ordres de grandeur.
->
-> Ce projet se méfiait du profileur de temps sur les méthodes courtes et très appelées. Il se méfie
-> maintenant du profileur d'allocations sur les objets minuscules et très nombreux. **Dans les deux
-> cas, le correctif est le même : multiplier le compte par la taille avant d'écrire une ligne.**
-
-### Trois fois la même leçon
-
-`ServerLevel.getWorldBorder()` consulte les données de monde **à chaque appel**, pour un objet
-identique pendant toute la partie — sur un chemin parcouru une fois par entité et par tick. Le
-profileur lui attribuait **2,9 %**.
-
-```
-3 877 401 recherches épargnées
-sans : 48,39 et 48,34 ms   ·   avec : 52,83 ms
-```
-
-Près de quatre millions de consultations supprimées, et le banc **monte de quatre millisecondes**.
-
-> Un poste élevé sur une méthode **courte et très appelée** est un artefact d'attribution jusqu'à
-> preuve du contraire. Et y poser un mixin lui **retire son inlinisation** : le coût du point
-> d'accroche dépasse celui du travail qu'on y supprime — **même quand on en supprime quatre
-> millions**.
-
-### Celui qui a été tranché en une exécution
-
-Le profil de 6 000 TNT désignait `Entity.move` à **52 % du tick** — et l'explosion elle-même à 1,5 %.
-Chaque TNT qui tombe lit huit états de bloc, en tire huit formes, les fusionne et résout axe par axe,
-pour découvrir qu'elle traverse de l'air.
-
-Or `LevelChunkSection.hasOnlyAir()` est un compteur déjà tenu à jour. Une boîte entièrement dans des
-sections vides ne peut heurter aucun bloc : la certitude coûtait deux lectures de champ.
-
-```
-0 balayage évité sur 3 437 405 examinés   →   taux 0,0 %
-```
-
-**La granularité du cache ne correspond pas à celle de la question.** `hasOnlyAir()` porte sur une
-section de seize blocs de côté ; la boîte d'une entité en fait un. Une TNT qui tombe près du sol est
-dans la même section que le sol. Le raccourci ne pouvait servir qu'à ce qui tombe en plein ciel.
-
-> Sans le compteur de taux, on aurait lu « ×1,61 contre ×1,76 » et conclu « c'est le bruit » — vrai,
-> et pour la mauvaise raison. **Le taux vaut zéro, et zéro multiplié par n'importe quoi vaut zéro.**
-
-### Celui qui a été retiré deux fois
-
-Une bête posée sur un cube plein ne peut pas tomber : sa collision pouvait être **conclue** au lieu
-d'être calculée. Le raisonnement était juste ; le verdict ne l'a pas été.
-
-**Premier refus** — taux de déclenchement **4,5 %**, coût net d'une milliseconde. La cause n'était pas
-le code mais l'état du monde : dans un tas, les bêtes se poussent en permanence et rien n'est jamais
-immobile.
-
-**L'enclos a corrigé cette cause.** 915 bêtes sur 1000 se sont posées, le taux est monté à **26 %**.
-Quatre paires de mesures entrelacées ont tranché quand même :
-
-```
-sans : 6,21 · 7,21 · 8,25 · 6,75   moyenne 7,11 ms
-avec : 6,37 · 6,48 · 8,29 · 7,97   moyenne 7,28 ms
-```
-
-Trois fois sur quatre dans le mauvais sens.
-
-> **La règle, et elle est arithmétique.** Le rapport a fini par publier le bon chiffre : **157 appels
-> à `collide` par tick**, une fois la cadence appliquée. Le raccourci portait sur quarante ; son point
-> d'accroche se payait sur cent cinquante-sept.
->
-> La valeur d'un raccourci est le produit de **trois** nombres : son taux de déclenchement, ce qu'il
-> épargne, et le nombre d'appels. La première publication disait « 22 674 collisions épargnées » — un
-> grand nombre qui cachait les deux autres.
-
-### L'enclos, ou comment un module en débloque trois
-
-Trois modules attendaient que les bêtes s'immobilisent, et aucun n'y arrivait. `Jam` exige vingt
-ticks d'immobilité consécutifs et n'en trouvait que **152 sur 1000**.
-
-La cause était en amont des trois : **les bêtes décident d'aller se promener.** Le compteur
-d'immobilité se remet à zéro, l'amas ne se déclare jamais figé, et plus rien ne peut se poser.
-
-Or une vache au milieu d'un enclos plein qui décide de marcher fait calculer un chemin, le suit, se
-fait repousser par ses voisines, et **finit là où elle était**. Le résultat observable est identique ;
-seul le calcul disparaît.
-
-Le critère ne suppose rien sur la forme du lieu — pas la densité, qui aurait figé douze bêtes
-parfaitement libres réparties sur un chunk. **Cette bête est-elle allée quelque part ?** On note sa
-position, on revient cent ticks plus tard. Moins de deux blocs en cinq secondes, elle cesse de
-décider. Dès qu'elle en parcourt deux, elle recommence.
-
-> Aucune barrière à surveiller : **bouger est sa propre preuve.**
-
-```
-amas figés   121 / 162  →  372 / 422      Jam se déclenche 3× plus
-915 bêtes figées sur 1000 · 23 649 décisions d'errance épargnées
-```
-
-### Celui qui est revenu
-
-Le module des entonnoirs a été retiré une première fois sur un verdict sans appel — *« 47 objets sans
-le mod, 22 avec »*, le débit divisé par deux. **Ce chiffre venait d'un instrument que le projet avait
-lui-même déclaré non reproductible** : trois exécutions identiques rendaient 18/30, 39/16, puis 16/16.
-
-La cause tenait dans le correctif précédent. Casser une trémie n'efface pas son contenu, il le
-**relâche** — précisément là où la boucle suivante reposait les trémies, qui le ré-aspiraient.
-
-Réparé, l'instrument rend trois fois le même chiffre à l'objet près. Et la bonne réponse n'était pas
-d'endormir l'entonnoir mais de lui faire porter **seize objets par recherche de conteneur au lieu
-d'un**, en payant seize fois la recharge : débit moyen identique, travail divisé par seize.
-
-> Vanilla fait déjà cela pour un objet ramassé au sol — `addItem(Container, ItemEntity)` avale une
-> pile entière de 64 pour la même recharge de 8 ticks. La règle « un objet à la fois » n'est pas une
-> loi du jeu : c'est une particularité du transfert entre conteneurs, que vanilla lui-même enfreint.
-
-### Les deux règles que ces échecs ont installées
-
-> **1.** Un poste élevé sur une méthode **très courte et très appelée** doit être suspecté d'artefact
-> avant d'être attaqué. L'échantillonneur ne voit que le sommet de pile, et le JIT inline.
-
-> **2.** Compter des **allocations évitées** ne prouve rien tant qu'on n'a pas mesuré le tas. Deux
-> fois, ce projet a supprimé ce que la machine virtuelle supprimait déjà.
+Le détail des treize modules, ce qu'ils promettaient et pourquoi ils ont perdu à la mesure : voir
+[NOTES-INGENIERIE.md](NOTES-INGENIERIE.md).
 
 ---
 
+<a id="ce-que-vanilla-26-1-fait-deja"></a>
 ## 🔍 Ce que vanilla 26.1 fait déjà
 
 Vérifier avant d'écrire a évité **huit** modules inutiles. Mojang a absorbé, version après version,
@@ -1772,6 +1857,7 @@ une question que personne ne pose — *pourquoi ce travail a-t-il lieu ?*
 
 ---
 
+<a id="outils-pour-modpack-lourd"></a>
 ## 🧰 Outils pour modpack lourd
 
 ```
@@ -1810,38 +1896,19 @@ chiffre qui tranchera, et le module n'est pas écrit avant.
 
 ---
 
-## 🧾 Les trois règles d'instrument, et ce qu'elles ont coûté à apprendre
+<a id="les-trois-regles-d-instrument"></a>
+## 🧾 Les trois règles d'instrument
 
-Ce laboratoire a deux profileurs. **Les deux mentent sur les extrêmes, et pour des raisons
-symétriques.**
+Ce laboratoire a deux profileurs, et **les deux mentent sur les extrêmes — pour des raisons
+symétriques.** Le profileur de temps surestime une méthode courte et très appelée ; le profileur
+d'allocations surestime un site qui alloue de tout petits objets très souvent. Piège commun aux deux :
+poser un mixin sur le point mesuré lui **retire son inlinisation**, et le coût du point d'accroche peut
+dépasser celui du travail qu'on y supprime.
 
-| | Ce qu'il voit | Où il se trompe | Prix payé |
-|---|---|---|---|
-| **Temps** *(sommet de pile)* | Où est le processeur | Une méthode **courte et très appelée** monte haut sans porter le temps qu'on lui prête — le JIT l'inline et elle absorbe ses voisines | 3 modules |
-| **Allocations** *(JFR)* | Qui alloue | Il **échantillonne et extrapole** : un site qui alloue de **tout petits** objets **très souvent** est surévalué d'ordres de grandeur | 1 module, facteur **70** |
+Le tableau complet, et la troisième règle — apprise en septembre 2026, en rapportant un pourcentage à ce
+qu'il totalisait vraiment plutot qu'a un tick — : voir [NOTES-INGENIERIE.md](NOTES-INGENIERIE.md).
 
-Et un piège commun aux deux : **y poser un mixin retire l'inlinisation**. Le coût du point d'accroche
-peut dépasser celui du travail supprimé — la bordure du monde a coûté **4 ms** pour 3,9 millions de
-recherches économisées.
-
-> **Le correctif est le même dans les deux cas : multiplier le compte par la taille avant d'écrire
-> une ligne de code.** 2,4 M de tableaux × 16 octets = 39 Mo, pas 2 700.
-
-### La troisième, apprise en septembre 2026
-
-Le profileur d'allocations désignait un poste à **10,5 %**, soit 1,88 Go — la boîte vide que le
-cerveau fabrique à chaque test de condition. Le module écrit pour la partager a rendu **vingt
-mégaoctets** par fenêtre de mesure, et ×1,04 : sous la dérive du banc.
-
-L'écart n'était pas une erreur de mesure mais une erreur de lecture. Le profileur classe par **volume
-cumulé depuis l'ouverture de l'enregistrement** — chargement du serveur, décantation et les *deux*
-phases entrelacées comprises. Ses 17,99 Go de total ne sont pas le travail d'un tick.
-
-> **Un pourcentage n'a de sens que rapporté à ce qui a été totalisé.** « Dix pour cent des
-> allocations » désignait un poste réel, et ce poste pèse quatre pour cent d'une fenêtre de mesure.
-
----
-
+<a id="ce-qui-ne-se-fera-pas-et-pourquoi"></a>
 ## 🚧 Ce qui ne se fera pas, et pourquoi
 
 | Piste | Verdict |
@@ -1855,9 +1922,11 @@ phases entrelacées comprises. Ses 17,99 Go de total ne sont pas le travail d'un
 | **Sommeil généralisé aux mods** | On ne peut pas endormir ce dont on ne sait pas quand il doit se réveiller. Lire l'état coûte plus que le tick. |
 | **Mémoire retenue** | 4,8 Mo d'états de bloc ; le reste **est le terrain** (242 Mo de `BitStorage`), incompressible. |
 | **Tick parallèle par régions** | Nul sous 16 cœurs. Verdict rendu, non implémenté. |
+| **Mesh shaders pour le terrain** | `VK_EXT_mesh_shader` détecté et activable (287 extensions brutes captées sur la RTX 3080 de test), mais jamais exploité par un rendu : preuve de concept hors-jeu et feuille de route écrites (`tools/EssaiMeshShader.java`, `notes/mesh-shaders-terrain-faisabilite.md`), refonte du pipeline de maillage non entreprise — chantier de plusieurs semaines, pas d'un soir. |
 
 ---
 
+<a id="mon-antivirus-dit-que-lanterne-est-un-virus"></a>
 ## 🛡️ « Mon antivirus dit que Lanterne est un virus »
 
 **Ce n'en est pas un, et voici de quoi le vérifier toi-même plutôt que de nous croire sur parole.**
@@ -1949,6 +2018,7 @@ tranquillité.
 
 ---
 
+<a id="le-modpack-lanterne-jade-journeymap-sodium-distant-horizons-jei"></a>
 ## 🧩 Le modpack — Lanterne + Jade + JourneyMap + Sodium + Distant Horizons + JEI
 
 Lanterne est le **socle de performance** de ce pack. Les autres sont des mods de confort ou de rendu.
