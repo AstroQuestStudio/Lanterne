@@ -9,6 +9,7 @@
   "mixins": [
     "ServerEntityMixin",
     "ProfilerMixin",
+    "ManneMixin",
     "LivingEntityMixin",
     "NetworkRegistryMixin",
     "FurnaceMixin",

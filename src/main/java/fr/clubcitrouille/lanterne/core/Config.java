@@ -100,6 +100,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ANCHOR;
     public static final ModConfigSpec.BooleanValue VIGIL;
     public static final ModConfigSpec.BooleanValue RUMEUR;
+    public static final ModConfigSpec.BooleanValue MANNE;
 
     public static final ModConfigSpec.BooleanValue BEACON_OVERHAUL;
     public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_1;
@@ -956,8 +957,22 @@ public final class Config {
                 "",
                 "ETEINT PAR DEFAUT : c'est un changement D'EQUILIBRAGE, pas une optimisation, et",
                 "vanilla reserve ce rabais a qui a fait l'effort. A l'administrateur de decider si sa",
-                "coop veut le partager.")
+                "coop voit le partager.")
                 .define("rumeur_villageois_partagee", false);
+        MANNE = BUILDER.comment(
+                "LA MANNE : le stock d'un villageois ne s'epuise jamais.",
+                "",
+                "VANILLA, lu au javap sur le jar reellement compile : chaque MerchantOffer porte un",
+                "compteur uses, incremente de un a chaque echange par MerchantOffer.increaseUses(),",
+                "et isOutOfStock() renvoie vrai des que uses atteint maxUses - l'echange reste",
+                "visible mais refuse jusqu'a ce que le villageois se restocke en dormant chez lui, ou",
+                "jusqu'au lendemain. Ce module ne touche a rien d'autre : ni les prix, ni la demande,",
+                "ni l'experience versee - seul le compteur d'usages reste bloque a zero.",
+                "",
+                "ETEINT PAR DEFAUT : comme RUMEUR juste au-dessus, c'est un changement",
+                "D'EQUILIBRAGE assume, pas une optimisation - a l'administrateur de decider si son",
+                "monde veut des marchands qui ne tarissent jamais.")
+                .define("manne_villageois_stock_infini", false);
 
         BUILDER.comment(
                 "",
