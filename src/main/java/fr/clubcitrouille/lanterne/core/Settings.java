@@ -615,6 +615,8 @@ public final class Settings {
     /** La lentille : mise a l'echelle de resolution. Voir {@link Lens}. */
     /** La jauge de performance sur le HUD. Voir {@code client.Gauge}. */
     private static boolean gauge;
+    /** Le Regard : la tooltip d'inspection bloc/entité. Voir {@code client.regard.Sight}. */
+    private static boolean regard = true;
     private static boolean lens;
     private static boolean din = true;
     /**
@@ -1297,6 +1299,11 @@ public final class Settings {
         return gauge;
     }
 
+    /** Comme {@link #gauge()} : une aide à l'écran, pas un module d'optimisation — pas de {@code master &&}. */
+    public static boolean regard() {
+        return regard;
+    }
+
     public static boolean spill() {
         return master && spill;
     }
@@ -1559,6 +1566,7 @@ public final class Settings {
         clump = wanted.contains("clump") || wanted.contains("orbes");
         vigil = wanted.contains("vigil") || wanted.contains("garde");
         waypoints = wanted.contains("waypoint") || wanted.contains("reperes");
+        regard = wanted.contains("regard");
         // Les réglages viennent de changer en bloc : les modules à état jettent le leur. Voir epoch().
         epoch++;
         // Le masquage des feuilles n'est pas un booléen mais un choix à trois branches, dont la
@@ -1638,6 +1646,7 @@ public final class Settings {
         tampon = ClientConfig.TAMPON.get();
         din = ClientConfig.DIN.get();
         gauge = ClientConfig.GAUGE.get();
+        regard = ClientConfig.REGARD.get();
         lens = ClientConfig.LENS.get();
         Lens.tune(ClientConfig.LENS_PRESET.get());
         // La nettete et la houle survivent desormais au redemarrage. Sans ces deux lignes, un

@@ -38,6 +38,7 @@
     "MemoryBoxMixin",
     "ThreadCountMixin",
     "ExperienceOrbAccessor",
+    "FurnaceProgressAccessor",
     "RegionFileVersionMixin",
     "RegionFileStorageMixin",
     "IOWorkerPendingStoreMixin",

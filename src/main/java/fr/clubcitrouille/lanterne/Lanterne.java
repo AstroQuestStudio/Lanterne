@@ -144,6 +144,10 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.Machine.appraise();
         fr.clubcitrouille.lanterne.content.waypoint.Waypoints.register(modBus);
         fr.clubcitrouille.lanterne.core.network.SouvenirNet.register(modBus);
+        // Le Regard : l'inspection bloc/entite. Le paquet reseau s'enregistre des deux cotes —
+        // meme raison que les reperes juste au-dessus — la tooltip elle-meme (client.regard.Sight)
+        // ne s'enregistre que dans le bloc CLIENT ci-dessous.
+        fr.clubcitrouille.lanterne.content.regard.Regard.register(modBus);
         // Les touches et les couches d'interface passent par le bus du MOD et n'existent que côté
         // client. L'appel est donc gardé : un serveur dédié ne doit jamais charger ces classes, et
         // la garde suffit — une classe n'est chargée qu'au moment où l'on s'en sert.
@@ -163,6 +167,7 @@ public final class Lanterne {
             // Meme raison : la touche du guide illustre reutilise cette meme categorie.
             fr.clubcitrouille.lanterne.client.ponder.Hint.register(modBus);
             fr.clubcitrouille.lanterne.client.Gauge.register(modBus);
+            fr.clubcitrouille.lanterne.client.regard.Sight.register(modBus);
             // Le rendu des tableaux : la mosaïque, le magot et le dessin n'existent que côté client
             // et ne doivent jamais être chargés par un serveur dédié.
             fr.clubcitrouille.lanterne.content.painting.CanvasRenderer.register(modBus);

@@ -48,6 +48,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue VEIL_PARTICLES;
     public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
     public static final ModConfigSpec.BooleanValue GAUGE;
+    public static final ModConfigSpec.BooleanValue REGARD;
     public static final ModConfigSpec.BooleanValue LENS;
     public static final ModConfigSpec.EnumValue<Lens.Preset> LENS_PRESET;
     public static final ModConfigSpec.EnumValue<Upscale.Edge> LENS_EDGE;
@@ -225,6 +226,28 @@ public final class ClientConfig {
                 "saccade - le prereglage d'echelle en cours, et le nombre de creatures que le Voile",
                 "vient d'ecarter. Releve sur une fenetre glissante de deux secondes.")
                 .define("jauge", false);
+        REGARD = BUILDER.comment(
+                "LE REGARD : en visant un bloc ou une entite, une tooltip dit ce qu'il y a vraiment",
+                "dedans - dans l'esprit de Jade/HWYLA, mais construite avec les API de ce moteur et",
+                "reliee aux VRAIS modules de Lanterne plutot que de deviner.",
+                "",
+                "BLOC : nom, mod d'origine, etat de redstone si pertinent, apercu du contenu pour un",
+                "conteneur (demande au serveur - voir content.regard.Regard - un client ne connait",
+                "JAMAIS le contenu d'un coffre qu'il n'a pas ouvert), barre de cuisson/combustible",
+                "pour un four, et le VRAI debit d'un entonnoir selon que \"Entonnoirs par lots\" est",
+                "actif sur ce serveur.",
+                "",
+                "ENTITE : nom, vie avec barre, equipement visible, et pour une creature non protegee,",
+                "la cadence de simulation ESTIMEE que \"Niveau de detail\" lui applique - une fenetre",
+                "sur ce que Lanterne decide, qu'aucun mod d'inspection generaliste ne peut montrer.",
+                "",
+                "OBJET AU SOL : la VRAIE portee et frequence de fusion appliquees par \"Fusion des",
+                "objets\" sur ce serveur, au lieu du chiffre vanilla si ce module est actif.",
+                "",
+                "Coute une lecture de blocstate/entite par image quand actif, et au plus une petite",
+                "requete reseau toutes les quelques images UNIQUEMENT quand la cible est un conteneur",
+                "reel - voir Radiographie pour la mesure. Desactive : cout nul, rien n'est evalue.")
+                .define("regard", true);
         LENS = BUILDER.comment(
                 "LA LENTILLE : rendre le monde plus petit que l'ecran, puis l'y etaler.",
                 "",

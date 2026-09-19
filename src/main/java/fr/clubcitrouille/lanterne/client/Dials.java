@@ -358,6 +358,14 @@ public final class Dials extends Screen {
                 "F3 donne une moyenne arrondie ; la jauge donne les à-coups, qui sont ce qu'on"
                         + " ressent.",
                 "Effet immédiat. Fenêtre glissante de deux secondes."));
+        image.add(Dial.toggle("Le Regard", Settings::regard, ClientConfig.REGARD,
+                "En visant un bloc ou une entité : nom, contenu réel d'un conteneur, vie, équipement —"
+                        + " dans l'esprit de Jade/HWYLA.",
+                "Relié aux vrais modules de Lanterne : cadence de simulation d'une créature, vrai"
+                        + " débit d'un entonnoir, vraie portée de fusion d'un tas d'objets — ce"
+                        + " qu'un mod d'inspection générique ne peut pas savoir.",
+                "Effet immédiat. Une petite requête réseau, au plus toutes les dix images, et"
+                        + " seulement en visant un vrai conteneur."));
         this.families.add(image);
     }
 
