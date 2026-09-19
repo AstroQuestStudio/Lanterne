@@ -1142,13 +1142,25 @@ public final class Config {
         LEURRE = BUILDER.comment(
                 "Allumer l'anti x-ray. A false, le serveur envoie exactement ce que Mojang enverrait.",
                 "",
-                "ETEINT PAR DEFAUT pour l'instant : ce module rend l'AutoMiner du Club Citrouille",
-                "aveugle aux filons pas encore exposes (voir plus haut, son cache de filons lit la",
-                "section entiere sans condition d'exposition - exactement le comportement qu'un x-ray",
-                "donnerait). L'utilisateur n'a pas encore tranche entre corriger AutoMiner pour qu'il ne",
-                "lise que l'expose, ou accepter qu'il perde cette detection a distance. A remettre a",
-                "true une fois ce choix fait - le module lui-meme est fini, mesure, et sans danger.")
-                .define("actif", false);
+                "ALLUME PAR DEFAUT. La tension qui le tenait eteint est resolue : AutoMiner (le bot",
+                "officiel du Club Citrouille) voit desormais TOUT - y compris les filons non exposes,",
+                "c'est une fonctionnalite voulue par l'administrateur, pas un bug - tandis que",
+                "n'importe quel autre mod ou pack x-ray reste aveugle a ce que ce module protege.",
+                "",
+                "Le mecanisme : une connexion qui a reellement le mod autominer charge declare, a la",
+                "negociation reseau, un canal d'identite que Lanterne lui prete (aucune modification",
+                "d'AutoMiner necessaire - c'est une lecture LOCALE du chargeur de mods cote client,",
+                "verifiee cote serveur via NetworkRegistry.hasChannel). Voir core.Leurre (section",
+                "'Le signal retenu') pour le detail complet, et pourquoi la premiere piste envisagee -",
+                "une liste de mods exposee par la poignee de main FML/NeoForge, independante de tout",
+                "canal - a ete VERIFIEE FAUSSE pour ce moteur par lecture de bytecode, pas supposee.",
+                "",
+                "Ce signal n'est pas une preuve cryptographique et ne pretend pas l'etre : un pack de",
+                "ressources ne peut structurellement rien contre lui (il ne participe a aucune poignee",
+                "de main), mais un vrai mod ecrit pour usurper l'identifiant 'autominer' le pourrait.",
+                "Raisonnable pour un petit serveur prive entre amis ; insuffisant seul sur un serveur",
+                "public a forts enjeux. Voir core.Leurre pour la discussion complete du seuil retenu.")
+                .define("actif", true);
         LEURRE_BLOCKS = BUILDER.comment(
                 "Blocs proteges : caches tant qu'aucune de leurs six faces ne touche une case non",
                 "opaque. Un identifiant de bloc par ligne (\"minecraft:diamond_ore\"). Defaut : tous les",

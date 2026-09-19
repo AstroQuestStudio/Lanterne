@@ -59,6 +59,7 @@
     "EmballageBiomeMixin",
     "LeurreEmballageMixin",
     "LeurreInvalidationMixin",
+    "LeurreConnexionMixin",
     "MiningMixin",
     "BurinMixin",
     "AureoleMixin",

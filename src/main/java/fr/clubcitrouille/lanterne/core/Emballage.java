@@ -124,13 +124,21 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  * exactement comme chez vanilla. Leur promotion passe par {@code setBlockEntity}, qu'on surveille :
  * le paquet est donc réemballé au moment où elles apparaissent.
  *
- * <h2>Le destinataire : rien dans ce paquet ne dépend de lui</h2>
+ * <h2>Le destinataire : presque rien dans ce paquet ne dépend de lui — SAUF depuis {@code Leurre}</h2>
  *
- * <p>Il fallait le vérifier avant d'envoyer le même octet à deux joueurs, et la réponse est nette.
- * Le paquet ne contient que la position, les sections, les cartes de hauteur, les étiquettes des
- * entités de bloc et la lumière — aucun de ces morceaux ne consulte le joueur. Les identifiants de
- * registre qui y sont écrits (type d'entité de bloc, biome, état de bloc) viennent des registres du
- * <b>serveur</b>, communs à toutes les connexions.
+ * <p>Il fallait le vérifier avant d'envoyer le même octet à deux joueurs, et la réponse était nette
+ * jusqu'à l'exemption AutoMiner par connexion : le paquet ne contient que la position, les sections,
+ * les cartes de hauteur, les étiquettes des entités de bloc et la lumière — aucun de ces morceaux ne
+ * consultait le joueur. Les identifiants de registre qui y sont écrits (type d'entité de bloc, biome,
+ * état de bloc) viennent des registres du <b>serveur</b>, communs à toutes les connexions.
+ *
+ * <p>Une exception existe désormais, et elle est délibérée : {@code core.Leurre} peut faire varier le
+ * contenu DES SECTIONS elles-mêmes selon que la connexion a — ou non — déclaré le canal d'identité
+ * d'AutoMiner (voir sa Javadoc, section « Le signal retenu »). {@link #cle} en tient compte : la clé
+ * de cache porte désormais un bit qui distingue la vue réelle de la vue voilée, pour que ce module ne
+ * serve JAMAIS la mauvaise variante à la mauvaise connexion. Voir {@link #cle} pour le mécanisme
+ * exact, et pourquoi la tolérance aux collisions de hachage qui protège le reste de ce cache ne
+ * suffisait pas ici.
  *
  * <p>Un morceau, en revanche, dépend bien du moment de l'envoi : la lumière auxiliaire de NeoForge.
  * {@code sendChunk} n'envoie pas notre paquet seul, il l'emballe dans un lot avec une charge utile
@@ -287,7 +295,9 @@ public final class Emballage {
     private static long evinces;
 
     /**
-     * La clé d'un chunk : sa position, brassée avec l'identité de son monde.
+     * La clé d'un chunk : sa position, brassée avec l'identité de son monde, et — depuis
+     * l'exemption AutoMiner par connexion — un dernier bit qui distingue la vue RÉELLE de la vue
+     * VOILÉE.
      *
      * <p>Une position seule confondrait l'origine du Nether et celle de l'Overworld. On y mêle donc
      * l'identité de l'objet monde. Ce n'est pas gratuit — la machine virtuelle calcule le hachage
@@ -298,9 +308,27 @@ public final class Emballage {
      * <p>Un mélange reste un hachage, donc les collisions restent possibles ; c'est le jeton
      * d'identité du colis qui les rend inoffensives, pas cette multiplication. Elle ne fait que les
      * rendre rares.
+     *
+     * <h2>Pourquoi le bit d'exemption ne peut PAS se fier à cette même tolérance aux collisions</h2>
+     *
+     * <p>{@code Leurre.voile} peut désormais rendre, pour la MÊME section réelle, deux résultats
+     * différents selon la connexion — voir sa Javadoc, section « Le signal retenu ». Si ce cache
+     * gardait une seule entrée par chunk, la première connexion à demander un chunk déciderait, pour
+     * TOUTES les suivantes, si elles voient la vraie donnée ou la voilée : une fuite (AutoMiner
+     * d'abord, joueur ordinaire ensuite) ou une exemption ratée (l'inverse), au choix du hasard des
+     * arrivées. Le jeton d'identité du colis ne protège que contre les COLLISIONS entre chunks
+     * différents — il ne peut rien contre deux vues légitimement différentes du MÊME chunk.
+     *
+     * <p>Le décalage à gauche d'un bit, suivi d'un OR déterministe, garantit que les deux variantes
+     * d'un même {@code (monde, position)} ne peuvent JAMAIS entrer en collision entre elles — seul ce
+     * bit les distingue, pas le hachage. Les collisions qui restent possibles (entre deux chunks
+     * réellement différents) restent aussi rares qu'avant, et aussi inoffensives : le jeton
+     * d'identité continue de les couvrir. Le coût est la moitié de l'espace de clefs sur soixante-
+     * quatre bits — sans effet mesurable à l'échelle d'un cache de quelques milliers d'entrées.
      */
-    private static long cle(Level monde, long position) {
-        return position * 0x9E3779B97F4A7C15L + System.identityHashCode(monde);
+    private static long cle(Level monde, long position, boolean vueReelle) {
+        long base = (position * 0x9E3779B97F4A7C15L + System.identityHashCode(monde)) << 1;
+        return vueReelle ? base | 1L : base;
     }
 
     /**
@@ -347,7 +375,7 @@ public final class Emballage {
             return new ClientboundLevelChunkWithLightPacket(chunk, lumieres, filtreCiel, filtreBlocs);
         }
 
-        long cle = cle(chunk.getLevel(), chunk.getPos().pack());
+        long cle = cle(chunk.getLevel(), chunk.getPos().pack(), Leurre.exempt());
         Colis reservation = new Colis(new WeakReference<>(chunk), null, 0);
         synchronized (VERROU) {
             Colis garde = COLIS.getAndMoveToLast(cle);
@@ -397,12 +425,26 @@ public final class Emballage {
      * <p>La comparaison d'identité n'est pas une précaution de plus, elle est nécessaire : sur une
      * collision de clé entre deux dimensions, retirer aveuglément jetterait le colis d'un chunk
      * parfaitement à jour. On ne retire que le sien.
+     *
+     * <p>Essaie les DEUX variantes de {@link #cle} (réelle et voilée), sans savoir laquelle est
+     * réellement en cache : un bloc qui change invalide le chunk pour toute connexion, exemptée ou
+     * non, et cette méthode ne doit dépendre d'aucun état ambiant pour rester correcte.
      */
     public static void oublie(LevelChunk chunk) {
         if (vide) {
             return;
         }
-        long cle = cle(chunk.getLevel(), chunk.getPos().pack());
+        long position = chunk.getPos().pack();
+        Level monde = chunk.getLevel();
+        oublieUneVariante(cle(monde, position, false), chunk);
+        oublieUneVariante(cle(monde, position, true), chunk);
+    }
+
+    /**
+     * Retire, si elle appartient bien à ce chunk, une seule des deux variantes de {@link #cle} —
+     * voir la Javadoc de {@link #oublie} pour pourquoi les deux doivent toujours être essayées.
+     */
+    private static void oublieUneVariante(long cle, LevelChunk chunk) {
         synchronized (VERROU) {
             Colis garde = COLIS.get(cle);
             if (garde == null || garde.chunk().get() != chunk) {

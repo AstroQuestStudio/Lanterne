@@ -150,6 +150,10 @@ public final class Lanterne {
         // client et serveur : voir la Javadoc de MecheNet sur pourquoi ce fichier-ci ne porte pas la
         // même garde défensive contre un client qui ignorerait le canal.
         fr.clubcitrouille.lanterne.core.network.MecheNet.register(modBus);
+        // L'exemption AutoMiner de l'anti x-ray : canal d'identite sans donnee, enregistre des deux
+        // cotes (voir la Javadoc de LeurreNet pour pourquoi la decision de le declarer diverge par
+        // cote malgre un appel partage, exactement comme MecheNet et SouvenirNet juste au-dessus).
+        fr.clubcitrouille.lanterne.core.network.LeurreNet.register(modBus);
         // Le consentement du joueur a la mise a jour automatique : fichier CLIENT, enregistre des
         // deux cotes — meme raison que ClientConfig et Consent juste en dessous.
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,

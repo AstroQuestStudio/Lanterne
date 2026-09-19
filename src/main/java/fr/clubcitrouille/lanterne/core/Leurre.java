@@ -111,13 +111,76 @@ import net.minecraft.world.level.chunk.PalettedContainer;
  * <p><b>Ce n'est pas contourné ici, et ce n'est pas un défaut caché.</b> C'est une vraie tension de
  * conception, remontée telle quelle : l'anti x-ray et une prévision de filons à travers la roche non
  * creusée ne peuvent pas coexister sans qu'un mécanisme sache distinguer le bot du pack — et rien,
- * côté serveur, ne le peut. Ce que ce module GARANTIT malgré cette tension : {@link #estProtege} ne
- * s'applique qu'à un ensemble de blocs choisi ({@link Config#LEURRE_BLOCKS}), et l'exposition suit
- * l'avancement réel de la mine — dès qu'AutoMiner (ou un joueur) creuse et expose une face, le
- * prochain envoi du chunk porte la vraie donnée par la voie normale de mise à jour de bloc, comme
- * pour n'importe quel bloc modifié. AutoMiner reste donc utilisable pour miner — il découvre les
- * filons au fur et à mesure qu'il avance, comme un joueur, au lieu de les voir à distance à travers
- * la roche.
+ * côté serveur, ne le peut <b>au sens général</b>. Ce que ce module GARANTIT malgré cette tension :
+ * {@link #estProtege} ne s'applique qu'à un ensemble de blocs choisi ({@link Config#LEURRE_BLOCKS}),
+ * et l'exposition suit l'avancement réel de la mine — dès qu'AutoMiner (ou un joueur) creuse et
+ * expose une face, le prochain envoi du chunk porte la vraie donnée par la voie normale de mise à
+ * jour de bloc, comme pour n'importe quel bloc modifié.
+ *
+ * <h2>La décision : AutoMiner voit tout, tout le reste reste voilé</h2>
+ *
+ * <p>La tension ci-dessus n'est pas résolue en affaiblissant la protection : elle est résolue en la
+ * rendant <b>par connexion</b> plutôt que globale. C'est un choix explicite de l'administrateur de ce
+ * serveur, pas une concession technique : AutoMiner est le bot officiel du Club Citrouille, sa
+ * détection de filons non exposés est une fonctionnalité voulue, et un pack x-ray tiers doit rester
+ * bloqué. Les deux ne sont possibles ensemble que si le serveur peut distinguer l'un de l'autre —
+ * c'est tout l'objet de {@link #EXEMPT}.
+ *
+ * <h2>Le signal retenu, et pourquoi ce n'est PAS ce qui avait d'abord été envisagé</h2>
+ *
+ * <p>L'idée de départ — lire une liste complète des mods chargés par le client, distincte de tout
+ * canal réseau, exposée pendant la poignée de main FML/NeoForge — a été <b>vérifiée fausse</b> pour ce
+ * moteur (NeoForge 26.3.0.3-beta), pas supposée. Trois lectures de bytecode l'établissent (détail
+ * complet dans la Javadoc de {@code core.network.LeurreNet}) : {@code ServerLoginPacketListenerImpl}
+ * ne porte plus aucune trace de mod list depuis la réécriture du réseau NeoForge (post-1.20.2) ;
+ * {@code ServerConfigurationPacketListenerImpl} ne négocie que des <b>canaux</b> ; et le jar NeoForge
+ * lui-même ne conserve par connexion que des ensembles de canaux
+ * ({@code ChannelAttributes.PAYLOAD_SETUP}), jamais une liste brute d'identifiants de mod. Un mod sans
+ * canal réseau est donc, dans ce moteur précis, structurellement invisible au serveur — et AutoMiner
+ * n'en a aucun (vérifié : {@code grep} sans résultat sur {@code PayloadRegistrar}/
+ * {@code NetworkRegistry}/{@code SimpleChannel} dans son code).
+ *
+ * <p>Le signal réellement retenu est donc un <b>canal d'identité</b> que Lanterne — obligatoire des
+ * deux côtés — prête à AutoMiner sans toucher à son code : {@code core.network.AutominerPresence}, un
+ * paquet à zéro champ, jamais envoyé. La classe cliente de Lanterne ne le déclare, pendant la
+ * négociation réseau, que si {@code ModList.get().isLoaded("autominer")} répond vrai — une lecture
+ * LOCALE du chargeur de mods, dans la même JVM que le jeu qui tourne, pas une affirmation reçue du
+ * réseau. Côté serveur, {@link fr.clubcitrouille.lanterne.mixin.LeurreConnexionMixin} lit le résultat
+ * de la négociation via {@code ServerGamePacketListenerImpl.hasChannel(...)} — délègue vérifié par
+ * désassemblage à {@code NetworkRegistry.hasChannel(Connection, ConnectionProtocol, Identifier)} — au
+ * point exact où la connexion cible est connue : {@code PlayerChunkSender.sendChunk}. Voir la Javadoc
+ * de ce mixin pour pourquoi ce point précis, et pas celui où {@link #voile} est appelée elle-même.
+ *
+ * <h2>Pourquoi ce signal est raisonnable ici, et ce qu'il ne prétend pas être</h2>
+ *
+ * <p>Ce n'est PAS une preuve cryptographique, et ça ne prétend pas l'être : un joueur qui écrirait son
+ * propre faux mod portant l'identifiant {@code autominer} et rien d'autre obtiendrait la même
+ * exemption sans faire tourner le vrai bot. Aucun signal auto-déclaré ne peut fermer cette porte —
+ * c'est vrai de n'importe quel mécanisme d'identité côté client, sur n'importe quel serveur, avec
+ * n'importe quel moteur. Ce qui compte est le NIVEAU de friction que ça impose, comparé à ce que ça
+ * empêche :
+ *
+ * <ul>
+ *   <li>un pack de ressources ne peut structurellement RIEN ici — il ne participe à aucune poignée de
+ *       main, ne charge aucun code, ne peut pas déclarer de canal. C'est la menace réelle que ce
+ *       module visait à l'origine (« son xray doit fonctionner mais les autres mods d'xray non »), et
+ *       elle reste entièrement bloquée ;</li>
+ *   <li>un vrai mod x-ray tiers devrait se faire passer pour AutoMiner — changer son propre
+ *       identifiant de mod en {@code autominer} dans son {@code neoforge.mods.toml}. NeoForge ne
+ *       l'empêche pas techniquement, mais ce n'est plus « installer un pack », c'est écrire ou modifier
+ *       un mod NeoForge en connaissant le nom exact du canal à imiter ({@code autominer_presence}), un
+ *       effort d'un tout autre ordre pour un serveur privé entre amis ;</li>
+ *   <li>ce serveur n'est <b>pas</b> compétitif à fort enjeu — c'est un serveur privé du Club Citrouille,
+ *       entre joueurs qui se connaissent. Le seuil de sécurité recherché est « décourager un pack
+ *       téléchargé en deux clics », pas « résister à un attaquant qui recompile un mod ». Sur un
+ *       serveur public à forts enjeux (PvP compétitif, économie réelle), ce signal seul serait
+ *       insuffisant — il faudrait alors une vraie authentification du binaire, hors de portée d'un
+ *       canal réseau auto-déclaré quel qu'il soit.</li>
+ * </ul>
+ *
+ * <p>AutoMiner reste donc utilisable pour miner à distance à travers la roche — c'est la fonctionnalité
+ * voulue par l'administrateur, pas un bug — tandis qu'un pack x-ray téléchargé par un joueur ordinaire
+ * reste aveugle à tout ce que ce module protège, exactement comme sans AutoMiner du tout.
  *
  * <h2>Le Regard (HUD façon Jade), en comparaison : aucun conflit</h2>
  *
@@ -157,14 +220,61 @@ public final class Leurre {
     private static long blocsCaches;
     private static long invalidations;
 
+    // ------------------------------------------------------------------------------------------
+    // La décision par connexion : voir la Javadoc de classe, section « Le signal retenu ».
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * Cette connexion a-t-elle réellement AutoMiner chargé ? Posée par {@link
+     * fr.clubcitrouille.lanterne.mixin.LeurreConnexionMixin} à l'entrée de {@code
+     * PlayerChunkSender.sendChunk} — le seul point de la pile d'appels qui connaît la connexion cible
+     * — et lue par {@link #voile}, plusieurs cadres plus bas, sans qu'aucun paramètre ne puisse
+     * transporter l'information à travers le constructeur de vanilla qui les sépare.
+     *
+     * <p>{@code ThreadLocal} plutôt qu'un simple champ statique : {@code sendChunk} ne s'exécute
+     * qu'un fil à la fois sur la machine visée (voir la Javadoc de {@link Emballage}, même hypothèse),
+     * mais un {@code ThreadLocal} coûte la même chose ici — une lecture de champ — et reste correct
+     * même si un jour ce chemin cessait d'être mono-fil. {@code withInitial(() -> FALSE)} : le repli
+     * par défaut est toujours « pas exempté », jamais l'inverse — voir la Javadoc du mixin pour
+     * pourquoi ce sens est le seul sûr.
+     */
+    private static final ThreadLocal<Boolean> EXEMPT = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    /** Posé par {@code LeurreConnexionMixin} avant la construction du paquet de cette connexion. */
+    public static void beginEnvoi(boolean exempt) {
+        EXEMPT.set(exempt);
+    }
+
+    /** Retire l'état posé par {@link #beginEnvoi}, une fois le paquet de cette connexion construit. */
+    public static void finEnvoi() {
+        EXEMPT.set(Boolean.FALSE);
+    }
+
+    /**
+     * Lu par {@link Emballage} pour distinguer ses deux variantes de paquet en cache — voir sa
+     * Javadoc, section sur la clef de cache. Ne doit jamais être appelée hors d'un {@link #beginEnvoi}
+     * / {@link #finEnvoi} en cours : hors de cette fenêtre, la valeur par défaut ({@code false}) est
+     * correcte mais ne reflète aucune connexion réelle.
+     */
+    public static boolean exempt() {
+        return EXEMPT.get();
+    }
+
     /**
      * La section à envoyer : la vraie, ou une doublure dont les positions protégées non exposées
      * portent un bloc de remplissage. Appelée à la place de la section réelle aux deux points
      * d'accroche de {@code LeurreEmballageMixin} — voir la Javadoc de classe pour pourquoi les deux
      * doivent voir exactement le même résultat.
+     *
+     * <p>Une connexion exemptée ({@link #EXEMPT}) court-circuite tout le reste de cette méthode, y
+     * compris {@link #rafraichitReglages} : elle rend toujours {@code section} telle quelle, sans
+     * jamais consulter ni le cache ni la liste des blocs protégés. C'est délibérément la branche la
+     * MOINS chère de toute cette classe — une lecture de {@code ThreadLocal} et un retour — parce
+     * qu'elle doit rester quasi gratuite même si un jour la totalité d'un serveur se composait de
+     * connexions exemptées.
      */
     public static LevelChunkSection voile(LevelChunk chunk, LevelChunkSection section) {
-        if (!Settings.leurre()) {
+        if (!Settings.leurre() || EXEMPT.get()) {
             return section;
         }
         rafraichitReglages();

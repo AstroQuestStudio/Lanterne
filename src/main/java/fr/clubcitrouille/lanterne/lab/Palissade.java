@@ -38,7 +38,15 @@ import fr.clubcitrouille.lanterne.core.Settings;
  *       ajoute un premier envoi qui doit tout calculer, et combien ajoute un second envoi du même
  *       chunk une fois le cache par section rempli — c'est la promesse de {@link Leurre} qu'il
  *       s'agit de vérifier, pas de supposer.</li>
+ *   <li>{@link Step#MEASURE_EXEMPT} — le coût d'une connexion reconnue AutoMiner, sur la MÊME grille
+ *       et le MÊME cache déjà plein hérité de l'étape précédente : l'exemption par connexion (voir
+ *       {@code Leurre.EXEMPT} et {@code LeurreConnexionMixin}) doit rester la branche la moins
+ *       chère de toute la classe, jamais un coût de plus au-dessus du cache déjà chaud.</li>
  * </ol>
+ *
+ * <p>{@link #runCorrectness} vérifie aussi, dans le même passage, que le diamant totalement enfoui
+ * REDEVIENT visible pour une connexion exemptée sans jamais être exposé — et que le repli par défaut,
+ * hors de toute fenêtre {@code beginEnvoi}/{@code finEnvoi}, reste bien du côté protégé.
  *
  * <p>Les deux bras (SANS/AVEC) tournent dans la MÊME exécution, sur les MÊMES chunks, via {@link
  * Settings#setLeurre} — la seule façon de comparer sans laisser une différence de génération ou de
@@ -60,7 +68,8 @@ public final class Palissade {
     private static final int WARMUP = 2;
 
     private enum Step {
-        OFF, SEEDING, SETTLE, CORRECTNESS, MEASURE_OFF, MEASURE_ON_COLD, MEASURE_ON_WARM, DONE
+        OFF, SEEDING, SETTLE, CORRECTNESS, MEASURE_OFF, MEASURE_ON_COLD, MEASURE_ON_WARM,
+        MEASURE_EXEMPT, DONE
     }
 
     private static Step step = Step.OFF;
@@ -82,6 +91,11 @@ public final class Palissade {
     private static final long[] offNanos = new long[READINGS];
     private static final long[] onColdNanos = new long[READINGS];
     private static final long[] onWarmNanos = new long[READINGS];
+    // Une seule lecture significative eut suffi — la branche exempte ne consulte ni cache ni palette,
+    // voir Leurre.voile — mais la même statistique que les deux autres bras évite tout soupçon de
+    // chiffre choisi. Cache déjà PLEIN à ce stade (hérité de MEASURE_ON_WARM) : la branche exempte
+    // doit rester la moins chère malgré ça, pas seulement quand rien n'est en cache.
+    private static final long[] exemptNanos = new long[READINGS];
     private static int reading;
 
     private static long sectionsVuesAvant;
@@ -177,6 +191,22 @@ public final class Palissade {
                 }
                 reading++;
                 if (reading >= READINGS) {
+                    reading = 0;
+                    step = Step.MEASURE_EXEMPT;
+                }
+            }
+            case MEASURE_EXEMPT -> {
+                // Même grille, même cache PLEIN qu'à l'instant — mais chaque section est lue comme
+                // le serait celle d'une connexion ayant déclaré le canal d'identité d'AutoMiner :
+                // Leurre.voile doit court-circuiter avant même de consulter ce cache.
+                Leurre.beginEnvoi(true);
+                long elapsed = buildAll(level);
+                Leurre.finEnvoi();
+                if (reading >= WARMUP) {
+                    exemptNanos[reading - WARMUP] = elapsed;
+                }
+                reading++;
+                if (reading >= READINGS) {
                     step = Step.DONE;
                     for (ChunkPos pos : positions) {
                         level.setChunkForced(pos.x(), pos.z(), false);
@@ -265,6 +295,28 @@ public final class Palissade {
             correctnessLog.append("ÉCHEC : le diamant totalement enfoui est parti tel quel — fuite. ");
         }
 
+        // L'exemption par connexion : toujours diamant enfoui, mais cette fois pour une connexion
+        // qui a déclaré le canal d'identité d'AutoMiner. Voir Leurre.EXEMPT et LeurreConnexionMixin.
+        Leurre.beginEnvoi(true);
+        LevelChunkSection voileeExempt = Leurre.voile(chunk, reelle);
+        Leurre.finEnvoi();
+        boolean exemptVoitLeVrai = voileeExempt.getBlockState(lx, ly, lz).is(Blocks.DIAMOND_ORE);
+        if (!exemptVoitLeVrai) {
+            correctnessOk = false;
+            correctnessLog.append("ÉCHEC : une connexion exemptée (AutoMiner reconnu) ne voit PAS le "
+                    + "diamant enfoui — l'exemption par connexion ne fonctionne pas. ");
+        }
+        // Et le repli par défaut, hors de toute fenêtre begin/finEnvoi, doit rester protégé : c'est
+        // ce que verrait un chemin de construction de paquet qui ne passerait jamais par le mixin.
+        LevelChunkSection voileeSansContexte = Leurre.voile(chunk, reelle);
+        boolean replisSurDefautProtege =
+                !voileeSansContexte.getBlockState(lx, ly, lz).is(Blocks.DIAMOND_ORE);
+        if (!replisSurDefautProtege) {
+            correctnessOk = false;
+            correctnessLog.append("ÉCHEC : hors de toute connexion connue, le diamant enfoui part "
+                    + "quand même — le repli par défaut n'est pas du côté sûr. ");
+        }
+
         // Une face s'ouvre : le mécanisme normal de mise à jour de bloc doit désormais tout dire.
         level.setBlock(target.above(), Blocks.AIR.defaultBlockState(), flags);
         LevelChunkSection reelleApres = chunk.getSections()[sectionIndex];
@@ -304,6 +356,7 @@ public final class Palissade {
         double offMedian = median(offNanos);
         double coldValue = onColdNanos[0];
         double warmMedian = median(onWarmNanos);
+        double exemptMedian = median(exemptNanos);
 
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[PALISSADE] SANS leurre (%d chunks, %d lecture(s)) : médiane %.2f ms, "
@@ -317,6 +370,12 @@ public final class Palissade {
                 "[PALISSADE] AVEC leurre, cache PLEIN (%d lecture(s), chunks déjà vus) : médiane "
                         + "%.2f ms, soit %.4f ms/chunk.",
                 READINGS - WARMUP, warmMedian / 1e6, warmMedian / 1e6 / GRID_CHUNKS));
+        Lanterne.LOG.info(String.format(Locale.ROOT,
+                "[PALISSADE] AVEC leurre, connexion EXEMPTÉE (%d lecture(s), même cache plein) : "
+                        + "médiane %.2f ms, soit %.4f ms/chunk — le court-circuit de Leurre.EXEMPT "
+                        + "doit rendre ce chiffre AU PLUS proche de la médiane SANS leurre, jamais "
+                        + "au-dessus de la médiane cache PLEIN non exemptée.",
+                READINGS - WARMUP, exemptMedian / 1e6, exemptMedian / 1e6 / GRID_CHUNKS));
 
         if (offMedian <= 0d || warmMedian <= 0d) {
             Lanterne.LOG.warn("[PALISSADE] VERDICT : au moins une médiane nulle ou négative — signal "
