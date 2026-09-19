@@ -109,6 +109,7 @@
     "VulkanPhysicalDeviceMixin",
     "VulkanFeatureSetsMixin",
     "VulkanPresentDiagMixin",
+    "VulkanSubmitDiagMixin",
     "PortailRenderMixin"
   ]
 }

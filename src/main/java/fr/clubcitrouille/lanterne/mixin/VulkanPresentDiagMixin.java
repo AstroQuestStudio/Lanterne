@@ -82,17 +82,95 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * comportement de rendu ni de présentation — uniquement de la lecture et un journal, désactivé
  * par défaut.
  *
+ * <h2>Relance de l'investigation — {@code acquireNextTexture()} disculpé, nouvelle cible</h2>
+ *
+ * <p>Le diagnostic ci-dessus a été exécuté : {@code acquireNextTexture()} coûte 0,02-0,04 ms en
+ * moyenne, donc CE N'EST PAS lui. L'hypothèse initiale (blocage caché entre l'acquisition et le
+ * chronomètre de rendu) est réfutée. Reste à expliquer où passent les ~25 ms restants du
+ * compartiment « hors rendu ». Lecture de {@code Minecraft.renderFrame()} (mêmes sources
+ * embarquées, jamais {@code .mcsrc}) : l'ordre réel des appels est
+ * {@code acquireNextTexture()} → (chrono rendu démarre) → tick + {@code gameRenderer.render()}
+ * + {@code blitFromTexture()} → (chrono rendu s'arrête, {@code frameTimeNs} calculé) →
+ * {@code RenderSystem.getDevice().createCommandEncoder().submit()} → {@code windowSurface
+ * .present()}. Donc DEUX appels, pas un seul, sont hors du chrono de rendu ET hors de
+ * {@code acquireNextTexture()} : {@code submit()} et {@code present()}.
+ *
+ * <p>Lecture de {@code VulkanCommandEncoder.submit()} (mêmes sources, vérifié par
+ * {@code javap -p} sur le jar patché : {@code public void submit()}, aucune surcharge) : cette
+ * méthode signale un sémaphore <b>timeline</b> ({@code this.submitSemaphore}, créé avec
+ * {@code VkSemaphoreTypeCreateInfo.semaphoreType(1)} = {@code VK_SEMAPHORE_TYPE_TIMELINE}, champ
+ * confirmé par lecture directe du constructeur), soumet la file via
+ * {@code vkQueueSubmit2KHR(..., VK_NULL_HANDLE)} — AUCUNE fence n'est utilisée nulle part dans
+ * {@code VulkanQueue.Submission.close()}, vérifié par {@code javap} — puis appelle
+ * {@code this.awaitSubmitCompletion(this.currentSubmitIndex - 2L, 5_000_000_000L)}
+ * ({@code MAX_SUBMITS_IN_FLIGHT = 2}). Cette dernière méthode ({@code private boolean
+ * awaitSubmitCompletion(long, long)}, signature confirmée par {@code javap -p}) appelle
+ * {@code vkWaitSemaphores(...)} — un vrai appel Vulkan BLOQUANT côté CPU — pour attendre que le
+ * GPU ait fini la soumission d'il y a deux images, avant de réinitialiser le pool de commandes
+ * courant. <b>Ce moteur utilise déjà un sémaphore timeline pour cette synchronisation CPU/GPU</b>
+ * — la feature Vulkan {@code timelineSemaphore} (Vulkan 1.2 core) est même dans
+ * {@code VulkanFeatureSets.REQUIRED_FEATURESET}, donc obligatoire sur toute carte qui fait
+ * tourner ce moteur, vérifié par lecture directe de {@code VulkanFeatureSets.java}. Il n'y a
+ * AUCUNE fence ni sémaphore binaire à remplacer ici : la mission de remplacer « les fences
+ * binaires classiques » par un sémaphore timeline autour de la présentation n'a pas de cible,
+ * parce que ce point de synchronisation précis n'a jamais utilisé de fence binaire — seuls les
+ * sémaphores {@code acquireSemaphores}/{@code presentSemaphores} de {@code VulkanGpuSurface} sont
+ * binaires, et ils DOIVENT l'être : {@code vkAcquireNextImageKHR} et {@code vkQueuePresentKHR}
+ * n'acceptent structurellement que des sémaphores binaires pour la synchronisation liée au
+ * swapchain (extension {@code VK_KHR_swapchain} de base, sans {@code VK_KHR_present_wait} ni
+ * {@code VK_EXT_swapchain_maintenance1}) — aucune substitution par un sémaphore timeline n'est
+ * possible à cet endroit précis sans changer d'extension Vulkan, ce qui sort du périmètre de
+ * cette relance.
+ *
+ * <p>Le vrai suspect devient donc {@code submit()} — plus précisément l'attente CPU explicite
+ * dans {@code awaitSubmitCompletion()} — et non {@code present()} lui-même :
+ * {@code VulkanGpuSurface.present()} (vérifié par {@code javap -c}) ne contient qu'un seul appel
+ * natif, {@code vkQueuePresentKHR}, sans aucune synchronisation CPU explicite autour. Si le GPU
+ * est structurellement plus lent que le CPU sous Vulkan pour cette scène (RING, dix mille vaches,
+ * {@code horizon} actif), {@code awaitSubmitCompletion()} bloquera le thread de rendu jusqu'à ce
+ * que le GPU rattrape la soumission d'il y a deux images — et ce blocage tombe très exactement
+ * dans la fenêtre « hors rendu » que {@code Glass} mesure, hors de portée du chrono de rendu ET de
+ * la mesure déjà faite sur {@code acquireNextTexture()}. Ce n'est pas un défaut de conception :
+ * c'est le mécanisme de contrôle de la profondeur de file (deux soumissions en vol maximum) qui
+ * fait honnêtement remonter un vrai retard GPU au thread CPU — mais ce retard doit être mesuré
+ * avant de conclure quoi que ce soit.
+ *
+ * <p>Ce fichier ajoute donc la mesure de {@code present()} lui-même (ci-dessous), et un second
+ * mixin, {@code VulkanSubmitDiagMixin} (classe séparée car cible {@code VulkanCommandEncoder},
+ * pas {@code VulkanGpuSurface}), mesure {@code submit()} dans son ensemble ET isole le temps
+ * passé dans {@code awaitSubmitCompletion()} — la seule façon de savoir, sans supposer, si le
+ * coût vient de l'attente du sémaphore timeline (vrai retard GPU) ou d'ailleurs dans
+ * {@code submit()} (empaquetage de la soumission, {@code vkQueueSubmit2KHR} lui-même, etc.).
+ *
  * <h2>Protocole de vérification</h2>
  *
- * <p>{@code LANTERNE_VK_PRESENT_DIAG=1} avec {@code LANTERNE_GLASS=1} et
- * {@code LANTERNE_MODULES=horizon} (mêmes réglages que le banc RING qui a produit ×3,71 sous
- * Vulkan). Une ligne {@code [LANTERNE][VK-DIAG] Swapchain configuré} apparaît à chaque
- * (re)configuration — rare, seulement au démarrage et lors d'un redimensionnement — et donne
- * le mode demandé et l'ensemble des modes que le pilote rapporte comme supportés. Une ligne
- * {@code [LANTERNE][VK-DIAG] acquireNextTexture} apparaît toutes les trois secondes pendant la
- * mesure, avec la moyenne et le pire temps passé dans cet appel sur la fenêtre écoulée : si ce
- * chiffre s'approche des ~25,92 ms de « hors rendu » mesurés par {@code Glass} avec
- * {@code horizon} actif, la cause est confirmée à l'endroit précis prévu par cette javadoc.
+ * <p>{@code LANTERNE_VK_PRESENT_DIAG=1} avec {@code LANTERNE_GLASS=1}, {@code LANTERNE_GLASS_SCENE
+ * =ring}, {@code LANTERNE_GLASS_HERD=10000} et {@code LANTERNE_MODULES=horizon} (mêmes réglages
+ * que le banc RING qui a produit ×3,71 sous Vulkan). Une ligne
+ * {@code [LANTERNE][VK-DIAG] Swapchain configuré} apparaît à chaque (re)configuration — rare,
+ * seulement au démarrage et lors d'un redimensionnement — et donne le mode demandé et
+ * l'ensemble des modes que le pilote rapporte comme supportés. Quatre lignes apparaissent ensuite
+ * toutes les trois secondes pendant la mesure, chacune avec la moyenne et le pire temps sur la
+ * fenêtre écoulée :
+ *
+ * <ul>
+ *   <li>{@code [LANTERNE][VK-DIAG] acquireNextTexture} — déjà mesuré, sert de référence (attendu
+ *       proche de zéro).</li>
+ *   <li>{@code [LANTERNE][VK-DIAG] present} — le seul appel natif de {@code present()}
+ *       ({@code vkQueuePresentKHR}). S'il est proche de zéro, {@code present()} est disculpé à
+ *       son tour.</li>
+ *   <li>{@code [LANTERNE][VK-DIAG] submit (total)} — le coût complet de {@code submit()}, appelé
+ *       juste avant {@code present()} et juste après l'arrêt du chrono de rendu.</li>
+ *   <li>{@code [LANTERNE][VK-DIAG] awaitSubmitCompletion} — le sous-ensemble de {@code submit()}
+ *       passé dans l'attente bloquante du sémaphore timeline. Si ce chiffre s'approche des
+ *       ~25,92 ms de « hors rendu » mesurés par {@code Glass} avec {@code horizon} actif (et que
+ *       {@code submit (total)} lui est proche), la cause est confirmée : le GPU est en retard sur
+ *       le CPU sous Vulkan pour cette scène, et le mécanisme de contrôle de la profondeur de file
+ *       (deux soumissions en vol) le fait honnêtement apparaître comme un blocage CPU juste avant
+ *       la présentation. Si {@code submit (total)} est grand mais {@code awaitSubmitCompletion}
+ *       petit, le coût est ailleurs dans {@code submit()} (peu probable vu le code, mais à
+ *       vérifier plutôt que supposer).</li>
+ * </ul>
  */
 @Mixin(VulkanGpuSurface.class)
 public abstract class VulkanPresentDiagMixin {
@@ -116,6 +194,23 @@ public abstract class VulkanPresentDiagMixin {
     /** Zéro tant qu'aucune fenêtre de trois secondes n'a encore été ouverte. */
     @Unique
     private long lanterne$lastLogAt;
+
+    /** Horodatage du début de l'appel en cours à {@code present()}, ou zéro. */
+    @Unique
+    private long lanterne$presentStartedAt;
+
+    @Unique
+    private long lanterne$presentAccumNanos;
+
+    @Unique
+    private int lanterne$presentAccumCount;
+
+    @Unique
+    private long lanterne$presentAccumMaxNanos;
+
+    /** Zéro tant qu'aucune fenêtre de trois secondes n'a encore été ouverte pour {@code present()}. */
+    @Unique
+    private long lanterne$presentLastLogAt;
 
     /**
      * Le mode demandé, et l'ensemble complet que CE pilote rapporte comme supporté — la seule
@@ -184,5 +279,58 @@ public abstract class VulkanPresentDiagMixin {
         this.lanterne$accumCount = 0;
         this.lanterne$accumMaxNanos = 0L;
         this.lanterne$lastLogAt = now;
+    }
+
+    /**
+     * Chronomètre l'unique appel natif de {@code present()} ({@code vkQueuePresentKHR}) — aucune
+     * synchronisation CPU explicite n'entoure cet appel dans {@code VulkanGpuSurface.present()}
+     * (vérifié par {@code javap -c} : un seul appel {@code vkQueuePresentKHR} entre le montage de
+     * {@code VkPresentInfoKHR} et le traitement du code de retour). Si ce chiffre reste proche de
+     * zéro, tout blocage éventuel se trouve dans {@code submit()} (voir
+     * {@code VulkanSubmitDiagMixin}), pas ici.
+     */
+    @Inject(method = "present", at = @At("HEAD"))
+    private void lanterne$presentStart(CallbackInfo ci) {
+        if (!LANTERNE_VK_DIAG) {
+            return;
+        }
+        this.lanterne$presentStartedAt = System.nanoTime();
+    }
+
+    @Inject(method = "present", at = @At("RETURN"))
+    private void lanterne$presentEnd(CallbackInfo ci) {
+        if (!LANTERNE_VK_DIAG || this.lanterne$presentStartedAt == 0L) {
+            return;
+        }
+        long elapsed = System.nanoTime() - this.lanterne$presentStartedAt;
+        this.lanterne$presentStartedAt = 0L;
+        this.lanterne$presentAccumNanos += elapsed;
+        this.lanterne$presentAccumCount++;
+        if (elapsed > this.lanterne$presentAccumMaxNanos) {
+            this.lanterne$presentAccumMaxNanos = elapsed;
+        }
+
+        long now = System.nanoTime();
+        if (this.lanterne$presentLastLogAt == 0L) {
+            this.lanterne$presentLastLogAt = now;
+            return;
+        }
+        if (now - this.lanterne$presentLastLogAt < 3_000_000_000L) {
+            return;
+        }
+
+        double avgMs = (this.lanterne$presentAccumNanos / (double) this.lanterne$presentAccumCount) / 1e6d;
+        double maxMs = this.lanterne$presentAccumMaxNanos / 1e6d;
+        Lanterne.LOG.info(
+                "[LANTERNE][VK-DIAG] present : {} appel(s) sur les 3 dernières secondes, {} ms "
+                        + "en moyenne, {} ms au pire.",
+                this.lanterne$presentAccumCount,
+                String.format(Locale.ROOT, "%.3f", avgMs),
+                String.format(Locale.ROOT, "%.3f", maxMs));
+
+        this.lanterne$presentAccumNanos = 0L;
+        this.lanterne$presentAccumCount = 0;
+        this.lanterne$presentAccumMaxNanos = 0L;
+        this.lanterne$presentLastLogAt = now;
     }
 }
