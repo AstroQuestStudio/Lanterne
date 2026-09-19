@@ -4,6 +4,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.joml.Matrix4fc;
 
@@ -29,6 +31,7 @@ import com.mojang.renderpearl.api.textures.GpuSampler;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.Util;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 
@@ -169,6 +172,42 @@ final class Accumulate {
         return encoder.transientMemory().uploadGpu(bytes, 256L, GpuBuffer.USAGE_UNIFORM);
     }
 
+    /**
+     * Le délai maximal accordé à la toute première compilation de ce pipeline.
+     *
+     * <h2>Le gel du 567e592 : lu en bytecode sur le vrai jar patché, pas supposé</h2>
+     *
+     * <p>{@code Runnable::run} comme exécuteur de {@code GpuDevice.compilePipeline} ne fait pas
+     * ce qu'on croit. {@code FrontendGpuDevice.compilePipeline} délègue à
+     * {@code PipelineBuilder.compilePipeline}, qui retourne
+     * {@code CompletableFuture.supplyAsync(fournisseur, exécuteur)} — et ce fournisseur, avec
+     * {@code Runnable::run}, s'exécute <b>synchronement, en ligne, sur le thread appelant</b> :
+     * {@code Executor.execute} n'y fait qu'appeler {@code Runnable.run()} directement, sans
+     * jamais changer de thread. Le fournisseur, lui, appelle
+     * {@code VulkanDevice.compilePipeline} qui appelle directement
+     * {@code VulkanRenderPipeline.compile} — la construction Vulkan complète (modules de
+     * nuanceurs, disposition, {@code vkCreateGraphicsPipelines}) tourne donc <b>entièrement sur
+     * le thread de rendu</b>, avant même que {@code .get()} ne soit atteint.
+     *
+     * <p>Conséquence : le {@code .get()} qui suivait ce champ ne protégeait rien. Un pilote
+     * bloqué sur cette combinaison — jamais exercée avant que {@code club_citrouille} ne
+     * compile enfin, voir {@link Scene#borrow}, dont le repli sur {@code Resolve.chain() == null}
+     * empêchait {@link Scene#give} d'être jamais atteint plus tôt cette session — gelait donc le
+     * rendu tout entier, sans le moindre message : exactement le silence de plus de cinq minutes
+     * observé en jeu.
+     *
+     * <p>Le remède n'est pas d'ajouter un délai au {@code .get()} existant — trop tard, le blocage
+     * a déjà eu lieu avant de l'atteindre. Il faut confier le travail à {@link Util#backgroundExecutor()}
+     * — le même bassin ("Worker-Main") que {@code ShaderManager} utilise déjà pour compiler
+     * {@code club_citrouille}, vérifié par le même chemin de bytecode — pour que le thread de
+     * rendu ait, cette fois, quelque chose à attendre AVEC un délai. Si le délai expire, seul le
+     * thread d'arrière-plan reste occupé (une fuite, pas un gel) : le thread de rendu, lui,
+     * repart aussitôt, et cette passe se déclare cassée — cohérent avec le contrat déjà
+     * documenté par la classe : un échec de compilation est définitif et n'éteint que cette
+     * passe.
+     */
+    private static final long COMPILE_TIMEOUT_SECONDS = 10L;
+
     /** Compile le pipeline et crée les échantillonneurs au tout premier appel, et une seule fois. */
     private static boolean ensureReady() {
         if (compiled != null) {
@@ -184,11 +223,18 @@ final class Accumulate {
                     FilterMode.NEAREST, FilterMode.NEAREST, 1, OptionalDouble.empty());
             historySampler = device.createSampler(AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
                     FilterMode.LINEAR, FilterMode.LINEAR, 1, OptionalDouble.empty());
-            compiled = device.compilePipeline(PIPELINE, SHADER_SOURCE, Runnable::run)
-                    .get()
+            compiled = device.compilePipeline(PIPELINE, SHADER_SOURCE, Util.backgroundExecutor())
+                    .get(COMPILE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .finishCompile();
             Lanterne.LOG.info("[ÉCHELLE] Pipeline d'accumulation temporelle compilé.");
             return true;
+        } catch (TimeoutException timeout) {
+            broken = true;
+            Lanterne.LOG.warn("[ÉCHELLE] Compilation de l'accumulation temporelle bloquée plus de "
+                    + "{} s (pilote ou combinaison jamais exercée) : la remontée continue sans elle "
+                    + "(EASU/RCAS seuls). Le thread de rendu repart ; seul le thread d'arrière-plan "
+                    + "reste occupé.", COMPILE_TIMEOUT_SECONDS, timeout);
+            return false;
         } catch (Throwable problem) {
             broken = true;
             Lanterne.LOG.warn("[ÉCHELLE] Compilation de l'accumulation temporelle refusée : la "

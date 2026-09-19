@@ -2,6 +2,8 @@ package fr.clubcitrouille.lanterne.client.upscale;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -23,6 +25,7 @@ import com.mojang.renderpearl.api.textures.GpuSampler;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.Util;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 
@@ -154,6 +157,19 @@ final class Gbuffer {
         }
     }
 
+    /**
+     * Le délai maximal accordé à la toute première compilation de ce pipeline.
+     *
+     * <p>Voir le Javadoc de la constante homonyme dans {@link Accumulate}, qui porte le
+     * raisonnement complet — lu en bytecode sur le vrai jar patché — pour ce même patron exact :
+     * {@code Runnable::run} comme exécuteur de {@code GpuDevice.compilePipeline} fait tourner la
+     * compilation Vulkan complète en ligne sur le thread de rendu, sans aucun filet, et c'est ce
+     * qui a gelé le rendu la nuit du 567e592, la toute première fois que cette classe — jamais
+     * atteinte avant que {@code club_citrouille} ne compile enfin, voir {@link Scene#borrow} —
+     * a été exercée pour de vrai.
+     */
+    private static final long COMPILE_TIMEOUT_SECONDS = 10L;
+
     /** Compile le pipeline et crée l'échantillonneur au tout premier appel, et une seule fois. */
     private static boolean ensureReady() {
         if (compiled != null) {
@@ -170,11 +186,18 @@ final class Gbuffer {
             // une valeur qui ne correspond à aucun des deux.
             depthSampler = device.createSampler(AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
                     FilterMode.NEAREST, FilterMode.NEAREST, 1, OptionalDouble.empty());
-            compiled = device.compilePipeline(PIPELINE, SHADER_SOURCE, Runnable::run)
-                    .get()
+            compiled = device.compilePipeline(PIPELINE, SHADER_SOURCE, Util.backgroundExecutor())
+                    .get(COMPILE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .finishCompile();
             Lanterne.LOG.info("[ÉCHELLE] Pipeline de reconstruction des normales compilé.");
             return true;
+        } catch (TimeoutException timeout) {
+            broken = true;
+            Lanterne.LOG.warn("[ÉCHELLE] Compilation des normales de G-buffer bloquée plus de {} s "
+                    + "(pilote ou combinaison jamais exercée) : lanterne:normal restera absente "
+                    + "cette session. Le thread de rendu repart ; seul le thread d'arrière-plan "
+                    + "reste occupé.", COMPILE_TIMEOUT_SECONDS, timeout);
+            return false;
         } catch (Throwable problem) {
             broken = true;
             Lanterne.LOG.warn("[ÉCHELLE] Compilation des normales de G-buffer refusée : "
