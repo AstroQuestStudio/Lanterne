@@ -293,6 +293,10 @@ public final class Radiographie {
         // lancement LANTERNE_GREEDY_MESH=1 à un lancement sans (le compteur reste à "aucun quad vu"
         // dans ce cas, Greedy.accept() retournant false immédiatement).
         sb.append(fr.clubcitrouille.lanterne.client.terrain.Greedy.report()).append('\n');
+        // Le guet : voir fr.clubcitrouille.lanterne.client.terrain.Guet — desactive par defaut
+        // (reglage "guet"), rapporte donc "guet : desactive" tant qu'un joueur ne l'a pas active
+        // explicitement pour une session de mesure.
+        sb.append(fr.clubcitrouille.lanterne.client.terrain.Guet.report()).append('\n');
         sb.append('\n');
 
         sb.append("LENTILLE (mise à l'échelle) — chronologie\n").append("-".repeat(60)).append('\n');

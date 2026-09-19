@@ -62,6 +62,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue DIN_ALLOWANCE;
     public static final ModConfigSpec.IntValue DIN_WINDOW;
     public static final ModConfigSpec.BooleanValue EMPREINTE;
+    public static final ModConfigSpec.BooleanValue GUET;
 
     public static final ModConfigSpec SPEC;
 
@@ -462,6 +463,36 @@ public final class ClientConfig {
                 "confirme\" et la ligne de compilation du premier pipeline d'Echelle (Gbuffer) au",
                 "journal.")
                 .define("empreinte", false);
+
+        GUET = BUILDER.comment(
+                "LE GUET : mesure, SANS RIEN CHANGER AU RENDU, si la liste des sections de chunk",
+                "visibles reste identique d'une image a l'autre.",
+                "",
+                "CONTEXTE VERIFIE PAR JAVAP SUR LE VRAI JAR PATCHE (jamais suppose) : ce moteur",
+                "bascule DEJA sur un vrai vkCmdDrawIndexedIndirect par groupe de sections partageant",
+                "un meme tampon GPU - LevelRenderer.prepareChunkRendersIndirect /",
+                "ChunkSectionsToRender.DrawIndirect / VulkanRenderPass.drawIndexedIndirect, confirmes",
+                "un a un par lecture de bytecode reelle, PAS un appel de dessin par section. Le cout",
+                "mesure dans extractSectionDrawGroups (6,3% de temps propre dans une session en jeu",
+                "reelle du 19 septembre 2026, voir config/lanterne/profil-2026-09-19_21-04-36.txt) est",
+                "donc du travail CPU de regroupement par image, pas des appels de dessin en trop.",
+                "",
+                "CE QUE CE MODULE FAIT : rien que lire LevelRenderer.visibleSections() (deja public,",
+                "aucun mixin) chaque image et comparer une signature legere (taille + identite de",
+                "chaque section ET de son maillage compile) a celle de l'image precedente. N'ecrit",
+                "jamais dans le pipeline de rendu, ne peut donc pas le casser.",
+                "",
+                "CE QUE CE MODULE NE FAIT PAS : aucune tentative de mise en cache du regroupement",
+                "n'a ete faite. La piste existe (ne reconstruire les groupes de dessin que si cette",
+                "signature change) mais couple aujourd'hui, dans le meme calcul, une part STATIQUE",
+                "(quelles sections partagent quel tampon) et une part ANIMEE par image (fondu de",
+                "visibilite par section, et l'index qui la relie a son groupe de dessin) - une",
+                "refonte reelle du chemin de rendu de terrain, pas une extension sure a l'aveugle",
+                "sans pouvoir lancer un client ici. Ce module produit la mesure qui dira si cette",
+                "refonte vaut le risque, voir son rapport dans Radiographie.",
+                "",
+                "NON MESURE : eteint par defaut, comme tout module non mesure dans ce depot.")
+                .define("guet", false);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

@@ -74,6 +74,11 @@ public final class Pane {
         // temporel. Voir Vertige.
         fr.clubcitrouille.lanterne.lab.Vertige.pulse();
 
+        // Le guet : mesure si le regroupement des sections de chunk visibles change d'une image a
+        // l'autre (reglage "guet", eteint par defaut - non mesure). Ne lit que de l'API publique
+        // de LevelRenderer, n'y ecrit jamais. Voir Guet pour le pourquoi complet.
+        fr.clubcitrouille.lanterne.client.terrain.Guet.pulse();
+
         if (!Glass.armed()) {
             return;
         }
