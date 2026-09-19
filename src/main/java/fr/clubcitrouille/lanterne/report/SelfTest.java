@@ -127,6 +127,8 @@ public final class SelfTest {
     private static boolean traversee;
     /** Vrai si l'on éprouve l'anti x-ray (conformité puis coût). Voir {@code lab.Palissade}. */
     private static boolean palissade;
+    /** Vrai si l'on éprouve le raccourci de recette (indice de dernière-recette). Voir {@code lab.Etabli}. */
+    private static boolean etabli;
     private static int pregenRadius;
 
     /** Vrai si l.on éprouve le débit de génération selon le parallélisme. */
@@ -527,6 +529,13 @@ public final class SelfTest {
             Lanterne.LOG.info("Épreuve de la palissade (anti x-ray) armée.");
             return;
         }
+        if ("1".equals(System.getenv("LANTERNE_ETABLI"))) {
+            etabli = true;
+            step = Step.SETTLING;
+            waiting = SETTLE;
+            Lanterne.LOG.info("Épreuve de l'établi (raccourci de recette) armée.");
+            return;
+        }
 
         String raw = System.getenv("LANTERNE_SELFTEST");
         if (raw == null || raw.isBlank()) {
@@ -560,7 +569,7 @@ public final class SelfTest {
                     && !sommaire && !aide && !amarre && !cognee && !friture && !cheptel && !billet
                     && !loterieTest
                     && !seuil && !terrassement && !coince && !restitution && !rappel && !traversee
-                    && !palissade
+                    && !palissade && !etabli
                     && pregenRadius <= 0)) {
             return;
         }
@@ -613,7 +622,8 @@ public final class SelfTest {
                 && !fr.clubcitrouille.lanterne.lab.Seuil.running()
                 && !fr.clubcitrouille.lanterne.lab.Surge.running()
                 && !fr.clubcitrouille.lanterne.lab.Terrassement.running()
-                && !fr.clubcitrouille.lanterne.lab.Traversee.running() && waiting-- > 0) {
+                && !fr.clubcitrouille.lanterne.lab.Traversee.running()
+                && !fr.clubcitrouille.lanterne.lab.Etabli.running() && waiting-- > 0) {
             return;
         }
 
@@ -1024,6 +1034,17 @@ public final class SelfTest {
                 fr.clubcitrouille.lanterne.lab.Palissade.tick(server);
             } else if (step == Step.SETTLING) {
                 fr.clubcitrouille.lanterne.lab.Palissade.begin(server);
+                step = Step.LAUNCHED;
+            }
+            return;
+        }
+
+        if (etabli) {
+            // Aucune doublure : RecipeManager ne dépend d'aucun chunk chargé ni d'aucun joueur.
+            if (fr.clubcitrouille.lanterne.lab.Etabli.running()) {
+                fr.clubcitrouille.lanterne.lab.Etabli.tick(server);
+            } else if (step == Step.SETTLING) {
+                fr.clubcitrouille.lanterne.lab.Etabli.begin(server);
                 step = Step.LAUNCHED;
             }
             return;

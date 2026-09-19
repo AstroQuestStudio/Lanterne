@@ -12,6 +12,7 @@
     "LivingEntityMixin",
     "NetworkRegistryMixin",
     "FurnaceMixin",
+    "RaccourciCraftingMixin",
     "ServerLevelMixin",
     "LevelMixin",
     "LoterieMixin",

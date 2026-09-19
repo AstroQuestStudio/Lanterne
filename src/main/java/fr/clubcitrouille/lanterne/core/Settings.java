@@ -394,6 +394,8 @@ public final class Settings {
     private static boolean jam = true;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
     private static boolean sleep = true;
+    /** Le raccourci de recette : essayer d'abord la dernière recette qui a matché. Voir {@link Raccourci}. */
+    private static boolean raccourci = true;
     /**
      * Le transfert par lots des entonnoirs : seize objets par recherche, et seize fois la recharge.
      *
@@ -1185,6 +1187,10 @@ public final class Settings {
         return master && sleep;
     }
 
+    public static boolean raccourci() {
+        return master && raccourci;
+    }
+
     public static boolean bulk() {
         return master && bulk;
     }
@@ -1561,6 +1567,7 @@ public final class Settings {
         explosions = wanted.contains("explosion") || wanted.contains("blast");
         jam = wanted.contains("jam");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
+        raccourci = wanted.contains("raccourci") || wanted.contains("shortcut");
         bulk = wanted.contains("bulk") || wanted.contains("lot") || wanted.contains("entonnoir");
         gather = wanted.contains("gather") || wanted.contains("fusion") || wanted.contains("objets");
         pasture = wanted.contains("pasture") || wanted.contains("enclos") || wanted.contains("errance");
@@ -1765,6 +1772,7 @@ public final class Settings {
         save = Config.SAVE.get();
         jam = Config.JAM.get();
         sleep = Config.SLEEP.get();
+        raccourci = Config.RACCOURCI.get();
         bulk = Config.BULK.get();
         gather = Config.GATHER.get();
         broom = Config.BROOM.get();
@@ -1843,6 +1851,9 @@ public final class Settings {
         }
         if (sleep) {
             text.append("sommeil ");
+        }
+        if (raccourci) {
+            text.append("raccourci ");
         }
         if (bulk) {
             text.append("entonnoirs ");

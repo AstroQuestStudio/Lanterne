@@ -51,6 +51,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SAVE;
     public static final ModConfigSpec.BooleanValue JAM;
     public static final ModConfigSpec.BooleanValue SLEEP;
+    public static final ModConfigSpec.BooleanValue RACCOURCI;
     public static final ModConfigSpec.BooleanValue BULK;
     public static final ModConfigSpec.BooleanValue RATIONING;
     public static final ModConfigSpec.BooleanValue SCRATCH_POS;
@@ -221,6 +222,26 @@ public final class Config {
                 "Sommeil des blocs-entites dont l'echeance est connue : un four qui cuit sait",
                 "quand il aura fini, et n'a rien a faire d'ici la.")
                 .define("sommeil", true);
+        RACCOURCI = BUILDER.comment(
+                "RACCOURCI DE RECETTE : la table a craft et la grille 2x2 du joueur essaient",
+                "d'abord la derniere recette qui a matche, avant de tout rebalayer.",
+                "",
+                "RecipeManager.getRecipeFor porte deja, nativement, un indice de derniere-recette",
+                "(le meme principe que le quickCheck du four) - mais CraftingMenu et InventoryMenu",
+                "lui transmettent TOUJOURS null, verifie par javap sur le vrai jar patche : chaque",
+                "clic rebalaie donc lineairement les recettes de RecipeType.CRAFTING, 1277 sur ce",
+                "serveur (1266 vanilla + 11 Lanterne, comptees dans les fichiers reels).",
+                "",
+                "Inspire de FastSuite (mod tiers, etudie par javap, jamais charge) pour LE CONSTAT -",
+                "mais pas pour SA technique : FastSuite parallelise le matching sur un bassin de",
+                "fils, inutile sur la cible mono-coeur de ce serveur. Ce module se contente de",
+                "nourrir le canal que vanilla sait deja consulter - aucun fil, aucun verrou.",
+                "",
+                "Ne peut jamais rendre une mauvaise recette : RecipeManager.getRecipeFor REVERIFIE",
+                "toujours matches() sur l'indice avant de lui faire confiance - c'est du code",
+                "vanilla, pas de ce module. Au pire un indice perime coute UN matches() de plus,",
+                "jamais plus cher qu'un indice nul.")
+                .define("raccourci_recette", true);
         BULK = BUILDER.comment(
                 "Entonnoirs : seize objets par recherche de conteneur, au lieu d'un.",
                 "La recharge suit le lot - seize objets coutent 8x16 ticks - donc le debit moyen",
