@@ -279,7 +279,17 @@ def analyse(sortie):
             if dernier:
                 resultats[courant][1].add((dernier, nue.split(":", 1)[1].strip()))
             continue
-        forme = re.search(r"([\w<>$]+)\s*\([^)]*\)\s*;?\s*$", nue)
+        # « throws Xxx » peut s'intercaler entre la parenthèse fermante et le
+        # point-virgule (« configure(...) throws SurfaceException; ») — sans cette
+        # clause optionnelle, toute méthode qui déclare une exception vérifiée
+        # ratait ce motif et disparaissait purement et simplement de « connus »,
+        # ce qui faisait crier « method absente » sur une cible parfaitement
+        # valide. Trouvé sur VulkanGpuSurface.configure/acquireNextTexture, toutes
+        # deux « throws SurfaceException » — jamais vu avant parce qu'aucun mixin
+        # de ce dépôt ne visait jusqu'ici une méthode déclarant une exception.
+        forme = re.search(
+                r"([\w<>$]+)\s*\([^)]*\)(?:\s+throws\s+[\w.$]+(?:\s*,\s*[\w.$]+)*)?\s*;?\s*$",
+                nue)
         if forme:
             dernier = forme.group(1)
             resultats[courant][0].add(dernier)
