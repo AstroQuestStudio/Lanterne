@@ -60,5 +60,7 @@
   "block.lanterne.coffre_depot": "Drop-off Chest",
   "item.lanterne.coffre_depot": "Drop-off Chest",
   "block.lanterne.coffre_reception": "Pickup Chest",
-  "item.lanterne.coffre_reception": "Pickup Chest"
+  "item.lanterne.coffre_reception": "Pickup Chest",
+  "block.lanterne.recycleur": "Recycler",
+  "item.lanterne.recycleur": "Recycler"
 }

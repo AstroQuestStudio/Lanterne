@@ -48,7 +48,8 @@ jouant.*
 [🧺 Le Trieur — l'entonnoir qui filtre](#le-trieur-l-entonnoir-qui-filtre) ·
 [🔦 L'Aureole — la balise, repensée](#l-aureole-la-balise-repensee) ·
 [💰 La Manne — stock infini des villageois](#la-manne-le-stock-infini-des-villageois) ·
-[🗄️ Le Réseau — stockage relié et Guichet](#le-reseau-stockage-relie-et-guichet)
+[🗄️ Le Réseau — stockage relié et Guichet](#le-reseau-stockage-relie-et-guichet) ·
+[♻️ Le Recycleur — une fraction de la recette](#le-recycleur-une-fraction-de-la-recette)
 
 **Confort joueur**
 [🧭 Les repères et la Boussole d'Ancre](#les-reperes-et-la-boussole-d-ancre) ·
@@ -759,6 +760,40 @@ Réglable dans `lanterne-server.toml`, section `reseau` : `reseau_actif` (défau
 restent posables même coupé, seul le réseau s'éteint) et
 `reseau_intervalle_reapprovisionnement_ticks` (défaut 100, soit cinq secondes, pour le Coffre de
 réception).
+
+---
+
+<a id="le-recycleur-une-fraction-de-la-recette"></a>
+## ♻️ Le Recycleur — une fraction de la recette
+
+**Un outil ou une armure presque cassé ne mérite pas la poubelle.** Clique le Recycleur avec un
+objet endommageable en main : il retrouve la recette qui le fabrique, et rend une fraction de ses
+matériaux — proportionnelle à la durabilité qu'il lui reste, arrondie vers le bas. Un casque en fer
+(5 lingots à la fabrication) retrouvé à 40 % de durabilité rend 2 lingots. À 100 %, il rend les 5 —
+jamais plus que ce qui a été dépensé pour le fabriquer.
+
+| | |
+|---|---|
+| **Recette** | 4 lingots de fer · 1 entonnoir, en croix |
+| **Consomme** | Un seul exemplaire — jamais toute une pile, mais un objet endommageable ne s'empile de toute façon jamais |
+| **Rend** | Le premier item accepté par chaque ingrédient de la recette d'origine, × (quantité dans la recette × fraction de durabilité), arrondi vers le bas |
+| **Refuse** | Objet sans durabilité, objet sans recette connue, ou objet trop usé pour rendre quoi que ce soit — rien n'est consommé dans ces trois cas |
+
+**Pourquoi ce n'est pas un détour vers la duplication.** Le Recycleur ne rend jamais plus que ce qui
+reste de valeur dans l'objet. Fabriquer un objet neuf puis le recycler dans la seconde rend donc *au
+mieux* ce qui a été dépensé pour le fabriquer — jamais davantage, et l'arrondi systématique vers le
+bas retire même la fraction perdue à la conversion. Le seul geste que ce bloc rend possible, c'est
+d'éviter la perte **totale** d'un objet presque cassé qu'on aurait sinon jeté.
+
+**Comment la recette est retrouvée.** `RecipeManager.getRecipes()` est balayé à la recherche de la
+première `ShapedRecipe` — le sous-type de `CraftingRecipe` que couvrent les recettes d'outil et
+d'armure — dont le résultat correspond à l'objet en main. Vérifié au `javap -c` sur le jar client
+26.3 réel : `ShapedRecipe.assemble(CraftingInput)` ignore entièrement son argument et rend une copie
+du résultat stocké dans la recette elle-même — `CraftingInput.EMPTY` est donc un argument légitime,
+pas un raccourci fragile.
+
+Un interrupteur (`recycleur_actif`, actif par défaut) coupe uniquement le **recyclage** : le bloc
+reste toujours enregistré et posable, même coupé — même règle que l'Ancre et le Trieur ci-dessus.
 
 ---
 
