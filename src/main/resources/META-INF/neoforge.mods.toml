@@ -34,6 +34,23 @@ ou pas chargé — et c'est là qu'est le gaspillage.
 [[mixins]]
 config = "lanterne.mixins.json"
 
+# Mixins Iris (portage interne, voir MIGRATION-IRIS.md) - toujours sous le seul modId
+# "lanterne" declare plus haut, "iris" n'existe plus comme mod separe (voir commit e8138a6).
+[[mixins]]
+config = "mixins.iris.json"
+
+[[mixins]]
+config = "mixins.iris.vertexformat.json"
+
+[[mixins]]
+config = "mixins.iris.compat.sodium.json"
+
+[[mixins]]
+config = "mixins.iris.compat.dh.json"
+
+[[mixins]]
+config = "mixins.iris.forge.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
