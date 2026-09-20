@@ -46,7 +46,8 @@ jouant.*
 [⚓ L'Ancre de chunk](#l-ancre-de-chunk) ·
 [🏮 La Lanterne de Veille](#la-lanterne-de-veille) ·
 [🔦 L'Aureole — la balise, repensée](#l-aureole-la-balise-repensee) ·
-[💰 La Manne — stock infini des villageois](#la-manne-le-stock-infini-des-villageois)
+[💰 La Manne — stock infini des villageois](#la-manne-le-stock-infini-des-villageois) ·
+[🗄️ Le Réseau — stockage relié et Guichet](#le-reseau-stockage-relie-et-guichet)
 
 **Confort joueur**
 [🧭 Les repères et la Boussole d'Ancre](#les-reperes-et-la-boussole-d-ancre) ·
@@ -685,6 +686,37 @@ rien d'autre. Aucun autre calcul n'est touché : ni les prix, ni la demande, ni 
 **Éteint par défaut** (`manne_villageois_stock_infini`) : c'est un changement d'équilibrage assumé, pas
 une optimisation — à l'administrateur de décider si son monde veut des marchands qui ne tarissent
 jamais.
+
+---
+
+<a id="le-reseau-stockage-relie-et-guichet"></a>
+## 🗄️ Le Réseau — stockage relié et Guichet
+
+Relier des coffres dispersés dans toute la base et récupérer n'importe quel objet stocké depuis un seul
+terminal — instantanément, même sur cent blocs, et **sans jamais simuler un déplacement tick par tick**.
+Quatre blocs :
+
+| Bloc | Rôle |
+|---|---|
+| ⚙️ **Aiguillage** | Posé contre un coffre, un baril ou un shulker déjà là, il l'annonce au réseau — sans le remplacer. |
+| 🖥️ **Guichet** | Le terminal : cherche, filtre, clique — l'objet arrive dans le coffre de collecte posé à côté. |
+| 📥 **Coffre de dépôt** | Un coffre ordinaire, déjà un nœud du réseau, pour qu'un bot minier externe y déverse son butin. |
+| 📤 **Coffre de réception** | Idem, plus un filtre « à maintenir en stock » réglé au clic droit — il se ressert seul, lentement. |
+
+**Pourquoi c'est sans lag, à n'importe quelle distance.** Le réseau n'est jamais un tuyau : c'est un
+registre. Un bloc qui le rejoint s'y annonce une fois, au chargement de son chunk ; une demande au
+Guichet parcourt linéairement les quelques nœuds connus et déplace l'objet **directement** d'un
+conteneur à l'autre, en mémoire — pas de hopper à hopper, pas de tick, pas de délai. Le coût d'une
+livraison ne dépend que du nombre de coffres reliés, jamais de la distance qui les sépare.
+
+**Le Guichet livre dans un coffre, jamais dans l'inventaire** — choix explicite : « ça fait plus
+vanilla ». Pose un coffre à côté du Guichet, clique un objet dans la liste, ramasse-le comme n'importe
+quel butin.
+
+Réglable dans `lanterne-server.toml`, section `reseau` : `reseau_actif` (défaut activé — les blocs
+restent posables même coupé, seul le réseau s'éteint) et
+`reseau_intervalle_reapprovisionnement_ticks` (défaut 100, soit cinq secondes, pour le Coffre de
+réception).
 
 ---
 
@@ -1654,6 +1686,10 @@ rendu à la mesure.**
 
     #La Lanterne de Veille : aucun monstre n'apparait dans son chunk.
     lanterne_de_veille = true
+
+    [ajouts.reseau]
+        #Allumer le Reseau (Aiguillage, Guichet, Coffre de depot, Coffre de reception).
+        reseau_actif = true
 
     [ajouts.balai]
         #Le seul module qui RETIRE quelque chose au jeu. Eteint par defaut.

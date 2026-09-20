@@ -49,5 +49,13 @@
   "item.lanterne.ecran": "Écran",
   "block.lanterne.projecteur": "Projecteur",
   "item.lanterne.projecteur": "Projecteur",
-  "subtitles.lanterne.ecran": "Écran : lecture"
+  "subtitles.lanterne.ecran": "Écran : lecture",
+  "block.lanterne.aiguillage": "Aiguillage",
+  "item.lanterne.aiguillage": "Aiguillage",
+  "block.lanterne.guichet": "Guichet",
+  "item.lanterne.guichet": "Guichet",
+  "block.lanterne.coffre_depot": "Coffre de dépôt",
+  "item.lanterne.coffre_depot": "Coffre de dépôt",
+  "block.lanterne.coffre_reception": "Coffre de réception",
+  "item.lanterne.coffre_reception": "Coffre de réception"
 }
