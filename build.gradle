@@ -314,6 +314,16 @@ dependencies {
     // sélecteur natif est absent au lancement — voir Reach.java.
     compileOnly 'org.lwjgl:lwjgl-tinyfd:3.4.1'
 
+    // <h2>shaderc : preuve de faisabilite Vulkan, pas encore une vraie dependance de rendu</h2>
+    //
+    // RenderPearl (le backend Vulkan natif du jeu depuis la 26.3) l'utilise deja pour ses propres
+    // shaders internes, mais rien ne garantit qu'il reste sur le classpath au runtime pour NOTRE
+    // code — meme prudence que lwjgl-tinyfd juste au-dessus. Version alignee sur celle du jeu
+    // (LWJGL 3.4.3, verifiee dans les rapports de la session). Voir lab/ShadercProbe.java : preuve
+    // isolee que la chaine GLSL -> SPIR-V fonctionne reellement dans cet environnement, rien de
+    // branche au pipeline de rendu pour l'instant (RECHERCHE-VULKAN-SANS-SODIUM.md).
+    compileOnly 'org.lwjgl:lwjgl-shaderc:3.4.3'
+
     // <h2>L'API de BlueMap : jar local, pas de coordonnee Maven trouvee fiable dans le temps</h2>
     //
     // BlueMap est LGPL-3.0 (compatible avec notre GPL-3.0, absorbe sans souci) mais son API n'a pas
