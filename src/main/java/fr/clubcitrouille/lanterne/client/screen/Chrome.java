@@ -117,6 +117,16 @@ public final class Chrome implements Engine {
      * mesurer : {@code %1$s} vaut soit une position à imposer, soit le mot {@code null} pour dire
      * « laisse-la courir toute seule cette fois », et {@link Pane} n'envoie une position que toutes
      * les {@link Pane#HARD_SEEK} millisecondes.
+     *
+     * <h2>Pourquoi « unMute », et pas seulement « setVolume »</h2>
+     *
+     * <p>{@code Embed} pose {@code mute=1} sur l'URL d'origine — pas un réglage, une condition :
+     * Chromium refuse de démarrer un média avec du son sans un vrai geste de souris <b>sur sa propre
+     * page</b>, et le clic sur « Lire » a lieu dans l'écran de Lanterne, jamais dans la page CEF. Un
+     * média qui démarre muet échappe à cette règle. Rester muet pour toujours n'est pas le but pour
+     * autant : une fois la lecture réellement engagée, {@code setVolume} ne suffit pas à lever le
+     * drapeau interne « muet » de YouTube — {@code unMute} le fait, et se déclenche dès que le volume
+     * demandé n'est plus nul.
      */
     private static final String SCRIPT_YOUTUBE =
             "(function(){var f=document.getElementById('p');if(!f||!f.contentWindow)return;"
@@ -124,7 +134,8 @@ public final class Chrome implements Engine {
             + "{event:'command',func:func,args:args||[]}),'*');}catch(e){}}"
             + "if(%1$s!==null)send('seekTo',[%1$s,true]);"
             + "send(%2$s?'playVideo':'pauseVideo',[]);"
-            + "send('setVolume',[%3$s]);})()";
+            + "send('setVolume',[%3$s]);"
+            + "send(%3$s>0?'unMute':'mute',[]);})()";
 
     /** Les poignées vers Rinku, résolues une fois. Nulles tant que le mod n'est pas là. */
     private static final class Bridge {

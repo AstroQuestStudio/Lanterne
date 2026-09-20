@@ -98,9 +98,18 @@ public final class Embed {
             // « autoplay=0 » parce que c'est l'horloge qui décide de partir, pas la page.
             // « controls=0 » parce qu'un joueur ne peut pas cliquer dedans : les commandes sont
             // dans l'écran du bloc, et en montrer d'autres qui ne répondent pas serait cruel.
+            //
+            // « mute=1 » n'est pas un réglage de volume, c'est ce qui permet à « playVideo » de
+            // fonctionner du tout. Chromium refuse de démarrer un média avec du son sans un vrai
+            // geste de la souris SUR la page du navigateur elle-même — et le clic sur « Lire » a
+            // lieu dans l'écran de Lanterne, jamais dans la page CEF, donc ce geste n'existe pas de
+            // son point de vue. Un média qui démarre muet échappe à cette règle, dans tous les
+            // navigateurs : c'est la même raison que la quasi-totalité des vidéos qui s'auto-jouent
+            // sur le web démarrent sans son. {@code Chrome.SCRIPT_YOUTUBE} coupe la coupure ensuite
+            // par « unMute », une fois la lecture déjà en cours.
             return new Form(YOUTUBE_EMBED_PREFIX + youtube
                     + "?enablejsapi=1&autoplay=0&controls=0&rel=0&modestbranding=1"
-                    + "&playsinline=1&iv_load_policy=3", Kind.LECTEUR, host);
+                    + "&playsinline=1&iv_load_policy=3&mute=1", Kind.LECTEUR, host);
         }
 
         String vimeo = vimeoId(host, path);
