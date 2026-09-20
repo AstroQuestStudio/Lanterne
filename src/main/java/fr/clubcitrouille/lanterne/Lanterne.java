@@ -188,6 +188,11 @@ public final class Lanterne {
             // Juste après : capture l'état final d'options.txt (posé par Reveil, ou déjà présent)
             // avant que Minecraft.<init> ne le charge et ne le mute — voir la Javadoc de Vigie.
             fr.clubcitrouille.lanterne.client.Vigie.capture();
+            // Même fenêtre de sûreté, même geste, mais sur le fichier d'un compagnon : voir la
+            // Javadoc de Eclaireur pour la preuve que le chargement de CoreProperties par
+            // JourneyMap est tardif (piloté par son propre ordonnanceur de tâches), donc largement
+            // après ce point.
+            fr.clubcitrouille.lanterne.client.Eclaireur.install();
             fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
             // Apres Compass : la touche de la boutique reutilise la categorie de
             // raccourcis qu'il declare, et NeoForge refuse un identifiant en double.
