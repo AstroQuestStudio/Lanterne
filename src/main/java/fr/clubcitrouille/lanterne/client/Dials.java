@@ -429,6 +429,36 @@ public final class Dials extends Screen {
                         + " qu'un mod d'inspection générique ne peut pas savoir.",
                 "Effet immédiat. Une petite requête réseau, au plus toutes les dix images, et"
                         + " seulement en visant un vrai conteneur."));
+        // Les trois réglages qui suivent sont vanilla, pas Lanterne — même justification et même
+        // câblage (Minecraft.getInstance().options, jamais commit()) que « Vulkan » ci-dessus, et
+        // que particules/nuages/météo dans buildScenery() (voir la note qui les accompagne pour la
+        // preuve complète). Rangés ici et non avec leurs cousins de buildScenery() : ce sont des
+        // réglages de FINESSE DE RENDU (géométrie, couleur, ombre portée), pas des phénomènes
+        // atmosphériques.
+        image.add(Dial.cycle("Mélange de biomes", Dials::biomeBlendLabel, () -> AMBER,
+                Dials::cycleBiomeBlend,
+                "La zone lissée pour mélanger la couleur de l'herbe/feuillage entre biomes voisins.",
+                "Options.biomeBlendRadius() (entier, bornes réelles 0 à 7, défaut 2) est confirmé lu "
+                        + "dans ClientLevel pour le calcul de couleur de biome. Les crans reprennent le"
+                        + " libellé NxN de vanilla (options.biomeBlendRadius.<taille>, lang réel du"
+                        + " jar) : 1x1 au minimum, 15x15 au maximum. Un mélange large coûte plus cher à"
+                        + " chaque bloc de bordure entre deux biomes.",
+                "Visible au prochain rendu du chunk concerné."));
+        image.add(Dial.cycle("Éclairage lisse", Dials::ambientOcclusionLabel, Dials::ambientOcclusionColour,
+                Dials::toggleAmbientOcclusion,
+                "Adoucit les coins de blocs en les assombrissant légèrement (« ambient occlusion »).",
+                "Options.ambientOcclusion() est un booléen (défaut actif) — confirmé lu chaque image"
+                        + " par GameRenderer.extractOptions(). Le lang de Sodium garde encore des clés"
+                        + " mortes pour un ancien réglage à trois crans (OFF/MIN/MAX) ; ce moteur n'en"
+                        + " a plus que deux, vérifié au bytecode : le troisième cran n'existe plus.",
+                "Visible au prochain rendu du chunk concerné, sans redémarrage."));
+        image.add(Dial.cycle("Ombres des entités", Dials::entityShadowsLabel, Dials::entityShadowsColour,
+                Dials::toggleEntityShadows,
+                "Le disque d'ombre au sol sous les créatures et les joueurs.",
+                "Options.entityShadows() est un booléen (défaut actif) — confirmé lu par"
+                        + " EntityRenderer.extractShadow(), qui vide la liste des ombres de l'entité"
+                        + " si ce réglage est coupé.",
+                "Effet immédiat."));
         this.families.add(image);
     }
 
@@ -930,6 +960,54 @@ public final class Dials extends Screen {
 
     private static String weatherLabel() {
         return vanillaOptions().weatherRadius().get() + " blocs";
+    }
+
+    // --- Encore vanilla, mais rangés dans « L'image » : finesse de rendu, pas atmosphère ----------
+
+    /**
+     * Les huit crans reprennent le libellé NxN que vanilla affiche lui-même pour ce champ
+     * (clés {@code options.biomeBlendRadius.1/.3/.5/.7/.9/.11/.13/.15} du lang réel du jar) — un
+     * rayon de 0 à 7 s'y traduit en diamètre 2r+1.
+     */
+    private static void cycleBiomeBlend(int step) {
+        int was = vanillaOptions().biomeBlendRadius().get();
+        int now = Math.clamp((long) was + step, 0, 7);
+        if (now != was) {
+            vanillaOptions().biomeBlendRadius().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String biomeBlendLabel() {
+        int radius = vanillaOptions().biomeBlendRadius().get();
+        int side = 2 * radius + 1;
+        return side + "x" + side;
+    }
+
+    private static void toggleAmbientOcclusion(int ignoredDirection) {
+        vanillaOptions().ambientOcclusion().set(!vanillaOptions().ambientOcclusion().get());
+        vanillaOptions().save();
+    }
+
+    private static String ambientOcclusionLabel() {
+        return vanillaOptions().ambientOcclusion().get() ? "actif" : "coupé";
+    }
+
+    private static int ambientOcclusionColour() {
+        return vanillaOptions().ambientOcclusion().get() ? ON : OFF;
+    }
+
+    private static void toggleEntityShadows(int ignoredDirection) {
+        vanillaOptions().entityShadows().set(!vanillaOptions().entityShadows().get());
+        vanillaOptions().save();
+    }
+
+    private static String entityShadowsLabel() {
+        return vanillaOptions().entityShadows().get() ? "actif" : "coupé";
+    }
+
+    private static int entityShadowsColour() {
+        return vanillaOptions().entityShadows().get() ? ON : OFF;
     }
 
     // --- Ce que le serveur a décidé ----------------------------------------
