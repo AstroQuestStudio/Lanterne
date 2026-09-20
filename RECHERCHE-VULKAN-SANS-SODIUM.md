@@ -149,3 +149,31 @@ bout sur du vrai contenu de shaderpack.
 isolé dans `ShadercProbe` de la même façon que `JcppProcessor` ici, avant l'appel shaderc. Ne pas
 brancher au pipeline de rendu réel avant d'avoir un test standalone qui produit du SPIR-V valide
 sur un vrai shader.
+
+## Vulkan — étape 3 : nouveau blocage précis, glsl-transformer couplé à un device GPU vivant (21/09/2026 ~02h)
+
+Suite directe de l'étape 2 : cherché où Iris orchestre l'appel à `glsl-transformer` pour combler
+exactement le manque identifié (`colortex0`/`texelCoord` non déclarés, `#version` manquant).
+Trouvé : `net.irisshaders.iris.pipeline.transform.TransformPatcher`, méthode `patchComposite(...)`
+(exactement celle utilisée pour les shaders `composite*.glsl` comme celui testé à l'étape 2).
+
+**Nouveau blocage réel, vérifié en lisant le code (pas une supposition)** : `patchComposite` et
+`patchDepth` commencent TOUS LES DEUX par `RenderSystem.getDevice().getDeviceInfo().isZZeroToOne()`
+(lignes 317 et 381) — un appel qui exige un device GPU/RenderSystem déjà initialisé par une vraie
+session de jeu en cours. Un prototype standalone (sans client Minecraft lancé, comme `ShadercProbe`
+l'a fait jusqu'ici) ne peut PAS appeler cette méthode : `RenderSystem.getDevice()` lèvera une
+exception ou renverra null hors d'un contexte de rendu réel — non testé pour ne pas risquer un
+appel qui bloque/plante le processus de test, la lecture du code suffit à confirmer le couplage.
+
+**Conclusion honnête** : la chaîne complète jcpp → glsl-transformer → shaderc, telle qu'Iris
+l'utilise réellement, N'EST PAS testable en standalone pur sans lancer le vrai jeu — c'est un
+couplage architectural d'Iris lui-même (le transform dépend de l'état du device de rendu réel,
+probablement pour des choix de compatibilité spécifiques au backend GPU actif), pas une limite
+de notre prototype qu'on pourrait contourner proprement sans risque. Continuer cette piste
+nécessite soit (a) un vrai lancement client (voir le chantier "lanceur client jetable" ailleurs
+dans TACHES-NUIT.md), soit (b) appeler `glsl-transformer` directement via son API bas niveau
+(sans passer par `TransformPatcher`, en réimplémentant à la main les déclarations qu'Iris injecte
+normalement) — plus de travail, mais reste standalone. Aucune des deux tentée dans cette passe
+(budget de fork insuffisant), à reprendre.
+
+Aucun fichier de code modifié cette passe (recherche/lecture seule, `ShadercProbe.java` inchangé).
