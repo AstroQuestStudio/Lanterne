@@ -85,4 +85,33 @@ pour comprendre son vrai mécanisme de découverte avant de retenter.
 Dossier `C:\lanterne-client-test\` laissé en place (classpath.txt inclus) pour repartir de là plutôt
 que de tout refaire. Process de test arrêté proprement.
 
-**TÂCHE B (visibilité Iris/Sodium) non commencée faute de temps — reste à faire.**
+**TÂCHE B (visibilité Iris/Sodium) — investiguée en profondeur, correctif risqué reporté (fork, 21/09 ~01h35).**
+
+Diagnostic précis, corrige l'hypothèse initiale : ce n'est PAS `ModList.isLoaded("iris")`. Sodium
+lui-même (le vrai moteur, `net.caffeinemc.sodium-neoforge-0.9.2+mc26.3-mod.jar`) ne contient
+AUCUNE classe liée à Iris — zéro détection côté Sodium. `reeses-sodium-options` n'est même pas
+installé sur `test 1`. Le vrai mécanisme : NeoForge lit `modproperties.<modId>."sodium:config_api_user"`
+dans `neoforge.mods.toml` pour savoir quelle classe (`ConfigEntryPoint`) appeler pour CHAQUE mod
+qui en déclare une. Iris déclarait `modproperties.iris."sodium:config_api_user" =
+net.irisshaders.iris.compat.sodium.config.IrisConfig` dans SON PROPRE toml original — perdu à la
+fusion car "iris" n'est plus un modId. Lanterne a DÉJÀ sa propre entrée
+(`modproperties.${mod_id}."sodium:config_api_user" = fr.clubcitrouille.lanterne.client.sodium.Graft`,
+`client/sodium/Graft.java`) — un mod ne peut en déclarer qu'UNE seule.
+
+Piste explorée : `Graft.registerConfigLate` et `IrisConfig.registerConfigLate` ont la même
+signature (`ConfigEntryPoint.registerConfigLate(ConfigBuilder)`) — semblait fusionnable en
+appelant les deux depuis Graft sur le même builder. MAIS les deux appellent
+`builder.registerOwnModOptions()` (Graft ligne 104, IrisConfig ligne 42) — cette méthode pose le
+nom/icône/thème de couleur de LA page du mod appelant, appelée une seule fois par convention.
+L'appeler deux fois depuis le même point d'entrée risque un conflit ou un écrasement silencieux
+(le second `.setName("Iris")` écraserait potentiellement le nom déjà posé par Graft) — jamais
+vérifié en pratique, risque réel de casser la page de réglages Lanterne déjà utilisée par les
+joueurs. PAS tenté en conditions de fin de session (contexte fork limité, pas de marge pour
+itérer si ça casse). Documenté plutôt que forcé, comme demandé.
+
+**Piste de reprise recommandée** : soit fusionner à la main le CONTENU des deux
+`registerConfigLate` dans une seule méthode (une seule page combinée "Lanterne" avec les
+sections Iris dedans, pas un onglet séparé "Iris" comme avant — changement de comportement
+visible, à valider avec le patron plutôt qu'à décider seul), soit vérifier si l'API Sodium
+expose un moyen de déclarer plusieurs "mod options" depuis un seul appelant (pas trouvé dans les
+~50 premières lignes explorées de `ConfigBuilder`/`ConfigEntryPoint`, pas allé plus loin).
