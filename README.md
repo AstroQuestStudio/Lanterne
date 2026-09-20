@@ -964,7 +964,10 @@ le zoom en position « appuyée » après avoir ouvert puis fermé un coffre en 
 <a id="souris-avancee"></a>
 ## 🖱️ Souris avancée
 
-Les quatre mécaniques du mod populaire **Mouse Tweaks**.
+Les quatre mécaniques du mod populaire **[Mouse Tweaks](https://github.com/YaLTeR/MouseTweaks)**
+(Ivan Molodetskikh, **BSD-3-Clause**) — transcrites depuis son vrai code source, avec son accord de
+licence explicite. Voir `NOTICE.md` pour le détail module par module et le texte complet de la
+licence.
 
 ### Quatre gestes
 

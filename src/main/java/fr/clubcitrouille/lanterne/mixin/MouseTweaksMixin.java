@@ -19,88 +19,61 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.BundleItem;
 import net.minecraft.world.item.ItemStack;
 
 import fr.clubcitrouille.lanterne.core.ClientConfig;
 
 /**
- * Souris avancée — transcription fidèle des quatre mécaniques du mod populaire
- * <a href="https://github.com/YaLTeR/MouseTweaks">Mouse Tweaks</a> (BSD-3-Clause ; adaptation autorisée
- * par le patron). L'algorithme ci-dessous vient d'une lecture du vrai portage NeoForge du mod par un
- * agent dédié — ce n'est pas une réinvention, c'est une traduction dans les API de ce moteur précis.
+ * Souris avancée — port littéral de <a href="https://github.com/YaLTeR/MouseTweaks">Mouse Tweaks</a>
+ * (BSD-3-Clause — copyright Ivan Molodetskikh, 2023 ; voir {@code NOTICE.md} pour la reproduction
+ * complète de la licence, condition 1 du BSD-3-Clause). Adaptation autorisée explicitement par le
+ * patron du projet, après qu'une première tentative de « transcription depuis une description de
+ * l'algorithme » (sans le vrai code sous les yeux) s'est révélée boguée en jeu : un glissé qui ne
+ * touchait aucune case compatible bloquait quand même TOUT le geste vanilla à la place, empêchant un
+ * simple dépose dans un coffre qui ne contenait pas encore l'objet.
  *
- * <h2>Les quatre mécaniques</h2>
+ * <h2>Le vrai fichier source lu ligne à ligne avant d'écrire celui-ci</h2>
  *
- * <p><b>1. Glissé bouton droit ({@link #handleRmbDragSlot})</b> : ne s'active que si le curseur porte
- * déjà un objet au moment du clic initial. Au premier changement de case, la case d'ORIGINE du glissé
- * est elle-même cliquée avant la nouvelle case survolée — un vrai clic droit vanilla rejoué sur chaque
- * case, refusé si la case est incompatible ou déjà pleine.
+ * <p>{@code src/main/java/yalter/mousetweaks/Main.java} du dépôt réel (récupéré via l'API GitHub,
+ * commit `HEAD` au moment de la lecture) — {@code onMouseClicked}, {@code onMouseReleased},
+ * {@code onMouseDrag}, {@code onMouseScrolled}, {@code findPushSlots}, {@code findPullSlot}. La
+ * traduction ci-dessous suit sa structure quasiment instruction par instruction ; seuls les noms
+ * d'API changent (voir plus bas), et les réglages de configuration du vrai mod (fichier
+ * {@code MouseTweaks.cfg}, activation par mécanique, ordre de recherche de la molette, sens inversé)
+ * sont réduits à un seul interrupteur — {@link ClientConfig#SOURIS_AVANCEE} — plutôt que reproduits un
+ * par un.
  *
- * <p><b>2. Clic gauche avec objet en main, sans Shift ({@link #handlePickupDragSlot})</b> : fusionne
- * la case survolée dans le curseur (PICKUP) si elle contient le même objet — mais seulement si la
- * fusion tient dans la pile max du curseur ; sinon, rien ne se passe pour cette case plutôt que de
- * laisser un reliquat coincé.
+ * <h2>La vraie découverte du bug : ce fichier ne doit (presque) JAMAIS annuler l'évènement</h2>
  *
- * <p><b>3. Clic gauche + Shift ({@link #handleShiftDragSlot})</b> : un shift-clic (QUICK_MOVE) par
- * case survolée. La plus simple des quatre — aucune vérification de compatibilité, le shift-clic
- * vanilla gère déjà ça tout seul.
+ * <p>{@code onMouseDrag} du vrai mod se termine TOUJOURS par {@code return false} — jamais un seul
+ * {@code return true} dans toute la méthode. Le mod ne bloque jamais le glissé vanilla lui-même : il
+ * se contente de jouer des clics supplémentaires en aparté, puis laisse vanilla continuer. La seule
+ * fois où il empêche activement vanilla de refaire le même travail est le glissé bouton droit
+ * (mécanique 1), et PAS en annulant l'évènement — en désarmant directement l'état interne de
+ * quick-craft de vanilla ({@code handler.disableRMBDraggingFunctionality()}, traduit ici en
+ * manipulation directe de {@code skipNextRelease}/{@code isQuickCrafting}, tous deux accessibles par
+ * {@code @Shadow} puisque ce mixin est fusionné dans la classe cible). La version précédente de ce
+ * fichier annulait le glissé entier ({@code cir.setReturnValue(true)}) dès qu'une des trois mécaniques
+ * de glissé était active, même pour les cases où elle ne faisait rien — c'est ce qui bloquait un dépôt
+ * dans un coffre vide ou contenant un objet différent. Seule {@code onMouseScrolled} annule vraiment
+ * l'évènement dans le vrai mod (la molette n'a pas d'autre sens dans un écran de conteneur).
  *
- * <p><b>4. Molette ({@link #onMouseScrolled})</b> : POUSSE (molette vers le bas) ou TIRE (vers le
- * haut) un nombre d'objets accumulé entre appels. Voir la Javadoc de {@link #onMouseScrolled},
- * {@link #handleWheelPush} et {@link #handleWheelPull} pour le détail — c'est la mécanique la plus
- * dense des quatre, et la seule qui manipule le curseur en plusieurs clics successifs.
- *
- * <h2>Vérifié au {@code javap} sur {@code neoformruntime/artifacts/minecraft_26.3_client.jar} avant
- * d'écrire une ligne de ce fichier</h2>
+ * <h2>Vérifié au {@code javap} sur le vrai jar client 26.3 avant d'écrire une ligne</h2>
  *
  * <ul>
- *   <li>{@code ItemStack.isSameItem(ItemStack, ItemStack)} et
- *       {@code ItemStack.isSameItemSameComponents(ItemStack, ItemStack)} : statiques, deux arguments
- *       — pas des méthodes d'instance.</li>
- *   <li>{@code ItemStack.getMaxStackSize()} : n'apparaît PAS directement dans {@code ItemStack}, c'est
- *       une méthode par défaut de l'interface {@code ItemInstance} qu'elle implémente — appelable
- *       normalement, juste absente d'un {@code javap} qui ne suit pas les interfaces.</li>
- *   <li>{@code Player.getInventory()} retourne {@code Inventory}, qui {@code implements Container} —
- *       exactement le type de {@code Slot.container} (champ public final), ce qui rend
- *       {@code slot.container == joueur.getInventory()} directement comparable sans cast.</li>
- *   <li>{@code net.minecraft.world.inventory.ResultSlot extends Slot} existe bien séparément dans ce
- *       moteur — {@code instanceof} dessus est donc fiable.</li>
- *   <li>{@code AbstractContainerScreen} ne déclare ni {@code Player} ni {@code Inventory} accessibles
- *       directement en {@code @Shadow} ; le joueur local vient de
- *       {@code Minecraft.getInstance().player} ({@code LocalPlayer extends AbstractClientPlayer
- *       extends Player}), comme n'importe quel autre écran client.</li>
+ *   <li>{@code AbstractContainerScreen} porte {@code protected boolean isQuickCrafting},
+ *       {@code private int quickCraftingButton} et {@code private boolean skipNextRelease} —
+ *       les trois champs que {@code disableRMBDraggingFunctionality} manipule dans le vrai mod,
+ *       tous trois {@code @Shadow}-ables (Mixin résout par descripteur bytecode, la visibilité Java
+ *       source ne s'applique pas à un champ shadow).</li>
+ *   <li>{@code ItemStack.isSameItem}/{@code isSameItemSameComponents} : statiques, deux arguments.</li>
+ *   <li>{@code net.minecraft.world.inventory.ResultSlot} existe séparément — {@code instanceof} fiable
+ *       pour {@code handler.isCraftingOutput(slot)}.</li>
+ *   <li>{@code mouseReleased(MouseButtonEvent)} existe et n'était pas encore accroché par la version
+ *       précédente de ce fichier — nécessaire pour réinitialiser {@code canDoLMBDrag}/
+ *       {@code canDoRMBDrag} exactement comme {@code onMouseReleased} du vrai mod.</li>
  * </ul>
- *
- * <h2>Trois endroits où l'énoncé laissait un choix, tranché ici et documenté (pas des simplifications
- * de l'algorithme — juste des angles morts du texte source résolus une fois pour toutes)</h2>
- *
- * <ol>
- *   <li>Ordre de recherche d'une case source pour TIRER (mécanique 4/PULL) : l'énoncé autorise
- *       explicitement les deux sens. {@link #findPullSource} balaie {@code menu.slots} dans l'ordre
- *       croissant.</li>
- *   <li>« Restitue le reliquat sur la case source (droit si le curseur porte un type différent de ce
- *       qu'il y avait, gauche sinon) » : la comparaison se fait entre le reliquat sur le curseur et le
- *       contenu ACTUEL (après le ramassage) de la case source — une case source vidée compte comme
- *       « pas différent » (clic gauche, dépose tout proprement) ; une case source qui contiendrait
- *       encore un objet distinct du reliquat prend un clic droit (dépose un par un, jamais un swap
- *       brutal de piles incompatibles). Voir {@link #restituteLeftoverOnSource}.</li>
- *   <li>Garde-fou « curseur déjà incompatible pendant un scroll » (mécanique 4) : comparé contre le
- *       contenu de la case SURVOLÉE quand elle en a un ; si la case survolée est vide, il n'y a rien de
- *       défini à comparer et la vérification est ignorée pour ce tick — {@code mayPlace} et les
- *       recherches de case cible/source, elles, restent des garde-fous actifs en aval.</li>
- * </ol>
- *
- * <p>Aucune mécanique n'a dû être appauvrie par rapport à l'énoncé fourni — contrairement à la version
- * précédente de ce fichier, qui remplaçait la molette « un par un » par un simple QUICK_MOVE faute
- * d'avoir le vrai algorithme sous la main. Ici, la molette pousse et tire bien objet par objet.
- *
- * <h2>Implémentation</h2>
- *
- * <p>{@code mouseDragged} porte les mécaniques 1 à 3 (glissé), {@code mouseScrolled} porte la
- * mécanique 4. Les deux détectent un changement de case via {@code hoveredSlot} (maintenu par l'écran
- * vanilla) comparé à la dernière case traitée — rien ne mémorise les cases déjà visitées plus tôt dans
- * le même geste, un retour en arrière les retraite normalement, exactement comme le texte source
- * l'exige.
  */
 @Mixin(AbstractContainerScreen.class)
 public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
@@ -111,456 +84,427 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
     @Shadow
     protected Slot hoveredSlot;
 
-    /** La case traitée dans le glissé courant — réinitialisée à null à la fin du glissé. */
-    private Slot lastDraggedSlot = null;
+    @Shadow
+    protected boolean isQuickCrafting;
+
+    @Shadow
+    private int quickCraftingButton;
+
+    @Shadow
+    private boolean skipNextRelease;
+
+    /** {@code Main.oldSelectedSlot} — la case sous la souris au dernier évènement traité. */
+    private Slot lastSelectedSlot;
+
+    /** {@code Main.canDoLMBDrag} — vrai si le curseur était VIDE au moment du clic gauche initial. */
+    private boolean canDoLmbDrag;
+
+    /** {@code Main.canDoRMBDrag} — vrai si le curseur portait un objet au clic droit initial. */
+    private boolean canDoRmbDrag;
+
+    /** {@code Main.rmbTweakLeftOriginalSlot} — la case d'origine du glissé droit a-t-elle reçu son clic ? */
+    private boolean rmbTweakLeftOriginalSlot;
+
+    /** {@code Main.accumulatedScrollDelta} — reliquat fractionnaire de molette entre deux appels. */
+    private double accumulatedScrollDelta;
 
     /**
-     * Le bouton du glissé courant, conservé pour sa durée. {@code -1} = pas de glissé en cours.
-     *
-     * <h2>0 est un bouton valide — jamais une valeur "rien"</h2>
-     *
-     * <p>Vérifié dans ce même dépôt, {@code client.screen.Phare} (le clic gauche de l'écran de
-     * balise) teste déjà {@code event.button() == 0} pour le clic gauche — c'est la convention GLFW
-     * standard, inchangée dans ce moteur : 0 = gauche, 1 = droit, 2 = milieu. Un premier jet de cette
-     * classe utilisait 0 comme sentinelle "pas de glissé", ce qui confondait "aucun glissé" avec "un
-     * glissé au clic gauche" — la moitié des gestes ne se déclenchait jamais. {@code -1} n'est le
-     * numéro d'aucun bouton réel.</p>
+     * {@code Main.onMouseClicked} — jamais annulé. Enregistre la case sous la souris et détermine si
+     * les glissés LMB/RMB pourront démarrer, selon l'état du curseur À CET INSTANT PRÉCIS (avant que
+     * vanilla ne traite lui-même ce clic).
      */
-    private int dragButton = -1;
-
-    /** Vrai si le glissé actuel a commencé avec Shift enfoncé (pour le clic gauche uniquement). */
-    private boolean dragWithShift = false;
-
-    /**
-     * Vrai si {@code menu.getCarried()} n'était pas vide au moment du clic initial du glissé. Gate les
-     * mécaniques 1 (RMB) et 2 (LMB sans Shift), toutes deux titrées « avec objet en main » dans
-     * l'énoncé — évalué UNE fois au début du glissé, jamais recalculé en route, car ces deux
-     * mécaniques manipulent elles-mêmes le curseur (le voir se vider en cours de route est normal et
-     * ne doit pas faire basculer vers un autre comportement).
-     */
-    private boolean dragCarriedAtStart = false;
-
-    /** La case sous le curseur au tout début du glissé courant — utilisée par la mécanique 1 (RMB). */
-    private Slot rmbOriginSlot = null;
-
-    /** Vrai une fois que la case d'origine du glissé RMB a reçu son clic (voir {@link #handleRmbDragSlot}). */
-    private boolean rmbOriginClicked = false;
-
-    /**
-     * Accumulateur de molette, persistant entre appels de {@link #onMouseScrolled} — voir sa Javadoc.
-     */
-    private double wheelAccumulated = 0.0;
-
-    /**
-     * Intercepte le glissé de souris — mécaniques 1 (RMB), 2 (LMB avec objet, sans Shift) et
-     * 3 (LMB + Shift). Un simple clic gauche sans Shift et sans objet en main n'est PAS une mécanique
-     * Mouse Tweaks : on laisse vanilla gérer ce cas (retour false, rien consommé).
-     */
-    @Inject(method = "mouseDragged(Lnet/minecraft/client/input/MouseButtonEvent;DD)Z", at = @At("HEAD"), cancellable = true)
-    private boolean onMouseDragged(MouseButtonEvent event, double x, double y, CallbackInfoReturnable<Boolean> cir) {
+    @Inject(method = "mouseClicked(Lnet/minecraft/client/input/MouseButtonEvent;Z)Z", at = @At("HEAD"))
+    private void lanterne$onMouseClicked(MouseButtonEvent event, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
         if (!ClientConfig.SOURIS_AVANCEE.get()) {
-            return false; // Config désactivée, laisser vanilla gérer.
+            return;
+        }
+        this.lastSelectedSlot = this.hoveredSlot;
+        ItemStack carried = this.menu.getCarried();
+        int button = event.button();
+        if (button == 0) {
+            this.canDoLmbDrag = carried.isEmpty();
+        } else if (button == 1) {
+            this.canDoRmbDrag = !carried.isEmpty();
+            this.rmbTweakLeftOriginalSlot = false;
+        }
+    }
+
+    /** {@code Main.onMouseReleased} — referme les deux glissés, jamais annulé. */
+    @Inject(method = "mouseReleased(Lnet/minecraft/client/input/MouseButtonEvent;)Z", at = @At("HEAD"))
+    private void lanterne$onMouseReleased(MouseButtonEvent event, CallbackInfoReturnable<Boolean> cir) {
+        int button = event.button();
+        if (button == 0) {
+            this.canDoLmbDrag = false;
+        } else if (button == 1) {
+            this.canDoRmbDrag = false;
+        }
+    }
+
+    /**
+     * {@code Main.onMouseDrag} — jamais annulé (voir la Javadoc de classe). Rejoue des clics en aparté
+     * quand la souris entre dans une nouvelle case, puis laisse vanilla traiter l'évènement normalement.
+     */
+    @Inject(method = "mouseDragged(Lnet/minecraft/client/input/MouseButtonEvent;DD)Z", at = @At("HEAD"))
+    private void lanterne$onMouseDragged(MouseButtonEvent event, double x, double y, CallbackInfoReturnable<Boolean> cir) {
+        if (!ClientConfig.SOURIS_AVANCEE.get()) {
+            return;
         }
 
+        Slot selectedSlot = this.hoveredSlot;
+        if (selectedSlot == this.lastSelectedSlot) {
+            return; // La souris n'a pas changé de case : rien à faire (comme le vrai mod).
+        }
+
+        ItemStack stackOnMouse = this.menu.getCarried();
         int button = event.button();
 
-        if (dragButton == -1) {
-            // Nouveau glissé : capturer tout l'état "au moment du clic initial" une bonne fois.
-            dragButton = button;
-            dragWithShift = event.hasShiftDown();
-            lastDraggedSlot = null;
-            dragCarriedAtStart = !menu.getCarried().isEmpty();
-            rmbOriginSlot = this.hoveredSlot;
-            rmbOriginClicked = false;
-        } else if (dragButton != button) {
-            // Bouton changé en cours de glissé (rare mais possible) — ignorer.
-            return false;
-        }
-
-        boolean leftShiftDrag = button == 0 && dragWithShift;                       // mécanique 3
-        boolean leftPickupDrag = button == 0 && !dragWithShift && dragCarriedAtStart; // mécanique 2
-        boolean rightDistributeDrag = button == 1 && dragCarriedAtStart;            // mécanique 1
-        if (!leftShiftDrag && !leftPickupDrag && !rightDistributeDrag) {
-            return false;
-        }
-
-        Slot hoveredNow = this.hoveredSlot;
-        if (hoveredNow != null && hoveredNow != lastDraggedSlot) {
-            if (leftShiftDrag) {
-                handleShiftDragSlot(hoveredNow);
-            } else if (leftPickupDrag) {
-                handlePickupDragSlot(hoveredNow);
-            } else {
-                handleRmbDragSlot(hoveredNow);
+        // Au premier vrai départ de la case d'origine pendant un glissé droit : désarmer le
+        // quick-craft vanilla (pas annuler l'évènement — voir la Javadoc de classe), puis cliquer la
+        // case d'origine elle-même.
+        if (this.canDoRmbDrag && button == 1 && !this.rmbTweakLeftOriginalSlot) {
+            this.rmbTweakLeftOriginalSlot = true;
+            this.skipNextRelease = true;
+            if (this.isQuickCrafting && this.quickCraftingButton == 1) {
+                this.isQuickCrafting = false;
             }
-            lastDraggedSlot = hoveredNow;
+            rmbTweakMaybeClickSlot(this.lastSelectedSlot, stackOnMouse);
         }
 
-        cir.setReturnValue(true);
-        return true;
+        this.lastSelectedSlot = selectedSlot;
+
+        if (selectedSlot == null) {
+            return;
+        }
+
+        if (button == 0) {
+            if (!this.canDoLmbDrag) {
+                return;
+            }
+            ItemStack selectedSlotStack = selectedSlot.getItem();
+            if (selectedSlotStack.isEmpty()) {
+                return; // Les mécaniques LMB ne font rien sur une case vide.
+            }
+            boolean shiftIsDown = event.hasShiftDown();
+
+            if (stackOnMouse.isEmpty()) {
+                // Glissé Shift+gauche SANS objet en main : shift-clic direct.
+                if (!shiftIsDown) {
+                    return;
+                }
+                handleSlotClick(selectedSlot, 0, ContainerInput.QUICK_MOVE);
+            } else {
+                // Glissé (Shift+)gauche AVEC objet en main : uniquement des cases compatibles.
+                if (!areStacksCompatible(selectedSlotStack, stackOnMouse)) {
+                    return;
+                }
+                if (shiftIsDown) {
+                    handleSlotClick(selectedSlot, 0, ContainerInput.QUICK_MOVE);
+                } else {
+                    if (stackOnMouse.getCount() + selectedSlotStack.getCount() > stackOnMouse.getMaxStackSize()) {
+                        return; // Le reliquat serait coincé sans moyen de le reprendre : on renonce.
+                    }
+                    handleSlotClick(selectedSlot, 0, ContainerInput.PICKUP);
+                    if (!(selectedSlot instanceof ResultSlot)) {
+                        handleSlotClick(selectedSlot, 0, ContainerInput.PICKUP);
+                    }
+                }
+            }
+        } else if (button == 1) {
+            if (!this.canDoRmbDrag) {
+                return;
+            }
+            rmbTweakMaybeClickSlot(selectedSlot, stackOnMouse);
+        }
     }
 
-    /**
-     * Mécanique 1 — glissé bouton droit. Au premier vrai départ de la case d'origine, celle-ci reçoit
-     * elle aussi son clic droit (pas seulement les cases suivantes) ; ensuite chaque case nouvellement
-     * survolée reçoit le même traitement, y compris en cas de retour sur une case déjà traitée plus
-     * tôt dans le glissé (aucune mémoire de "déjà visitée").
-     */
-    private void handleRmbDragSlot(Slot hoveredNow) {
-        if (!rmbOriginClicked && rmbOriginSlot != null && hoveredNow != rmbOriginSlot) {
-            clickRmbSlotIfAllowed(rmbOriginSlot);
-            rmbOriginClicked = true;
+    /** {@code Main.rmbTweakMaybeClickSlot} — un vrai clic droit vanilla, refusé si incompatible/plein. */
+    private void rmbTweakMaybeClickSlot(Slot slot, ItemStack stackOnMouse) {
+        if (slot == null || stackOnMouse.isEmpty() || slot instanceof ResultSlot) {
+            return;
         }
-        clickRmbSlotIfAllowed(hoveredNow);
-        if (hoveredNow == rmbOriginSlot) {
-            rmbOriginClicked = true;
-        }
-    }
-
-    /** Un vrai clic droit vanilla (PICKUP, bouton=1) — refusé si la case est incompatible ou pleine. */
-    private void clickRmbSlotIfAllowed(Slot slot) {
-        ItemStack carried = menu.getCarried();
-        if (carried.isEmpty()) {
-            return; // Plus rien à distribuer.
-        }
-        if (slot.hasItem()) {
-            ItemStack slotStack = slot.getItem();
-            if (!sameItemAndComponents(carried, slotStack) || slotStack.getCount() >= slot.getMaxStackSize(slotStack)) {
-                return; // Incompatible, ou déjà à sa taille max : refuse.
+        if (!(stackOnMouse.getItem() instanceof BundleItem)) {
+            ItemStack selectedSlotStack = slot.getItem();
+            if (!areStacksCompatible(selectedSlotStack, stackOnMouse)) {
+                return;
+            }
+            if (selectedSlotStack.getCount() == slot.getMaxStackSize(selectedSlotStack)) {
+                return;
             }
         }
         handleSlotClick(slot, 1, ContainerInput.PICKUP);
     }
 
     /**
-     * Mécanique 2 — clic gauche avec objet en main, sans Shift. Fusionne toute la case survolée dans
-     * le curseur si elle contient le même objet (même Item, mêmes composants). Un dépassement de la
-     * pile max du curseur abandonne totalement cette case plutôt que de laisser un reliquat coincé.
-     * Un seul clic, jamais un second même sur une {@link ResultSlot} — la refaire cliquer avancerait
-     * un lot de fabrication supplémentaire non désiré.
-     */
-    private void handlePickupDragSlot(Slot slot) {
-        if (!slot.hasItem()) {
-            return;
-        }
-        ItemStack carried = menu.getCarried();
-        if (carried.isEmpty()) {
-            return;
-        }
-        ItemStack slotStack = slot.getItem();
-        if (!sameItemAndComponents(carried, slotStack)) {
-            return;
-        }
-        if (carried.getCount() + slotStack.getCount() > carried.getMaxStackSize()) {
-            return; // Abandon total pour cette case.
-        }
-        handleSlotClick(slot, 0, ContainerInput.PICKUP);
-    }
-
-    /** Mécanique 3 — clic gauche + Shift. Un shift-clic par case survolée, sans autre condition. */
-    private void handleShiftDragSlot(Slot slot) {
-        handleSlotClick(slot, 0, ContainerInput.QUICK_MOVE);
-    }
-
-    /**
-     * Intercepte la molette — mécanique 4, la plus dense des quatre.
-     *
-     * <h2>Accumulation</h2>
-     *
-     * <p>{@code vertical} est accumulé dans {@link #wheelAccumulated} entre appels ; si son signe
-     * change par rapport à l'accumulé courant, celui-ci est remis à zéro avant d'ajouter le nouveau
-     * delta. La partie entière (tronquée vers zéro) de l'accumulé est le nombre d'objets à déplacer ce
-     * tick ; le reste fractionnaire est conservé pour le prochain appel — gère nativement les petits
-     * deltas fractionnaires de certaines souris/trackpads sans rien perdre.
-     *
-     * <h2>Sens</h2>
-     *
-     * <p>{@code vertical < 0} (molette vers le bas) POUSSE hors de la case survolée vers l'autre camp
-     * du menu ; {@code vertical > 0} TIRE depuis l'autre camp vers la case survolée. Le camp d'une case
-     * est déterminé par {@code slot.container == joueur.getInventory()} (voir {@link #sameCamp}).
-     *
-     * <h2>Case de sortie de craft survolée directement</h2>
-     *
-     * <p>Interdiction absolue d'y pousser (l'évènement est tout de même consommé, rien ne se passe).
-     * En tirer répète un simple clic gauche (chaque clic prend le lot entier produit, jamais un
-     * exemplaire) — c'est le seul chemin de {@link ResultSlot} qui ne passe pas par
-     * {@link #handleWheelPush}/{@link #handleWheelPull}.
+     * {@code Main.onMouseScrolled} — toujours annulé au-dessus d'une case valide (la molette n'a pas
+     * d'autre sens dans un écran de conteneur), même quand rien ne bouge, pour ne jamais laisser un
+     * autre mod réagir au même scroll de façon surprenante.
      */
     @Inject(method = "mouseScrolled(DDDD)Z", at = @At("HEAD"), cancellable = true)
-    private boolean onMouseScrolled(double x, double y, double horizontal, double vertical, CallbackInfoReturnable<Boolean> cir) {
+    private void lanterne$onMouseScrolled(double x, double y, double horizontal, double vertical, CallbackInfoReturnable<Boolean> cir) {
         if (!ClientConfig.SOURIS_AVANCEE.get()) {
-            return false;
+            return;
+        }
+        Slot selectedSlot = this.hoveredSlot;
+        if (selectedSlot == null) {
+            return;
         }
 
-        // Réinitialiser le glissé si on interagit avec la molette.
-        dragButton = -1;
-        lastDraggedSlot = null;
-
-        Slot hoveredNow = this.hoveredSlot;
-        if (hoveredNow == null || vertical == 0) {
-            return false;
+        if (this.accumulatedScrollDelta != 0 && Math.signum(vertical) != Math.signum(this.accumulatedScrollDelta)) {
+            this.accumulatedScrollDelta = 0;
         }
+        this.accumulatedScrollDelta += vertical;
+        int delta = (int) this.accumulatedScrollDelta;
+        this.accumulatedScrollDelta -= delta;
 
-        if (wheelAccumulated != 0 && Math.signum(wheelAccumulated) != Math.signum(vertical)) {
-            wheelAccumulated = 0; // Changement de sens : on ne mélange pas un reliquat vers le bas avec un scroll vers le haut.
-        }
-        wheelAccumulated += vertical;
-        int units = (int) wheelAccumulated; // Troncature vers zéro.
-        wheelAccumulated -= units; // Le reste fractionnaire attend le prochain scroll.
-
-        if (units == 0) {
+        if (delta == 0) {
             cir.setReturnValue(true);
-            return true; // Rien à déplacer ce tick, mais on garde la main sur l'évènement.
+            return;
         }
 
-        ItemStack carried = menu.getCarried();
-        if (!carried.isEmpty() && hoveredNow.hasItem() && !sameItemAndComponents(carried, hoveredNow.getItem())) {
-            // Garde-fou : curseur déjà occupé par un type incompatible — abandon, mais consommation.
+        int numItemsToMove = Math.abs(delta);
+        boolean pushItems = delta < 0;
+
+        ItemStack selectedSlotStack = selectedSlot.getItem();
+        if (selectedSlotStack.isEmpty()) {
             cir.setReturnValue(true);
-            return true;
+            return;
         }
 
-        if (hoveredNow instanceof ResultSlot) {
-            if (units < 0) {
-                cir.setReturnValue(true);
-                return true; // Jamais de push dans une sortie de craft.
-            }
-            for (int i = 0; i < units; i++) {
-                handleSlotClick(hoveredNow, 0, ContainerInput.PICKUP); // Un lot entier par clic.
-            }
-        } else if (units < 0) {
-            handleWheelPush(hoveredNow, -units);
+        ItemStack stackOnMouse = this.menu.getCarried();
+
+        if (selectedSlot instanceof ResultSlot) {
+            handleScrollOnCraftingOutput(selectedSlot, selectedSlotStack, stackOnMouse, numItemsToMove, pushItems);
+            cir.setReturnValue(true);
+            return;
+        }
+
+        // Impossible d'interagir proprement si le curseur porte déjà un objet du MÊME type que la
+        // case survolée — le vrai mod renonce plutôt que d'inventer un comportement ambigu.
+        if (!stackOnMouse.isEmpty() && areStacksCompatible(selectedSlotStack, stackOnMouse)) {
+            cir.setReturnValue(true);
+            return;
+        }
+
+        if (pushItems) {
+            handleWheelPush(selectedSlot, selectedSlotStack, stackOnMouse, numItemsToMove);
         } else {
-            handleWheelPull(hoveredNow, units);
+            handleWheelPull(selectedSlot, selectedSlotStack, numItemsToMove);
         }
-
         cir.setReturnValue(true);
-        return true;
     }
 
-    /**
-     * PUSH — pousse {@code want} objets (borné par ce que contient réellement {@code hovered}) hors de
-     * la case survolée vers l'autre camp. Ramasse en UNE fois (jamais de ramassages répétés dans le
-     * même tick), puis dépose un par un (clic droit répété) sur les cases cibles trouvées par
-     * {@link #findPushTargets}, et restitue le reliquat sur la case source à la fin.
-     */
-    private void handleWheelPush(Slot hovered, int want) {
-        ItemStack sourceStack = hovered.getItem();
-        if (sourceStack.isEmpty()) {
+    private void handleScrollOnCraftingOutput(Slot selectedSlot, ItemStack selectedSlotStack,
+            ItemStack stackOnMouse, int numItemsToMove, boolean pushItems) {
+        if (!areStacksCompatible(selectedSlotStack, stackOnMouse)) {
             return;
         }
-        want = Math.min(want, sourceStack.getCount());
-        if (want <= 0) {
-            return;
+        if (stackOnMouse.isEmpty()) {
+            if (!pushItems) {
+                return; // Impossible de tirer VERS une sortie de craft.
+            }
+            while (numItemsToMove-- > 0) {
+                List<Slot> targets = findPushSlots(selectedSlot, selectedSlotStack.getCount(), true);
+                if (targets == null) {
+                    break; // Distribution impossible en entier : ne pas même ramasser le lot.
+                }
+                handleSlotClick(selectedSlot, 0, ContainerInput.PICKUP);
+                for (int i = 0; i < targets.size(); i++) {
+                    Slot slot = targets.get(i);
+                    if (i == targets.size() - 1) {
+                        handleSlotClick(slot, 0, ContainerInput.PICKUP);
+                    } else {
+                        int clickTimes = slot.getMaxStackSize(slot.getItem()) - slot.getItem().getCount();
+                        while (clickTimes-- > 0) {
+                            handleSlotClick(slot, 1, ContainerInput.PICKUP);
+                        }
+                    }
+                }
+            }
+        } else {
+            while (numItemsToMove-- > 0) {
+                handleSlotClick(selectedSlot, 0, ContainerInput.PICKUP);
+            }
         }
+    }
 
-        List<Slot> targets = findPushTargets(hovered, sourceStack);
+    /** PUSH — pousse hors de la case survolée vers l'autre camp du menu. */
+    private void handleWheelPush(Slot selectedSlot, ItemStack selectedSlotStack, ItemStack stackOnMouse, int numItemsToMove) {
+        if (!stackOnMouse.isEmpty() && !selectedSlot.mayPlace(stackOnMouse)) {
+            return;
+        }
+        numItemsToMove = Math.min(numItemsToMove, selectedSlotStack.getCount());
+
+        List<Slot> targets = findPushSlots(selectedSlot, numItemsToMove, false);
         if (targets.isEmpty()) {
-            return; // Nulle part où pousser : ne pas même entamer le ramassage.
+            return;
         }
 
-        boolean grabAll = shouldGrabAll(menu.getCarried(), sourceStack.getCount(), want);
-        handleSlotClick(hovered, grabAll ? 0 : 1, ContainerInput.PICKUP);
-        if (menu.getCarried().isEmpty()) {
-            return; // Rien ramassé (cas limite) : abandonner proprement.
+        boolean hadItemOnMouse = !stackOnMouse.isEmpty();
+
+        int pickUpButton = 1;
+        if (stackOnMouse.isEmpty() && selectedSlotStack.getCount() <= numItemsToMove) {
+            pickUpButton = 0;
+        }
+        handleSlotClick(selectedSlot, pickUpButton, ContainerInput.PICKUP);
+
+        ItemStack pickedUpStack = this.menu.getCarried();
+        numItemsToMove = Math.min(numItemsToMove, pickedUpStack.getCount());
+
+        for (Slot slot : targets) {
+            int clickTimes = slot.getMaxStackSize(pickedUpStack) - slot.getItem().getCount();
+            clickTimes = Math.min(clickTimes, numItemsToMove);
+            numItemsToMove -= clickTimes;
+            while (clickTimes-- > 0) {
+                handleSlotClick(slot, 1, ContainerInput.PICKUP);
+            }
         }
 
-        int placed = 0;
-        for (Slot target : targets) {
-            if (placed >= want || menu.getCarried().isEmpty()) {
+        boolean hasLeftoverItems = !this.menu.getCarried().isEmpty();
+        if (hadItemOnMouse || hasLeftoverItems) {
+            int putDownButton = 0;
+            if (hadItemOnMouse && hasLeftoverItems) {
+                putDownButton = 1;
+            }
+            handleSlotClick(selectedSlot, putDownButton, ContainerInput.PICKUP);
+        }
+    }
+
+    /** PULL — tire depuis l'autre camp du menu vers la case survolée. */
+    private void handleWheelPull(Slot selectedSlot, ItemStack selectedSlotStack, int numItemsToMove) {
+        int maxItemsToMove = selectedSlot.getMaxStackSize(selectedSlotStack) - selectedSlotStack.getCount();
+        numItemsToMove = Math.min(numItemsToMove, maxItemsToMove);
+
+        while (numItemsToMove > 0) {
+            Slot targetSlot = findPullSlot(selectedSlot);
+            if (targetSlot == null) {
                 break;
             }
-            while (placed < want && !menu.getCarried().isEmpty() && !targetIsFull(target)) {
-                int beforeCount = menu.getCarried().getCount();
-                handleSlotClick(target, 1, ContainerInput.PICKUP);
-                int deposited = beforeCount - menu.getCarried().getCount(); // Toujours relu, jamais calculé.
-                if (deposited <= 0) {
-                    break; // La case cible refuse : passer à la suivante.
+            ItemStack targetSlotStack = targetSlot.getItem();
+            int numItemsInTargetSlot = targetSlotStack.getCount();
+            ItemStack stackOnMouse = this.menu.getCarried();
+
+            if (targetSlot instanceof ResultSlot) {
+                if (maxItemsToMove < numItemsInTargetSlot) {
+                    break;
                 }
-                placed += deposited;
-            }
-        }
-
-        restituteLeftoverOnSource(hovered);
-    }
-
-    /**
-     * PULL — tire jusqu'à {@code want} objets depuis l'autre camp vers la case survolée, une case
-     * source à la fois, tant qu'il reste de la place dans la case survolée. Une source qui s'avère
-     * être une {@link ResultSlot} interrompt la boucle : un seul clic gauche entier, jamais objet par
-     * objet, et rien d'autre ce tick.
-     */
-    private void handleWheelPull(Slot hovered, int want) {
-        int pulled = 0;
-        while (pulled < want && hoveredHasRoom(hovered)) {
-            Slot source = findPullSource(hovered);
-            if (source == null) {
-                break; // Plus rien de compatible en face.
+                maxItemsToMove -= numItemsInTargetSlot;
+                numItemsToMove = Math.min(numItemsToMove - 1, maxItemsToMove);
+                if (!stackOnMouse.isEmpty() && !selectedSlot.mayPlace(stackOnMouse)) {
+                    break;
+                }
+                handleSlotClick(selectedSlot, 0, ContainerInput.PICKUP);
+                handleSlotClick(targetSlot, 0, ContainerInput.PICKUP);
+                handleSlotClick(selectedSlot, 0, ContainerInput.PICKUP);
+                continue;
             }
 
-            if (source instanceof ResultSlot) {
-                handleSlotClick(source, 0, ContainerInput.PICKUP);
-                return; // Un seul clic gauche par tick de molette pour une sortie de craft.
+            boolean hadItemOnMouse = !stackOnMouse.isEmpty();
+            if (hadItemOnMouse && !targetSlot.mayPlace(stackOnMouse)) {
+                break;
             }
 
-            int need = want - pulled;
-            int sourceCount = source.getItem().getCount();
-            boolean grabAll = shouldGrabAll(menu.getCarried(), sourceCount, need);
-            handleSlotClick(source, grabAll ? 0 : 1, ContainerInput.PICKUP);
-            if (menu.getCarried().isEmpty()) {
-                break; // Rien ramassé : éviter une boucle infinie.
+            int pickUpButton = 1;
+            if (stackOnMouse.isEmpty() && targetSlotStack.getCount() == 1) {
+                pickUpButton = 0;
             }
+            handleSlotClick(targetSlot, pickUpButton, ContainerInput.PICKUP);
 
-            int hoveredBefore = stackCount(hovered);
-            int pickedCount = menu.getCarried().getCount();
-            if (pickedCount <= need) {
-                handleSlotClick(hovered, 0, ContainerInput.PICKUP); // Tout déposer d'un coup.
+            int numPickedUp = this.menu.getCarried().getCount();
+            int numToMoveFromTarget = Math.min(numPickedUp, numItemsToMove);
+            if (numToMoveFromTarget == numPickedUp) {
+                handleSlotClick(selectedSlot, 0, ContainerInput.PICKUP);
             } else {
-                for (int i = 0; i < need && !menu.getCarried().isEmpty(); i++) {
-                    handleSlotClick(hovered, 1, ContainerInput.PICKUP);
+                for (int i = 0; i < numToMoveFromTarget; i++) {
+                    handleSlotClick(selectedSlot, 1, ContainerInput.PICKUP);
                 }
             }
-            int gained = stackCount(hovered) - hoveredBefore; // Toujours relu, jamais calculé.
+            maxItemsToMove -= numToMoveFromTarget;
+            numItemsToMove -= numToMoveFromTarget;
 
-            restituteLeftoverOnSource(source);
-
-            if (gained <= 0) {
-                break; // Aucun progrès : éviter une boucle infinie.
+            boolean hasLeftoverItems = !this.menu.getCarried().isEmpty();
+            if (hadItemOnMouse || hasLeftoverItems) {
+                int putDownButton = 0;
+                if (hadItemOnMouse && hasLeftoverItems) {
+                    putDownButton = 1;
+                }
+                handleSlotClick(targetSlot, putDownButton, ContainerInput.PICKUP);
             }
-            pulled += gained;
         }
     }
 
-    /**
-     * Dernier clic sur la case source pour lui rendre le reliquat du curseur, si {@code getCarried()}
-     * n'est pas vide après un push/pull. Voir le point 2 de la Javadoc de classe pour l'interprétation
-     * du choix droit/gauche.
-     */
-    private void restituteLeftoverOnSource(Slot source) {
-        ItemStack leftover = menu.getCarried();
-        if (leftover.isEmpty()) {
-            return;
-        }
-        ItemStack sourceNow = source.getItem();
-        boolean sameType = sourceNow.isEmpty() || sameItemAndComponents(sourceNow, leftover);
-        handleSlotClick(source, sameType ? 0 : 1, ContainerInput.PICKUP);
-    }
+    /** {@code Main.findPullSlot} — première case compatible dans l'autre camp, ordre croissant. */
+    private Slot findPullSlot(Slot selectedSlot) {
+        ItemStack selectedSlotStack = selectedSlot.getItem();
+        boolean findInPlayerInventory = selectedSlot.container != playerInventory();
 
-    /**
-     * Cases cibles pour un PUSH, dans l'autre camp que {@code hovered} : d'abord les cases non-vides
-     * déjà compatibles et non pleines, dans l'ordre du menu, puis en second recours les cases vides
-     * qui acceptent le type ({@link Slot#mayPlace}). Une {@link ResultSlot} n'est jamais une cible —
-     * son {@code mayPlace} refuse déjà tout en vanilla, exclue ici explicitement pour que ce soit lu
-     * sans ambiguïté plutôt que déduit d'un comportement vanilla implicite.
-     */
-    private List<Slot> findPushTargets(Slot hovered, ItemStack sourceStack) {
-        List<Slot> targets = new ArrayList<>();
-        for (Slot candidate : this.menu.slots) {
-            if (candidate == hovered || candidate instanceof ResultSlot || sameCamp(candidate, hovered)) {
+        for (Slot slot : this.menu.slots) {
+            boolean slotInPlayerInventory = slot.container == playerInventory();
+            if (findInPlayerInventory != slotInPlayerInventory) {
                 continue;
             }
-            if (candidate.hasItem() && sameItemAndComponents(candidate.getItem(), sourceStack) && !targetIsFull(candidate)) {
-                targets.add(candidate);
-            }
-        }
-        for (Slot candidate : this.menu.slots) {
-            if (candidate == hovered || candidate instanceof ResultSlot || sameCamp(candidate, hovered)) {
+            ItemStack stack = slot.getItem();
+            if (stack.isEmpty() || !areStacksCompatible(selectedSlotStack, stack)) {
                 continue;
             }
-            if (!candidate.hasItem() && candidate.mayPlace(sourceStack)) {
-                targets.add(candidate);
-            }
-        }
-        return targets;
-    }
-
-    /**
-     * Première case source compatible pour un PULL, dans l'autre camp que {@code hovered}, dans
-     * l'ordre croissant de {@code menu.slots} (l'énoncé autorise les deux sens ; choix documenté en
-     * classe). Compatible = même objet que ce qu'il y a déjà dans {@code hovered} si elle n'est pas
-     * vide, sinon n'importe quel objet que {@code hovered} accepte ({@link Slot#mayPlace}).
-     */
-    private Slot findPullSource(Slot hovered) {
-        ItemStack hoveredStack = hovered.getItem();
-        for (Slot candidate : this.menu.slots) {
-            if (candidate == hovered || !candidate.hasItem() || sameCamp(candidate, hovered)) {
-                continue;
-            }
-            ItemStack candidateStack = candidate.getItem();
-            boolean compatible = hoveredStack.isEmpty()
-                    ? hovered.mayPlace(candidateStack)
-                    : sameItemAndComponents(candidateStack, hoveredStack);
-            if (compatible) {
-                return candidate;
-            }
+            return slot;
         }
         return null;
     }
 
-    /**
-     * Vrai si {@code a} et {@code b} appartiennent au même camp du menu — {@code slot.container} valant
-     * ou non l'inventaire du joueur local ({@code Player.getInventory()}).
-     */
-    private boolean sameCamp(Slot a, Slot b) {
-        Inventory playerInventory = playerInventory();
-        return (a.container == playerInventory) == (b.container == playerInventory);
+    /** {@code Main.findPushSlots} — cases non-vides compatibles d'abord, cases vides ensuite. */
+    private List<Slot> findPushSlots(Slot selectedSlot, int itemCount, boolean mustDistributeAll) {
+        ItemStack selectedSlotStack = selectedSlot.getItem();
+        boolean findInPlayerInventory = selectedSlot.container != playerInventory();
+
+        List<Slot> result = new ArrayList<>();
+        List<Slot> goodEmptySlots = new ArrayList<>();
+
+        for (Slot slot : this.menu.slots) {
+            if (itemCount <= 0) {
+                break;
+            }
+            boolean slotInPlayerInventory = slot.container == playerInventory();
+            if (findInPlayerInventory != slotInPlayerInventory || slot instanceof ResultSlot) {
+                continue;
+            }
+            ItemStack stack = slot.getItem();
+            if (stack.isEmpty()) {
+                if (slot.mayPlace(selectedSlotStack)) {
+                    goodEmptySlots.add(slot);
+                }
+            } else if (areStacksCompatible(selectedSlotStack, stack) && stack.getCount() < slot.getMaxStackSize(stack)) {
+                result.add(slot);
+                itemCount -= Math.min(itemCount, slot.getMaxStackSize(stack) - stack.getCount());
+            }
+        }
+        for (Slot slot : goodEmptySlots) {
+            if (itemCount <= 0) {
+                break;
+            }
+            result.add(slot);
+            itemCount -= Math.min(itemCount, slot.getMaxStackSize(selectedSlotStack));
+        }
+
+        if (mustDistributeAll && itemCount > 0) {
+            return null;
+        }
+        return result;
     }
 
-    /** L'inventaire du joueur local, ou {@code null} si aucun joueur (ne devrait pas arriver ici). */
     private static Inventory playerInventory() {
         LocalPlayer player = Minecraft.getInstance().player;
         return player != null ? player.getInventory() : null;
     }
 
-    /** Règle partagée PUSH.2/PULL.2 : clic gauche (tout) si le curseur est vide et que ça suffit, sinon droit (moitié). */
-    private static boolean shouldGrabAll(ItemStack carried, int sourceCount, int need) {
-        return carried.isEmpty() && sourceCount <= need;
-    }
-
-    private static boolean targetIsFull(Slot target) {
-        ItemStack stack = target.getItem();
-        return !stack.isEmpty() && stack.getCount() >= target.getMaxStackSize(stack);
-    }
-
-    private static boolean hoveredHasRoom(Slot hovered) {
-        ItemStack stack = hovered.getItem();
-        return stack.isEmpty() || stack.getCount() < hovered.getMaxStackSize(stack);
-    }
-
-    private static int stackCount(Slot slot) {
-        return slot.getItem().getCount();
-    }
-
-    /** Même Item ET mêmes composants — les deux vérifications, jamais une seule (voir mécanique 2). */
-    private static boolean sameItemAndComponents(ItemStack a, ItemStack b) {
-        return ItemStack.isSameItem(a, b) && ItemStack.isSameItemSameComponents(a, b);
+    /** {@code Main.areStacksCompatible} — vide compatible avec tout, sinon même Item + composants. */
+    private static boolean areStacksCompatible(ItemStack a, ItemStack b) {
+        return a.isEmpty() || b.isEmpty() || (ItemStack.isSameItem(a, b) && ItemStack.isSameItemSameComponents(a, b));
     }
 
     /**
-     * Réinitialiser l'état du glissé après un clic normal (qui ne fait pas partie du glissé).
-     */
-    @Inject(method = "mouseClicked(Lnet/minecraft/client/input/MouseButtonEvent;Z)Z", at = @At("HEAD"))
-    private void onMouseClicked(MouseButtonEvent event, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
-        dragButton = -1;
-        lastDraggedSlot = null;
-        rmbOriginSlot = null;
-        rmbOriginClicked = false;
-        dragCarriedAtStart = false;
-    }
-
-    /**
-     * Retrouve le numéro de la case dans le menu et déclenche le clic.
-     *
-     * <h2>Appel direct, jamais de réflexion</h2>
-     *
-     * <p>Cette classe EST un mixin sur {@code AbstractContainerScreen} : Mixin fusionne son
-     * bytecode dans la classe cible elle-même, {@code slotClicked} (protégée) est donc un appel
-     * direct depuis ici, exactement comme n'importe quelle autre méthode héritée — au même titre que
-     * {@link #menu}/{@link #hoveredSlot} ci-dessus, lus par {@code @Shadow} sans réflexion non plus.
-     * Une version précédente passait par {@code Class.getDeclaredMethod} + {@code setAccessible},
-     * enveloppée dans un {@code catch (Exception e) {}} muet — si l'appel avait échoué pour
-     * n'importe quelle raison, rien ne l'aurait jamais dit, et toute la fonctionnalité serait restée
-     * silencieusement inerte.
+     * {@code handler.clickSlot} — appel direct à {@code slotClicked}, jamais de réflexion (voir la
+     * précédente version de ce fichier pour pourquoi : un échec de réflexion enveloppé dans un
+     * {@code catch} muet laissait toute la fonctionnalité inerte sans jamais le dire).
      */
     private void handleSlotClick(Slot slot, int button, ContainerInput input) {
         int slotIndex = this.menu.slots.indexOf(slot);

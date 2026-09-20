@@ -81,6 +81,7 @@ sa licence. Tant qu'un module n'y figure pas, il est d'origine.
 | `mixin/ConnectionMixin.java`, `mixin/ServerLoginPacketListenerImplMixin.java`, `core/network/ConnectionEncryption.java` — l'accroche | **Rien n'est repris.** Point d'accroche réécrit pour la 26.3 : `Connection.setEncryptionKey` y reçoit des `Cipher` déjà construits, plus la `SecretKey` brute — voir la javadoc de `ConnectionEncryption`. Ne couvre que le serveur pour l'instant, le client demande un relais entre deux méthodes non encore écrit. | — |
 | `mixin/ServerNameResolverMixin.java` — pas de recherche DNS inversée pour une IP littérale | Idée de [Fast IP Ping](https://github.com/Fallen-Breath/fast-ip-ping) (Fallen_Breath) ; point d'accroche réécrit pour la 26.3 — un seul mixin sur `ServerNameResolver.resolveAddress`, méthode nommée et stable, là où l'original en posait deux ou trois sur des classes anonymes et des lambdas | LGPL-3.0-only |
 | `tools/ExtractColors.java` — l'atlas de textures de RELIEF (la carte 3D) | Technique de [BlueMap](https://github.com/BlueMap-Minecraft/BlueMap) (BlueColored) : un atlas de sprites + un index bloc → cellule, lu dans `core/resources/pack/resourcepack/atlas/Atlas.java`. Simplifiée : un seul index par colonne (la face du dessus), sans le parsing complet de blockstate/model JSON de BlueMap — RELIEF ne rend jamais de modèle 3D arbitraire (escalier, dalle…), juste le sol par colonne. Aucune ligne recopiée. | MIT |
+| `mixin/MouseTweaksMixin.java` — Souris avancée | **[Mouse Tweaks](https://github.com/YaLTeR/MouseTweaks)** (Ivan Molodetskikh). Les quatre mécaniques (glissé droit, glissé gauche avec objet, glissé gauche + Shift, molette) et leur algorithme exact — recherche de case cible/source, restitution du reliquat, garde-fous de compatibilité — sont transcrits depuis `src/main/java/yalter/mousetweaks/Main.java`, lu en entier avant d'écrire ce fichier. Adaptation, pas copie mot pour mot : les noms d'API de ce moteur diffèrent (`ContainerInput` au lieu d'un entier de bouton vanilla, `@Shadow` sur les champs de `AbstractContainerScreen` au lieu d'un `GuiContainerHandler` séparé), et la désactivation du glissé droit vanilla concurrent se fait par manipulation directe de `skipNextRelease`/`isQuickCrafting` (champs shadowés) plutôt que par l'API d'un mixin loader tiers. | **BSD-3-Clause** — copyright (c) 2023, Ivan Molodetskikh. Texte complet en fin de ce fichier. |
 
 **L'élastique** demande une précision de licence, parce que le mod auquel on pense
 d'abord est justement celui dont on ne peut rien prendre :
@@ -440,3 +441,39 @@ Tout ce qui est listé dans `README.md` à la date du passage en GPL-3.0 a été
 écrit pour ce projet et mesuré sur ses propres bancs : les entonnoirs par lots,
 la fusion au sol, l'enclos, la Vigie, le Balai, la compression réseau, le minage
 à l'horloge réelle, les cadences d'entités, le Carnet et la Boussole d'Ancre.
+
+## Licence de Mouse Tweaks (BSD-3-Clause)
+
+Reproduite en entier ici, comme l'exige la condition 1 de cette licence — voir
+`mixin/MouseTweaksMixin.java` dans la table ci-dessus pour ce qui en est transcrit.
+
+```
+BSD 3-Clause License
+
+Copyright (c) 2023, Ivan Molodetskikh
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
