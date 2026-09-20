@@ -325,14 +325,15 @@ public final class Radiographie {
         if (elapsed < 1_000_000_000L) {
             return;
         }
-        double fps = windowFrames / (elapsed / 1e9d);
+        double dureeReelle = elapsed / 1e9d;
+        double fps = windowFrames / dureeReelle;
         if (fps < fpsMin) {
             fpsMin = fps;
         }
         if (fps > fpsMax) {
             fpsMax = fps;
         }
-        noterCreuxSiBesoin(fps, (now - sessionStartNanos) / 1e9d);
+        noterCreuxSiBesoin(fps, (now - sessionStartNanos) / 1e9d, dureeReelle);
         windowFrames = 0;
         windowNanos = 0;
         lastFrameLogNanos = now;
@@ -354,8 +355,21 @@ public final class Radiographie {
      * piles en texte lisible, dans {@link #formatCreux} — n'a lieu QUE si un creux est confirmé,
      * ce qui reste rare par construction (un seuil de {@link #seuilCreuxFps} FPS n'est, par
      * définition, pas la norme d'une session jouable).
+     *
+     * <h2>La durée réelle de la fenêtre, pas une hypothèse de 1s</h2>
+     *
+     * <p>{@code recordFrame} ne ferme une fenêtre qu'une fois qu'un nouveau appel arrive — donc
+     * qu'une fois qu'une image a enfin fini de se rendre. Si le thread de rendu se bloque
+     * complètement (compilation de shaders Iris, par exemple), plus aucune image n'arrive pendant
+     * tout le blocage : la fenêtre "en cours" reste ouverte tout ce temps, et son
+     * {@code elapsed} réel peut largement dépasser 1 seconde — signalé le 20/09/2026 par un joueur
+     * qui contestait à raison un « 0,1 FPS » qui, présenté comme une fenêtre de 1s, semblait
+     * inventé. Le calcul de FPS lui-même reste juste (le nombre d'images sur la durée réelle
+     * écoulée), mais l'étiqueter comme "1s" était trompeur. {@link #dureeReelle} porte maintenant
+     * cette vraie durée jusqu'au rapport, pour que "0,1 FPS" se lise "quasi rien ne s'est rendu
+     * pendant Xs", pas "chaque image a pris 10 secondes".
      */
-    private static void noterCreuxSiBesoin(double fps, double sec) {
+    private static void noterCreuxSiBesoin(double fps, double sec, double dureeReelle) {
         List<StackTraceElement[]> echantillons;
         synchronized (treeLock) {
             if (fenetreEnCours.isEmpty()) {
@@ -367,7 +381,7 @@ public final class Radiographie {
         if (fps >= seuilCreuxFps || creuxDetectes.size() >= CREUX_MAX) {
             return;
         }
-        creuxDetectes.add(formatCreux(sec, fps, echantillons));
+        creuxDetectes.add(formatCreux(sec, fps, dureeReelle, echantillons));
     }
 
     /**
@@ -377,7 +391,8 @@ public final class Radiographie {
      * répéter soixante fois la même pile de vingt lignes n'aiderait pas plus qu'une seule copie
      * avec un compte à côté.
      */
-    private static String formatCreux(double sec, double fps, List<StackTraceElement[]> echantillons) {
+    private static String formatCreux(double sec, double fps, double dureeReelle,
+            List<StackTraceElement[]> echantillons) {
         // LinkedHashMap : conserve l'ordre de première apparition, pour un rapport reproductible
         // (deux lectures du même fichier donnent le même ordre) plutôt que l'ordre de hachage.
         Map<String, Integer> comptes = new LinkedHashMap<>();
@@ -391,10 +406,17 @@ public final class Radiographie {
         tri.sort(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue).reversed());
 
         StringBuilder sb = new StringBuilder();
+        // Une fenêtre "normale" dure 1 à 1,1s (la marge du sondage) ; au-delà, le rendu s'est
+        // réellement arrêté pendant tout ce temps — voir la Javadoc de noterCreuxSiBesoin. Le dire
+        // explicitement évite qu'un "0,1 FPS" sur une fenêtre en fait longue de 12s ne se lise
+        // comme une image mettant 10 secondes chacune.
+        String dureeNote = dureeReelle > 1.1
+                ? String.format(Locale.ROOT, " (rendu à l'arrêt pendant %.1fs réelles, pas 1s)", dureeReelle)
+                : "";
         sb.append(String.format(Locale.ROOT,
-                "  t+%.0fs : %.1f FPS — %d échantillon(s) capturé(s) pendant cette fenêtre, "
+                "  t+%.0fs : %.1f FPS%s — %d échantillon(s) capturé(s) pendant cette fenêtre, "
                         + "%d pile(s) distincte(s)%n",
-                sec, fps, echantillons.size(), tri.size()));
+                sec, fps, dureeNote, echantillons.size(), tri.size()));
         int rang = 0;
         for (Map.Entry<String, Integer> entry : tri) {
             rang++;
