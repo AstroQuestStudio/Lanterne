@@ -70,6 +70,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue RESERVE;
     public static final ModConfigSpec.IntValue RESERVE_CAPACITE;
     public static final ModConfigSpec.BooleanValue JOINTURE;
+    public static final ModConfigSpec.BooleanValue SOURIS_AVANCEE;
 
     public static final ModConfigSpec SPEC;
 
@@ -660,6 +661,18 @@ public final class ClientConfig {
                 "RECONSTRUCTION - en realite plus fort : le modele est choisi au CHARGEMENT DES",
                 "RESSOURCES (F3+T ou redemarrage), pas seulement a la prochaine section de chunk.")
                 .define("jointure", false);
+
+        SOURIS_AVANCEE = BUILDER.comment(
+                "SOURIS AVANCEE : les quatre mecaniques du mod Mouse Tweaks.",
+                "",
+                "1. Shift + clic gauche + glisse : chaque case survole reçoit un transfert rapide.",
+                "2. Clic droit + glisse : avec une pile en main, chaque case reçoit un exemplaire.",
+                "3. Molette de la souris : un exemplaire a la fois vers/depuis l'inventaire du joueur.",
+                "4. Fonctionne sur TOUT ecran de conteneur, vanilla ou modé.",
+                "",
+                "Le comportement vanilla du glisse gauche sans Shift (deplacement de fenetre dans",
+                "certains ecrans) n'est pas affecte - seule la molette ET le shift+glisse changent.")
+                .define("souris_avancee", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

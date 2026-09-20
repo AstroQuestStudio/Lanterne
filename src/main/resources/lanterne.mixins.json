@@ -115,6 +115,7 @@
     "VulkanDeviceMixin",
     "VulkanRenderPipelineMixin",
     "PortailRenderMixin",
-    "DynamicGpuDataMixin"
+    "DynamicGpuDataMixin",
+    "MouseTweaksMixin"
   ]
 }
