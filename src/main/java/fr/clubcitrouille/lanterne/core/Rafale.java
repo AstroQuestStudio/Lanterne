@@ -1,7 +1,11 @@
 package fr.clubcitrouille.lanterne.core;
 
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import net.minecraft.core.BlockPos;
@@ -11,6 +15,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.core.network.AutominerPresence;
@@ -58,6 +66,30 @@ import fr.clubcitrouille.lanterne.core.network.RafaleRequest;
  * qu'AutoMiner l'a déjà résolu depuis son plan — est posé tel quel. C'est une extension du principe
  * déjà validé dans {@code BuildSite.clear()}/{@code BUILD_CLEAR_CREATIVE_BATCH} : plusieurs gestes
  * par tick plutôt qu'une vraie simulation d'interaction.
+ *
+ * <h2>Pourquoi une requête n'est plus traitée d'un seul coup</h2>
+ *
+ * <p>Un crash réel et reproductible (20/09/2026, deux occurrences) fait perdre la connexion en jeu :
+ * {@code DecoderException: Failed to decode packet 'clientbound/minecraft:recipe_book_add'}, cause
+ * {@code Optional.orElseThrow} dans un codec basé registre de {@code RecipeDisplayEntry}. Les deux
+ * occurrences partagent un motif commun — un très grand nombre d'objets de types différents devient
+ * disponible pour le joueur dans la même poignée de ticks (une fois un {@code /give} massif, une fois
+ * une démolition en masse par ce pont) — ce qu'un joueur humain ne produit jamais en jeu normal, et
+ * qui multiplie d'un coup les récompenses de recettes accordées par {@code AdvancementRewards}
+ * (javap confirmé : c'est elle, et non un déclencheur d'inventaire direct, qui appelle
+ * {@code ServerPlayer.awardRecipesByKey}, empaqueté ensuite en {@code ClientboundRecipeBookAddPacket}).
+ * L'endroit exact du bug dans ce codec — probablement lié à {@code RecipeDisplayEntry.category}
+ * (registre) ou {@code craftingRequirements} (liste d'ingrédients, potentiellement basés sur une
+ * étiquette) — n'a pas pu être isolé avec certitude par lecture de bytecode seule, faute d'un
+ * débogueur en direct ; c'est une bêta de moteur ({@code neo_version=26.3.0.7-beta}), pas un fichier
+ * que ce dépôt possède.
+ *
+ * <p>Sans pouvoir corriger le vrai codec, on peut réduire le risque de le déclencher : traiter au
+ * plus {@link #BATCH_PAR_TICK} cases par tick au lieu des 4096 d'une requête d'un coup ramène le
+ * débit d'objets nouvellement disponibles à un ordre de grandeur bien plus proche de ce qu'un joueur
+ * humain produit en minant normalement — le rythme qui n'a, lui, jamais fait planter personne. Les
+ * vrais drops restent inchangés (voir plus haut, « Casser, pas supprimer ») : ce n'est pas leur
+ * existence qui est en cause ici, seulement leur concentration dans le temps.
  */
 public final class Rafale {
     /**
@@ -70,12 +102,38 @@ public final class Rafale {
      */
     public static final int LIMIT = RafaleRequest.LIMIT;
 
+    /**
+     * Cases traitées par joueur, par tick — voir la Javadoc de classe pour le crash que ce plafond
+     * atténue. Trente-deux fois le rythme de {@code BuildSite.build()} en vol (32/tick) : largement
+     * assez pour rester bien plus rapide que la pose case par case, largement en dessous des 4096
+     * d'un coup qui ont accompagné les deux occurrences réelles du crash.
+     */
+    private static final int BATCH_PAR_TICK = 256;
+
+    /**
+     * File d'attente par joueur, au-delà de laquelle une nouvelle requête est refusée plutôt
+     * qu'empilée indéfiniment. Trois fois {@link #LIMIT} : de quoi absorber une requête pleine
+     * pendant que la précédente finit de s'égrener sans laisser la mémoire grossir sans fin si un
+     * client mal élevé en envoie plus vite qu'elles ne se vident.
+     */
+    private static final int FILE_MAX = LIMIT * 3;
+
     // Voir Increvable.EPARGNES pour le pourquoi de cette paire de compteurs (ecrits depuis le fil du
     // serveur, lus depuis Radiographie.report() sur un autre fil en fin de session).
     private static final AtomicLong POSES = new AtomicLong();
     private static final AtomicLong CASSES = new AtomicLong();
 
+    /** Une case en attente, position et etat voulu confondus — {@code wanted} vaut {@code null} en demolition. */
+    private record Operation(BlockPos position, BlockState wanted, boolean demolish) {}
+
+    /** Une file par joueur. {@code ConcurrentHashMap} : cree depuis le fil reseau, videe depuis le fil du serveur. */
+    private static final Map<UUID, ArrayDeque<Operation>> FILES = new ConcurrentHashMap<>();
+
     private Rafale() {}
+
+    public static void register() {
+        NeoForge.EVENT_BUS.register(Rafale.class);
+    }
 
     /** Ce joueur a-t-il le droit d'emprunter ce pont ? Même question qu'{@link Increvable#epargne}. */
     public static boolean autorise(ServerPlayer player) {
@@ -83,50 +141,92 @@ public final class Rafale {
     }
 
     /**
-     * Traite une requête déjà validée par {@code core.network.RafaleNet} (canal, réglage, taille).
-     * Ne lève jamais : une case refusée est sautée, jamais une raison d'abandonner les autres.
+     * Met une requête déjà validée par {@code core.network.RafaleNet} (canal, réglage, taille) en
+     * file d'attente — voir la Javadoc de classe pour pourquoi elle n'est plus traitée d'un coup.
+     * Ne lève jamais : une requête incohérente ou une file pleine est ignorée, jamais une raison de
+     * faire échouer autre chose.
      */
-    public static void traiter(ServerPlayer player, RafaleRequest request) {
-        Level level = player.level();
-        if (!player.mayBuild()) {
-            return; // aventure, spectateur : vanilla le refuserait aussi a une pose normale.
-        }
-        if (request.demolish()) {
-            demolir(player, level, request.positions());
-        } else {
-            batir(player, level, request.positions(), request.states());
-        }
-    }
-
-    private static void demolir(ServerPlayer player, Level level, List<BlockPos> positions) {
-        for (BlockPos pos : positions) {
-            if (level.getBlockState(pos).isAir()) {
-                continue;
-            }
-            if (player.gameMode.destroyBlock(pos)) {
-                CASSES.incrementAndGet();
-            }
-        }
-    }
-
-    private static void batir(ServerPlayer player, Level level, List<BlockPos> positions,
-            List<BlockState> states) {
-        if (positions.size() != states.size()) {
+    public static void enqueue(ServerPlayer player, RafaleRequest request) {
+        List<BlockPos> positions = request.positions();
+        List<BlockState> states = request.states();
+        if (!request.demolish() && positions.size() != states.size()) {
             return; // paquet incoherent : rien de sur a en tirer, on refuse tout plutot que devinner.
         }
-        boolean creatif = player.hasInfiniteMaterials();
+        ArrayDeque<Operation> file = FILES.computeIfAbsent(player.getUUID(), ignored -> new ArrayDeque<>());
+        if (file.size() >= FILE_MAX) {
+            Lanterne.LOG.warn("[RAFALE] file pleine pour {} : requete ignoree ({} en attente)",
+                    player.getGameProfile().name(), file.size());
+            return;
+        }
         for (int i = 0; i < positions.size(); i++) {
-            BlockPos pos = positions.get(i);
-            BlockState wanted = states.get(i);
-            if (level.getBlockState(pos).is(wanted.getBlock()) && level.getBlockState(pos).equals(wanted)) {
-                continue; // deja en place : ni consommer ni reposer.
+            file.addLast(new Operation(positions.get(i), request.demolish() ? null : states.get(i),
+                    request.demolish()));
+        }
+    }
+
+    /**
+     * Vide jusqu'à {@link #BATCH_PAR_TICK} cases par joueur en attente. Un joueur qui s'est
+     * déconnecté entre l'envoi et le tick voit sa file abandonnée sans traitement — {@code mayBuild}
+     * et l'inventaire n'ont plus de sens pour un joueur qui n'est plus là.
+     */
+    @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
+        if (FILES.isEmpty()) {
+            return;
+        }
+        for (UUID id : List.copyOf(FILES.keySet())) {
+            ArrayDeque<Operation> file = FILES.get(id);
+            if (file == null) {
+                continue;
             }
-            if (!creatif && !consommer(player, wanted)) {
-                continue; // matiere manquante : sautee, jamais posee gratuitement.
+            ServerPlayer player = event.getServer().getPlayerList().getPlayer(id);
+            if (player == null) {
+                FILES.remove(id);
+                continue;
             }
-            if (level.setBlock(pos, wanted, Block.UPDATE_ALL, 512)) {
-                POSES.incrementAndGet();
+            drain(player, file);
+            if (file.isEmpty()) {
+                FILES.remove(id);
             }
+        }
+    }
+
+    private static void drain(ServerPlayer player, ArrayDeque<Operation> file) {
+        Level level = player.level();
+        if (!player.mayBuild()) {
+            file.clear(); // aventure, spectateur : vanilla refuserait aussi une pose normale.
+            return;
+        }
+        boolean creatif = player.hasInfiniteMaterials();
+        for (int traitees = 0; traitees < BATCH_PAR_TICK && !file.isEmpty(); traitees++) {
+            Operation op = file.pollFirst();
+            if (op.demolish()) {
+                demolirUne(player, level, op.position());
+            } else {
+                batirUne(player, level, op.position(), op.wanted(), creatif);
+            }
+        }
+    }
+
+    private static void demolirUne(ServerPlayer player, Level level, BlockPos pos) {
+        if (level.getBlockState(pos).isAir()) {
+            return;
+        }
+        if (player.gameMode.destroyBlock(pos)) {
+            CASSES.incrementAndGet();
+        }
+    }
+
+    private static void batirUne(ServerPlayer player, Level level, BlockPos pos, BlockState wanted,
+            boolean creatif) {
+        if (level.getBlockState(pos).is(wanted.getBlock()) && level.getBlockState(pos).equals(wanted)) {
+            return; // deja en place : ni consommer ni reposer.
+        }
+        if (!creatif && !consommer(player, wanted)) {
+            return; // matiere manquante : sautee, jamais posee gratuitement.
+        }
+        if (level.setBlock(pos, wanted, Block.UPDATE_ALL, 512)) {
+            POSES.incrementAndGet();
         }
     }
 

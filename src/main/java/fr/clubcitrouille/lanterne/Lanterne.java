@@ -94,6 +94,9 @@ public final class Lanterne {
         // La jonction silencieuse avec ClubCitrouilleAutoMiner (mod client de vol) : voir le
         // javadoc de la classe pour ce que le javap a trouvé, et pourquoi il a fallu s'en passer.
         fr.clubcitrouille.lanterne.core.Envol.register();
+        // Le pont Rafale (construction en masse) draine ses files d'attente par tick sur ce meme
+        // bus — voir la Javadoc de Rafale pour pourquoi une requete n'est plus traitee d'un coup.
+        fr.clubcitrouille.lanterne.core.Rafale.register();
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.painting.Easel::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(

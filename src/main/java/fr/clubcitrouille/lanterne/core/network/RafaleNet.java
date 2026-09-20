@@ -41,7 +41,9 @@ public final class RafaleNet {
             if (!(context.player() instanceof ServerPlayer player) || !Rafale.autorise(player)) {
                 return;
             }
-            Rafale.traiter(player, request);
+            // Mise en file, pas traitement immediat : voir la Javadoc de Rafale pour le crash reseau
+            // que l'etalement sur plusieurs ticks attenue.
+            Rafale.enqueue(player, request);
         });
     }
 }
