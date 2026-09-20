@@ -16,6 +16,12 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 neoForge {
     version = project.neo_version
 
+    // Migration Iris (voir MIGRATION-IRIS.md) : les widened-access Fabric d'Iris deviennent un
+    // access transformer NeoForge classique, au meme endroit que celui deja ecrit et verifie pour
+    // le module neoforge d'Iris plus tot cette session (meme fichier, une entree en plus).
+    accessTransformers.from(file("src/main/resources/META-INF/accesstransformer.cfg"))
+    interfaceInjectionData.from(file("src/main/resources/interface_injections.json"))
+
     // Lanterne agit dans les boucles chaudes du serveur : il lui faut des mixins, là où AutoMiner se
     // contentait des évènements. Un évènement est un appel de plus ; un mixin est une modification
     // du code en place, que le JIT peut ensuite inliner comme s'il avait toujours été là. Sur un

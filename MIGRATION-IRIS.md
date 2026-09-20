@@ -112,3 +112,46 @@ sodium-neoforge-real-0.9.2+mc26.3.jar}`.
 3. Ne recopier `neoforge/src/main/resources/interface_injections.json` (et son mécanisme
    d'enregistrement) qu'une fois l'access transformer en place — plusieurs erreurs actuelles
    (`iris$getGlId()` introuvable) en dépendent directement.
+
+## Troisième tentative (nuit du 20-21/09/2026) : ÇA COMPILE — common + neoforge, dans Lanterne
+
+**Résultat : `BUILD SUCCESSFUL`, pour la première fois. `net.irisshaders.iris.*` et `kroppeb.*`
+(module `common`, ~704 fichiers) PUIS `net.irisshaders.iris.mixin.forge.*` +
+`net.irisshaders.iris.platform.*` (module `neoforge`, 10 classes actives — les 2 mixins déjà
+désactivés cette session, `MixinLevelRenderer`/`MixinFluidRendererImpl`, n'ont pas été recopiés)
+compilent ensemble comme code source normal de Lanterne, sans aucun jar externe.**
+
+Ce qui a débloqué le mur de l'access widener, précisément :
+
+1. **`accessTransformers.from(...)` + `interfaceInjectionData.from(...)` ajoutés au bloc
+   `neoForge { }` de `build.gradle`** (Lanterne n'en avait aucun jusqu'ici). Le fichier
+   `src/main/resources/META-INF/accesstransformer.cfg` copié est EXACTEMENT celui déjà écrit et
+   vérifié par javap pour le module `neoforge` d'Iris plus tôt cette session — il se trouve qu'il
+   couvre déjà 27 des 28 entrées de `common/src/main/resources/iris.accesswidener` (les deux
+   modules touchent les mêmes classes RenderPearl/vanilla). Une seule entrée manquante ajoutée à
+   la main : `public-f com.mojang.renderpearl.backend.opengl.GlRenderPipeline` (la classe entière,
+   pas juste son constructeur déjà couvert — `extendable class` dans l'access widener Fabric).
+2. **`interface_injections.json`** copié tel quel depuis le module `neoforge` (mêmes 7 interfaces
+   injectées, notamment `GpuTextureInterface.iris$getGlId()` qui bloquait 70 des 70 erreurs
+   restantes après l'access transformer).
+3. **`BuildConfig.java` écrit à la main** (`net.irisshaders.iris.BuildConfig`, 4 constantes :
+   `IS_SHARED_BETA`, `ACTIVATE_RENDERDOC`, `BETA_TAG`, `BETA_VERSION`) plutôt que d'intégrer le
+   plugin Gradle `com.github.gmazzo.buildconfig` qu'utilise Iris — génération à la volée pour 4
+   constantes fixes n'en valait pas la peine. Mêmes valeurs par défaut que le `buildConfig { }` du
+   `build.gradle.kts` d'Iris.
+
+**Ce qui n'est PAS fait, volontairement (hors du périmètre de "faire compiler") — prochaine
+étape réelle pour que ce code tourne, pas juste compile :**
+- Aucun fichier `mixins.iris*.json` ni `mixins.iris.forge.json` copié dans
+  `src/main/resources/` — la compilation Java n'en a pas besoin, mais NeoForge Mixin lèvera au
+  démarrage sans eux (à faire : les fusionner dans `lanterne.mixins.json` existant, ou les
+  déclarer séparément dans `neoforge.mods.toml`).
+- `META-INF/neoforge.mods.toml` de Lanterne n'a PAS été modifié — le second bloc `[[mods]]`/les
+  dépendances Sodium/DistantHorizons d'Iris restent à fusionner dedans.
+- Le jar externe `iris-neoforge-1.11.6-INOFFICIEL-mc26.3.jar` + `sodium-neoforge` restent
+  installés dans `test 1/mods` en parallèle du nouveau code source intégré — les deux copies du
+  même moteur coexistent actuellement, ce qui causerait un vrai conflit de classes au runtime si
+  le jar externe Iris restait installé une fois que Lanterne embarque son propre code. Retirer ce
+  jar de `test 1/mods` fera partie de la bascule finale, pas avant que le runtime soit vérifié.
+- Rien testé en jeu — seule la compilation Java a été vérifiée, jamais un lancement réel avec ce
+  code intégré.
