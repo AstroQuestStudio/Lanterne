@@ -40,6 +40,10 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * <p>Déplacer seize objets sans payer seize recharges multiplierait le débit par seize. Le module ne
  * vaut donc que si la recharge suit — {@code setCooldown(8)} devient {@code setCooldown(8 × tours)} —
  * et c'est la seule ligne dont dépend l'exactitude du débit.
+ *
+ * <p>Depuis {@link Bulk#cooldownFor}, cette ligne divise EN PLUS par {@link Settings#bulkSpeed()} :
+ * le débit n'est plus « exactement celui de vanilla » par défaut, et c'est voulu — voir la Javadoc de
+ * {@code cooldownFor} pour pourquoi, et {@code Config#BULK_SPEED} pour le réglage.
  */
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperBulkMixin {
@@ -123,6 +127,9 @@ public abstract class HopperBulkMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;setCooldown(I)V"))
     private static void lanterne$payForTheLot(HopperBlockEntity entity, int ticks) {
-        entity.setCooldown(Settings.bulk() ? ticks * Bulk.owed() : ticks);
+        // Bulk.cooldownFor applique le multiplicateur de Settings#bulkSpeed en plus du paiement du
+        // lot — voir sa Javadoc pour pourquoi ce n'est plus, a partir d'ici, un module a debit
+        // inchange.
+        entity.setCooldown(Settings.bulk() ? Bulk.cooldownFor(ticks) : ticks);
     }
 }

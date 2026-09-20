@@ -459,6 +459,11 @@ public final class Dials extends Screen {
                 "Seize objets par recherche de conteneur, au lieu d'un.",
                 "La recharge suit le lot : le débit moyen est EXACTEMENT celui de vanilla. Ce n'est"
                         + " pas un ralentissement — vanilla fait déjà cela pour un objet ramassé."));
+        world.add(Dial.serverCount("Vitesse des entonnoirs", Config.BULK_SPEED, "×",
+                "Multiplie le débit RÉEL de la ligne au-dessus — pas juste son coût de calcul.",
+                "1 = vanilla au bit près. Au-delà, un entonnoir en continu sort ce multiple de 2,5"
+                        + " objets/seconde. Un tout petit lot peut plafonner sous la valeur demandée :"
+                        + " le jeu ne connaît pas de recharge inférieure à un tick."));
         world.add(Dial.serverFlag("Fusion des objets", Config.GATHER,
                 "Fusion sur 2 blocs à l'horizontale et 1 à la verticale, contre 0,5 et ZÉRO en"
                         + " vanilla — deux objets empilés ne s'y rejoignent jamais.",

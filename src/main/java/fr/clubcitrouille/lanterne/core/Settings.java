@@ -411,6 +411,12 @@ public final class Settings {
      */
     private static boolean bulk = true;
     /**
+     * Le multiplicateur de débit RÉEL du transfert par lots — voir {@link Bulk#cooldownFor}. À la
+     * différence de {@link #bulk}, ceci change le rythme de jeu et pas seulement son coût calcul ;
+     * voir la Javadoc de {@code Config#BULK_SPEED} pour l'assumer en toutes lettres.
+     */
+    private static int bulkSpeed = 8;
+    /**
      * La fusion élargie des objets au sol.
      *
      * <p>Voir {@link Gather}. Vanilla cherche un demi-bloc à l'horizontale et <b>zéro</b> à la
@@ -1233,6 +1239,15 @@ public final class Settings {
         return master && bulk;
     }
 
+    /**
+     * Toujours au moins un : un multiplicateur nul ferait diviser par zéro dans {@link
+     * Bulk#cooldownFor}. Pas de {@code master &&} — {@link #bulk()} le porte déjà, et ce nombre n'a
+     * aucun sens si le lot lui-même est coupé.
+     */
+    public static int bulkSpeed() {
+        return Math.max(1, bulkSpeed);
+    }
+
     public static boolean gather() {
         return master && gather;
     }
@@ -1856,6 +1871,7 @@ public final class Settings {
         sleep = Config.SLEEP.get();
         raccourci = Config.RACCOURCI.get();
         bulk = Config.BULK.get();
+        bulkSpeed = Config.BULK_SPEED.get();
         gather = Config.GATHER.get();
         broom = Config.BROOM.get();
         vigil = Config.VIGIL.get();

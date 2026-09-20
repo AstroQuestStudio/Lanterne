@@ -56,6 +56,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue SLEEP;
     public static final ModConfigSpec.BooleanValue RACCOURCI;
     public static final ModConfigSpec.BooleanValue BULK;
+    public static final ModConfigSpec.IntValue BULK_SPEED;
     public static final ModConfigSpec.BooleanValue RATIONING;
     public static final ModConfigSpec.BooleanValue SCRATCH_POS;
     public static final ModConfigSpec.BooleanValue STRICT_YIELD;
@@ -277,6 +278,27 @@ public final class Config {
                 "Vanilla fait deja cela pour un objet ramasse au sol : une pile entiere de 64",
                 "entre d'un coup, pour la meme recharge de 8 ticks.")
                 .define("entonnoirs", true);
+        BULK_SPEED = BUILDER.comment(
+                "MULTIPLICATEUR DE DEBIT REEL des entonnoirs par lots (Trieur compris) - PAS un",
+                "reglage de performance, un reglage de RYTHME DE JEU. Assume comme tel.",
+                "",
+                "\"Entonnoirs\" ci-dessus ne fait QUE reduire le cout calcul, a debit inchange - un",
+                "objet toutes les 8 ticks, comme vanilla, soit 2,5 objets/seconde par entonnoir. Ce",
+                "reglage-ci divise la recharge payee par ce facteur : a 8 (defaut), un entonnoir en",
+                "continu sort 20 objets/seconde au lieu de 2,5 - le lot de seize part en 0,8s au",
+                "lieu de 6,4s. A 1, comportement IDENTIQUE a vanilla.",
+                "",
+                "NE FAIT PAS DE MIRACLE : vider un inventaire complet (jusqu'a 2304 objets) par UN",
+                "SEUL entonnoir prend encore 2304/20 = 115 secondes a 8x. Pour descendre sous la",
+                "minute, il faut plusieurs entonnoirs en parallele qui se partagent la charge - le",
+                "vrai gain d'un grand Trieur vient de leur nombre, celui-ci vient de leur rythme",
+                "chacun. Les deux se cumulent.",
+                "",
+                "Plancher a UN tick de recharge : au-dela d'un certain rapport lot/vitesse, un",
+                "tres petit lot (un seul objet) ne peut pas descendre sous un tick et le",
+                "multiplicateur reel plafonne alors sous la valeur demandee - une limite du jeu",
+                "par tick, pas un defaut de ce module.")
+                .defineInRange("entonnoirs_vitesse", 8, 1, 64);
         GATHER = BUILDER.comment(
                 "Objets au sol : fusion sur 2 blocs a l'horizontale et 1 a la verticale,",
                 "contre 0,5 et ZERO en vanilla - deux objets empiles ne se rejoignent jamais.",
