@@ -53,6 +53,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue REFLET;
     public static final ModConfigSpec.BooleanValue GRELE;
     public static final ModConfigSpec.IntValue GRELE_CAP;
+    public static final ModConfigSpec.BooleanValue INCREVABLE;
     public static final ModConfigSpec.BooleanValue SLEEP;
     public static final ModConfigSpec.BooleanValue RACCOURCI;
     public static final ModConfigSpec.BooleanValue BULK;
@@ -247,6 +248,13 @@ public final class Config {
                 "40 (defaut) : un coup a 80 degats ou plus ne se distingue deja plus a l'oeil",
                 "d'un coup a 40 degats sur ce seul indicateur.")
                 .defineInRange("grele_plafond", 40, 1, 1000);
+        INCREVABLE = BUILDER.comment(
+                "Le pont AutoMiner : un joueur dont le client a reellement charge AutoMiner (detecte",
+                "par le canal d'identite deja verifie pour l'anti x-ray, voir core.Leurre) ne perd",
+                "jamais la durabilite de son outil en minant. Une API explicite qu'AutoMiner",
+                "consomme, pas une detection cachee de plus - voir core.Increvable et le README.",
+                "Coupe ce pont sans rien changer d'autre : mets ce reglage a false.")
+                .define("increvable", true);
         SLEEP = BUILDER.comment(
                 "Sommeil des blocs-entites dont l'echeance est connue : un four qui cuit sait",
                 "quand il aura fini, et n'a rien a faire d'ici la.")

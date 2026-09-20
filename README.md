@@ -55,6 +55,7 @@ jouant.*
 [🧭 Les repères et la Boussole d'Ancre](#les-reperes-et-la-boussole-d-ancre) ·
 [🔭 La Longuevue — zoom façon Sodium](#la-longuevue-le-zoom-tenu-facon-sodium) ·
 [🖱️ Souris avancée](#souris-avancee) ·
+[🔗 Le pont AutoMiner](#le-pont-autominer) ·
 [🖼️ Les Tableaux](#les-tableaux-tes-images-sur-tes-murs) ·
 [💿 Les Disques](#les-disques-ta-musique-dans-le-jukebox)
 
@@ -991,6 +992,24 @@ licence.
 | Réglage | Défaut | Ce qu'il fait |
 |---|:---:|---|
 | `souris_avancee` | activé | l'ensemble des quatre mécaniques |
+
+---
+
+<a id="le-pont-autominer"></a>
+## 🔗 Le pont AutoMiner
+
+Une API explicite entre Lanterne et **AutoMiner** (dépôt séparé, client seul, projet
+d'expérimentation, jamais distribué) — pas une détection cachée : le canal d'identité qu'AutoMiner
+déclare volontairement à la connexion (déjà utilisé pour l'anti x-ray, voir plus haut « Anti-triche »)
+sert ici à épargner la durabilité de l'outil **au bris de bloc uniquement** — jamais au combat, jamais
+sur l'armure — pour un client qui a réellement AutoMiner chargé. Le bris de bloc lui-même reste
+entièrement vanilla : il continue de compter normalement dans les statistiques du joueur.
+
+Un joueur ordinaire, sans AutoMiner, n'est jamais concerné, quel que soit l'état de ce réglage.
+
+| Réglage | Défaut | Ce qu'il fait |
+|---|:---:|---|
+| `increvable` | activé | coupe le pont sans toucher à l'anti x-ray, indépendant |
 
 ---
 

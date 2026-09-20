@@ -397,6 +397,8 @@ public final class Settings {
     /** Plafond des particules d'indicateur de degats en combat de masse. Voir {@link Grele}. */
     private static boolean grele = true;
     private static int greleCap = 40;
+    /** Le pont AutoMiner : durabilite epargnee au minage. Voir {@link Increvable}. */
+    private static boolean increvable = true;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
     private static boolean sleep = true;
     /** Le raccourci de recette : essayer d'abord la dernière recette qui a matché. Voir {@link Raccourci}. */
@@ -1227,6 +1229,11 @@ public final class Settings {
         return master && grele;
     }
 
+    /** Le pont AutoMiner : durabilité épargnée au minage. Voir {@link Increvable}. */
+    public static boolean increvable() {
+        return master && increvable;
+    }
+
     public static boolean sleep() {
         return master && sleep;
     }
@@ -1651,6 +1658,7 @@ public final class Settings {
         // pris par jam/collisions plus haut et plus bas dans ce fichier.
         reflet = wanted.contains("reflet");
         grele = wanted.contains("grele");
+        increvable = wanted.contains("increvable") || wanted.contains("autominer");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         raccourci = wanted.contains("raccourci") || wanted.contains("shortcut");
         bulk = wanted.contains("bulk") || wanted.contains("lot") || wanted.contains("entonnoir");
@@ -1868,6 +1876,7 @@ public final class Settings {
         grele = Config.GRELE.get();
         greleCap = Config.GRELE_CAP.get();
         Grele.setCap(greleCap);
+        increvable = Config.INCREVABLE.get();
         sleep = Config.SLEEP.get();
         raccourci = Config.RACCOURCI.get();
         bulk = Config.BULK.get();
