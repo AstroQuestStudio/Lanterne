@@ -45,6 +45,7 @@ jouant.*
 **Blocs & mécaniques ajoutées**
 [⚓ L'Ancre de chunk](#l-ancre-de-chunk) ·
 [🏮 La Lanterne de Veille](#la-lanterne-de-veille) ·
+[🧺 Le Trieur — l'entonnoir qui filtre](#le-trieur-l-entonnoir-qui-filtre) ·
 [🔦 L'Aureole — la balise, repensée](#l-aureole-la-balise-repensee) ·
 [💰 La Manne — stock infini des villageois](#la-manne-le-stock-infini-des-villageois)
 
@@ -612,6 +613,47 @@ l'optimisation, ce serait retirer le jeu.
 
 > L'Ancre garde son chunk **chargé**. La Lanterne le garde **calme**. Deux blocs, une seule règle à
 > retenir.
+
+---
+
+<a id="le-trieur-l-entonnoir-qui-filtre"></a>
+## 🧺 Le Trieur — l'entonnoir qui filtre
+
+**Un entonnoir qui n'accepte que ce qu'on lui a montré.** Neuf cases de filtre, une bascule liste
+blanche / liste noire, et rien d'autre de changé : le Trieur est un **bloc à part**, jamais un
+remplacement du hopper vanilla. Le poser ne touche à aucune ferme qui utilise déjà des entonnoirs
+ordinaires — zéro risque pour ce qui tourne déjà.
+
+| | |
+|---|---|
+| **Recette** | 1 entonnoir · 4 comparateurs, un par face |
+| **Filtre** | 9 gabarits, jamais consommés — un exemplaire par case, l'excédent est rendu |
+| **Mode** | Liste blanche (par défaut) ou liste noire, au clic sur le bouton de l'écran |
+| **Vitesse** | Celle du hopper, **exactement** — voir le transfert par lots ci-dessus |
+
+**La sémantique du filtre est délibérément asymétrique.** Liste blanche vide = n'accepte **rien** : un
+Trieur qu'on vient de poser doit être configuré avant de servir — le comportement le plus sûr pour un
+outil de tri, plutôt qu'un entonnoir muet qui laisserait tout passer sans qu'on l'ait demandé. Liste
+noire vide = accepte **tout**, symétriquement : rien n'est bloqué tant qu'on n'a rien désigné.
+
+**Où passe le filtre, et pourquoi aucun mixin n'était nécessaire.** Vérifié au `javap` sur le jar
+client 26.3 réel, classes en clair : que l'objet soit poussé dedans par un autre entonnoir, ou aspiré
+depuis le dessus, les deux chemins passent par `container.canPlaceItem(slot, stack)` — une méthode
+d'interface (`Container`), `default` et donc surchargeable, pas une méthode statique. `TrieurBlockEntity`
+la surcharge, dans les deux sens à la fois, sans toucher à un seul octet du hopper vanilla.
+
+**Pourquoi la vitesse ne bouge pas.** Le module Bulk (voir *Les gains, charge par charge*) transfère
+seize objets par recherche de conteneur au lieu d'un, en payant seize fois la recharge exacte — c'est ce
+qui rend un entonnoir plus rapide sans changer son débit moyen, et c'est un point fragile : une horloge
+à entonnoir compte les objets un par un. `TrieurBlockEntity` étend `HopperBlockEntity`, et les mixins de
+Bulk ciblent `HopperBlockEntity.class` au bytecode — une sous-classe hérite du bytecode fusionné par
+Mixin comme de n'importe quelle méthode Java. Le Trieur reçoit donc le transfert par lots
+**gratuitement**, sans dupliquer une seule ligne de `Bulk.java`.
+
+Un interrupteur (`trieur_actif`, actif par défaut) coupe uniquement le **filtrage** : un Trieur désactivé
+par configuration se comporte comme un entonnoir ordinaire, tout passe. Le bloc reste toujours
+enregistré — même règle que l'Ancre et la Lanterne de Veille ci-dessus : un interrupteur ne doit jamais
+pouvoir détruire une construction.
 
 ---
 

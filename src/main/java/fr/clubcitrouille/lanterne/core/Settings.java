@@ -429,6 +429,14 @@ public final class Settings {
      */
     private static boolean vigil = true;
     /**
+     * Le Trieur : liste blanche ou noire, posée dans le monde comme la Lanterne de Veille ci-dessus.
+     *
+     * <p>N'obéit pas non plus au maître, et pour la même raison qu'elle : couper {@code master} en
+     * cours de partie pour un banc ne doit pas rouvrir en silence tous les Trieurs d'une chaîne de tri
+     * déjà construite. Voir {@link fr.clubcitrouille.lanterne.content.trieur.TrieurBlockEntity}.
+     */
+    private static boolean trieur = true;
+    /**
      * L'enclos : une bête qui a prouvé qu'elle n'allait nulle part cesse de décider d'y aller.
      *
      * <p>Voir {@link Pasture}. C'est le chaînon qui bloquait {@link Jam} et le repos posé : tant que
@@ -1510,6 +1518,11 @@ public final class Settings {
         return vigil;
     }
 
+    /** Voir {@link #vigil()} : même exclusion du maître, même raison. */
+    public static boolean trieur() {
+        return trieur;
+    }
+
     /**
      * Le balai ne dépend PAS de l'interrupteur général.
      *
@@ -1801,6 +1814,7 @@ public final class Settings {
         gather = Config.GATHER.get();
         broom = Config.BROOM.get();
         vigil = Config.VIGIL.get();
+        trieur = Config.TRIEUR_ACTIF.get();
         pasture = Config.PASTURE.get();
         wire = Config.WIRE.get();
         poi = Config.POI.get();

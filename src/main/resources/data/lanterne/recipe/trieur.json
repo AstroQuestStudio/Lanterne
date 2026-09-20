@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " C ",
+    "CHC",
+    " C "
+  ],
+  "key": {
+    "C": "minecraft:comparator",
+    "H": "minecraft:hopper"
+  },
+  "result": {
+    "id": "lanterne:trieur",
+    "count": 1
+  }
+}

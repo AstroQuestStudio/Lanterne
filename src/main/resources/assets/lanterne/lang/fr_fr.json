@@ -49,5 +49,8 @@
   "item.lanterne.ecran": "Écran",
   "block.lanterne.projecteur": "Projecteur",
   "item.lanterne.projecteur": "Projecteur",
-  "subtitles.lanterne.ecran": "Écran : lecture"
+  "subtitles.lanterne.ecran": "Écran : lecture",
+  "block.lanterne.trieur": "Trieur",
+  "item.lanterne.trieur": "Trieur",
+  "container.lanterne.trieur": "Trieur"
 }

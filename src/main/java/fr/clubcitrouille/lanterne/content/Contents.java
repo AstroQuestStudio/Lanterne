@@ -4,6 +4,7 @@ import java.util.function.Supplier;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -13,9 +14,13 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.content.trieur.Trieur;
+import fr.clubcitrouille.lanterne.content.trieur.TrieurBlockEntity;
+import fr.clubcitrouille.lanterne.content.trieur.TrieurMenu;
 
 /**
  * Le seul contenu que ce mod ajoute au jeu.
@@ -96,6 +101,9 @@ public final class Contents {
     public static final DeferredRegister<net.minecraft.world.level.block.entity.BlockEntityType<?>>
             BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, Lanterne.ID);
 
+    public static final DeferredRegister<MenuType<?>> MENUS =
+            DeferredRegister.create(Registries.MENU, Lanterne.ID);
+
     /**
      * Le bloc-entité de la Lanterne — sans ticker, donc gratuit par tick.
      *
@@ -108,6 +116,35 @@ public final class Contents {
                     () -> new net.minecraft.world.level.block.entity.BlockEntityType<>(
                             VigilBlockEntity::new, VIGIL.get()));
 
+    /**
+     * Le Trieur : un entonnoir qui filtre. Voir {@link Trieur} pour l'architecture complète — un
+     * bloc à part, qui hérite du transfert par lots sans dupliquer une ligne de {@link
+     * fr.clubcitrouille.lanterne.core.Bulk}.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredBlock<Trieur> TRIEUR =
+            BLOCKS.registerBlock("trieur", Trieur::new, () -> BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .strength(3.0F, 4.8F)
+                    .sound(SoundType.METAL)
+                    .requiresCorrectToolForDrops());
+
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem>
+            TRIEUR_ITEM = ITEMS.registerSimpleBlockItem("trieur", TRIEUR);
+
+    public static final Supplier<net.minecraft.world.level.block.entity.BlockEntityType<TrieurBlockEntity>>
+            TRIEUR_ENTITY = BLOCK_ENTITIES.register("trieur",
+                    () -> new net.minecraft.world.level.block.entity.BlockEntityType<>(
+                            TrieurBlockEntity::new, TRIEUR.get()));
+
+    /**
+     * Un {@code MenuType} neuf, pas un remplacement — contrairement à {@code Phare}, qui écrase
+     * l'écran du {@code MenuType.BEACON} vanilla, celui-ci n'existe encore nulle part : {@code
+     * RegisterMenuScreensEvent.register} peut donc s'en servir normalement, sans la réflexion que
+     * {@code Phare.onRegisterScreens} documente pour son propre cas.
+     */
+    public static final Supplier<MenuType<TrieurMenu>> TRIEUR_MENU = MENUS.register("trieur",
+            () -> IMenuTypeExtension.create((id, inventory, buffer) -> new TrieurMenu(id, inventory)));
+
     /** Un onglet à part : on doit pouvoir trouver l'ancre sans savoir où Mojang l'aurait rangée. */
     public static final Supplier<CreativeModeTab> TAB = TABS.register("lanterne",
             () -> CreativeModeTab.builder()
@@ -118,6 +155,7 @@ public final class Contents {
                         output.accept(VIGIL_ITEM.get());
                         output.accept(CARNET.get());
                         output.accept(ANCHOR_COMPASS.get());
+                        output.accept(TRIEUR_ITEM.get());
                     })
                     .build());
 
@@ -127,6 +165,7 @@ public final class Contents {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
+        MENUS.register(modBus);
         TABS.register(modBus);
     }
 }

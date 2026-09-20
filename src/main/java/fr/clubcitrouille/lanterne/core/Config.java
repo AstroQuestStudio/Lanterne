@@ -99,6 +99,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
     public static final ModConfigSpec.BooleanValue VIGIL;
+    public static final ModConfigSpec.BooleanValue TRIEUR_ACTIF;
     public static final ModConfigSpec.BooleanValue RUMEUR;
     public static final ModConfigSpec.BooleanValue MANNE;
 
@@ -920,6 +921,14 @@ public final class Config {
                 "Ne touche ni aux generateurs de creatures, ni aux raids, ni aux animaux.",
                 "Coupee, le bloc reste posable et eclaire - il ne garde simplement plus rien.")
                 .define("lanterne_de_veille", true);
+        TRIEUR_ACTIF = BUILDER.comment(
+                "Le Trieur : un entonnoir qui filtre, en liste blanche ou noire.",
+                "Coupe seulement le FILTRAGE - le bloc reste enregistre et pose, et transfere",
+                "toujours par lots comme n'importe quel entonnoir (voir Bulk). A false, un Trieur",
+                "pose se comporte comme un entonnoir ordinaire : tout passe.",
+                "Il n'est jamais retire du registre : un bloc absent devient de l'air dans les",
+                "mondes ou il etait pose, et un reglage ne doit pas detruire un tri deja construit.")
+                .define("trieur_actif", true);
         RUMEUR = BUILDER.comment(
                 "RUMEUR : la reputation gagnee en guerissant un villageois zombifie profite a TOUS",
                 "les joueurs connectes, pas seulement a celui qui a tenu la pomme d'or.",
