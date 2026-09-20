@@ -133,6 +133,8 @@ public final class Guide {
                 + "de portée accordée, places de rattrapage rendues.");
         line(source, "/lanterne increvable", "Le pont AutoMiner pour la durabilité des outils : "
                 + "combien de fois il a déjà épargné une casse. Éteint par défaut.");
+        line(source, "/lanterne rafale", "Le pont AutoMiner pour la construction en masse — pose "
+                + "et casse jusqu'à 4096 blocs d'un coup. Éteint par défaut.");
         if (admin) {
             line(source, "/lanterne maree on", "La marée suit à nouveau la charge.");
             line(source, "/lanterne maree off", "Fige les distances où elles sont.");

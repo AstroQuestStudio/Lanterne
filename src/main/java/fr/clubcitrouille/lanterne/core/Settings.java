@@ -399,6 +399,8 @@ public final class Settings {
     private static int greleCap = 40;
     /** Le pont AutoMiner : durabilite epargnee au minage. Voir {@link Increvable}. */
     private static boolean increvable = true;
+    /** Le pont AutoMiner : construction/demolition en masse. Voir {@link Rafale}. Eteint par defaut. */
+    private static boolean rafale = false;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
     private static boolean sleep = true;
     /** Le raccourci de recette : essayer d'abord la dernière recette qui a matché. Voir {@link Raccourci}. */
@@ -1234,6 +1236,11 @@ public final class Settings {
         return master && increvable;
     }
 
+    /** Le pont AutoMiner : construction/démolition en masse. Voir {@link Rafale}. */
+    public static boolean rafale() {
+        return master && rafale;
+    }
+
     public static boolean sleep() {
         return master && sleep;
     }
@@ -1659,6 +1666,7 @@ public final class Settings {
         reflet = wanted.contains("reflet");
         grele = wanted.contains("grele");
         increvable = wanted.contains("increvable") || wanted.contains("autominer");
+        rafale = wanted.contains("rafale") || wanted.contains("fill");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         raccourci = wanted.contains("raccourci") || wanted.contains("shortcut");
         bulk = wanted.contains("bulk") || wanted.contains("lot") || wanted.contains("entonnoir");
@@ -1877,6 +1885,7 @@ public final class Settings {
         greleCap = Config.GRELE_CAP.get();
         Grele.setCap(greleCap);
         increvable = Config.INCREVABLE.get();
+        rafale = Config.RAFALE.get();
         sleep = Config.SLEEP.get();
         raccourci = Config.RACCOURCI.get();
         bulk = Config.BULK.get();

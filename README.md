@@ -1007,9 +1007,21 @@ entièrement vanilla : il continue de compter normalement dans les statistiques 
 
 Un joueur ordinaire, sans AutoMiner, n'est jamais concerné, quel que soit l'état de ce réglage.
 
+Le même canal sert une seconde fonction, plus lourde : `rafale` autorise un client AutoMiner à poser
+ou casser jusqu'à 4096 blocs en une seule requête — l'équivalent d'un `/fill` déclenché par le bot
+plutôt que tapé à la main. **Pas réservé aux opérateurs** : n'importe quel joueur survie avec AutoMiner
+peut s'en servir, si le serveur a ouvert ce réglage. La démolition **casse** réellement (drops, usure
+d'outil — le même chemin que `ServerPlayerGameMode.destroyBlock`, pas une suppression gratuite) ; la
+construction **consomme** la matière correspondante dans l'inventaire en survie, et saute une case dont
+le joueur n'a plus l'objet. En créatif, ni drop ni consommation — comme vanilla.
+
 | Réglage | Défaut | Ce qu'il fait |
 |---|:---:|---|
 | `increvable` | activé | coupe le pont sans toucher à l'anti x-ray, indépendant |
+| `rafale` | **désactivé** | construction en masse — capacité, pas simple commodité, à ouvrir en connaissance de cause |
+
+`/lanterne increvable` et `/lanterne rafale` relèvent, en jeu, combien de fois chaque pont a déjà agi
+— en lecture seule : les deux réglages ne se changent que dans la configuration.
 
 ---
 

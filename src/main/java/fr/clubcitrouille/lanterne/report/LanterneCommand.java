@@ -384,6 +384,16 @@ public final class LanterneCommand {
                                     .withStyle(ChatFormatting.AQUA), false);
                             return 1;
                         }))
+                // Meme raison qu'increvable juste au-dessus, et meme surface d'attaque que
+                // l'elastique/le burin : une capacite de construction ne s'ouvre pas d'un mot lance
+                // en jeu, mais savoir si elle a deja pose ou casse quelque chose, ca se demande.
+                .then(Commands.literal("rafale")
+                        .executes(context -> {
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    fr.clubcitrouille.lanterne.core.Rafale.report())
+                                    .withStyle(ChatFormatting.AQUA), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("maree")
                         .executes(context -> {
                             context.getSource().sendSuccess(() -> Component.literal(

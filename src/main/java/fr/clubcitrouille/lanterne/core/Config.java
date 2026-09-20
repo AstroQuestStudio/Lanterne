@@ -54,6 +54,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue GRELE;
     public static final ModConfigSpec.IntValue GRELE_CAP;
     public static final ModConfigSpec.BooleanValue INCREVABLE;
+    public static final ModConfigSpec.BooleanValue RAFALE;
     public static final ModConfigSpec.BooleanValue SLEEP;
     public static final ModConfigSpec.BooleanValue RACCOURCI;
     public static final ModConfigSpec.BooleanValue BULK;
@@ -255,6 +256,17 @@ public final class Config {
                 "consomme, pas une detection cachee de plus - voir core.Increvable et le README.",
                 "Coupe ce pont sans rien changer d'autre : mets ce reglage a false.")
                 .define("increvable", true);
+        RAFALE = BUILDER.comment(
+                "Le pont AutoMiner pour la construction en masse : un joueur dont le client a",
+                "reellement charge AutoMiner (meme canal que increvable ci-dessus) peut poser ou",
+                "casser jusqu'a 4096 blocs d'un coup (Rafale.LIMIT) - l'equivalent d'un /fill",
+                "declenche par le bot plutot que tape a la main. La demolition CASSE (drops,",
+                "usure d'outil) et la construction CONSOMME la matiere en survie - rien n'est",
+                "gratuit, voir core.Rafale. Contrairement a increvable, ETEINT par defaut : c'est une",
+                "capacite de construction, pas une simple commodite - un serveur l'ouvre en",
+                "connaissance de cause. Pas besoin d'etre operateur pour s'en servir : voir le README,",
+                "section « Le pont AutoMiner ».")
+                .define("rafale", false);
         SLEEP = BUILDER.comment(
                 "Sommeil des blocs-entites dont l'echeance est connue : un four qui cuit sait",
                 "quand il aura fini, et n'a rien a faire d'ici la.")

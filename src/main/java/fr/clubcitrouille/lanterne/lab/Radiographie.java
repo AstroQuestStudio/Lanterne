@@ -502,6 +502,7 @@ public final class Radiographie {
         // cumule depuis le demarrage du client, cote serveur ; reste a "aucune durabilite epargnee"
         // sans client AutoMiner detecte, quel que soit l'etat du reglage.
         sb.append(fr.clubcitrouille.lanterne.core.Increvable.report()).append('\n');
+        sb.append(fr.clubcitrouille.lanterne.core.Rafale.report()).append('\n');
         sb.append('\n');
 
         sb.append(String.format(Locale.ROOT,
