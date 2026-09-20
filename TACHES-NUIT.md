@@ -115,3 +115,24 @@ sections Iris dedans, pas un onglet séparé "Iris" comme avant — changement d
 visible, à valider avec le patron plutôt qu'à décider seul), soit vérifier si l'API Sodium
 expose un moyen de déclarer plusieurs "mod options" depuis un seul appelant (pas trouvé dans les
 ~50 premières lignes explorées de `ConfigBuilder`/`ConfigEntryPoint`, pas allé plus loin).
+
+## Artefact visuel du ciel (bordure nette, teinte différente) — même cause probable, PAS corrigé
+
+Signalé par le patron en jeu (capture non accessible au fork qui a investigué, décrit comme une
+ligne horizontale nette dans le ciel séparant deux teintes, scène de nuit, DH actif).
+
+**Hypothèse forte, avec preuve partielle (javap sur le vrai jar `DistantHorizons-3.3.0-26.3-fabric-neoforge.jar`), PAS un correctif tenté** :
+
+- DH a son propre système de brouillard/ciel qui **désactive le fog vanilla** (`MixinVanillaFogCommon.cancelFog()`, confirmé en bytecode : renvoie `true` sauf cas spéciaux comme être dans un fluide ou aveuglé) pour dessiner SON PROPRE brouillard jusqu'à sa distance LOD (shaders `assets/distanthorizons/shaders/fog/gl/fog.frag` etc.).
+- DH a un vrai accessoire de compat Iris (`neoforge/wrappers/modAccessor/IrisAccessor.class`, `getModName()` renvoie littéralement `"iris"`) qui appelle `IrisApi.getInstance().isShaderPackInUse()` — cet appel EN LUI-MÊME fonctionne toujours (appel Java direct sur une classe maintenant dans le jar Lanterne, pas de dépendance à un modId).
+- **Mais** : je n'ai pas pu vérifier en bytecode (budget de fork insuffisant pour aller plus loin) SI DH décide d'instancier/utiliser cet `IrisAccessor` en se basant sur `ModList.isLoaded("iris")` AVANT même d'appeler `isShaderPackInUse()`. Si oui — ce qui est l'explication la plus probable vu le nom de la méthode (`getModName()` typique d'un pattern "vérifie que ce mod est chargé, puis instancie son accessor") — alors DH ne sait plus qu'Iris est actif, garde son PROPRE brouillard/fog activé en plus de celui d'Iris, d'où la bordure visible : c'est EXACTEMENT le même bug racine déjà documenté ci-dessus pour le menu Sodium (`ModList.isLoaded("iris")` cassé partout depuis la fusion), pas un nouveau bug introduit par la migration au sens strict — une CONSÉQUENCE du même problème sous-jacent.
+
+**Recommandation** : ne pas traiter ce symptôme séparément. Le futur correctif de la visibilité
+"iris" comme modId (voir section précédente, piste `[[mods]] modId="iris"` passif à tester avec
+prudence sur `C:\lanterne-server-test`) devrait résoudre CE bug-ci également s'il est confirmé.
+Vérifier après coup avec un vrai test client (le patron, ou le lanceur client jetable une fois
+terminé) : si la bordure disparaît une fois "iris" à nouveau visible dans `ModList`, l'hypothèse
+est confirmée rétroactivement.
+
+Rien modifié dans le code pour cette tâche (investigation seule, hypothèse forte mais pas 100%
+vérifiée par manque de budget de contexte). Aucune compilation nécessaire.
