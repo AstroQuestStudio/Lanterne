@@ -33,36 +33,35 @@ import net.neoforged.neoforge.common.ModConfigSpec;
  * fois par chargement.
  */
 public final class Tariff {
-    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+    
 
-    public static final ModConfigSpec.BooleanValue ACTIVE;
-    public static final ModConfigSpec.ConfigValue<String> SYMBOL;
-    public static final ModConfigSpec.IntValue START;
-    public static final ModConfigSpec.IntValue BATCH;
-    public static final ModConfigSpec.IntValue MARGIN;
-    public static final ModConfigSpec.BooleanValue BUYBACK;
-    public static final ModConfigSpec.BooleanValue PAY;
-    public static final ModConfigSpec.IntValue BOARD_SIZE;
+    public static ModConfigSpec.BooleanValue ACTIVE;
+    public static ModConfigSpec.ConfigValue<String> SYMBOL;
+    public static ModConfigSpec.IntValue START;
+    public static ModConfigSpec.IntValue BATCH;
+    public static ModConfigSpec.IntValue MARGIN;
+    public static ModConfigSpec.BooleanValue BUYBACK;
+    public static ModConfigSpec.BooleanValue PAY;
+    public static ModConfigSpec.IntValue BOARD_SIZE;
 
-    public static final ModConfigSpec.IntValue GEN_FACTOR;
-    public static final ModConfigSpec.IntValue GEN_SELL;
+    public static ModConfigSpec.IntValue GEN_FACTOR;
+    public static ModConfigSpec.IntValue GEN_SELL;
 
-    public static final ModConfigSpec.BooleanValue DRIFT;
-    public static final ModConfigSpec.IntValue AMPLITUDE;
-    public static final ModConfigSpec.IntValue ELASTICITY;
-    public static final ModConfigSpec.IntValue RELAX_TICKS;
-    public static final ModConfigSpec.IntValue RELAX_PERMILLE;
+    public static ModConfigSpec.BooleanValue DRIFT;
+    public static ModConfigSpec.IntValue AMPLITUDE;
+    public static ModConfigSpec.IntValue ELASTICITY;
+    public static ModConfigSpec.IntValue RELAX_TICKS;
+    public static ModConfigSpec.IntValue RELAX_PERMILLE;
 
-    public static final ModConfigSpec.BooleanValue QUOTA;
-    public static final ModConfigSpec.IntValue QUOTA_ALLOWANCE;
-    public static final ModConfigSpec.IntValue QUOTA_MOST;
-    public static final ModConfigSpec.BooleanValue DEBIT;
-    public static final ModConfigSpec.IntValue DEBIT_ALLOWANCE;
-    public static final ModConfigSpec.IntValue DEBIT_MOST;
-    public static final ModConfigSpec.IntValue TOLL_RELAX_PERMILLE;
-    public static final ModConfigSpec.IntValue PAY_FEE;
+    public static ModConfigSpec.BooleanValue QUOTA;
+    public static ModConfigSpec.IntValue QUOTA_ALLOWANCE;
+    public static ModConfigSpec.IntValue QUOTA_MOST;
+    public static ModConfigSpec.BooleanValue DEBIT;
+    public static ModConfigSpec.IntValue DEBIT_ALLOWANCE;
+    public static ModConfigSpec.IntValue DEBIT_MOST;
+    public static ModConfigSpec.IntValue TOLL_RELAX_PERMILLE;
+    public static ModConfigSpec.IntValue PAY_FEE;
 
-    public static final ModConfigSpec SPEC;
 
     private static boolean active = true;
     private static String symbol = "¤";
@@ -91,7 +90,7 @@ public final class Tariff {
     private static int tollRelaxPermille = 2;
     private static int payFee;
 
-    static {
+    public static void defineInto(ModConfigSpec.Builder BUILDER) {
         BUILDER.comment(
                 "Lanterne - la boutique et l'economie.",
                 "",
@@ -370,7 +369,6 @@ public final class Tariff {
                 .defineInRange("virement_frais_pourcent", 0, 0, 50);
         BUILDER.pop();
 
-        SPEC = BUILDER.build();
     }
 
     private Tariff() {}
@@ -383,7 +381,7 @@ public final class Tariff {
      * vérifier écraserait nos valeurs à chaque chargement d'un autre fichier.
      */
     public static void apply(ModConfigEvent event) {
-        if (event.getConfig().getSpec() != SPEC) {
+        if (event.getConfig().getSpec() != fr.clubcitrouille.lanterne.core.Config.SPEC) {
             return;
         }
         if (!(event instanceof ModConfigEvent.Loading) && !(event instanceof ModConfigEvent.Reloading)) {

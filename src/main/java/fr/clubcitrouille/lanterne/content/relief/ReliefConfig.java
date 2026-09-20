@@ -12,15 +12,16 @@ import net.neoforged.neoforge.common.ModConfigSpec;
  * ce module n'exécute plus une seule instruction — voir {@link Relief#tick}.
  */
 public final class ReliefConfig {
-    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+    public static ModConfigSpec.BooleanValue ACTIVE;
+    public static ModConfigSpec.IntValue BUDGET_MS;
+    public static ModConfigSpec.IntValue RESCAN_TICKS;
 
-    public static final ModConfigSpec.BooleanValue ACTIVE;
-    public static final ModConfigSpec.IntValue BUDGET_MS;
-    public static final ModConfigSpec.IntValue RESCAN_TICKS;
-
-    public static final ModConfigSpec SPEC;
-
-    static {
+    /**
+     * Ajoute la section "carte3d" au générateur partagé de {@link fr.clubcitrouille.lanterne.core.Config}
+     * — fusion du 20/09/2026, {@code lanterne-carte3d.toml} n'existe plus comme fichier séparé, voir
+     * {@code Config} pour l'orchestration complète et {@code lanterne-common.toml} pour le résultat.
+     */
+    public static void defineInto(ModConfigSpec.Builder BUILDER) {
         BUILDER.comment(
                 "RELIEF : génère en tâche de fond les données de la carte 3D (façon BlueMap) que le",
                 "panel web affiche. Lit les régions déjà écrites sur disque, n'en génère aucune",
@@ -40,12 +41,13 @@ public final class ReliefConfig {
                 "Ticks entre deux balayages des dossiers de régions à la recherche de fichiers",
                 "modifiés depuis la dernière tuile écrite. 200 (défaut) : dix secondes.")
                 .defineInRange("balayage_ticks", 200, 20, 12000);
-        SPEC = BUILDER.build();
     }
 
     private ReliefConfig() {}
 
     public static void apply(ModConfigEvent event) {
         // Rien à recalculer : les ModConfigSpec.*Value se relisent eux-mêmes à chaque .get().
+        // Le filtre par SPEC vit maintenant dans Config.apply (fichier fusionné) — ce gestionnaire
+        // n'est appelé que si c'est déjà le bon évènement.
     }
 }

@@ -32,33 +32,32 @@ import net.neoforged.neoforge.common.ModConfigSpec;
  * chaque réglage : il n'y a pas deux vérités.
  */
 public final class Studio {
-    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+    
 
     // --- Tableaux ---------------------------------------------------------
 
-    public static final ModConfigSpec.IntValue PAINTING_MAX_SIDE;
-    public static final ModConfigSpec.IntValue PAINTING_MAX_BLOCKS;
-    public static final ModConfigSpec.IntValue PAINTING_MAX_SOURCE_KIB;
-    public static final ModConfigSpec.IntValue PAINTING_QUOTA;
-    public static final ModConfigSpec.IntValue MOSAIC_SIDE;
-    public static final ModConfigSpec.IntValue MOSAIC_MIPS;
-    public static final ModConfigSpec.IntValue SHARD_BYTES;
-    public static final ModConfigSpec.IntValue SHARDS_PER_TICK;
-    public static final ModConfigSpec.BooleanValue LINKS;
-    public static final ModConfigSpec.IntValue LINK_TIMEOUT;
-    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> DOMAINS;
-    public static final ModConfigSpec.BooleanValue FREE_EDIT;
+    public static ModConfigSpec.IntValue PAINTING_MAX_SIDE;
+    public static ModConfigSpec.IntValue PAINTING_MAX_BLOCKS;
+    public static ModConfigSpec.IntValue PAINTING_MAX_SOURCE_KIB;
+    public static ModConfigSpec.IntValue PAINTING_QUOTA;
+    public static ModConfigSpec.IntValue MOSAIC_SIDE;
+    public static ModConfigSpec.IntValue MOSAIC_MIPS;
+    public static ModConfigSpec.IntValue SHARD_BYTES;
+    public static ModConfigSpec.IntValue SHARDS_PER_TICK;
+    public static ModConfigSpec.BooleanValue LINKS;
+    public static ModConfigSpec.IntValue LINK_TIMEOUT;
+    public static ModConfigSpec.ConfigValue<java.util.List<? extends String>> DOMAINS;
+    public static ModConfigSpec.BooleanValue FREE_EDIT;
 
     // --- Disques ----------------------------------------------------------
 
-    public static final ModConfigSpec.IntValue DISC_MAX_MIB;
-    public static final ModConfigSpec.IntValue DISC_MAX_SECONDS;
-    public static final ModConfigSpec.IntValue DISC_QUOTA;
-    public static final ModConfigSpec.BooleanValue DISC_DECODE;
-    public static final ModConfigSpec.IntValue DISC_SLOTS;
-    public static final ModConfigSpec.IntValue DISC_BURN;
+    public static ModConfigSpec.IntValue DISC_MAX_MIB;
+    public static ModConfigSpec.IntValue DISC_MAX_SECONDS;
+    public static ModConfigSpec.IntValue DISC_QUOTA;
+    public static ModConfigSpec.BooleanValue DISC_DECODE;
+    public static ModConfigSpec.IntValue DISC_SLOTS;
+    public static ModConfigSpec.IntValue DISC_BURN;
 
-    public static final ModConfigSpec SPEC;
 
     /** Côté maximal, en pixels, d'une image après ré-échantillonnage. */
     private static int paintingMaxSide = 1024;
@@ -114,7 +113,7 @@ public final class Studio {
     /** Durée d'une gravure, en secondes. */
     private static int discBurn = 6;
 
-    static {
+    public static void defineInto(ModConfigSpec.Builder BUILDER) {
         BUILDER.comment(
                 "Lanterne - l'atelier : tes propres tableaux, tes propres disques.",
                 "",
@@ -270,7 +269,6 @@ public final class Studio {
                 .defineInRange("gravure_s", 6, 1, 60);
         BUILDER.pop();
 
-        SPEC = BUILDER.build();
     }
 
     private Studio() {}
@@ -283,7 +281,7 @@ public final class Studio {
      * ne sont pas la nôtre, et y répondre écraserait nos valeurs par celles d'un autre fichier.
      */
     public static void apply(ModConfigEvent event) {
-        if (event.getConfig().getSpec() != SPEC) {
+        if (event.getConfig().getSpec() != fr.clubcitrouille.lanterne.core.Config.SPEC) {
             return;
         }
         if (!(event instanceof ModConfigEvent.Loading) && !(event instanceof ModConfigEvent.Reloading)) {

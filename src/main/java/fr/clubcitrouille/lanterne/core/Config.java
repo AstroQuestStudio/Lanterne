@@ -1603,6 +1603,34 @@ public final class Config {
                 .define("auto", true);
 
         BUILDER.pop();
+
+        // Fusion du 20/09/2026 : lanterne-boutique.toml, lanterne-carte3d.toml et lanterne-common.toml
+        // (Studio, type COMMON a l'origine) n'existent plus comme fichiers separes — un seul fichier
+        // etait devenu insupportable a maintenir a cinq. Chaque module garde son propre fichier Java
+        // (Tariff, ReliefConfig, Studio) et sa propre methode defineInto(BUILDER), appelee ICI dans le
+        // meme constructeur partage, avant le build() final — voir leur Javadoc de classe respective.
+        //
+        // Changement de comportement assume pour Studio : son fichier etait de type COMMON (charge
+        // des deux cotes, y compris en solo avant de rejoindre un serveur). Fusionne dans ce fichier de
+        // type SERVER, il ne sera plus lisible cote client avant connexion — les limites d'import de
+        // l'atelier restent appliquees par le serveur de toute facon, donc aucun comportement de JEU
+        // ne change, seulement le moment ou le client peut LIRE la valeur.
+        BUILDER.comment("La boutique : regles du marche. Anciennement lanterne-boutique.toml.")
+                .push("boutique");
+        fr.clubcitrouille.lanterne.content.shop.Tariff.defineInto(BUILDER);
+        BUILDER.pop();
+
+        BUILDER.comment("La carte 3D du panel web. Anciennement lanterne-carte3d.toml.")
+                .push("carte3d");
+        fr.clubcitrouille.lanterne.content.relief.ReliefConfig.defineInto(BUILDER);
+        BUILDER.pop();
+
+        BUILDER.comment("L'atelier : tableaux et disques personnalises. Anciennement lanterne-common.toml",
+                "(type COMMON) — voir la note ci-dessus sur le changement de moment de lecture cote client.")
+                .push("atelier");
+        fr.clubcitrouille.lanterne.content.painting.Studio.defineInto(BUILDER);
+        BUILDER.pop();
+
         SPEC = BUILDER.build();
     }
 

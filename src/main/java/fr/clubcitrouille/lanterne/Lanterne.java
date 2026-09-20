@@ -67,9 +67,16 @@ public final class Lanterne {
         // dans le registre transforme en air toutes les ancres déjà posées dans les mondes des
         // joueurs — un interrupteur ne doit jamais pouvoir détruire une construction.
         fr.clubcitrouille.lanterne.content.Contents.register(modBus);
+        // Fusion du 20/09/2026 : UN SEUL fichier "lanterne-common.toml" pour Config, Tariff (boutique),
+        // ReliefConfig (carte3d) et Studio (atelier, ex-COMMON) — voir la Javadoc de Config juste avant
+        // son bloc static pour l'orchestration complète et le changement de comportement assumé pour
+        // Studio (ne se lit plus côté client avant connexion à un serveur, comme tout le reste ici).
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
-                fr.clubcitrouille.lanterne.core.Config.SPEC);
+                fr.clubcitrouille.lanterne.core.Config.SPEC, "lanterne-common.toml");
         modBus.addListener(fr.clubcitrouille.lanterne.core.Config::apply);
+        modBus.addListener(fr.clubcitrouille.lanterne.content.shop.Tariff::apply);
+        modBus.addListener(fr.clubcitrouille.lanterne.content.relief.ReliefConfig::apply);
+        modBus.addListener(fr.clubcitrouille.lanterne.content.painting.Studio::apply);
         // Le fichier CLIENT est enregistré des deux côtés : un serveur dédié le charge sans jamais
         // le lire, ce qui ne coûte rien, et le garder inconditionnel évite une garde de distribution
         // de plus. Ce qui compte est que les réglages de rendu ne soient plus dans le fichier du
@@ -77,14 +84,6 @@ public final class Lanterne {
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
                 fr.clubcitrouille.lanterne.core.ClientConfig.SPEC);
         modBus.addListener(fr.clubcitrouille.lanterne.core.ClientConfig::apply);
-        // Les réglages d'abord : le filtre de journal les consulte, et la première version
-        // l'installait avant de les avoir lus — si bien qu'aucun réglage ne pouvait l'en empêcher.
-        // L'atelier : les tableaux personnalisés et les disques personnalisés. Un seul fichier de
-        // réglages pour les deux, de type COMMON — les limites d'import engagent le serveur qui les
-        // fait respecter autant que le client qui prépare les fichiers. Voir content.painting.Studio.
-        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.COMMON,
-                fr.clubcitrouille.lanterne.content.painting.Studio.SPEC);
-        modBus.addListener(fr.clubcitrouille.lanterne.content.painting.Studio::apply);
         fr.clubcitrouille.lanterne.content.painting.Easel.register(modBus);
         fr.clubcitrouille.lanterne.content.disc.Groove.register(modBus);
         fr.clubcitrouille.lanterne.content.disc.Retrack.register();
@@ -101,18 +100,8 @@ public final class Lanterne {
                 fr.clubcitrouille.lanterne.content.painting.Easel::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.disc.Groove::onRegisterCommands);
-        // La boutique et l'economie. Le fichier de reglages est de type SERVER : les regles du
-        // marche engagent le serveur seul, et un client ne doit jamais pouvoir s'inventer une
-        // amplitude de derive. Le nom de fichier est explicite parce que Config.SPEC occupe deja
-        // le fichier SERVER par defaut.
-        // La carte 3D : fichier a part pour la meme raison que la boutique juste apres —
-        // Config.SPEC occupe deja le fichier SERVER par defaut.
-        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
-                fr.clubcitrouille.lanterne.content.relief.ReliefConfig.SPEC, "lanterne-carte3d.toml");
-        modBus.addListener(fr.clubcitrouille.lanterne.content.relief.ReliefConfig::apply);
-        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
-                fr.clubcitrouille.lanterne.content.shop.Tariff.SPEC, "lanterne-boutique.toml");
-        modBus.addListener(fr.clubcitrouille.lanterne.content.shop.Tariff::apply);
+        // La boutique et l'economie, la carte 3D : leurs reglages vivent desormais dans le fichier
+        // fusionne enregistre plus haut (lanterne-common.toml) — voir Config.defineInto orchestration.
         fr.clubcitrouille.lanterne.content.shop.Bazaar.register(modBus);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.shop.Bazaar::onRegisterCommands);
