@@ -11,8 +11,10 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -311,6 +313,20 @@ public final class LanterneCommand {
                                             .withStyle(ChatFormatting.GRAY), false);
                                     return 1;
                                 })))
+                // Le vol, à la demande — jamais par défaut. Le serveur vanilla expulse tout joueur
+                // qu'il voit s'élever sans que son ancien.mayfly le permette ; un mod client de vol
+                // ne change rien à cette autorisation, il ne fait que produire le mouvement que le
+                // serveur refuse ensuite. « Flying is not enabled on this server » n'est donc pas un
+                // bogue du mod de vol, c'est le serveur qui applique une règle que personne n'a
+                // encore levée pour ce joueur. Cette commande la lève, sans passer par le créatif —
+                // un joueur qui veut juste voler ne veut pas forcément un sac infini.
+                .then(Commands.literal("vol")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> toggleFlight(context.getSource(),
+                                context.getSource().getPlayerOrException()))
+                        .then(Commands.argument("joueur", EntityArgument.player())
+                                .executes(context -> toggleFlight(context.getSource(),
+                                        EntityArgument.getPlayer(context, "joueur")))))
                 // En lecture seule, et délibérément. Ce module élargit des seuils anti-triche :
                 // pouvoir l'allumer depuis le tchat mettrait cette décision à portée d'un opérateur
                 // pressé, alors qu'elle appartient au fichier de configuration — c'est-à-dire à
@@ -540,6 +556,27 @@ public final class LanterneCommand {
         source.sendSuccess(() -> Component.literal(
                         "« /lanterne bench » compare la même charge avec et sans.")
                 .withStyle(ChatFormatting.DARK_GRAY), false);
+    }
+
+    /**
+     * Bascule l'autorisation de voler, sans toucher au reste des capacités du joueur.
+     *
+     * <p>{@code flying} redescend à faux quand {@code mayfly} s'éteint : sans cela, un joueur qui
+     * volait au moment où l'autorisation lui est retirée resterait en l'air jusqu'à son prochain
+     * mouvement, ce qui ressemble à un bogue plutôt qu'à une commande qui vient d'agir.
+     */
+    private static int toggleFlight(CommandSourceStack source, ServerPlayer target) {
+        var abilities = target.getAbilities();
+        boolean allowed = !abilities.mayfly;
+        abilities.mayfly = allowed;
+        if (!allowed) {
+            abilities.flying = false;
+        }
+        target.onUpdateAbilities();
+        source.sendSuccess(() -> Component.literal(target.getGameProfile().name()
+                        + (allowed ? " peut désormais voler." : " ne peut plus voler."))
+                .withStyle(allowed ? ChatFormatting.GREEN : ChatFormatting.YELLOW), true);
+        return 1;
     }
 
     private static void line(CommandSourceStack source, String name, String value) {
