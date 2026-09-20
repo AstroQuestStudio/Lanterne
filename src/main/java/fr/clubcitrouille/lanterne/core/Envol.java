@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 
@@ -137,6 +138,63 @@ public final class Envol {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
+        reapply(player);
+    }
+
+    /**
+     * Un changement de mode de jeu remet {@code mayfly} à sa valeur par défaut du nouveau mode
+     * (vrai en créatif/spectateur, faux sinon) — {@code GameType.updatePlayerAbilities}, appelé sans
+     * condition par vanilla à chaque bascule, y compris {@code /gamemode survival} tapée par le
+     * joueur lui-même. C'est exactement ce qui s'est produit en test réel le 20/09/2026 : un joueur
+     * autorisé par {@code /lanterne vol}, qui volait encore en survie après être repassé en survie
+     * depuis le créatif, s'est fait éjecter par l'anti-triche vanilla (« kicked for floating too
+     * long! ») quelques secondes après le changement de mode — {@link #onLogin} seul ne rattrape
+     * qu'une reconnexion, jamais un changement de mode en cours de partie.
+     *
+     * <p>L'ordre exact entre ce que NeoForge poste ici et l'écriture de {@code abilities.mayfly} par
+     * vanilla n'a pas été vérifié au bytecode dans cet environnement (pas de source décompilée sous
+     * la main pour {@code ServerPlayer.setGameMode}) — donc plutôt qu'un pari sur cet ordre, cette
+     * méthode réapplique {@code mayfly} de toute façon si besoin, sans condition sur l'ordre. Le
+     * filet de sécurité réel reste {@link #onServerTick} ci-dessous, qui rattrape n'importe quel
+     * chemin de remise à zéro que ce gestionnaire n'aurait pas anticipé, largement sous la seconde.
+     */
+    @SubscribeEvent
+    public static void onGameModeChange(PlayerEvent.PlayerChangeGameModeEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        reapply(player);
+    }
+
+    /**
+     * Filet de sécurité : une fois par seconde, réapplique {@code mayfly} à tout joueur en ligne
+     * autorisé dont l'autorisation aurait été perdue par un chemin non anticipé ci-dessus (respawn,
+     * un autre mod, une commande vanilla non couverte). Une seconde reste largement sous les ~4
+     * secondes de vol continu que l'anti-triche vanilla tolère avant d'éjecter — voir la Javadoc de
+     * {@link #onGameModeChange}. Le coût est négligeable : cette boucle ne touche que les joueurs
+     * déjà dans {@link #granted}, un ensemble de confiance, jamais toute la liste des joueurs.
+     */
+    @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
+        if (event.getServer().getTickCount() % 20 != 0) {
+            return;
+        }
+        Set<UUID> ids;
+        synchronized (LOCK) {
+            ids = loaded();
+        }
+        if (ids.isEmpty()) {
+            return;
+        }
+        for (UUID id : ids) {
+            ServerPlayer player = event.getServer().getPlayerList().getPlayer(id);
+            if (player != null) {
+                reapply(player);
+            }
+        }
+    }
+
+    private static void reapply(ServerPlayer player) {
         if (!allowed(player.getUUID())) {
             return;
         }
