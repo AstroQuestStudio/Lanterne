@@ -7,7 +7,10 @@ import java.util.Optional;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.Hud;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.narration.NarratedElementType;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -42,6 +45,38 @@ import fr.clubcitrouille.lanterne.core.Config;
  * laisser invisibles aurait rendu le réglage aveugle : un joueur qui bâtit une pyramide de diamant
  * doit voir, immédiatement, que le multiplicateur s'applique — pas le déduire d'un fichier de
  * configuration qu'il n'a pas forcément ouvert.
+ *
+ * <h2>Le bug qui a rendu tout l'écran muet, et sa preuve</h2>
+ *
+ * <p>Cette classe déclarait {@code extractBackground(GuiGraphicsExtractor, int, int, float)}. Ce nom
+ * ne correspond à AUCUNE méthode de {@code AbstractContainerScreen} dans ce moteur — vérifié au
+ * {@code javap} sur le jar client 26.3 réellement téléchargé par NeoForm
+ * ({@code neoformruntime/artifacts/minecraft_26.3_client.jar}), qui liste {@code extractRenderState}
+ * et {@code extractContents}, jamais {@code extractBackground}. Sans {@code @Override} qui aurait
+ * fait échouer la compilation, cette méthode compilait comme un simple ajout mort : jamais appelée
+ * par le moteur, donc le fond, le titre, les infos de portée ET toute la grille d'effets ne se
+ * dessinaient jamais. Le paiement et les emplacements d'inventaire, eux, continuaient de fonctionner
+ * (rendus par l'implémentation par défaut, jamais remplacée) — d'où un écran à moitié vide plutôt
+ * qu'un écran d'erreur, et un bogue invisible à la compilation comme à la vérification statique des
+ * mixins.
+ *
+ * <p>Le vrai point d'accroche est {@link #extractContents} : {@code AbstractContainerScreen} l'appelle
+ * depuis {@code extractRenderState}, et son implémentation par défaut commence par peindre les
+ * widgets ({@code Screen.extractRenderState}, appelé en {@code invokespecial}), PUIS pousse une
+ * matrice de translation de {@code (leftPos, topPos)} avant les étiquettes et les emplacements. Notre
+ * fond doit donc se peindre AVANT l'appel à {@code super.extractContents}, en coordonnées absolues —
+ * exactement comme {@code renderBg} le faisait dans les moteurs vanilla plus anciens — sous peine de
+ * peindre le panneau PAR-DESSUS le bouton et les emplacements au lieu de dessous.
+ *
+ * <h2>Des vrais widgets plutôt qu'une détection de clic à la main</h2>
+ *
+ * <p>La version précédente recalculait elle-même les rectangles de chaque icône et les comparait à la
+ * souris dans {@code mouseClicked}, dupliquant la mise en page du dessin. En plus d'avoir été le
+ * complice silencieux du bogue ci-dessus (rien ne prouvait plus que ces rectangles correspondaient à
+ * quoi que ce soit de visible), c'est le genre de code que la moindre divergence future entre dessin et
+ * détection casse sans avertissement. {@link EffectIcon} est un {@code AbstractWidget} par icône,
+ * ajouté une fois en {@link #init()} : survol, clic et infobulle passent par le même mécanisme déjà
+ * éprouvé par le bouton « Confirmer » vanilla, plutôt que par une seconde implémentation maison.
  *
  * <h2>Une seule case connue de la balise elle-même, et ce n'est pas la position</h2>
  *
@@ -103,6 +138,7 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
     private Holder<MobEffect> pendingPrimary;
     private Holder<MobEffect> pendingSecondary;
     private Button confirm;
+    private final List<EffectIcon> icons = new ArrayList<>();
 
     public Phare(BeaconMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title, IMAGE_WIDTH, IMAGE_HEIGHT);
@@ -147,6 +183,9 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         this.pos = beaconPos();
         this.pendingPrimary = this.menu.getPrimaryEffect();
         this.pendingSecondary = this.menu.getSecondaryEffect();
+        this.icons.clear();
+        addIconRow(primaryOptions(), primaryRowY(), true);
+        addIconRow(secondaryOptions(), secondaryRowY(), false);
         // A droite de la rangee secondaire, jamais en dessous : les emplacements d'inventaire du
         // joueur sont fixes par BeaconMenu (addStandardInventorySlots) et un bouton pose entre les
         // deux rangees et cette grille aurait chevauche l'un ou l'autre selon la resolution.
@@ -157,18 +196,40 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         refreshConfirmButton();
     }
 
+    private void addIconRow(List<Holder<MobEffect>> options, int rowY, boolean primaryRow) {
+        int x = this.leftPos + 10;
+        int lastTier = 0;
+        for (Holder<MobEffect> effect : options) {
+            int tier = requiredTier(effect);
+            if (lastTier != 0 && tier != lastTier) {
+                x += TIER_GAP;
+            }
+            lastTier = tier;
+            EffectIcon icon = new EffectIcon(effect, tier, primaryRow, x, rowY);
+            this.icons.add(icon);
+            this.addRenderableWidget(icon);
+            x += ICON + GAP;
+        }
+    }
+
     /**
      * Resynchronise le choix en attente sur ce que le serveur a réellement retenu.
      *
      * <p>Appelée à chaque tick de conteneur — comme {@code BeaconScreen.containerTick()} vanilla,
      * vérifié au {@code javap} — parce qu'une confirmation ne change rien au niveau de la pyramide
      * mais consomme le paiement : {@link #confirm} doit redevenir inactif dès que le serveur a traité
-     * l'envoi, sans attendre une fermeture/réouverture de l'écran.
+     * l'envoi, sans attendre une fermeture/réouverture de l'écran. C'est aussi ici que chaque icône
+     * réapprend si son palier est débloqué : la pyramide peut grandir ou s'effondrer pendant que
+     * l'écran reste ouvert.
      */
     @Override
     public void containerTick() {
         super.containerTick();
         refreshConfirmButton();
+        int level = this.menu.getLevels();
+        for (EffectIcon icon : this.icons) {
+            icon.active = level >= icon.tier;
+        }
     }
 
     private void refreshConfirmButton() {
@@ -190,8 +251,14 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
 
     // --- Le dessin ---------------------------------------------------------
 
+    /**
+     * Le vrai point d'accroche du fond — voir la Javadoc de classe pour ce qui remplaçait ceci avant
+     * et pourquoi ça ne dessinait jamais rien. Dessine en coordonnées ABSOLUES, avant d'appeler
+     * {@code super.extractContents} : ce dernier peint les widgets (nos icônes, le bouton Confirmer),
+     * les étiquettes et les emplacements PAR-DESSUS, jamais dessous.
+     */
     @Override
-    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partial) {
+    public void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partial) {
         int left = this.leftPos;
         int top = this.topPos;
         int level = this.menu.getLevels();
@@ -205,10 +272,10 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         graphics.text(this.font, tag, left + IMAGE_WIDTH - 10 - this.font.width(tag), top + 9, DIM, false);
 
         drawInfo(graphics, left, top, level);
-        drawRow(graphics, mouseX, mouseY, primaryRowY(), primaryOptions(), this.pendingPrimary,
-                "Effet principal", level);
-        drawRow(graphics, mouseX, mouseY, secondaryRowY(), secondaryOptions(),
-                this.pendingSecondary, "Effet secondaire (niveau 4)", level);
+        graphics.text(this.font, "Effet principal", left + 10, primaryRowY() - 10, DIM, false);
+        graphics.text(this.font, "Effet secondaire (niveau 4)", left + 10, secondaryRowY() - 10, DIM, false);
+
+        super.extractContents(graphics, mouseX, mouseY, partial);
     }
 
     @Override
@@ -289,91 +356,6 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         return Aureole.extraEffectTier(effect);
     }
 
-    private record IconSlot(Holder<MobEffect> effect, int tier, int x, int y) {}
-
-    /** Position de chaque icône d'une rangée — partagée entre le dessin et le clic, pour que les
-     *  deux ne puissent jamais diverger. */
-    private List<IconSlot> layoutRow(List<Holder<MobEffect>> options, int rowY) {
-        List<IconSlot> slots = new ArrayList<>();
-        int x = this.leftPos + 10;
-        int lastTier = 0;
-        for (Holder<MobEffect> effect : options) {
-            int tier = requiredTier(effect);
-            if (lastTier != 0 && tier != lastTier) {
-                x += TIER_GAP;
-            }
-            lastTier = tier;
-            slots.add(new IconSlot(effect, tier, x, rowY));
-            x += ICON + GAP;
-        }
-        return slots;
-    }
-
-    private void drawRow(GuiGraphicsExtractor graphics, int mouseX, int mouseY, int rowY,
-            List<Holder<MobEffect>> options, Holder<MobEffect> selected, String label, int level) {
-        graphics.text(this.font, label, this.leftPos + 10, rowY - 10, DIM, false);
-        for (IconSlot slot : layoutRow(options, rowY)) {
-            boolean unlocked = level >= slot.tier();
-            boolean picked = selected != null && selected.equals(slot.effect());
-            boolean hovered = unlocked && mouseX >= slot.x() && mouseX < slot.x() + ICON
-                    && mouseY >= slot.y() && mouseY < slot.y() + ICON;
-            if (picked) {
-                graphics.fill(slot.x() - 2, slot.y() - 2, slot.x() + ICON + 2, slot.y() + ICON + 2, AMBER);
-            } else if (hovered) {
-                graphics.fill(slot.x() - 1, slot.y() - 1, slot.x() + ICON + 1, slot.y() + ICON + 1, EDGE);
-            }
-            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, Hud.getMobEffectSprite(slot.effect()),
-                    slot.x(), slot.y(), ICON, ICON);
-            if (!unlocked) {
-                // Assombrit l'icône plutôt que de la cacher : un joueur doit voir ce qui
-                // l'attend au palier suivant, pas seulement ce qu'il a déjà.
-                graphics.fill(slot.x(), slot.y(), slot.x() + ICON, slot.y() + ICON, 0x90000000);
-            }
-            // Les icônes vanilla n'ont jamais porté leur nom : sans lui, Chance et Absorption sont
-            // deux ronds jaunes indiscernables l'un de l'autre. Le niveau requis se lit dans la
-            // légende quand l'effet n'est pas encore débloqué.
-            if (mouseX >= slot.x() && mouseX < slot.x() + ICON
-                    && mouseY >= slot.y() && mouseY < slot.y() + ICON) {
-                Component name = slot.effect().value().getDisplayName();
-                graphics.setTooltipForNextFrame(this.font, unlocked ? name
-                        : name.copy().append(" (niveau " + slot.tier() + " requis)"), mouseX, mouseY);
-            }
-        }
-    }
-
-    // --- Les clics -----------------------------------------------------------
-
-    @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() == 0) {
-            int mouseX = (int) event.x();
-            int mouseY = (int) event.y();
-            int level = this.menu.getLevels();
-            if (tryClickRow(layoutRow(primaryOptions(), primaryRowY()), mouseX, mouseY, level, true)) {
-                return true;
-            }
-            if (tryClickRow(layoutRow(secondaryOptions(), secondaryRowY()), mouseX, mouseY, level, false)) {
-                return true;
-            }
-        }
-        return super.mouseClicked(event, doubleClick);
-    }
-
-    private boolean tryClickRow(List<IconSlot> slots, int mouseX, int mouseY, int level,
-            boolean primaryRow) {
-        for (IconSlot slot : slots) {
-            if (level < slot.tier()) {
-                continue;
-            }
-            if (mouseX >= slot.x() && mouseX < slot.x() + ICON
-                    && mouseY >= slot.y() && mouseY < slot.y() + ICON) {
-                choose(slot.effect(), primaryRow);
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** Ne fait QUE mettre à jour le choix local — voir la Javadoc de {@link #pendingPrimary} pour
      *  pourquoi l'envoi réseau attend {@link #confirm()}. */
     private void choose(Holder<MobEffect> effect, boolean primaryRow) {
@@ -398,5 +380,69 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    /**
+     * Une icône d'effet, vraie {@code AbstractWidget} — voir la Javadoc de classe pour pourquoi ce
+     * n'est plus une simple zone testée à la main dans {@code mouseClicked}.
+     *
+     * <p>{@code active} (champ de {@code AbstractWidget}) porte le déblocage de palier : c'est lui
+     * qui empêche le clic sur une icône pas encore atteinte, exactement comme il empêche déjà le
+     * clic sur {@link Phare#confirm} tant qu'il n'y a pas de paiement. {@link Phare#containerTick}
+     * le remet à jour à chaque tick, la pyramide pouvant grandir ou s'effondrer pendant que l'écran
+     * reste ouvert.
+     */
+    private final class EffectIcon extends AbstractWidget {
+        private final Holder<MobEffect> effect;
+        private final int tier;
+        private final boolean primaryRow;
+
+        EffectIcon(Holder<MobEffect> effect, int tier, boolean primaryRow, int x, int y) {
+            super(x, y, ICON, ICON, effect.value().getDisplayName());
+            this.effect = effect;
+            this.tier = tier;
+            this.primaryRow = primaryRow;
+        }
+
+        private boolean picked() {
+            Holder<MobEffect> selected = this.primaryRow ? Phare.this.pendingPrimary : Phare.this.pendingSecondary;
+            return selected != null && selected.equals(this.effect);
+        }
+
+        @Override
+        public void onClick(MouseButtonEvent event, boolean doubleClick) {
+            Phare.this.choose(this.effect, this.primaryRow);
+        }
+
+        @Override
+        protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY,
+                float partial) {
+            int x = this.getX();
+            int y = this.getY();
+            if (picked()) {
+                graphics.fill(x - 2, y - 2, x + ICON + 2, y + ICON + 2, AMBER);
+            } else if (this.isHovered) {
+                graphics.fill(x - 1, y - 1, x + ICON + 1, y + ICON + 1, EDGE);
+            }
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, Hud.getMobEffectSprite(this.effect), x, y, ICON, ICON);
+            if (!this.active) {
+                // Assombrit l'icône plutôt que de la cacher : un joueur doit voir ce qui
+                // l'attend au palier suivant, pas seulement ce qu'il a déjà.
+                graphics.fill(x, y, x + ICON, y + ICON, 0x90000000);
+            }
+            // Les icônes vanilla n'ont jamais porté leur nom : sans lui, Chance et Absorption sont
+            // deux ronds jaunes indiscernables l'un de l'autre. Le niveau requis se lit dans la
+            // légende quand l'effet n'est pas encore débloqué.
+            if (this.isHovered) {
+                Component name = this.effect.value().getDisplayName();
+                graphics.setTooltipForNextFrame(Phare.this.font, this.active ? name
+                        : name.copy().append(" (niveau " + this.tier + " requis)"), mouseX, mouseY);
+            }
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {
+            output.add(NarratedElementType.TITLE, this.getMessage());
+        }
     }
 }
