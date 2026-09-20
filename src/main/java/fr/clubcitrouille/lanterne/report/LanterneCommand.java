@@ -374,6 +374,16 @@ public final class LanterneCommand {
                                     .withStyle(ChatFormatting.AQUA), false);
                             return 1;
                         }))
+                // En lecture seule, meme raison que l'elastique et le burin juste au-dessus : le
+                // reglage se change dans la configuration, pas d'un mot lance en jeu — mais savoir
+                // s'il a deja fait quelque chose, ca, ca se demande.
+                .then(Commands.literal("increvable")
+                        .executes(context -> {
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    fr.clubcitrouille.lanterne.core.Increvable.report())
+                                    .withStyle(ChatFormatting.AQUA), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("maree")
                         .executes(context -> {
                             context.getSource().sendSuccess(() -> Component.literal(
