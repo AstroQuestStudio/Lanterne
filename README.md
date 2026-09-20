@@ -620,6 +620,12 @@ l'optimisation, ce serait retirer le jeu.
 <a id="le-trieur-l-entonnoir-qui-filtre"></a>
 ## 🧺 Le Trieur — l'entonnoir qui filtre
 
+<div align="center">
+
+<img src="docs/images/trieur.png" width="320" alt="Le Trieur">
+
+</div>
+
 **Un entonnoir qui n'accepte que ce qu'on lui a montré.** Neuf cases de filtre, une bascule liste
 blanche / liste noire, et rien d'autre de changé : le Trieur est un **bloc à part**, jamais un
 remplacement du hopper vanilla. Le poser ne touche à aucune ferme qui utilise déjà des entonnoirs
@@ -733,6 +739,14 @@ jamais.
 
 <a id="le-reseau-stockage-relie-et-guichet"></a>
 ## 🗄️ Le Réseau — stockage relié et Guichet
+
+<div align="center">
+
+<img src="docs/images/aiguillage.png" width="170" alt="Aiguillage"> <img src="docs/images/guichet.png" width="170" alt="Guichet"> <img src="docs/images/coffre_depot.png" width="170" alt="Coffre de dépôt"> <img src="docs/images/coffre_reception.png" width="170" alt="Coffre de réception">
+
+**Aiguillage · Guichet · Coffre de dépôt · Coffre de réception**
+
+</div>
 
 Relier des coffres dispersés dans toute la base et récupérer n'importe quel objet stocké depuis un seul
 terminal — instantanément, même sur cent blocs, et **sans jamais simuler un déplacement tick par tick**.
