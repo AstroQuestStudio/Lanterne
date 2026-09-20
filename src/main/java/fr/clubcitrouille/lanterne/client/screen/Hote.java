@@ -2,11 +2,16 @@ package fr.clubcitrouille.lanterne.client.screen;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Enumeration;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -38,6 +43,23 @@ import fr.clubcitrouille.lanterne.content.screen.Embed;
  * fabriquée à partir d'un identifiant filtré à l'alphanumérique, jamais du texte libre reçu d'un
  * autre joueur. Il n'y a donc rien ici qu'un joueur malveillant puisse faire pointer ailleurs, et
  * rien qui quitte la machine du spectateur : ce n'est pas la surface que {@code Sieve} ferme.
+ *
+ * <h2>Pourquoi l'adresse n'est plus {@code 127.0.0.1}</h2>
+ *
+ * <p>Le bac à sable de Chromium, sur Windows, peut isoler le processus de rendu de CEF dans un
+ * AppContainer — et un AppContainer <b>bloque par défaut les connexions vers la boucle locale</b>,
+ * même venant du même poste. C'est documenté côté CEF lui-même (adresse jointe depuis un autre
+ * processus, confirmée fonctionner sur cette machine par un test isolé ; seule la connexion
+ * <em>depuis Rinku</em> échoue avec {@code ERR_CONNECTION_REFUSED}), et ça ne se contourne pas
+ * depuis Lanterne : Rinku n'expose aucun réglage de bac à sable dans {@code RinkuSettings}.
+ *
+ * <p>Cette restriction cible spécifiquement {@code 127.0.0.0/8}, pas le réseau local. On lie donc
+ * ce serveur à l'adresse réelle de l'interface réseau du joueur plutôt qu'à la boucle — en
+ * contrepartie, la page devient joignable depuis tout le réseau local (pas Internet) le temps
+ * qu'une vidéo tourne, par n'importe qui capable d'en deviner le port. Ce que cette page peut faire
+ * reste aussi restreint qu'avant — {@link #serve} continue de n'accepter qu'une adresse qui
+ * commence par {@link Embed#YOUTUBE_EMBED_PREFIX} — donc ce que ça expose, c'est au pire la même
+ * vidéo à quelqu'un d'autre sur le même réseau, jamais un accès à autre chose.
  */
 final class Hote {
     private Hote() {}
@@ -46,6 +68,7 @@ final class Hote {
 
     private static volatile HttpServer server;
     private static volatile int port = -1;
+    private static volatile String hostAddress;
 
     /** L'adresse locale à donner au navigateur pour un embed YouTube, ou nul si indisponible. */
     static synchronized String frame(String embedUrl) {
@@ -53,7 +76,7 @@ final class Hote {
         if (p < 0) {
             return null;
         }
-        return "http://127.0.0.1:" + p + CONTEXT + "?src="
+        return "http://" + hostAddress + ":" + p + CONTEXT + "?src="
                 + URLEncoder.encode(embedUrl, StandardCharsets.UTF_8);
     }
 
@@ -62,19 +85,56 @@ final class Hote {
             return port;
         }
         try {
-            HttpServer created = HttpServer.create(
-                    new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            InetAddress address = lanAddress();
+            HttpServer created = HttpServer.create(new InetSocketAddress(address, 0), 0);
             created.createContext(CONTEXT, Hote::serve);
             created.setExecutor(null);
             created.start();
             server = created;
             port = created.getAddress().getPort();
-            Lanterne.LOG.info("[PROJECTION] hote local demarre sur 127.0.0.1:{}", port);
+            hostAddress = address.getHostAddress();
+            Lanterne.LOG.info("[PROJECTION] hote local demarre sur {}:{}", hostAddress, port);
         } catch (IOException impossible) {
             Lanterne.LOG.warn("[PROJECTION] hote local indisponible : {}", String.valueOf(impossible));
             port = -1;
         }
         return port;
+    }
+
+    /**
+     * L'adresse IPv4 d'une interface réseau réelle du joueur, ou la boucle locale à défaut.
+     *
+     * <p>Préfère une adresse de réseau privé (192.168.x, 10.x, 172.16-31.x) sur une interface active
+     * et non virtuelle — c'est celle qu'un routeur domestique distribue, donc la plus probable pour
+     * un joueur chez lui. Sans ça, la boucle locale reste un repli honnête : elle marchait déjà pour
+     * tout le monde avant que le bac à sable de CEF ne soit identifié sur cette machine précise, donc
+     * mieux vaut ça que rien plutôt qu'échouer d'entrée.
+     */
+    private static InetAddress lanAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            for (NetworkInterface iface : Collections.list(interfaces)) {
+                if (iface.isLoopback() || iface.isVirtual() || !iface.isUp()) {
+                    continue;
+                }
+                for (InetAddress candidate : Collections.list(iface.getInetAddresses())) {
+                    if (candidate instanceof Inet4Address && private_(candidate)) {
+                        return candidate;
+                    }
+                }
+            }
+        } catch (SocketException illisible) {
+            Lanterne.LOG.debug("[PROJECTION] interfaces reseau illisibles : {}",
+                    String.valueOf(illisible));
+        }
+        return InetAddress.getLoopbackAddress();
+    }
+
+    private static boolean private_(InetAddress address) {
+        byte[] a = address.getAddress();
+        int b0 = a[0] & 0xFF;
+        int b1 = a[1] & 0xFF;
+        return b0 == 10 || b0 == 192 && b1 == 168 || b0 == 172 && b1 >= 16 && b1 <= 31;
     }
 
     private static void serve(HttpExchange exchange) {
@@ -119,7 +179,7 @@ final class Hote {
         // lui, certaines versions du lecteur ignorent les commandes distantes. On peut enfin le
         // renseigner : c'est précisément ce que cette page hôte apporte, une vraie origine.
         String withOrigin = embedUrl + "&origin=" + URLEncoder.encode(
-                "http://127.0.0.1:" + port, StandardCharsets.UTF_8);
+                "http://" + hostAddress + ":" + port, StandardCharsets.UTF_8);
         // Échappement d'attribut seulement : embedUrl est un préfixe fixe suivi d'un identifiant
         // déjà filtré par Embed.clean() (alphanumérique, « - », « _ ») et de paramètres littéraux
         // écrits par Embed.java ou ci-dessus — jamais de texte libre reçu d'un joueur.
