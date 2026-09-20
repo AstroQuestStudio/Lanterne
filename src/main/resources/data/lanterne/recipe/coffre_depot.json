@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " H ",
+    "ICI",
+    "III"
+  ],
+  "key": {
+    "H": "minecraft:hopper",
+    "I": "minecraft:iron_ingot",
+    "C": "minecraft:chest"
+  },
+  "result": {
+    "id": "lanterne:coffre_depot",
+    "count": 1
+  }
+}

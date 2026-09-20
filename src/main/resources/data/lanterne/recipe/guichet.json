@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "GGG",
+    "ILI",
+    "III"
+  ],
+  "key": {
+    "G": "minecraft:glass_pane",
+    "I": "minecraft:iron_ingot",
+    "L": "minecraft:lectern"
+  },
+  "result": {
+    "id": "lanterne:guichet",
+    "count": 1
+  }
+}
