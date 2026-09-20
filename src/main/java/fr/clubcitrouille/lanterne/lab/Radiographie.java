@@ -200,6 +200,52 @@ public final class Radiographie {
         }
     }
 
+    /**
+     * Vrai si cette frame appartient à la machinerie interne de {@code java.lang.invoke}
+     * (LambdaForm$MH, LambdaForm$DMH, DirectMethodHandle$Holder, BoundMethodHandle$Species...)
+     * plutôt qu'à du code source réel — un nom que la JVM génère à la volée, souvent suffixé d'une
+     * adresse hexadécimale comme {@code 0x00000000ac600000}, et qui ne dit RIEN du vrai site
+     * d'appel.
+     *
+     * <h2>Vérifié au runtime (Java 21, JDK Temurin), pas supposé</h2>
+     *
+     * <p>Sonde autonome (hors dépôt, hors Minecraft — 3 s de boucle échantillonnée par
+     * {@link ThreadMXBean#getThreadInfo}, exactement comme ici) : une boucle qui fait de la
+     * <b>concaténation de chaînes</b> (le candidat le plus évident, {@code invokedynamic} vers
+     * {@code StringConcatFactory}) ne produit JAMAIS ces frames en sommet de pile — 0 échantillon
+     * sur 608. En revanche, une boucle qui fait un <b>switch sur type scellé</b> (pattern matching,
+     * JEP 441, bootstrap {@code SwitchBootstraps.typeSwitch} — un mécanisme réellement présent
+     * dans ce moteur, Java 21) produit {@code java.lang.invoke.LambdaForm$MH...invoke} en sommet de
+     * pile pour 672 échantillons sur 672 — 100 %. C'est ce second mécanisme, vérifié et non une
+     * hypothèse, qui explique les entrées opaques vues dans les rapports réels de cette session
+     * (jusqu'à 9 % de temps propre cumulé pour une seule classe cachée, par exemple
+     * {@code LambdaForm$MH/0x00000000ac600000.invoke} dans le rapport du 20/09 14:32).
+     *
+     * <p>Ce même rapport réel (38036 échantillons) confirme aussi que grouper par ce nom brut est
+     * la PIRE façon d'agréger : dans l'arbre d'appel de ce rapport, les deux seules frames
+     * LambdaForm visibles sont à la racine absolue (chaîne de lancement FML/ModLauncher, 100 %
+     * trivial) — les 9 %, 5,1 %, 2,5 % etc. de la liste des méthodes coûteuses n'y apparaissent
+     * NULLE PART, parce qu'elles sont fragmentées sur des dizaines de sites d'appel différents qui
+     * partagent tous la même classe cachée (la JVM réutilise une classe LambdaForm par « forme » de
+     * chaîne d'adaptateurs, pas par site d'appel source) : chaque branche individuelle tombe sous
+     * le seuil d'élagage de 1 % de l'arbre, et le total de 9 % ne se voit donc QUE dans la liste
+     * plate, sous un nom qui ne désigne aucun site d'appel réel.
+     *
+     * <p>D'où le choix retenu ici : ne pas grouper par ce nom du tout — grouper par le premier
+     * appelant réel trouvé en remontant la pile DÉJÀ capturée. Aucune capture supplémentaire n'est
+     * nécessaire : {@link ThreadMXBean#getThreadInfo} rapporte déjà jusqu'à {@link #MAX_DEPTH}
+     * frames par relevé, la frame appelante réelle y est déjà, juste ignorée jusqu'ici.
+     *
+     * <p>N'exclut QUE {@code java.lang.invoke.*} — les lambdas Java ordinaires (capturées via
+     * {@code LambdaMetafactory}) ne passent pas par là : elles s'exécutent comme des méthodes
+     * compilées normales, nommées {@code lambda$méthode$N}, déjà lisibles (voir par exemple
+     * {@code ClientLevel.lambda$tickEntities$0} dans l'arbre d'appel d'un rapport réel) — pas
+     * besoin, et pas de preuve, de les filtrer aussi.
+     */
+    private static boolean estFrameOpaque(StackTraceElement frame) {
+        return frame.getClassName().startsWith("java.lang.invoke.");
+    }
+
     private static void record(StackTraceElement[] frames) {
         if (frames.length == 0) {
             return;
@@ -210,14 +256,26 @@ public final class Radiographie {
             node.total++;
             // frames[0] est le sommet de pile (méthode en cours) ; le dernier indice est la racine
             // du thread. On parcourt donc de la racine vers la feuille pour bâtir l'arbre dans le
-            // bon sens — celui d'un appelant vers ce qu'il appelle.
+            // bon sens — celui d'un appelant vers ce qu'il appelle. Les frames opaques de
+            // java.lang.invoke.* sont sautées (voir estFrameOpaque) : le nœud obtenu après la
+            // boucle est donc déjà la frame réelle la plus proche du sommet de pile, pas un nom de
+            // classe cachée généré par la JVM.
             for (int i = frames.length - 1; i >= 0; i--) {
+                if (estFrameOpaque(frames[i])) {
+                    continue;
+                }
                 String key = frames[i].getClassName() + "." + frames[i].getMethodName();
                 node = node.child(key);
                 node.total++;
             }
             node.self++;
-            String leafKey = frames[0].getClassName() + "." + frames[0].getMethodName();
+            // Si le sommet de pile brut était lui-même opaque, le nœud retenu est celui de
+            // l'appelant réel : l'étiquette le signale, pour que l'analyste sache que ce chiffre
+            // vient d'une résolution et pas d'un temps propre mesuré au niveau du bytecode exact de
+            // cette méthode.
+            String leafKey = estFrameOpaque(frames[0])
+                    ? node.name + "  [via invokedynamic/MethodHandle]"
+                    : node.name;
             selfByMethod.merge(leafKey, 1, Integer::sum);
         }
     }
