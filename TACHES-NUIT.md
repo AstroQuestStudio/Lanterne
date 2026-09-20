@@ -136,3 +136,140 @@ est confirmée rétroactivement.
 
 Rien modifié dans le code pour cette tâche (investigation seule, hypothèse forte mais pas 100%
 vérifiée par manque de budget de contexte). Aucune compilation nécessaire.
+
+## TÂCHE A — BlueMap/pregen ne reprenait pas au boot — CORRIGÉ, testé, preuve réelle (fork, 21/09 ~01h37)
+
+**Cause confirmée** : `Cadence.onServerStarted` ne s'occupait que de `Pregen.resumeIfPending` — rien
+n'appelait jamais `resumeFullRender()` de BlueMap au démarrage lui-même, seulement à la transition
+« dernier joueur part » (`onPlayerLeave`). Après un redémarrage à froid avec 0 joueur, le rendu
+BlueMap restait donc bloqué sur « Render-Threads are STOPPED » indéfiniment. Pregen, lui, n'avait
+en réalité PAS de bug — `resumeIfPending` était déjà correctement câblé (voir `lab/Pregen.java`,
+`stateFile()`/`writeState()`/`clearState()`) ; l'observation du patron était probablement due au
+pregen ayant simplement déjà terminé son rayon de 500 chunks, pas à un vrai bug.
+
+**Correctif** : `CadenceBlueMap.startOnReady(Supplier<Boolean>)` (nouvelle méthode) s'accroche à
+`BlueMapAPI.onEnable(...)`, qui se déclenche dès que le plugin BlueMap devient réellement prêt
+(chargement de ses ressources/stockage asynchrone après `ServerStartedEvent` — confirmé dans les
+logs, « Loaded! » arrive plusieurs secondes après « Done »). Si aucun joueur n'est connecté à ce
+moment-là, démarre `getRenderManager().start()` directement. `Cadence.register()` appelle
+`CadenceBlueMap.startOnReady(...)` derrière un `Compagnons.present(BLUEMAP)`, sans jamais référencer
+un type BlueMap dans sa propre signature (leçon du crash #2 de cette nuit, voir Javadoc des deux
+classes). Commit `9da44c7`.
+
+**Preuve réelle** : rebuild (`26.3.57`), déployé sur `C:\lanterne-server-test\`. Premier test
+bloqué par `config/bluemap/core.conf` → `accept-download: false` (BlueMap refusait de charger ses
+ressources tant que l'EULA de téléchargement Mojang n'était pas accepté sur CE serveur jetable
+précis — pas un bug Lanterne, juste la config du serveur de test). Corrigé (`accept-download: true`),
+serveur relancé, log confirmé :
+```
+[BlueMap-Plugin-Loading/INFO] [fr.cl.la.Lanterne/]: [CADENCE] BlueMap prêt, 0 joueur connecté —
+rendu complet démarré automatiquement (plus besoin d'attendre une connexion/déconnexion).
+[BlueMap-Plugin-Loading/INFO] [BlueMap/]: Loaded!
+```
+**PAS encore déployé sur le VPS de prod** — attend confirmation/réveil du patron avant ce déploiement
+précis (contrairement à d'autres fixes cette nuit, celui-ci touche le comportement au redémarrage
+donc mieux vaut un œil humain avant de le pousser en prod, même si le test jetable est concluant).
+
+## TÂCHE B — modId "iris" passif dans neoforge.mods.toml — TESTÉ, ne crash PAS, déployé sur `test 1` (fork, 21/09 ~01h40)
+
+Reprise de la piste documentée plus haut (« modId virtuel supplémentaire », risque de recréer le
+crash-loop du tout premier bug de la nuit). Ajouté un second bloc `[[mods]]` avec
+`modId = "iris"`, SANS aucune classe `@Mod("iris")` associée (exact inverse du crash #1 — annotation
+sans déclaration mods.toml ; ici c'est une déclaration mods.toml sans annotation). Commit `7a13b94`.
+
+**Preuve réelle sur `C:\lanterne-server-test\`** : build `26.3.58`, serveur relancé, log :
+```
+Done (0.443s)! For help, type "help"
+```
+— aucun crash, aucune `ModLoadingException`, aucune erreur liée à `iris` dans les logs de
+démarrage (grep exhaustif sur "iris" ne montre que les 3 warnings inoffensifs habituels de refmap
+mixin, déjà présents avant ce changement). Le fix BlueMap de TÂCHE A fonctionne toujours en même
+temps (`[CADENCE] BlueMap prêt...` reconfirmé sur ce même build). **NeoForge accepte donc bien un
+`[[mods]]` metadata-only sans classe `@Mod` correspondante** — contrairement à la crainte initiale.
+
+**Pas encore vérifié** : que `ModList.get().isLoaded("iris")` renvoie effectivement `true` en jeu
+avec ce build (le serveur jetable ne permet pas de le confirmer facilement sans un client réel ou
+une commande console qui l'affiche — aucune commande de ce type trouvée cette nuit). Donc l'effet
+attendu (menu Sodium ré-affiche un onglet Iris, artefact du ciel disparaît) reste à confirmer
+visuellement, PAS juste supposé.
+
+**Déployé sur `test 1/mods/lanterne-26.3.58.jar`** (remplace `26.3.56`) pour que le patron teste au
+réveil : lancer le client, vérifier (a) toujours 0 crash, (b) le menu vidéo Sodium/Iris, (c) si
+l'artefact du ciel a disparu. **PAS déployé sur le VPS de prod** — même raison que TÂCHE A, à
+confirmer par un test client réel avant de toucher la prod, ce risque-ci étant spéculatif
+(inverse jamais testé du tout premier crash de la nuit).
+
+**Serveur jetable arrêté proprement après ces deux tests** (aucun process resté en arrière-plan
+inutilement).
+
+## TÂCHE C — lanceur client jetable `C:\lanterne-client-test\` : progrès réel, PAS débloqué (fork, 21/09 ~01h50)
+
+Reprise de la piste prioritaire (débloquer un vrai test client pour toute la nuit). Deux bugs réels
+trouvés et corrigés dans la tentative de lancement, un blocage plus profond découvert et non résolu.
+
+**Bug #1 trouvé et corrigé — `classpath.txt` en CRLF corrompait le classpath Java.** Le fichier
+généré par une tentative précédente a des fins de ligne Windows (`\r\n`). En construisant le
+`-cp` avec `tr '\n' ';'` depuis Git Bash, chaque chemin de jar gardait un `\r` collé à la fin
+(sauf le dernier), donc chaque entrée du classpath pointait vers un fichier inexistant. Résultat
+observé : `ClassNotFoundException: net.neoforged.fml.startup.Client` alors que la classe existe
+bel et bien dans `libraries/net/neoforged/fancymodloader/loader/12.0.0/loader-12.0.0.jar` (vérifié
+via `jar tf`). Correctif : `tr -d '\r' < classpath.txt | tr '\n' ';'` avant de construire `-cp`.
+**Leçon pour la suite** : tout fichier `.txt`/`.json` généré par l'installeur NeoForge sous Windows
+est en CRLF — toujours le nettoyer avant de le consommer depuis un outil POSIX (Bash/tr/sed).
+
+**Bug #2 trouvé — les 3 arguments `--fml.neoForgeVersion/--fml.mcVersion/--fml.neoFormVersion`
+sont obligatoires côté client aussi**, exactement comme documenté plus haut pour le serveur
+jetable qui marche (`win_args.txt`). Sans eux, FML ne sait pas résoudre le jar patché depuis
+`-DlibraryDirectory`. Avec eux, on passe bien le `ClassNotFoundException` ET on atteint enfin le
+vrai scan de mods FML (logs montrent `BackgroundScanHandler/SCAN` sur `lanterne-26.3.55.jar`,
+`sodium-neoforge-...jar`, etc. — jamais atteint dans les tentatives précédentes).
+
+**Blocage restant, non résolu** : même avec les deux corrections ci-dessus, `--fml.startup.Client`
+échoue encore avec :
+```
+[main/ERROR] [ne.ne.fm.lo.FMLLoader/]: The patched Minecraft jar is missing. Please try to reinstall NeoForge.
+- Mod sodium requires neoforge 26.1.2.10-beta or above / Currently, neoforge is not installed
+- Mod lanterne requires neoforge 26.3.0.7-beta or above / Currently, neoforge is not installed
+```
+alors que le jar patché EXISTE bel et bien et est physiquement présent et lisible :
+`C:\lanterne-client-test\libraries\net\neoforged\minecraft-client-patched\26.3.0.7-beta\minecraft-client-patched-26.3.0.7-beta.jar`
+(39 Mo, taille cohérente). Les logs montrent même que FML tente d'ouvrir ce jar comme fichier de
+mod (`BackgroundScanHandler/SCAN` dessus) avant d'abandonner avec une `CancellationException` en
+cascade sur TOUS les fichiers de scan en cours — signe que l'échec est décidé ailleurs (probablement
+une vérification de hash/manifeste ou un marqueir d'installation que `--installClient` ne pose pas,
+contrairement à `--installServer`) et que la `CancellationException` n'est qu'un symptôme de l'abandon
+global, pas la cause. Testé avec `-DlibraryDirectory` en absolu ET en relatif (comme le serveur) :
+même erreur dans les deux cas.
+
+**Piste pour qui reprend ça** : comparer ce que `--installServer` écrit de différent de
+`--installClient` autour du fichier patché — chercher un fichier de métadonnées/hash à côté du
+jar patché côté serveur (jetable, qui marche) et voir s'il manque côté client. Ou décompiler/lire
+`FMLLoader.java` (dans `loader-12.0.0.jar`, méthode autour de la ligne 356, message "patched
+Minecraft jar is missing") pour voir la condition exacte testée.
+
+**Décision prise faute de temps** : bascule sur le correctif de repli prévu par la directive plutôt
+que de continuer à creuser un blocage sans certitude de délai. Deux process de test lancés pendant
+cette investigation (PID Windows 39576 et 3780, tous deux dans `C:\lanterne-client-test\`, tous deux
+déjà en échec FML) ont été arrêtés proprement et individuellement (`taskkill //PID <pid> //F`,
+jamais un `taskkill` global sur `java.exe` — les autres process Java de la machine n'ont pas été
+touchés).
+
+## TÂCHE D — correctif de repli : guard Sodium sur les 4 mixins vanilla d'Iris — NON TESTÉ VISUELLEMENT (fork, 21/09 ~01h55)
+
+Puisque le lanceur client n'a pas pu être débloqué à temps (TÂCHE C), application du correctif de
+repli prévu par la directive de cette tâche : `IrisMixinPlugin.shouldApplyMixin` (
+`src/main/java/net/irisshaders/iris/mixin/IrisMixinPlugin.java`) gate maintenant les 4 mixins
+identifiés dans `RECHERCHE-VULKAN-SANS-SODIUM.md` (§"mixins vanilla qui importent Sodium") —
+`MixinLevelRenderer`, `MixinWindow`, `MixinRenderPipeline`, `MixinDebugScreenEntriesList`, tous
+dans `net.irisshaders.iris.mixin` — derrière `Compagnons.present(Compagnons.SODIUM)`. Sans Sodium
+installé, ces 4 mixins ne s'appliquent plus du tout (`shouldApplyMixin` renvoie `false`), ce qui
+évite en théorie une résolution de type Sodium absent au moment où Mixin vérifie leur bytecode.
+
+**Preuve réelle** : compilation seule (`./gradlew compileJava`), propre, aucune erreur — voir
+sortie `Note: ... uses unchecked or unsafe operations` habituelle sur `MixinRenderFlame.java`
+(préexistante, sans rapport). **PAS de test client** (le lanceur jetable n'est toujours pas
+fonctionnel, TÂCHE C) : cet effet réel — comportement du rendu vanilla avec Sodium absent — n'a
+PAS été vérifié visuellement, conformément à la leçon répétée toute la nuit. À confirmer par le
+patron via un vrai client (avec et sans Sodium installé) avant de considérer ce fix terminé.
+
+**PAS déployé sur le VPS.** Compilé et commité sur `26.3` uniquement, jamais poussé.

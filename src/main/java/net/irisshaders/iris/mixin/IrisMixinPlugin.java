@@ -2,6 +2,7 @@ package net.irisshaders.iris.mixin;
 
 import com.google.common.base.Splitter;
 import com.google.common.io.Files;
+import fr.clubcitrouille.lanterne.report.Compagnons;
 import net.irisshaders.iris.platform.IrisPlatformHelpers;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
@@ -67,9 +68,27 @@ public class IrisMixinPlugin implements IMixinConfigPlugin {
 		return "iris.refmap.json";
 	}
 
+    /**
+     * Ces 4 mixins ciblent des classes VANILLA (donc toujours chargées) mais importent des types
+     * Sodium dans leurs champs/paramètres — voir RECHERCHE-VULKAN-SANS-SODIUM.md §"mixins vanilla
+     * qui importent Sodium". Sans Sodium installé, appliquer un de ces mixins ferait résoudre un
+     * type absent au moment où la JVM vérifie la bytecode du mixin, donc NoClassDefFoundError même
+     * si aucune méthode réellement appelée ne référence Sodium. NON TESTÉ VISUELLEMENT (pas de client
+     * jetable fonctionnel au moment de ce correctif) : compilation seule vérifiée.
+     */
+    private static final Set<String> VANILLA_MIXINS_IMPORTANT_SODIUM = Set.of(
+        "net.irisshaders.iris.mixin.MixinLevelRenderer",
+        "net.irisshaders.iris.mixin.MixinWindow",
+        "net.irisshaders.iris.mixin.MixinRenderPipeline",
+        "net.irisshaders.iris.mixin.MixinDebugScreenEntriesList"
+    );
+
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (mixinClassName.contains("VKOnly")) return usingVulkan;
+        if (VANILLA_MIXINS_IMPORTANT_SODIUM.contains(mixinClassName) && !Compagnons.present(Compagnons.SODIUM)) {
+            return false;
+        }
 		return !usingVulkan;
 	}
 
