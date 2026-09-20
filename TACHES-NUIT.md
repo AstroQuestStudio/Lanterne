@@ -56,3 +56,33 @@ l'instance `test 1` (minecraftinstance.json ?).
 3. Continuer Vulkan (`lab/ShadercProbe.java` prouve GLSL→SPIR-V fonctionnel, prochaine étape :
    l'intégrer réellement au pipeline de rendu, pas juste un prototype isolé).
 4. Construire un vrai lanceur de client jetable pour tester sans dépendre d'un humain éveillé.
+
+## Tentative de lanceur client jetable (fork, 21/09 ~01h25)
+
+**Progrès réel, pas terminé.** `C:\lanterne-client-test\` créé via `neoforge-installer.jar --installClient .`
+(nécessite un `launcher_profiles.json` factice copié depuis `Install/launcher_profiles.json` pour
+passer sa vérification — sinon refuse de tourner). Classpath reconstruit manuellement en PowerShell
+depuis les deux JSON de version (`versions/26.3/26.3.json` + `versions/neoforge-26.3.0.7-beta/*.json`),
+en piochant les libs manquantes dans le dossier partagé `C:\Users\trufa\curseforge\minecraft\Install\libraries\`
+(102/142 résolues directement, les 40 restantes sont TOUTES des natives Linux/macOS non pertinentes
+sur Windows — pas un vrai manque).
+
+**Lancé pour de vrai** (`net.neoforged.fml.startup.Client` avec Lanterne+Sodium dans mods/) : LWJGL
+charge ses natives correctement (juste des warnings Java inoffensifs), mais FML échoue avec
+"neoforge is not installed" — NeoForge était sur le classpath brut (`-cp`) mais pas découvert
+comme un vrai "mod" par le mécanisme de découverte de FML (qui attend probablement une disposition
+de dossier spécifique, pas juste une présence sur le classpath Java classique). Pas résolu faute de
+budget de contexte suffisant pour cette tâche en une seule passe.
+
+**Prochaine étape concrète** pour qui reprend ça : regarder comment le serveur jetable
+`C:\lanterne-server-test\` (qui MARCHE) construit son propre classpath/arguments — probablement via
+`@libraries/net/neoforged/neoforge/26.3.0.7-beta/win_args.txt` généré par l'installeur en mode SERVEUR
+(`--installServer`), qui gère correctement cette découverte. Le mode CLIENT ne génère pas cet
+équivalent (`--installClient` vise le vrai launcher Mojang, pas un lancement autonome) — chercher un
+`unix_args.txt`/`win_args.txt` équivalent pour le client, ou étudier `net.neoforged.fml.loading.moddiscovery`
+pour comprendre son vrai mécanisme de découverte avant de retenter.
+
+Dossier `C:\lanterne-client-test\` laissé en place (classpath.txt inclus) pour repartir de là plutôt
+que de tout refaire. Process de test arrêté proprement.
+
+**TÂCHE B (visibilité Iris/Sodium) non commencée faute de temps — reste à faire.**
