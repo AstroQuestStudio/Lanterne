@@ -379,16 +379,24 @@ public class Iris {
 		return true;
 	}
 
-	private static void handleException(Exception e) {
-		if (irisConfig.areDebugOptionsEnabled()) {
-			Minecraft.getInstance().gui.setScreen(new DebugLoadFailedGridScreen(Minecraft.getInstance().gui.screen(), Component.literal(e instanceof ShaderCompileException ? "Failed to compile shaders" : "Exception"), e));
+	private static void handleException(Throwable e) {
+		if (irisConfig.areDebugOptionsEnabled() && e instanceof Exception asDebugException) {
+			// DebugLoadFailedGridScreen attend une Exception - un Throwable qui n'en est pas
+			// (NoClassDefFoundError, Sodium absent) saute cet ecran de debug et tombe dans le
+			// else ci-dessous, qui gere deja tout Throwable correctement.
+			Minecraft.getInstance().gui.setScreen(new DebugLoadFailedGridScreen(Minecraft.getInstance().gui.screen(), Component.literal(e instanceof ShaderCompileException ? "Failed to compile shaders" : "Exception"), asDebugException));
 		} else {
 			if (Minecraft.getInstance().player != null) {
 				Minecraft.getInstance().player.sendSystemMessage(Component.translatable(e instanceof ShaderCompileException ? "iris.load.failure.shader" : "iris.load.failure.generic").append(Component.literal("Copy Info").withStyle(arg -> arg.withUnderlined(true).withColor(
 					ChatFormatting.BLUE).withClickEvent(new ClickEvent.CopyToClipboard(e.getMessage())).withHoverEvent(new HoverEvent.ShowText(Component.translatable("chat.copy.click"))))));
-			} else {
-				storedError = Optional.of(e);
+			} else if (e instanceof Exception asException) {
+				storedError = Optional.of(asException);
 			}
+			// Un Throwable qui n'est pas une Exception (ex: NoClassDefFoundError, Sodium absent -
+			// voir le commentaire sur l'appelant) n'est pas stocke ici : getStoredError() reste
+			// typee Optional<Exception>, un contrat public existant ailleurs dans le code, pas
+			// notre place pour l'elargir ce soir. Le message chat ci-dessus l'a deja montre au
+			// joueur, et logger.error (cote appelant) l'a deja trace.
 		}
 	}
 
@@ -663,9 +671,17 @@ public class Iris {
 		ProgramSet programs = currentPack.getProgramSet(dimensionId);
 
 		// We use DeferredWorldRenderingPipeline on 1.16, and NewWorldRendering pipeline on 1.17 when rendering shaders.
+		//
+		// Club Citrouille : "catch (Exception e)" seul ne rattrape pas NoClassDefFoundError, que la
+		// JVM leve quand une classe implemente une interface Sodium absente (ex: XHFPModelVertexType
+		// implements ChunkVertexType) - or notre neoforge.mods.toml declare Sodium "optional", pas
+		// "required" (verifie le 21/09/2026 : voir RECHERCHE-VULKAN-SANS-SODIUM.md). Sans ce
+		// catch(Throwable), lancer un shaderpack sans Sodium installe plante le jeu au lieu de
+		// retomber sur VanillaRenderingPipeline comme le code d'origine le prevoit deja pour toute
+		// autre erreur de construction.
 		try {
 			return new IrisRenderingPipeline(programs);
-		} catch (Exception e) {
+		} catch (Throwable e) {
 			handleException(e);
 
 			ShaderStorageBufferHolder.forceDeleteBuffers();
