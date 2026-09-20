@@ -52,5 +52,13 @@
   "subtitles.lanterne.ecran": "Screen: playing",
   "block.lanterne.trieur": "Sorter",
   "item.lanterne.trieur": "Sorter",
-  "container.lanterne.trieur": "Sorter"
+  "container.lanterne.trieur": "Sorter",
+  "block.lanterne.aiguillage": "Switch",
+  "item.lanterne.aiguillage": "Switch",
+  "block.lanterne.guichet": "Terminal",
+  "item.lanterne.guichet": "Terminal",
+  "block.lanterne.coffre_depot": "Drop-off Chest",
+  "item.lanterne.coffre_depot": "Drop-off Chest",
+  "block.lanterne.coffre_reception": "Pickup Chest",
+  "item.lanterne.coffre_reception": "Pickup Chest"
 }

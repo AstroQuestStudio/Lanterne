@@ -132,6 +132,9 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.content.screen.Screens.register(modBus);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.screen.Screens::onRegisterCommands);
+        // Le Reseau : stockage relie, Guichet et les deux coffres dedies. S'enregistre toujours, meme
+        // Config.RESEAU_ACTIF a faux — meme regle que le reste de ce constructeur.
+        fr.clubcitrouille.lanterne.content.reseau.Reseaux.register(modBus);
         // La réclame de l'hébergeur s'intercepte à l'exécution de la commande, et NeoForge y publie
         // un évènement annulable — donc aucun mixin. Elle ne pouvait PAS être traitée par Hush : la
         // commande est écrite sur l'entrée standard par le démon et ne traverse jamais le journal.
@@ -193,6 +196,9 @@ public final class Lanterne {
             // nommer aucune de ces classes : voir client.screen.Projection pour le plantage exact
             // que la garde evite, et pourquoi il n'existe qu'une porte.
             fr.clubcitrouille.lanterne.client.screen.Projection.register(modBus);
+            // Le Guichet : reception des instantanes de stock, et enregistrement de son ecran (ce
+            // dernier via @EventBusSubscriber, comme Phare — cet appel-ci ne branche que le reseau).
+            fr.clubcitrouille.lanterne.client.screen.GuichetScreen.register(modBus);
             // Portails immersifs : detection seule, journalisee si le reglage est allume — rien
             // n'est installe. Voir client.portals.Portail et notes/immersive-portals-faisabilite.md.
             // Plus d'appel direct ici : Portail s'enregistre desormais lui-meme aupres du bus

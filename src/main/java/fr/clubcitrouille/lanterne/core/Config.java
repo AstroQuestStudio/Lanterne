@@ -103,6 +103,9 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue RUMEUR;
     public static final ModConfigSpec.BooleanValue MANNE;
 
+    public static final ModConfigSpec.BooleanValue RESEAU_ACTIF;
+    public static final ModConfigSpec.IntValue RESEAU_INTERVALLE_REAPPRO;
+
     public static final ModConfigSpec.BooleanValue BEACON_OVERHAUL;
     public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_1;
     public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_2;
@@ -982,6 +985,33 @@ public final class Config {
                 "D'EQUILIBRAGE assume, pas une optimisation - a l'administrateur de decider si son",
                 "monde veut des marchands qui ne tarissent jamais.")
                 .define("manne_villageois_stock_infini", false);
+
+        BUILDER.comment(
+                "",
+                "LE RESEAU - stockage relie : Aiguillage, Guichet, Coffre de depot, Coffre de reception.",
+                "",
+                "Un registre evenementiel PUR (voir core.Reseau) : aucun objet ne transite jamais de",
+                "hopper en hopper sur la distance. Un noeud s'annonce au chargement de son chunk et se",
+                "desannonce a sa casse ou au dechargement ; une demande au Guichet parcourt lineairement",
+                "les noeuds connus et deplace l'objet DIRECTEMENT du conteneur source au conteneur de",
+                "collecte, en memoire, sans tick ni delai - c'est ce qui garantit l'absence de lag a",
+                "n'importe quelle distance, jamais une histoire de cables optimises.").push("reseau");
+
+        RESEAU_ACTIF = BUILDER.comment(
+                "Allumer le Reseau. Coupe, un Aiguillage ou un Coffre pose reste posable et utilisable",
+                "comme un bloc normal (le Coffre de depot et le Coffre de reception restent de vrais",
+                "coffres) - il ne s'annonce simplement plus a core.Reseau, et le Guichet le dit au joueur",
+                "plutot que d'echouer en silence.",
+                "Comme partout ailleurs dans ce mod, les blocs eux-memes ne sont JAMAIS retires du",
+                "registre par ce reglage - voir content.Contents pour la meme regle sur l'Ancre.")
+                .define("reseau_actif", true);
+        RESEAU_INTERVALLE_REAPPRO = BUILDER.comment(
+                "Ticks entre deux reapprovisionnements automatiques d'un Coffre de reception.",
+                "100 (defaut) : cinq secondes. Un module de confort, jamais un chemin chaud - inutile de",
+                "verifier a chaque tick un filtre qui ne change qu'au clic droit d'un joueur.")
+                .defineInRange("reseau_intervalle_reapprovisionnement_ticks", 100, 20, 12000);
+
+        BUILDER.pop();
 
         BUILDER.comment(
                 "",

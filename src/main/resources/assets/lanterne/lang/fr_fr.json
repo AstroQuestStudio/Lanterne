@@ -52,5 +52,13 @@
   "subtitles.lanterne.ecran": "Écran : lecture",
   "block.lanterne.trieur": "Trieur",
   "item.lanterne.trieur": "Trieur",
-  "container.lanterne.trieur": "Trieur"
+  "container.lanterne.trieur": "Trieur",
+  "block.lanterne.aiguillage": "Aiguillage",
+  "item.lanterne.aiguillage": "Aiguillage",
+  "block.lanterne.guichet": "Guichet",
+  "item.lanterne.guichet": "Guichet",
+  "block.lanterne.coffre_depot": "Coffre de dépôt",
+  "item.lanterne.coffre_depot": "Coffre de dépôt",
+  "block.lanterne.coffre_reception": "Coffre de réception",
+  "item.lanterne.coffre_reception": "Coffre de réception"
 }
