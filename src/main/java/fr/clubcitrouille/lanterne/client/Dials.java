@@ -188,11 +188,81 @@ public final class Dials extends Screen {
         buildVeil();
         buildScenery();
         buildImage();
+        buildShaders();
         buildSound();
         buildCreatures();
         buildWorld();
         buildMachine();
         buildExtras();
+    }
+
+    // --- Les shaders (Iris), migres dans le code source de Lanterne le 20-21/09/2026. Voir -----
+    // --- IRIS-ATTRIBUTION.md et MIGRATION-IRIS.md. Famille SEPAREE plutot que d'etendre         --
+    // --- buildImage() : moins de risque de regression sur un ecran deja utilise par les joueurs.--
+
+    /**
+     * Preparation du terrain pour le jour ou Sodium sera retire (voir TACHES-NUIT.md) : Iris est
+     * deja 100% dans Lanterne, mais son etat (actif/coupe) restait invisible/incontrolable
+     * ailleurs que par la touche K vanilla d'Iris ou le menu Sodium (qui a lui-meme perdu son
+     * onglet Iris a la fusion — voir TACHES-NUIT.md, correctif reporte).
+     *
+     * <h2>Pourquoi un {@code Dial.cycle} et non {@code Dial.toggle}</h2>
+     *
+     * <p>{@code Dial.toggle} exige un {@code ModConfigSpec.BooleanValue} — un reglage PERSISTE
+     * par Lanterne. Mais Iris gere deja sa propre persistance (iris.properties, hors de notre
+     * controle et pas a dupliquer) : ce cadran ne fait que LIRE et MODIFIER l'etat reel d'Iris a
+     * chaque instant, exactement comme le fait deja le cadran "Vulkan" plus haut pour un reglage
+     * vanilla equivalent — jamais commit() sur une config a nous.
+     *
+     * <h2>Ce qui n'est pas encore fait ici</h2>
+     *
+     * <p>Choisir PARMI plusieurs shaderpacks installes n'est pas cable (liste de longueur
+     * variable, meme raison que le renvoi vers un ecran a part pour les nuanciers Lanterne un peu
+     * plus haut) — seul actif/coupe l'est. Non teste visuellement (pas de lancement client
+     * possible depuis cette tache, voir TACHES-NUIT.md) : compilation verifiee uniquement.
+     */
+    private void buildShaders() {
+        Family shaders = new Family("Shaders", false, "Iris, migre dans Lanterne");
+        shaders.add(Dial.cycle("Shaders (Iris)", Dials::irisShaderLabel, Dials::irisShaderColour,
+                Dials::toggleIrisShaders,
+                "Active ou coupe le shaderpack actuellement selectionne (touche K par defaut,"
+                        + " reglages Iris eux-memes inchanges).",
+                "Un shaderpack NE DONNE PAS d'images par seconde : il en COUTE — ombres, eclairage"
+                        + " et eau recalcules chaque image. Voir le cadran « Upscaling » ci-dessus"
+                        + " pour en reduire le prix.",
+                "Effet immediat : le pipeline de rendu se reconstruit au clic, un court gel est"
+                        + " normal (compilation des shaders)."));
+        this.families.add(shaders);
+    }
+
+    private static String irisShaderLabel() {
+        try {
+            return net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse()
+                    ? "actif" : "coupé";
+        } catch (Throwable irisIndisponible) {
+            return "indisponible";
+        }
+    }
+
+    private static int irisShaderColour() {
+        try {
+            return net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse()
+                    ? ON : FAINT;
+        } catch (Throwable irisIndisponible) {
+            return FAINT;
+        }
+    }
+
+    /** {@code direction} ignore : un cycle a deux etats n'a pas de sens de rotation. */
+    private static void toggleIrisShaders(int direction) {
+        try {
+            boolean actif = net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse();
+            net.irisshaders.iris.Iris.toggleShaders(Minecraft.getInstance(), !actif);
+        } catch (Throwable echecBascule) {
+            // Iris.toggleShaders degrade deja proprement (voir le catch(Throwable) de
+            // Iris.createPipeline, corrige cette nuit) — un echec ici reste silencieux plutot que
+            // de faire planter tout l'ecran de reglages pour un seul cadran.
+        }
     }
 
     // --- Ce qui se règle ici : le fichier client ---------------------------
