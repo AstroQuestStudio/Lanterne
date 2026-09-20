@@ -43,6 +43,7 @@
     "FurnaceProgressAccessor",
     "RegionFileVersionMixin",
     "RegionFileStorageMixin",
+    "AquiferMixin",
     "IOWorkerPendingStoreMixin",
     "IOWorkerMixin",
     "RemblaiBlockMixin",
