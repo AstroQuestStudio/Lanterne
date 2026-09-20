@@ -12,14 +12,17 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.animal.cow.Cow;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import fr.clubcitrouille.lanterne.Lanterne;
@@ -43,6 +46,23 @@ import net.minecraft.world.entity.EntityTypes;
 public final class LanterneCommand {
     /** Au-delà, on refuse : le but est de charger le serveur, pas de le tuer. */
     private static final int MAX_HERD = 20_000;
+
+    /** Le monde de test : une plaine plate, vierge, sans rapport avec la vraie base. */
+    private static final ResourceKey<Level> MONDE_TEST =
+            ResourceKey.create(Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath(Lanterne.ID, "monde_test"));
+
+    /**
+     * Où revenir, par joueur — perdu au redémarrage, et c'est très bien ainsi.
+     *
+     * <p>Un aller-retour de confort n'a pas à survivre à un arrêt du serveur : au pire, un joueur
+     * revenu par un autre moyen retape la commande et repart d'où il se trouve alors, ce qui reste
+     * un résultat raisonnable pour un outil de test.
+     */
+    private static final java.util.Map<java.util.UUID, GlobalPos> RETURN_POINTS =
+            new java.util.HashMap<>();
+
+    private record GlobalPos(ResourceKey<Level> dimension, Vec3 pos, float yaw, float pitch) {}
 
     private LanterneCommand() {}
 
@@ -327,6 +347,12 @@ public final class LanterneCommand {
                         .then(Commands.argument("joueur", EntityArgument.player())
                                 .executes(context -> toggleFlight(context.getSource(),
                                         EntityArgument.getPlayer(context, "joueur")))))
+                // Le monde de test : une plaine plate et vide, pour essayer un chantier ou un bloc
+                // neuf sans le moindre risque sur la vraie base. Bascule dans les deux sens.
+                .then(Commands.literal("test")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> toggleTestWorld(context.getSource(),
+                                context.getSource().getPlayerOrException())))
                 // En lecture seule, et délibérément. Ce module élargit des seuils anti-triche :
                 // pouvoir l'allumer depuis le tchat mettrait cette décision à portée d'un opérateur
                 // pressé, alors qu'elle appartient au fichier de configuration — c'est-à-dire à
@@ -576,6 +602,50 @@ public final class LanterneCommand {
         source.sendSuccess(() -> Component.literal(target.getGameProfile().name()
                         + (allowed ? " peut désormais voler." : " ne peut plus voler."))
                 .withStyle(allowed ? ChatFormatting.GREEN : ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
+    /**
+     * Bascule entre le monde de test et l'endroit d'où le joueur est parti.
+     *
+     * <p>Le point de retour se pose au moment de PARTIR, jamais au moment de revenir — sans quoi un
+     * second aller dans le monde de test écraserait le souvenir de la vraie position par une
+     * position à l'intérieur du monde de test lui-même, et le joueur ne rentrerait plus jamais chez
+     * lui.
+     */
+    private static int toggleTestWorld(CommandSourceStack source, ServerPlayer player) {
+        ServerLevel testLevel = source.getServer().getLevel(MONDE_TEST);
+        if (testLevel == null) {
+            source.sendFailure(Component.literal(
+                    "Le monde de test n'existe pas sur ce serveur (redémarrage nécessaire après "
+                    + "l'installation du mod)."));
+            return 0;
+        }
+
+        if (player.level().dimension().equals(MONDE_TEST)) {
+            GlobalPos back = RETURN_POINTS.remove(player.getUUID());
+            ServerLevel target = back != null ? source.getServer().getLevel(back.dimension()) : null;
+            if (back == null || target == null) {
+                target = source.getServer().overworld();
+                Vec3 spawn = Vec3.atBottomCenterOf(target.getRespawnData().pos());
+                player.teleportTo(target, spawn.x, spawn.y, spawn.z,
+                        java.util.Set.of(), player.getYRot(), player.getXRot(), true);
+            } else {
+                player.teleportTo(target, back.pos().x, back.pos().y, back.pos().z,
+                        java.util.Set.of(), back.yaw(), back.pitch(), true);
+            }
+            source.sendSuccess(() -> Component.literal("Retour du monde de test.")
+                    .withStyle(ChatFormatting.GOLD), true);
+            return 1;
+        }
+
+        RETURN_POINTS.put(player.getUUID(), new GlobalPos(player.level().dimension(),
+                player.position(), player.getYRot(), player.getXRot()));
+        player.teleportTo(testLevel, 0.5d, 5d, 0.5d, java.util.Set.of(),
+                player.getYRot(), player.getXRot(), true);
+        source.sendSuccess(() -> Component.literal(
+                "Monde de test — plaine plate et vide. « /lanterne test » à nouveau pour revenir.")
+                .withStyle(ChatFormatting.GOLD), true);
         return 1;
     }
 
