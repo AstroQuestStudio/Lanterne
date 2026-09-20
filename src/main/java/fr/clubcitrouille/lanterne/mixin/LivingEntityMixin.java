@@ -168,6 +168,24 @@ public abstract class LivingEntityMixin {
     }
 
     /**
+     * MC-228976 : sur le client, {@code pushEntities} entier ne sert à rien d'observable. Voir
+     * {@link fr.clubcitrouille.lanterne.core.Reflet} pour le raisonnement complet et la preuve au
+     * bytecode. Posée en tête de la chaîne d'injecteurs de cette classe : si elle annule, ni
+     * {@link #lanterne$skipJammed} ni {@link #lanterne$capPushables} n'ont de raison de s'exécuter
+     * — l'un se serait de toute façon retiré côté client, l'autre ne cherche même plus rien.
+     */
+    @Inject(method = "pushEntities", at = @At("HEAD"), cancellable = true)
+    private void lanterne$skipClientPush(CallbackInfo callback) {
+        if (!Settings.reflet()) {
+            return;
+        }
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (fr.clubcitrouille.lanterne.core.Reflet.skip(self.level().isClientSide())) {
+            callback.cancel();
+        }
+    }
+
+    /**
      * {@code pushEntities} n'est PAS gardée par {@code isClientSide()} dans {@code aiStep} : le
      * bytecode de Minecraft l'appelle sans condition, juste après {@code checkAutoSpinAttack}. En
      * solo, où client et serveur intégré tournent dans la même JVM sur deux fils distincts, cette
