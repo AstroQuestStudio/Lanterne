@@ -23,9 +23,17 @@ public class IrisForgeHelpers implements IrisPlatformHelpers {
 
 	boolean HAS_CAMO = isModLoaded("cable_facades");
 
+	/**
+	 * "iris" n'existe plus comme fichier de mod separe depuis la fusion dans Lanterne (voir
+	 * IRIS-ATTRIBUTION.md) : {@code getModFileById(Iris.MODID)} renvoie null, d'ou le
+	 * NullPointerException reel observe au demarrage client le 21/09/2026 des la premiere
+	 * ouverture d'un menu qui affiche cette version (Iris.MODID vaut toujours "iris", jamais
+	 * change, cf ligne 81 de Iris.java). On renvoie la version de "lanterne" a la place : c'est
+	 * desormais le seul fichier de mod qui porte reellement ce code.
+	 */
 	@Override
 	public String getVersion() {
-		return FMLLoader.getCurrent().getLoadingModList().getModFileById(Iris.MODID).versionString();
+		return FMLLoader.getCurrent().getLoadingModList().getModFileById("lanterne").versionString();
 	}
 
 	@Override
