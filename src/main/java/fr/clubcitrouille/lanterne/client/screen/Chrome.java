@@ -100,6 +100,32 @@ public final class Chrome implements Engine {
             + "else{if(!v.paused)v.pause();}"
             + "v.volume=%3$s;v.muted=(%3$s<=0.001);})()";
 
+    /**
+     * Le script pour un YouTube encadré par {@link Hote} : plus de {@code <video>} à portée, parce
+     * que la page du haut n'est plus le lecteur mais un cadre qui le contient — l'iframe est d'une
+     * autre origine, {@code document.querySelector} n'y voit rien. Seul {@code postMessage} traverse
+     * cette frontière, avec le protocole que YouTube publie pour son lecteur intégrable
+     * ({@code enablejsapi=1}, déjà posé par {@code Embed}).
+     *
+     * <h2>Pourquoi la position n'est corrigée qu'à l'occasion, et pas à chaque battement</h2>
+     *
+     * <p>{@code postMessage} n'attend pas de réponse — {@code Chrome.wire} le dit déjà pour le
+     * chemin direct. Ici c'est pire : il n'y a même pas de {@code v.currentTime} local à lire pour
+     * savoir si la vidéo a dérivé avant de corriger. Imposer {@code seekTo} à chaque battement, à
+     * l'aveugle, remettrait en tampon le flux quatre fois par seconde — précisément le bégaiement
+     * que le seuil du chemin direct existe pour éviter. On imite donc ce seuil sans pouvoir le
+     * mesurer : {@code %1$s} vaut soit une position à imposer, soit le mot {@code null} pour dire
+     * « laisse-la courir toute seule cette fois », et {@link Pane} n'envoie une position que toutes
+     * les {@link Pane#HARD_SEEK} millisecondes.
+     */
+    private static final String SCRIPT_YOUTUBE =
+            "(function(){var f=document.getElementById('p');if(!f||!f.contentWindow)return;"
+            + "function send(func,args){try{f.contentWindow.postMessage(JSON.stringify("
+            + "{event:'command',func:func,args:args||[]}),'*');}catch(e){}}"
+            + "if(%1$s!==null)send('seekTo',[%1$s,true]);"
+            + "send(%2$s?'playVideo':'pauseVideo',[]);"
+            + "send('setVolume',[%3$s]);})()";
+
     /** Les poignées vers Rinku, résolues une fois. Nulles tant que le mod n'est pas là. */
     private static final class Bridge {
         MethodHandle initialised;
@@ -159,11 +185,19 @@ public final class Chrome implements Engine {
         try {
             int height = Math.clamp(wantedHeight, 240, 1440);
             int width = Math.max(2, Math.round(height * 16f / 9f) & ~1);
-            Object browser = bridge.create.invoke(form.url(), false, width, height);
+            boolean youtube = form.url().startsWith(Embed.YOUTUBE_EMBED_PREFIX);
+            String address = youtube ? Hote.frame(form.url()) : form.url();
+            if (address == null) {
+                // L'hote local n'a pas pu demarrer : pas de repli silencieux vers l'adresse nue,
+                // ce serait rouvrir l'Erreur 153 qu'il existe pour fermer.
+                Lanterne.LOG.warn("[PROJECTION] hote local indisponible, YouTube abandonne.");
+                return null;
+            }
+            Object browser = bridge.create.invoke(address, false, width, height);
             if (browser == null) {
                 return null;
             }
-            return new Pane(browser, width, height);
+            return new Pane(browser, width, height, youtube);
         } catch (Throwable refused) {
             Lanterne.LOG.warn("[PROJECTION] lecteur intégré indisponible : {}",
                     String.valueOf(refused));
@@ -243,19 +277,27 @@ public final class Chrome implements Engine {
          */
         private static final long BEAT = 250L;
 
+        /** Voir le commentaire de {@link Chrome#SCRIPT_YOUTUBE} : trois secondes entre deux
+         *  positions imposées à l'aveugle, assez rare pour ne pas faire bégayer le flux, assez
+         *  fréquent pour rattraper une horloge qui vient de sauter (rembobinage, rejoint en cours). */
+        private static final long HARD_SEEK = 3000L;
+
         private final Object browser;
         private final int width;
         private final int height;
+        private final boolean framed;
 
         private long spokeAt;
+        private long hardSeekAt;
         private long shownMillis;
         private volatile boolean shut;
         private String trouble = "";
 
-        Pane(Object browser, int width, int height) {
+        Pane(Object browser, int width, int height, boolean framed) {
             this.browser = browser;
             this.width = width;
             this.height = height;
+            this.framed = framed;
         }
 
         @Override
@@ -276,7 +318,7 @@ public final class Chrome implements Engine {
         /** Envoie la position, l'état de lecture et le volume à la page. */
         private void speak(long millis) {
             try {
-                String code = String.format(Locale.ROOT, SCRIPT,
+                String code = this.framed ? speakFramed(millis) : String.format(Locale.ROOT, SCRIPT,
                         String.format(Locale.ROOT, "%.3f", millis / 1000d),
                         this.playing ? "true" : "false",
                         String.format(Locale.ROOT, "%.3f", this.gain));
@@ -286,6 +328,19 @@ public final class Chrome implements Engine {
                 // l'autre n'est une panne : le battement suivant réessaiera dans un quart de
                 // seconde. Journaliser ferait une ligne toutes les 250 ms au démarrage.
             }
+        }
+
+        /** Le code pour {@link Chrome#SCRIPT_YOUTUBE} : voir son commentaire pour {@link #HARD_SEEK}. */
+        private String speakFramed(long millis) {
+            long now = System.currentTimeMillis();
+            String position = "null";
+            if (now - this.hardSeekAt >= HARD_SEEK) {
+                this.hardSeekAt = now;
+                position = String.format(Locale.ROOT, "%.3f", millis / 1000d);
+            }
+            return String.format(Locale.ROOT, SCRIPT_YOUTUBE, position,
+                    this.playing ? "true" : "false",
+                    String.format(Locale.ROOT, "%.0f", Math.clamp(this.gain, 0f, 1f) * 100));
         }
 
         private volatile boolean playing;

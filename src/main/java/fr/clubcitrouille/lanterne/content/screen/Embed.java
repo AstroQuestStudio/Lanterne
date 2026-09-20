@@ -35,6 +35,14 @@ import java.util.Locale;
 public final class Embed {
     private Embed() {}
 
+    /**
+     * Le préfixe qui distingue une adresse YouTube des autres lecteurs intégrables.
+     *
+     * <p>Sert à {@code client.screen.Chrome} pour savoir s'il faut passer par {@code Hote} — voir
+     * ce fichier pour pourquoi YouTube en a besoin spécifiquement, et pas Vimeo ni Dailymotion.
+     */
+    public static final String YOUTUBE_EMBED_PREFIX = "https://www.youtube-nocookie.com/embed/";
+
     /** Ce qu'on a reconnu, et ce qu'il faut pour l'afficher. */
     public record Form(String url, Kind kind, String host) {
         /** Faut-il un navigateur, ou un décodeur suffit-il ? */
@@ -90,7 +98,7 @@ public final class Embed {
             // « autoplay=0 » parce que c'est l'horloge qui décide de partir, pas la page.
             // « controls=0 » parce qu'un joueur ne peut pas cliquer dedans : les commandes sont
             // dans l'écran du bloc, et en montrer d'autres qui ne répondent pas serait cruel.
-            return new Form("https://www.youtube-nocookie.com/embed/" + youtube
+            return new Form(YOUTUBE_EMBED_PREFIX + youtube
                     + "?enablejsapi=1&autoplay=0&controls=0&rel=0&modestbranding=1"
                     + "&playsinline=1&iv_load_policy=3", Kind.LECTEUR, host);
         }
