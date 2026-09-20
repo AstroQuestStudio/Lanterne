@@ -781,6 +781,12 @@ réception).
 <a id="le-recycleur-une-fraction-de-la-recette"></a>
 ## ♻️ Le Recycleur — une fraction de la recette
 
+<div align="center">
+
+<img src="docs/images/recycleur.png" width="320" alt="Le Recycleur">
+
+</div>
+
 **Un outil ou une armure presque cassé ne mérite pas la poubelle.** Clique le Recycleur avec un
 objet endommageable en main : il retrouve la recette qui le fabrique, et rend une fraction de ses
 matériaux — proportionnelle à la durabilité qu'il lui reste, arrondie vers le bas. Un casque en fer
