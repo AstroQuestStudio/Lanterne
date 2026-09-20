@@ -42,6 +42,17 @@ public final class Cadence {
 
     public static void register() {
         NeoForge.EVENT_BUS.register(Cadence.class);
+        // Enregistre le callback tout de suite (pas besoin d'attendre ServerStartedEvent) :
+        // BlueMapAPI.onEnable stocke le consumer et l'appelle des que le plugin devient pret, quel
+        // que soit le moment. Voir la Javadoc de CadenceBlueMap#startOnReady.
+        if (Compagnons.present(Compagnons.BLUEMAP)) {
+            CadenceBlueMap.startOnReady(Cadence::aucunJoueurConnecte);
+        }
+    }
+
+    private static boolean aucunJoueurConnecte() {
+        var server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+        return server == null || server.getPlayerList().getPlayers().isEmpty();
     }
 
     /** Reprend une pré-génération interrompue par un crash, une fois par démarrage du monde. */

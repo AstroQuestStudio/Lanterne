@@ -64,6 +64,31 @@ final class CadenceBlueMap {
         });
     }
 
+    /**
+     * Démarre le rendu complet dès que BlueMap devient prêt, si 0 joueur n'est déjà connecté.
+     *
+     * <p>Signalé par le patron le 21/09/2026 : après un redémarrage du serveur, BlueMap restait
+     * indéfiniment sur « Render-Threads are STOPPED » tant que personne ne se connectait PUIS ne se
+     * déconnectait — {@link #resumeFullRender()} n'était jamais appelée au démarrage lui-même,
+     * seulement sur la transition « dernier joueur part ». {@link BlueMapAPI#onEnable} est le
+     * point d'accroche correct : le plugin BlueMap charge ses ressources et son stockage de façon
+     * asynchrone après {@code ServerStartedEvent} (constaté dans les logs — « Loaded! » arrive
+     * plusieurs secondes après « Done »), donc appeler {@link #resumeFullRender()} directement à
+     * {@code ServerStartedEvent} risquait fortement de tomber sur {@link BlueMapAPI#getInstance()}
+     * encore vide et de ne rien faire silencieusement.
+     */
+    static void startOnReady(java.util.function.Supplier<Boolean> aucunJoueurConnecte) {
+        BlueMapAPI.onEnable(api -> {
+            if (!Boolean.TRUE.equals(aucunJoueurConnecte.get())) {
+                return; // Un joueur s'est deja connecte avant que BlueMap ne soit pret : Cadence
+                        // gere deja ce cas via onPlayerJoin, ne pas demarrer par-dessus.
+            }
+            api.getRenderManager().start();
+            Lanterne.LOG.info("[CADENCE] BlueMap prêt, 0 joueur connecté — rendu complet démarré "
+                    + "automatiquement (plus besoin d'attendre une connexion/déconnexion).");
+        });
+    }
+
     static void updateAroundPlayers(List<ServerPlayer> players) {
         BlueMapAPI.getInstance().ifPresent(api -> {
             for (ServerPlayer player : players) {
