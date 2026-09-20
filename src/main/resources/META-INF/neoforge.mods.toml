@@ -31,6 +31,24 @@ plant de blé à dix chunks ne mérite pas vingt évaluations. Le jeu ne sait fa
 ou pas chargé — et c'est là qu'est le gaspillage.
 '''
 
+# TÂCHE B (21/09/2026, test nuit) : déclaration passive du modId "iris", SANS classe @Mod.
+# But : que Sodium réaffiche son onglet "Iris" et que Radiographie liste à nouveau Iris comme
+# présent, tous deux basés sur ModList.isLoaded("iris") — cassé depuis que l'entrypoint @Mod("iris")
+# a été retiré (commit e8138a6) pour corriger le tout premier crash-loop. À valider EXCLUSIVEMENT
+# sur le serveur jetable avant tout déploiement — le premier crash de cette nuit avait pour cause
+# une classe @Mod("iris") SANS entrée mods.toml correspondante ; ceci est l'inverse (entrée
+# mods.toml SANS classe @Mod), NeoForge pourrait tout aussi bien le refuser.
+[[mods]]
+modId = "iris"
+version = "${mod_version}"
+displayName = "Iris (fusionné dans Lanterne)"
+authors = "IrisShaders, porté par Club Citrouille"
+description = '''
+Déclaration passive : Iris est fusionné à 100% dans le code de Lanterne (voir MIGRATION-IRIS.md,
+IRIS-ATTRIBUTION.md). Ce modId existe uniquement pour que les mods tiers qui vérifient
+ModList.isLoaded("iris") (Sodium, Distant Horizons) continuent de fonctionner comme avant.
+'''
+
 [[mixins]]
 config = "lanterne.mixins.json"
 
