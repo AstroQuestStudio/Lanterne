@@ -132,7 +132,7 @@ public final class Guide {
         line(source, "/lanterne burin", "Le cassage sur mauvaise ligne : latence mesurée, marge "
                 + "de portée accordée, places de rattrapage rendues.");
         line(source, "/lanterne increvable", "Le pont AutoMiner pour la durabilité des outils : "
-                + "combien de fois il a déjà épargné une casse. Éteint par défaut.");
+                + "combien de fois il a déjà épargné une casse. Allumé par défaut.");
         line(source, "/lanterne rafale", "Le pont AutoMiner pour la construction en masse — pose "
                 + "et casse jusqu'à 4096 blocs d'un coup. Éteint par défaut.");
         if (admin) {
