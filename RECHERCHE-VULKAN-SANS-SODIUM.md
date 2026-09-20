@@ -116,3 +116,36 @@ déclenche que dans l'hypothèse future "Sodium retiré".
 **Piste concrète pour la suite** : étendre `IrisMixinPlugin.shouldApplyMixin` avec une liste des
 mixins Sodium-dépendants hors `compat/sodium/`, refusés si `!Compagnons.present(SODIUM)` (accès
 à `IrisPlatformHelpers.getInstance().isModLoaded("sodium")`, déjà utilisé ailleurs dans le code).
+
+## Vulkan — étape 2 : la vraie chaîne testée sur un VRAI shader (21/09/2026 ~01h30)
+
+Suite du prototype isolé `lab/ShadercProbe.java` (commit `9d56678`, GLSL minimal → SPIR-V
+réussi). Cette passe teste la vraie chaîne sur du contenu réel : `shaders/program/composite3.glsl`
+extrait de `ComplementaryReimagined_r5.9.zip` (vrai shaderpack installé), passé par
+`JcppProcessor.glslPreprocessSource` (préprocesseur C d'Iris, déjà migré et fonctionnel) PUIS par
+`shaderc_compile_into_spv`.
+
+**Résultat réel, vérifié hors-jeu (compilation + exécution standalone, classpath reconstruit à la
+main avec les vraies libs LWJGL/jcpp du cache Gradle)** :
+
+- **Le préprocesseur fonctionne sur du contenu réel** : `Preprocessing OK, 1994 chars` — les
+  macros/includes du vrai shaderpack passent sans erreur.
+- **`shaderc` seul rejette le résultat** : 7 erreurs, dont `'colortex0' : undeclared identifier`,
+  `'texelCoord' : undeclared identifier`, `#version: Desktop shaders for Vulkan SPIR-V require
+  version 140 or higher`.
+
+**Pourquoi, honnêtement** : les shaderpacks Iris écrivent du GLSL qui suppose que le MOTEUR
+(Iris) va injecter des déclarations (uniforms de texture comme `colortex0`, variables comme
+`texelCoord`, correction de la ligne `#version`) AVANT compilation — c'est le travail de
+`glsl-transformer` (transformation d'AST GLSL), pas du préprocesseur C `jcpp`. Ces deux
+bibliothèques sont toutes les deux déjà migrées et bundlées (`jarJar`, commit `115e33b`), mais
+seule `jcpp` a été exercée dans ce test — `glsl-transformer` reste à mettre dans la boucle pour
+que la vraie chaîne (preprocessing + transformation + compilation SPIR-V) fonctionne de bout en
+bout sur du vrai contenu de shaderpack.
+
+**Prochaine étape concrète** : trouver la classe d'Iris qui orchestre l'appel à
+`glsl-transformer` pour l'étape de transformation (chercher dans
+`net.irisshaders.iris.pipeline.transform` ou similaire dans le code déjà migré), l'appeler en
+isolé dans `ShadercProbe` de la même façon que `JcppProcessor` ici, avant l'appel shaderc. Ne pas
+brancher au pipeline de rendu réel avant d'avoir un test standalone qui produit du SPIR-V valide
+sur un vrai shader.
