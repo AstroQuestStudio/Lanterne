@@ -217,14 +217,21 @@ public final class MecheClient {
         finish(download.modId, download.version, oldPath);
     }
 
-    /** Tente de retirer l'ancien jar, puis dit au joueur exactement quoi faire. */
+    /** Tente de retirer l'ancien jar (au besoin en différé), puis dit au joueur quoi faire. */
     private static void finish(String modId, String version, Path oldPath) {
-        boolean oldGone = tryRemove(oldPath);
+        boolean removedNow = tryRemove(oldPath);
+        boolean watcherArmed = !removedNow && oldPath != null && scheduleDeferredRemoval(oldPath);
         Minecraft.getInstance().execute(() -> {
-            if (oldGone) {
+            if (removedNow) {
                 tell(Component.literal("Lanterne " + version + " téléchargé, vérifié, et installé. "
                         + "Ferme le jeu et relance-le pour l'appliquer.")
                         .withStyle(ChatFormatting.GREEN));
+            } else if (watcherArmed) {
+                tell(Component.literal("Lanterne " + version + " téléchargé et vérifié dans mods/. "
+                        + "Ferme le jeu normalement : l'ancien fichier " + oldPath.getFileName()
+                        + " se supprimera tout seul quelques secondes après la fermeture, rien à "
+                        + "faire à la main. Si ça ne suffit pas, supprime-le toi-même dans mods/ "
+                        + "avant de relancer.").withStyle(ChatFormatting.GOLD));
             } else {
                 tell(Component.literal("Lanterne " + version + " téléchargé et vérifié dans mods/. "
                         + "AVANT de relancer : ferme Minecraft, PUIS supprime toi-même l'ancien fichier "
@@ -233,6 +240,43 @@ public final class MecheClient {
                         + "du même mod détectées).").withStyle(ChatFormatting.GOLD));
             }
         });
+    }
+
+    /**
+     * Sur Windows, le verrou d'un jar déjà ouvert par le classloader ne tombe qu'à la fermeture
+     * COMPLÈTE du processus — jamais pendant qu'il tourne. Un processus détaché, indépendant de
+     * celui-ci, interroge le fichier toutes les quelques secondes et le supprime dès que le verrou
+     * tombe : le joueur n'a plus qu'à fermer et relancer normalement, jamais rien à supprimer à la
+     * main. Boucle plutôt qu'un délai fixe : le joueur peut fermer le jeu tout de suite comme dans
+     * deux heures, et {@code ping} sert de minuterie plutôt que {@code timeout} parce que ce dernier
+     * refuse de tourner sans console interactive (exactement le cas ici, l'entrée du process est un
+     * pipe, pas un terminal).
+     *
+     * @return {@code true} si le processus de nettoyage a bien été lancé (pas s'il a réussi — ça,
+     *     seul le prochain lancement de Lanterne pourra le confirmer indirectement).
+     */
+    private static boolean scheduleDeferredRemoval(Path oldPath) {
+        if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")) {
+            return false; // ailleurs, deleteIfExists() sur un fichier deja ouvert reussit deja seul
+        }
+        String target = oldPath.toAbsolutePath().toString();
+        String script = "for /l %i in (1,1,200) do ("
+                + "del /f /q \"" + target + "\" 2>nul & "
+                + "if not exist \"" + target + "\" exit /b & "
+                + "ping -n 4 127.0.0.1 >nul)";
+        try {
+            new ProcessBuilder("cmd", "/c", script)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            Lanterne.LOG.info("[MÈCHE] nettoyage différé programmé pour {} (processus détaché).",
+                    oldPath);
+            return true;
+        } catch (Exception cannotSpawn) {
+            Lanterne.LOG.warn("[MÈCHE] nettoyage différé impossible à programmer : {}",
+                    cannotSpawn.toString());
+            return false;
+        }
     }
 
     /**
