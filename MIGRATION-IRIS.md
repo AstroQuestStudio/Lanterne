@@ -55,3 +55,60 @@ installée dans `test 1/mods`.
 
 Estimation honnête : plusieurs jours de travail humain normal, pas une nuit — confirmé
 empiriquement ce soir, pas juste supposé au départ.
+
+## Deuxième tentative (nuit du 20-21/09/2026) : en partant de `common`, beaucoup plus loin
+
+Contrairement à la conclusion initiale ("chantier à part entière"), le module `common` d'Iris ne
+référence **aucune classe `net.fabricmc.*` dans son code Java** (vérifié : `grep -rl
+"net\.fabricmc\." common/src/main/java` → 0 résultat sur 696 fichiers). Les dépendances Fabric
+Loom de son `build.gradle.kts` servent à résoudre les mappings Minecraft et l'API Fabric — pas
+référencées directement par le code lui-même. Ça change complètement l'estimation.
+
+**Progrès réel, par itérations de compilation successives (chaque itération = une vraie
+`./gradlew compileJava`, pas une supposition) :**
+
+1. Copié `common/src/main/java/net` (638 fichiers) → 100 erreurs, toutes `cannot find symbol` sur
+   `net.irisshaders.iris.api.v0.*` (IrisApi, IrisApiConfig...).
+2. Trouvé et copié `common/src/api/java/net` (le module API d'Iris vit dans un **sourceSet Gradle
+   séparé** de `common`, pas dans `main`) → nouvelles erreurs, cette fois sur
+   `com.seibel.distanthorizons.*` (Distant Horizons).
+3. Ajouté `compileOnly files('libs/DHApi.jar')` dans `build.gradle` de Lanterne (jar trouvé à la
+   racine d'`iris-src`, copié dans `Lanterne/libs/`) → nouvelles erreurs sur
+   `kroppeb.stareval.*`.
+4. Trouvé que `kroppeb` est un **package top-level séparé** sous `common/src/main/java/`
+   (pas sous `net.irisshaders`) → copié aussi.
+5. Ajouté dans `build.gradle` : `org.antlr:antlr4-runtime:4.13.1`,
+   `io.github.douira:glsl-transformer:3.0.0-pre3`, `org.anarres:jcpp:1.4.14` (mêmes coordonnées
+   que `common/build.gradle.kts`, déjà en cache Gradle local depuis le build du module `neoforge`
+   plus tôt cette session), et `libs/sodium-neoforge-real-0.9.2+mc26.3.jar` (le vrai moteur
+   Sodium extrait du jarJar, même raison que pour le module `neoforge`).
+
+**Toutes ces dépendances se résolvent et compilent.** Le mur réel, atteint à cette itération :
+erreurs `is not public` / `has private access` / `cannot find symbol` sur des membres vanilla
+normalement exposés par **l'access widener Fabric d'Iris** (`common/src/main/resources/
+iris.accesswidener`, jamais copié ni converti) et par des **méthodes injectées par interface
+mixin** (`iris$getGlId()` etc., définies dans `interface_injections.json` du module `neoforge`,
+jamais enregistrées dans ce contexte de compilation brute).
+
+**Ce que ça confirme, précisément** : le vrai obstacle n'est PAS Fabric Loom vs ModDevGradle pour
+les dépendances (résolu ce soir, sans douleur) — c'est la conversion de l'access widener Fabric
+(`iris.accesswidener`) vers un access transformer NeoForge (format `accesstransformer.cfg`,
+entrée par entrée, chacune vérifiée par javap comme fait pour le module `neoforge` plus tôt cette
+session) + le branchement réel de Mixin (refmap, interface injections) sur ce nouveau code source
+avant que `compileJava` seul suffise à juger.
+
+**État laissé ce soir** : le code source d'Iris (`net/irisshaders`, `kroppeb`) a été RETIRÉ du
+dépôt (`compileJava` cassé au-delà de ce qu'il était raisonnable de corriger cette nuit) —
+`./gradlew compileJava` repasse au vert. **Gardé, en revanche** (infrastructure réutilisable,
+vérifiée valide) : les 5 lignes `compileOnly` ajoutées dans `build.gradle` (antlr4-runtime,
+glsl-transformer, jcpp, sodium-neoforge-real, DHApi.jar) et `Lanterne/libs/{DHApi.jar,
+sodium-neoforge-real-0.9.2+mc26.3.jar}`.
+
+**Prochaine tentative, point de départ exact (ne pas refaire la découverte ci-dessus)** :
+1. Recopier `common/src/main/java/net`, `common/src/api/java/net`, `common/src/main/java/kroppeb`.
+2. Convertir `common/src/main/resources/iris.accesswidener` en access transformer NeoForge,
+   entrée par entrée, vérifiée par javap contre le vrai jar patché 26.3.0.7-beta (méthode déjà
+   éprouvée pour le module `neoforge` — voir son historique de commits dans `iris-src`).
+3. Ne recopier `neoforge/src/main/resources/interface_injections.json` (et son mécanisme
+   d'enregistrement) qu'une fois l'access transformer en place — plusieurs erreurs actuelles
+   (`iris$getGlId()` introuvable) en dépendent directement.
