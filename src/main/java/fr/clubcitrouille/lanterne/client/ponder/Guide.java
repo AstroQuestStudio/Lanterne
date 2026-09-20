@@ -13,6 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.content.Contents;
 import fr.clubcitrouille.lanterne.content.disc.Groove;
 import fr.clubcitrouille.lanterne.content.painting.Easel;
 import fr.clubcitrouille.lanterne.content.waypoint.Gates;
@@ -132,6 +133,7 @@ public final class Guide {
             built.add(gate());
             built.add(burner());
             built.add(canvas());
+            built.add(sorter());
             Map<Item, Scene> table = new IdentityHashMap<>();
             for (Scene s : built) {
                 // La première scène qui revendique un objet le garde : deux guides pour un même
@@ -336,6 +338,56 @@ public final class Guide {
             s.hold(3);
         }
         s.hold(40);
+
+        return s.seal();
+    }
+
+    /**
+     * Le Trieur : un entonnoir qui filtre, sans jamais toucher au hopper vanilla.
+     *
+     * <p>Ce qu'il fallait montrer n'est pas « pose-le au-dessus d'un coffre » — un hopper vanilla le
+     * dit déjà tout seul par sa forme — mais le geste propre à ce bloc : <b>glisser un objet dans une
+     * case de filtre</b>, et ce que ça change au tri. Deux objets suffisent à le dire : un qui passe,
+     * un qui reste, sur le même entonnoir, sans rien inventer sur son mécanisme.
+     */
+    private static Scene sorter() {
+        ItemStack floor = new ItemStack(Blocks.POLISHED_ANDESITE);
+        ItemStack chest = new ItemStack(Blocks.CHEST);
+        ItemStack trieur = new ItemStack(Contents.TRIEUR_ITEM.get());
+        ItemStack coal = new ItemStack(Items.COAL);
+        ItemStack iron = new ItemStack(Items.IRON_INGOT);
+
+        Scene s = Scene.named("trieur", trieur.copy()).about(Contents.TRIEUR_ITEM.get());
+        s.aim(0f, 0.8f, 0f, 2.6f);
+
+        s.say("poser");
+        s.raise(Scene.box(-1, -1, -1, 1, -1, 1), floor, 1);
+        s.hold(6);
+        s.put(0, -1, 0, chest);
+        s.put(0, 0, 0, trieur);
+        s.hold(18);
+
+        s.say("filtre");
+        s.pan(0f, 0.6f, 0f, 1.8f, 20);
+        s.halo(0, 0, 0, AMBER, 90);
+        s.tag(0f, 0.4f, 0f, "filtre.note", 90);
+        s.fly(coal, 5.4f, 4.2f, -0.3f, 0.2f, 0.2f, -0.2f, 26);
+        s.spark(0f, 0.1f, 0f, AMBER);
+        s.hold(64);
+
+        s.say("passe");
+        s.pan(0f, 0.4f, 0f, 2.2f, 20);
+        s.fly(coal, -5.6f, 3.8f, 0.3f, 0f, 0.7f, 0f, 18);
+        s.hold(6);
+        s.halo(0, -1, 0, GREEN, 40);
+        s.hold(40);
+
+        s.say("reste");
+        s.fly(iron, 5.6f, 3.8f, -0.3f, 0f, 0.7f, 0f, 18);
+        s.hold(6);
+        s.halo(0, 0, 0, VIOLET, 50);
+        s.tag(0f, 0.4f, 0f, "reste.note", 50);
+        s.hold(50);
 
         return s.seal();
     }
