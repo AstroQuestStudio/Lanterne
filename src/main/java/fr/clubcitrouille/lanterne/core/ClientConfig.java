@@ -47,6 +47,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue ITEM_COPIES;
     public static final ModConfigSpec.BooleanValue VEIL_PARTICLES;
     public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
+    public static final ModConfigSpec.BooleanValue RESEAU_LUEUR;
     public static final ModConfigSpec.BooleanValue GAUGE;
     public static final ModConfigSpec.BooleanValue REGARD;
     public static final ModConfigSpec.BooleanValue ZOOM;
@@ -229,6 +230,20 @@ public final class ClientConfig {
                 "Un bloc en cours de cassage n'est jamais voile : sa fissure est le retour visuel du",
                 "minage. Demande le voile actif.")
                 .define("voile_blocs_entites", true);
+
+        RESEAU_LUEUR = BUILDER.comment(
+                "LA LUEUR DU RESEAU : une fine croix ambree, pulsee, au-dessus du Trieur, de",
+                "l'Aiguillage, du Guichet et des deux Coffres du Reseau quand ils sont reellement",
+                "en service - jamais un decor permanent sur un bloc pose mais inactif.",
+                "",
+                "Le signal differe par bloc, honnetement selon ce que chacun sait de lui-meme : le",
+                "Trieur suit son propre etat de redstone (ENABLED) et le module \"Trieur\" du",
+                "serveur, l'Aiguillage et le Guichet suivent un VRAI voisin trouve a l'instant (un",
+                "coffre, un baril...), les deux Coffres suivent l'etat du module \"Reseau\".",
+                "",
+                "Seize sommets par bloc actif visible, pas de particule, pas d'allocation par image -",
+                "voir client.reseau.Lueur pour le detail. Effet immediat.")
+                .define("lueur_reseau", true);
 
         GAUGE = BUILDER.comment(
                 "LA JAUGE : ce que le mod fait, lisible pendant qu'on joue.",

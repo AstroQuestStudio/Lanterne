@@ -127,6 +127,20 @@ public final class Reseaux {
 
     private Reseaux() {}
 
+    /**
+     * Le Réseau est-il allumé — lecture sûre pour un appelant CLIENT.
+     *
+     * <p>Les points d'entrée serveur existants ({@link Aiguillage#onLoad}, {@link
+     * CoffreDepotBlockEntity#onLoad}, {@code Guichet#tick}...) lisent {@code Config.RESEAU_ACTIF.get()}
+     * sans détour : côté serveur, le fichier est chargé bien avant qu'un monde existe. Un renderer
+     * client n'a pas cette garantie — {@code Dials#serverSpoke()} documente le cas précis où {@code
+     * get()} lève avant la synchronisation du config serveur — d'où la garde {@code isLoaded()} ici,
+     * réservée aux appelants qui ne peuvent pas la tenir pour acquise.
+     */
+    public static boolean actif() {
+        return Config.SPEC.isLoaded() && Config.RESEAU_ACTIF.get();
+    }
+
     // --- La part cliente, tenue à distance ------------------------------------
 
     /**

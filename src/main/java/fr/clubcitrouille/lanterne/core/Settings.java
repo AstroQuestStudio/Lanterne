@@ -626,6 +626,8 @@ public final class Settings {
     private static boolean veilParticles = true;
     /** Le voile etendu aux entites de bloc. Voir {@code BlockEntityVeilMixin}. */
     private static boolean veilBlockEntities = true;
+    /** La lueur ambree du Trieur/Reseau. Voir {@code client.reseau.Lueur}. */
+    private static boolean reseauLueur = true;
     /** Le vacarme : sons identiques limites. Voir {@link Din}. */
     /** La lentille : mise a l'echelle de resolution. Voir {@link Lens}. */
     /** La jauge de performance sur le HUD. Voir {@code client.Gauge}. */
@@ -1372,6 +1374,14 @@ public final class Settings {
         return regard;
     }
 
+    /**
+     * Comme {@link #regard()} : un habillage visuel, pas un module d'optimisation — pas de
+     * {@code master &&}. Voir {@code client.reseau.Lueur} pour ce que ce réglage allume.
+     */
+    public static boolean reseauLueur() {
+        return reseauLueur;
+    }
+
     /** La Longuevue. Comme {@link #regard()} : un geste du joueur, pas de {@code master &&}. */
     public static boolean zoom() {
         return zoom;
@@ -1703,6 +1713,7 @@ public final class Settings {
         // allumait les deux modules a la fois. Le banc l'a dit — « voile voile-blocs » — parce
         // qu'on lui avait appris a crier apres le meme defaut sur les objets au sol.
         veilBlockEntities = wanted.contains("blocs");
+        reseauLueur = wanted.contains("lueur");
         din = wanted.contains("vacarme") || wanted.contains("sons");
         lens = wanted.contains("lentille");
         gauge = wanted.contains("jauge");
@@ -1761,6 +1772,7 @@ public final class Settings {
         itemCopies = ClientConfig.ITEM_COPIES.get();
         veilParticles = ClientConfig.VEIL_PARTICLES.get();
         veilBlockEntities = ClientConfig.VEIL_BLOCK_ENTITIES.get();
+        reseauLueur = ClientConfig.RESEAU_LUEUR.get();
         tampon = ClientConfig.TAMPON.get();
         din = ClientConfig.DIN.get();
         gauge = ClientConfig.GAUGE.get();
@@ -1806,6 +1818,9 @@ public final class Settings {
         }
         if (veilBlockEntities) {
             text.append("voile-blocs ");
+        }
+        if (reseauLueur) {
+            text.append("lueur-reseau ");
         }
         if (din) {
             text.append("vacarme ");
