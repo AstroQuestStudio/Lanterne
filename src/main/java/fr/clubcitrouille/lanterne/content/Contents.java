@@ -145,6 +145,21 @@ public final class Contents {
     public static final Supplier<MenuType<TrieurMenu>> TRIEUR_MENU = MENUS.register("trieur",
             () -> IMenuTypeExtension.create((id, inventory, buffer) -> new TrieurMenu(id, inventory)));
 
+    /**
+     * Le Recycleur : rend une fraction des matériaux d'un équipement usé, proportionnelle à ce
+     * qu'il lui reste de durabilité. Voir {@link Recycleur} pour l'argument complet — notamment
+     * pourquoi ce geste ne peut jamais rendre plus que ce qui a été dépensé pour fabriquer l'objet.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredBlock<Recycleur> RECYCLEUR =
+            BLOCKS.registerBlock("recycleur", Recycleur::new, () -> BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .strength(3.5F, 6.0F)
+                    .sound(SoundType.METAL)
+                    .requiresCorrectToolForDrops());
+
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem>
+            RECYCLEUR_ITEM = ITEMS.registerSimpleBlockItem("recycleur", RECYCLEUR);
+
     /** Un onglet à part : on doit pouvoir trouver l'ancre sans savoir où Mojang l'aurait rangée. */
     public static final Supplier<CreativeModeTab> TAB = TABS.register("lanterne",
             () -> CreativeModeTab.builder()
@@ -156,6 +171,7 @@ public final class Contents {
                         output.accept(CARNET.get());
                         output.accept(ANCHOR_COMPASS.get());
                         output.accept(TRIEUR_ITEM.get());
+                        output.accept(RECYCLEUR_ITEM.get());
                     })
                     .build());
 

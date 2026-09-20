@@ -102,6 +102,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue TRIEUR_ACTIF;
     public static final ModConfigSpec.BooleanValue RUMEUR;
     public static final ModConfigSpec.BooleanValue MANNE;
+    public static final ModConfigSpec.BooleanValue RECYCLEUR_ACTIF;
 
     public static final ModConfigSpec.BooleanValue RESEAU_ACTIF;
     public static final ModConfigSpec.IntValue RESEAU_INTERVALLE_REAPPRO;
@@ -985,6 +986,16 @@ public final class Config {
                 "D'EQUILIBRAGE assume, pas une optimisation - a l'administrateur de decider si son",
                 "monde veut des marchands qui ne tarissent jamais.")
                 .define("manne_villageois_stock_infini", false);
+        RECYCLEUR_ACTIF = BUILDER.comment(
+                "Le Recycleur : rend une fraction des materiaux de fabrication d'un outil ou d'une",
+                "armure use, proportionnelle a la durabilite qu'il lui reste - un casque fabrique",
+                "avec 5 lingots et retrouve a 40% de durabilite en rend 2, arrondis vers le bas.",
+                "Ne rend jamais plus que ce qui a ete depense pour le fabriquer : fabriquer puis",
+                "recycler aussitot un objet neuf rend au mieux ce qu'on a paye, jamais davantage.",
+                "Coupe, le bloc reste enregistre et posable mais refuse tout recyclage - meme regle",
+                "que l'Ancre et le Trieur : un reglage ne doit jamais transformer en air ce qui a",
+                "ete construit.")
+                .define("recycleur_actif", true);
 
         BUILDER.comment(
                 "",

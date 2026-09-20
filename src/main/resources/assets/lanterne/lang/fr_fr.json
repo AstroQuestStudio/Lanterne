@@ -60,5 +60,7 @@
   "block.lanterne.coffre_depot": "Coffre de dépôt",
   "item.lanterne.coffre_depot": "Coffre de dépôt",
   "block.lanterne.coffre_reception": "Coffre de réception",
-  "item.lanterne.coffre_reception": "Coffre de réception"
+  "item.lanterne.coffre_reception": "Coffre de réception",
+  "block.lanterne.recycleur": "Recycleur",
+  "item.lanterne.recycleur": "Recycleur"
 }
