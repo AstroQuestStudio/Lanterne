@@ -250,6 +250,7 @@ public final class Chrome implements Engine {
                     MethodType.methodType(void.class, String.class, String.class, int.class));
             wired.ok = true;
             Lanterne.LOG.info("[PROJECTION] lecteur intégré détecté : Rinku.");
+            hookLoadErrors(entry, loader);
         } catch (Throwable absent) {
             // Absent, ou d'une version dont les signatures ont bougé. Les deux se traitent pareil :
             // on ne s'en sert pas, et l'ardoise dit quoi installer. Au niveau « debug » parce qu'un
@@ -258,6 +259,48 @@ public final class Chrome implements Engine {
                     String.valueOf(absent));
         }
         return wired;
+    }
+
+    /**
+     * Journalise les échecs de chargement de Rinku — jamais une action, seulement un journal.
+     *
+     * <h2>Pourquoi ce crochet existe</h2>
+     *
+     * <p>{@code executeJavaScript} et {@code createBrowser} sont des envois sans réponse — voir la
+     * Javadoc de {@link #SCRIPT}. Quand une page refuse de charger (un {@code Referer} encore rejeté,
+     * un port local injoignable), rien ne le dit ailleurs qu'ici : {@code CefLoadHandler.onLoadError}
+     * est le seul canal qui existe pour le savoir plutôt que le deviner. Ce module n'était pas prêt à
+     * l'écrire tant que cette classe n'avait rien à corréler avec — {@link Hote} lui donne enfin
+     * quelque chose à confirmer ou infirmer au prochain échec réel.
+     *
+     * <p>Par proxy dynamique et non par implémentation compilée : {@code org.cef.*} n'est nommé nulle
+     * part ailleurs dans ce fichier, précisément parce que Rinku est facultatif. Un proxy sur une
+     * interface résolue par réflexion tient la même promesse que le reste de {@link #wire} — aucune
+     * dépendance de compilation sur un jar qui peut ne pas être là.
+     */
+    private static void hookLoadErrors(Class<?> entry, ClassLoader loader) {
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            Object client = lookup.findStatic(entry, "getClient",
+                    MethodType.methodType(Class.forName("de.keksuccino.rinku.RinkuClient", false, loader)))
+                    .invoke();
+            Class<?> handlerType = Class.forName("org.cef.handler.CefLoadHandler", false, loader);
+            Object proxy = java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[] {handlerType},
+                    (target, method, args) -> {
+                        if ("onLoadError".equals(method.getName()) && args != null && args.length >= 5) {
+                            Lanterne.LOG.warn("[PROJECTION] echec de chargement ({}) : {} — {}",
+                                    args[2], args[4], args[3]);
+                        }
+                        return null;
+                    });
+            client.getClass().getMethod("addLoadHandler",
+                    Class.forName("org.cef.handler.CefLoadHandler", false, loader)).invoke(client, proxy);
+        } catch (Throwable indisponible) {
+            // Une version de Rinku dont cette API a bougé. Le lecteur reste utilisable ; seul ce
+            // diagnostic manque, et il n'a jamais conditionné wired.ok.
+            Lanterne.LOG.debug("[PROJECTION] diagnostic de chargement indisponible : {}",
+                    String.valueOf(indisponible));
+        }
     }
 
     /**

@@ -13,6 +13,7 @@ import java.util.UUID;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityMountEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
@@ -164,6 +165,24 @@ public final class Envol {
             return;
         }
         reapply(player);
+    }
+
+    /**
+     * Monter ou descendre d'une monture a aussi fait éjecter un joueur autorisé — incident réel du
+     * 20/09/2026, à cheval, sans changement de mode de jeu à proximité dans le journal (donc un
+     * chemin distinct de {@link #onGameModeChange}). « Flying is not enabled on this server » est,
+     * contrairement à « floating too long », un rejet <b>immédiat</b> sur le paquet qui bascule le
+     * vol côté client : la seconde de {@link #onServerTick} peut arriver trop tard si {@code mayfly}
+     * s'est trouvé bas au moment précis où ce paquet est parti. Comme pour
+     * {@link #onGameModeChange}, l'ordre exact entre cet évènement et une éventuelle remise à zéro
+     * vanilla n'est pas vérifié — {@link #reapply} ne coûte rien à appeler en trop, donc les deux
+     * sens (monter, descendre) sont couverts sans chercher lequel des deux est vraiment en cause.
+     */
+    @SubscribeEvent
+    public static void onMount(EntityMountEvent event) {
+        if (event.getEntityMounting() instanceof ServerPlayer player) {
+            reapply(player);
+        }
     }
 
     /**
