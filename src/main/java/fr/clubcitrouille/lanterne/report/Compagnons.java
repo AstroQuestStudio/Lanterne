@@ -63,6 +63,9 @@ public final class Compagnons {
     /** JourneyMap — la carte et ses propres repères. Voir {@code content.waypoint}. */
     public static final String JOURNEYMAP = "journeymap";
 
+    /** BlueMap — la carte web. Voir {@code lab.Cadence}/{@code lab.CadenceBlueMap}. */
+    public static final String BLUEMAP = "bluemap";
+
     /** Jade — l'infobulle du bloc visé. */
     public static final String JADE = "jade";
 
