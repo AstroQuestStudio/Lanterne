@@ -1,5 +1,8 @@
 package fr.clubcitrouille.lanterne.core;
 
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
+
 import net.minecraft.core.Direction;
 import net.minecraft.world.Container;
 import net.minecraft.world.WorldlyContainer;
@@ -108,9 +111,15 @@ public final class Bulk {
     /** Objets aspirés depuis le dessus durant le tick courant. */
     private static int sucked;
 
-    /** Compteurs de rapport : transferts effectués, et objets déplacés. */
-    private static long transfers;
-    private static long items;
+    // Compteurs de rapport : transferts effectués, et objets déplacés. AtomicLong et non un long
+    // brut — contrairement a ejected/sucked ci-dessus (lus et ecrits dans le meme tick serveur,
+    // jamais partages entre threads), CEUX-CI sont ecrits depuis le thread du serveur integre a
+    // chaque transfert mais lus depuis Radiographie.report() sur le thread de rendu (ou le thread
+    // du crochet d'arret JVM) une fois la session terminee : sans visibilite garantie entre
+    // threads, ce releve final pourrait lire une valeur perimee. Meme choix que Grele.TRIMMED_CALLS
+    // et Reflet.SKIPPED, pour la meme raison.
+    private static final AtomicLong TRANSFERS = new AtomicLong();
+    private static final AtomicLong ITEMS = new AtomicLong();
 
     private Bulk() {}
 
@@ -314,26 +323,43 @@ public final class Bulk {
     }
 
     private static void note(int moved) {
-        transfers++;
-        items += moved;
+        TRANSFERS.incrementAndGet();
+        ITEMS.addAndGet(moved);
     }
 
     /** Taille moyenne d'un lot, pour le rapport. Un contre vanilla, seize au mieux. */
     public static double averageLot() {
-        return transfers == 0L ? 0d : (double) items / transfers;
+        long t = TRANSFERS.get();
+        return t == 0L ? 0d : (double) ITEMS.get() / t;
     }
 
     public static long transfers() {
-        return transfers;
+        return TRANSFERS.get();
     }
 
     public static long items() {
-        return items;
+        return ITEMS.get();
+    }
+
+    /**
+     * Un résumé lisible, même statut que {@link Grele#report()} : cumulé depuis le démarrage du
+     * client (voir {@link #reset}, appelé uniquement par le banc {@code Kitchen}, jamais en jeu),
+     * pas remis à zéro par une session de {@code Radiographie}.
+     */
+    public static String report() {
+        long t = TRANSFERS.get();
+        if (t == 0L) {
+            return "bulk : aucun transfert par lot (reglage \"bulk\" eteint, ou aucun entonnoir "
+                    + "actif depuis le demarrage)";
+        }
+        return String.format(Locale.ROOT,
+                "bulk : %d transfert(s) par lot, %d objet(s) deplaces au total, lot moyen %.1f/%d",
+                t, ITEMS.get(), averageLot(), LOT);
     }
 
     public static void reset() {
-        transfers = 0L;
-        items = 0L;
+        TRANSFERS.set(0L);
+        ITEMS.set(0L);
         ejected = 0;
         sucked = 0;
     }
