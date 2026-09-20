@@ -147,6 +147,33 @@ public final class Bulk {
     }
 
     /**
+     * La recharge à payer pour le lot qui vient de partir — {@link #owed} tours vanilla, divisés par
+     * {@link Settings#bulkSpeed()}.
+     *
+     * <h2>Ceci n'est PAS le reste de cette classe</h2>
+     *
+     * <p>Tout ce qui précède préserve le débit vanilla AU BIT PRÈS — c'est tout l'argument de cette
+     * classe, répété trois fois dans sa Javadoc. {@code Settings#bulkSpeed()} rompt volontairement
+     * cette promesse : demandé en toutes lettres par le patron du projet (des Trieurs perçus comme
+     * « giga lents » en usage réel, malgré ce module), pas une dérive accidentelle. Voir {@code
+     * Config#BULK_SPEED} pour l'assumer avec les mêmes chiffres qu'ici.
+     *
+     * <p>À vitesse 1 (le plancher), le résultat est <b>identique</b> à {@code ticks * owed()} — cette
+     * méthode ne change donc rien pour qui n'a jamais touché le réglage.
+     *
+     * <h2>Le plancher d'un tick</h2>
+     *
+     * <p>Le jeu ne connaît pas de recharge négative ni fractionnaire. Un tout petit lot (un seul
+     * objet, {@code owed() == 1}) à une vitesse élevée peut demander moins d'un tick — la division
+     * entière l'arrondirait à zéro, ce qu'aucun entonnoir vanilla ne fait jamais. Le plancher à un
+     * tick borne alors le multiplicateur RÉEL en dessous de la valeur demandée pour ce lot précis :
+     * une limite du jeu, pas un défaut de cette méthode.
+     */
+    public static int cooldownFor(int vanillaTicks) {
+        return Math.max(1, vanillaTicks * owed() / Settings.bulkSpeed());
+    }
+
+    /**
      * Le conteneur de destination est-il plein par cette face ?
      *
      * <p>Recopie de {@code isFullContainer}, qui est privé. Vanilla s'en sert comme sortie rapide
