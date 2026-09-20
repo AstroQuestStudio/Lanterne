@@ -23,6 +23,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.BeaconMenu;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
 import net.minecraft.world.phys.BlockHitResult;
 
@@ -105,6 +106,13 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
     private static final int TEXT = 0xFFE8E8E8;
     private static final int DIM = 0xFF8A8A92;
     private static final int FAINT = 0xFF5A5A62;
+
+    /**
+     * Le liseré plus sombre du creux d'une case — copie exacte de la constante du même nom dans
+     * {@code TrieurScreen} : cet écran a le même bug (des vrais {@code Slot} vanilla — la case de
+     * paiement et l'inventaire du joueur — peints sur un panneau à fond plat, sans aucun cadre).
+     */
+    private static final int SLOT_EDGE = 0xFF0A0A0D;
 
     private static final int IMAGE_WIDTH = 230;
     private static final int IMAGE_HEIGHT = 219;
@@ -275,7 +283,32 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         graphics.text(this.font, "Effet principal", left + 10, primaryRowY() - 10, DIM, false);
         graphics.text(this.font, "Effet secondaire (niveau 4)", left + 10, secondaryRowY() - 10, DIM, false);
 
+        drawSlotFrames(graphics);
         super.extractContents(graphics, mouseX, mouseY, partial);
+    }
+
+    /**
+     * Le cadre en creux de chaque case du menu — la case de paiement ET l'inventaire du joueur —
+     * sans quoi ces objets flottent sur le fond uni du panneau sans aucune limite visible, exactement
+     * le même défaut que sur {@code TrieurScreen} (voir sa Javadoc pour la preuve de la capture
+     * d'écran qui l'a fait remarquer).
+     *
+     * <p>Peint ICI, avant {@code super.extractContents}, en coordonnées ABSOLUES comme le reste de
+     * cette méthode — {@code Slot.x}/{@code Slot.y} sont des coordonnées LOCALES au panneau que
+     * vanilla ne traduit qu'À L'INTÉRIEUR de {@code super.extractContents} (poussée de matrice puis
+     * {@code translate(leftPos, topPos)}, avant {@code extractSlots}) : il faut donc rajouter
+     * {@code leftPos}/{@code topPos} à la main ici, comme le fait déjà le reste de cette méthode pour
+     * le panneau et le bandeau.
+     */
+    private void drawSlotFrames(GuiGraphicsExtractor graphics) {
+        int left = this.leftPos;
+        int top = this.topPos;
+        for (Slot slot : this.menu.slots) {
+            int x = left + slot.x;
+            int y = top + slot.y;
+            graphics.fill(x - 1, y - 1, x + 17, y + 17, SLOT_EDGE);
+            graphics.fill(x, y, x + 16, y + 16, EDGE);
+        }
     }
 
     @Override

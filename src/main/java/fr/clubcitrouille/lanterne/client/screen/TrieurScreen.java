@@ -5,6 +5,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -42,6 +43,13 @@ public class TrieurScreen extends AbstractContainerScreen<TrieurMenu> {
     private static final int EDGE = 0xFF2A2A32;
     private static final int AMBER = 0xFFFFC857;
     private static final int DIM = 0xFF8A8A92;
+
+    /**
+     * Le liseré plus sombre du creux d'une case — {@link #EDGE} sert de fond de case (déjà plus
+     * clair que {@link #PANEL}, c'est pour ça qu'il dessinait le cadre du panneau) et cette teinte
+     * quasi noire l'encadre, pour que chaque case se lise comme un creux plutôt que comme une bosse.
+     */
+    private static final int SLOT_EDGE = 0xFF0A0A0D;
 
     private static final int IMAGE_WIDTH = 176;
     private static final int IMAGE_HEIGHT = 200;
@@ -106,7 +114,35 @@ public class TrieurScreen extends AbstractContainerScreen<TrieurMenu> {
         graphics.text(this.font, "Filtre (glisser un objet, un exemplaire par case)",
                 left + 8, top + 33, DIM, false);
 
+        drawSlotFrames(graphics);
         super.extractContents(graphics, mouseX, mouseY, partial);
+    }
+
+    /**
+     * Le cadre en creux de chaque case du menu — hopper, filtre ET inventaire du joueur — sans quoi
+     * les objets flottent sur le fond uni du panneau sans aucune limite visible. C'est exactement le
+     * retour du joueur sur la capture d'écran qui a motivé ce correctif : une pépite de charbon, des
+     * icônes d'inventaire et des lingots qui semblaient flotter au hasard, faute de case visible
+     * autour d'eux.
+     *
+     * <p>Peint ICI, avant {@code super.extractContents}, en coordonnées ABSOLUES comme le reste de
+     * cette méthode — {@code Slot.x}/{@code Slot.y} (des {@code int final}, vérifiés au {@code javap}
+     * sur le jar client 26.3 réel) sont des coordonnées LOCALES au panneau que vanilla ne traduit
+     * qu'À L'INTÉRIEUR de {@code super.extractContents} (poussée de matrice puis
+     * {@code translate(leftPos, topPos)}, avant {@code extractSlots}) : il faut donc rajouter
+     * {@code leftPos}/{@code topPos} à la main ici, exactement comme pour le panneau et le bandeau
+     * au-dessus, sous peine de peindre les cadres dans le coin supérieur gauche de l'écran au lieu de
+     * sous les cases.
+     */
+    private void drawSlotFrames(GuiGraphicsExtractor graphics) {
+        int left = this.leftPos;
+        int top = this.topPos;
+        for (Slot slot : this.menu.slots) {
+            int x = left + slot.x;
+            int y = top + slot.y;
+            graphics.fill(x - 1, y - 1, x + 17, y + 17, SLOT_EDGE);
+            graphics.fill(x, y, x + 16, y + 16, EDGE);
+        }
     }
 
     @Override
