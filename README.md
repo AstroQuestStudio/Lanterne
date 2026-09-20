@@ -53,6 +53,7 @@ jouant.*
 **Confort joueur**
 [🧭 Les repères et la Boussole d'Ancre](#les-reperes-et-la-boussole-d-ancre) ·
 [🔭 La Longuevue — zoom façon Sodium](#la-longuevue-le-zoom-tenu-facon-sodium) ·
+[🖱️ Souris avancée](#souris-avancee) ·
 [🖼️ Les Tableaux](#les-tableaux-tes-images-sur-tes-murs) ·
 [💿 Les Disques](#les-disques-ta-musique-dans-le-jukebox)
 
@@ -902,6 +903,36 @@ Le lissage tourne une fois par tick — la même cadence que `Camera.tickFov()` 
 clavier est lu au niveau matériel (`InputConstants.isKeyDown`), jamais via `KeyMapping.isDown()` : ce
 moteur cesse de relayer les touches aux `KeyMapping` dès qu'un écran est ouvert, ce qui bloquerait sinon
 le zoom en position « appuyée » après avoir ouvert puis fermé un coffre en le maintenant.
+
+---
+
+<a id="souris-avancee"></a>
+## 🖱️ Souris avancée
+
+Les quatre mécaniques du mod populaire **Mouse Tweaks**.
+
+### Quatre gestes
+
+1. **Shift + clic gauche + glissé** : en maintenant Shift et le clic gauche enfoncé, puis en faisant
+   glisser la souris par-dessus plusieurs cases (dans un inventaire, un coffre, un four, un établi —
+   n'importe quel conteneur), chaque case survolée reçoit un **transfert rapide** (shift-clic vanilla),
+   vidant l'inventaire vers l'autre côté une case à la fois.
+
+2. **Clic droit + glissé** : avec une pile en main, en maintenant le clic droit enfoncé et en glissant
+   par-dessus plusieurs cases, chaque case reçoit **un exemplaire** de l'objet tenu — distribution
+   un par un, jusqu'à épuisement de la pile.
+
+3. **Molette de la souris** : en survolant une case avec la molette (sans cliquer), un exemplaire
+   monte vers l'inventaire du joueur (molette vers le haut) ou descend vers le conteneur (molette vers le
+   bas).
+
+4. **Sur tout écran de conteneur** : vanilla ou modé, chaque écran supportant des cases reçoit ces
+   mécaniques — coffre, four, établi, écrans du mod `TrieurScreen`, `GuichetScreen`, etc. Le comportement
+   vanilla du glissé gauche sans Shift n'est pas affecté.
+
+| Réglage | Défaut | Ce qu'il fait |
+|---|:---:|---|
+| `souris_avancee` | activé | l'ensemble des quatre mécaniques |
 
 ---
 
