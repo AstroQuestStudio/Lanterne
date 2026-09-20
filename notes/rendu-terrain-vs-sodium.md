@@ -728,3 +728,111 @@ vaut 16 dès `FMLClientSetupEvent` — c'est-à-dire après que `Options.load()`
 `applyGraphicsPreset()` ont tous les deux déjà tourné, cohérent avec le mécanisme décrit ci-dessus.
 Reproduit trois fois, dans deux répertoires différents, sans exception — ce n'est pas un hasard de
 contention.
+
+## Re-vérification indépendante du plafond 16 — confirmé octet pour octet, aucun correctif de code ajouté
+
+Reprise (worktree `Lanterne-worktree-greedy-mesh`, branche `feature/greedy-mesh-continuation`)
+avec mandat de vérifier moi-même la conclusion de la section précédente plutôt que de la
+recopier telle quelle — le résumé transmis pour cette passe datait d'avant cette conclusion et
+pointait encore vers la piste `IntegratedServer`/`PlayerList` déjà explorée et innocentée deux
+sections plus haut. Les trois maillons de la chaîne causale ont été redésassemblés
+indépendamment (`javap -p -c -constants`, jamais `.mcsrc/`) sur
+`build/moddev/artifacts/minecraft-patched-26.3.0.3-beta.jar` (extrait en lecture seule vers un
+dossier de scratch hors dépôt, jar jamais modifié) :
+
+1. `GraphicsPreset.apply(Minecraft)` : `tableswitch` sur l'ordinal, confirmé offset par offset —
+   `case 0` (FAST) `bipush 8` sur `Options.renderDistance()` (offset 95), `case 1` (FANCY)
+   `bipush 16` (offset 358), `case 2` (FABULOUS) `bipush 32` (offset 620), `default` (CUSTOM) →
+   `887: return` immédiat, aucun appel `OptionInstance.set(...)` sur ce chemin.
+2. `Minecraft.<init>` : `options.applyGraphicsPreset(options.graphicsPreset().get())` appelé en
+   ligne droite aux offsets 1564-1581, juste après construction de `MouseHandler`/
+   `KeyboardHandler` — aucune instruction de branchement ne le garde, confirmé inconditionnel.
+3. `OptionInstance.set(T)` : `Minecraft.getInstance().isRunning()` lu à l'offset 21, `ifne 38` —
+   si faux (JVM pas encore démarrée, le cas pendant `Options.load()`), saut direct vers l'écriture
+   du champ `value` (offset 30) puis `return`, **sans jamais atteindre** l'appel à
+   `onValueUpdate.valueChanged(...)` (offset 58, atteignable seulement via le chemin `ifne`).
+
+Les trois maillons collent exactement à la description de la section précédente — reproduits
+ici par une lecture fraîche, pas recopiés. Verdict inchangé : comportement vanilla réel (pas un
+bug Lanterne), correctif retenu = configuration seule (`graphicsPreset:"custom"` à côté de
+`renderDistance:32` dans `options.txt`), pas de mixin — cette passe n'a rien trouvé qui remette
+en cause cette décision, donc aucun mixin `Options.load()`/`OptionInstance.set()` n'a été ajouté.
+
+**Correctif non appliqué à `run-vitrage/` cette passe non plus** — cette fois pour une raison
+différente de la précédente (plus de contention d'un autre fork) : `run-vitrage/` vit à la
+racine du dépôt PRINCIPAL (`C:\Users\trufa\Documents\Lanterne\run-vitrage\`), et la consigne de
+cette passe interdit explicitement d'y écrire quoi que ce soit — seul le worktree
+`Lanterne-worktree-greedy-mesh` est autorisé en écriture. Le correctif reste donc à appliquer à
+la main (ou par une passe qui a le droit d'écrire dans le dépôt principal) :
+`C:\Users\trufa\Documents\Lanterne\run-vitrage\options.txt`, remplacer
+`graphicsPreset:"fancy"` par `graphicsPreset:"custom"`, laisser `renderDistance:32` inchangé. Pas
+recréé en copie dans le worktree non plus : `run-vitrage/saves/New World (1)/` est une sauvegarde
+de monde complète (potentiellement volumineuse) et aucune mesure FPS n'était de toute façon
+prévue cette passe (voir plus bas, blocage de sécurité) — copier ce volume pour un usage qui ne
+se produira pas cette passe n'aurait été qu'un travail spéculatif.
+
+## Mesure FPS non tentée cette passe — blocage de sécurité, pas technique
+
+Six processus `java.exe` tournaient déjà au tout début de cette passe (vérifié par `tasklist`
+avant toute action), aucun identifiable comme un daemon Gradle par son nom/titre de fenêtre
+(`N/A` pour tous). Conformément à la consigne de sécurité de cette passe — ne jamais engager de
+mesure FPS ni de lancement de client dès qu'un `java.exe` non identifié tourne, pour ne pas
+reproduire l'incident de la section précédente (jusqu'à quatre clients simultanés, partie réelle
+du joueur perturbée) — **aucun client n'a été lancé cette passe**, donc aucune mesure FPS prise.
+Le plafond de distance 16 est maintenant compris et son correctif documenté avec précision
+(ci-dessus), donc la prochaine passe qui a la machine pour elle seule peut appliquer le correctif
+`options.txt` à `run-vitrage/` et mesurer directement, sans refaire cette investigation.
+
+## Plafond de distance 16 : re-vérification indépendante du bytecode, fix non appliqué à `run-vitrage/`
+
+Reprise pour appliquer le correctif ci-dessus. Avant de faire confiance à la conclusion de la
+passe précédente (le résumé de mandat transmis à cette passe ne la mentionnait même pas — il
+s'arrêtait à la piste `IntegratedServer`/`PlayerList`, déjà dépassée), tout le raisonnement a
+été rejoué de zéro par `javap -p -c -constants` sur le même jar (`build/moddev/artifacts/
+minecraft-patched-26.3.0.3-beta.jar` du dépôt principal, lu en lecture seule — jamais
+`.mcsrc/`), classes extraites dans un dossier de scratch temporaire, jamais dans un dépôt :
+
+- `GraphicsPreset.apply(Minecraft)` : `tableswitch` sur l'ordinal confirmé octet pour octet —
+  `case 0` (FAST) `bipush 8` sur `renderDistance` (offset 95), `case 1` (FANCY) `bipush 16`
+  (offset 358), `case 2` (FABULOUS) `bipush 32` (offset 620), `default` (CUSTOM, offset 887) :
+  `return` immédiat, aucun appel à `Options.set(...)` sur quoi que ce soit — confirmé, pas
+  supposé.
+- `Minecraft.<init>` : appelle `options.applyGraphicsPreset(options.graphicsPreset().get())`
+  en ligne droite (offsets 1564-1581), aucun saut conditionnel avant — confirmé inconditionnel.
+- `OptionInstance.set(T)` : `Minecraft.getInstance().isRunning()` (offset 21-24), `ifne 38` —
+  si faux (pendant `Options.load()` au démarrage), le code tombe directement sur l'écriture du
+  champ `value` (offset 30-32) et `goto 64` (return), sautant complètement l'appel à
+  `onValueUpdate.valueChanged(...)` (offset 58-59, atteignable seulement depuis le label 38) —
+  confirmé : le listener qui promeut `graphicsPreset` à `CUSTOM` ne peut pas s'armer pendant le
+  chargement du fichier.
+
+Les trois maillons de la chaîne de causalité sont donc reconfirmés indépendamment, pas
+seulement recopiés des notes précédentes. Verdict inchangé : comportement vanilla réel (les
+préréglages graphiques se réappliquent sans condition au démarrage et l'angle mort de
+`OptionInstance.set` pendant le chargement empêche la protection normale de s'armer), pas un
+bug Lanterne, pas un plafond artificiel. Le correctif de code envisagé (mixin sur
+`Options.load()`/`OptionInstance.set()` pour promouvoir `graphicsPreset` à `CUSTOM` quand la
+valeur chargée diffère du préréglage) reste jugé disproportionné pour un bénéfice qui ne
+concerne que les répertoires de banc de ce dépôt — décision de la passe précédente reconfirmée,
+pas de nouvelle information qui la remette en cause.
+
+**Correctif de configuration TOUJOURS PAS appliqué à `run-vitrage/`** — cette fois pour une
+raison différente de la passe précédente (qui était bloquée par contention d'un autre fork) :
+cette passe travaille dans un worktree Git dédié
+(`C:\Users\trufa\Documents\Lanterne-worktree-greedy-mesh`) avec consigne explicite de ne
+JAMAIS toucher au dépôt principal (`C:\Users\trufa\Documents\Lanterne`), où vit
+`run-vitrage/`. Le correctif reste néanmoins trivial et documenté avec précision pour qui a le
+droit d'y toucher : dans
+`C:\Users\trufa\Documents\Lanterne\run-vitrage\options.txt`, remplacer
+`graphicsPreset:"fancy"` par `graphicsPreset:"custom"`, laisser `renderDistance:32` tel quel.
+Un lancement suffit à confirmer dans le journal `Changing view distance to 32, from ...` au
+lieu de 16 (déjà vérifié trois fois dans d'autres répertoires par la passe précédente).
+
+**Aucune mesure FPS tentée dans cette passe.** Six processus `java.exe` étaient déjà en cours
+d'exécution au tout début de cette passe (aucun identifiable comme un daemon Gradle par son
+titre de fenêtre — tous `N/A`), et le patron avait explicitement prévenu qu'il relançait sa
+propre partie. Consigne de sécurité de ce mandat : dans ce cas, n'engager aucun lancement de
+client ni mesure FPS. Respecté strictement — le volet 1 (cause du plafond 16) a donc été traité
+entièrement par lecture de bytecode statique, sans lancer quoi que ce soit. Le volet 2 (mesure
+FPS ON/OFF de `Greedy.ENABLED`) n'a donc pas pu être tenté du tout cette passe — reste ouvert
+pour une passe qui démarre avec la machine confirmée libre de toute partie réelle.
