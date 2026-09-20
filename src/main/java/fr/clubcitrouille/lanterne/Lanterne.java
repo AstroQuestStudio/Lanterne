@@ -91,6 +91,9 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.PortalPreload.register();
         fr.clubcitrouille.lanterne.core.Treve.register();
         fr.clubcitrouille.lanterne.core.Rumeur.register();
+        // La jonction silencieuse avec ClubCitrouilleAutoMiner (mod client de vol) : voir le
+        // javadoc de la classe pour ce que le javap a trouvé, et pourquoi il a fallu s'en passer.
+        fr.clubcitrouille.lanterne.core.Envol.register();
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.painting.Easel::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(

@@ -590,6 +590,11 @@ public final class LanterneCommand {
      * <p>{@code flying} redescend à faux quand {@code mayfly} s'éteint : sans cela, un joueur qui
      * volait au moment où l'autorisation lui est retirée resterait en l'air jusqu'à son prochain
      * mouvement, ce qui ressemble à un bogue plutôt qu'à une commande qui vient d'agir.
+     *
+     * <p>Le basculement est aussi écrit dans {@link fr.clubcitrouille.lanterne.core.Envol} : c'est ce
+     * qui rend ce geste manuel <em>persistant</em> d'une connexion à l'autre, sans qu'il faille le
+     * retaper — voir le javadoc de cette classe pour pourquoi une détection automatique du mod de vol
+     * client n'a pas été possible.
      */
     private static int toggleFlight(CommandSourceStack source, ServerPlayer target) {
         var abilities = target.getAbilities();
@@ -599,8 +604,10 @@ public final class LanterneCommand {
             abilities.flying = false;
         }
         target.onUpdateAbilities();
+        fr.clubcitrouille.lanterne.core.Envol.setAllowed(target.getUUID(), allowed);
         source.sendSuccess(() -> Component.literal(target.getGameProfile().name()
-                        + (allowed ? " peut désormais voler." : " ne peut plus voler."))
+                        + (allowed ? " peut désormais voler." : " ne peut plus voler.")
+                        + (allowed ? " (survivra à la reconnexion)" : ""))
                 .withStyle(allowed ? ChatFormatting.GREEN : ChatFormatting.YELLOW), true);
         return 1;
     }
