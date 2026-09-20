@@ -358,10 +358,27 @@ dependencies {
     //
     // Voir IRIS-ATTRIBUTION.md et MIGRATION-IRIS.md. Ces trois dépendances viennent telles
     // quelles de build.gradle.kts du module "common" d'Iris (mêmes coordonnées exactes) —
-    // nécessaires pour compiler son moteur de shaders (parseur GLSL, préprocesseur C).
-    compileOnly 'org.antlr:antlr4-runtime:4.13.1'
-    compileOnly 'io.github.douira:glsl-transformer:3.0.0-pre3'
-    compileOnly 'org.anarres:jcpp:1.4.14'
+    // nécessaires pour compiler ET FAIRE TOURNER son moteur de shaders (parseur GLSL,
+    // préprocesseur C). D'abord déclarées en compileOnly (compilation seule), ce qui a produit
+    // un vrai crash client le 21/09/2026 : NoClassDefFoundError sur
+    // org.anarres.cpp.PreprocessorListener dès qu'un joueur active un shaderpack — ces classes
+    // n'étaient tout simplement jamais présentes dans le jar publié. jarJar les embarque
+    // réellement, comme les autres dépendances bundlées ci-dessous.
+    jarJar(implementation('org.antlr:antlr4-runtime:[4.13.1,4.14)')) {
+        version {
+            prefer '4.13.1'
+        }
+    }
+    jarJar(implementation('io.github.douira:glsl-transformer:[3.0.0-pre3,3.1)')) {
+        version {
+            prefer '3.0.0-pre3'
+        }
+    }
+    jarJar(implementation('org.anarres:jcpp:[1.4.14,1.5)')) {
+        version {
+            prefer '1.4.14'
+        }
+    }
     // Le vrai moteur Sodium-NeoForge (classes internes, pas juste l'API ci-dessus) — extrait du
     // jarJar publié, mêmes raisons que neoforge/libs/sodium-neoforge-real-0.9.2+mc26.3.jar dans
     // le clone de travail iris-src (SODIUM_DEPENDENCY_NEO de leur build.gradle.kts pointe, chez
