@@ -11,11 +11,15 @@ import org.lwjgl.sdl.SDLScancode;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
+import net.minecraft.client.CloudStatus;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ParticleStatus;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import fr.clubcitrouille.lanterne.client.screen.Palette;
@@ -242,7 +246,7 @@ public final class Dials extends Screen {
     }
 
     private void buildScenery() {
-        Family decor = new Family("Le décor", false, "coffres, feuilles, objets au sol");
+        Family decor = new Family("Le décor", false, "coffres, feuilles, objets au sol — et le ciel");
         decor.add(Dial.toggle("Coffres statiques", Settings::staticChests,
                 ClientConfig.STATIC_CHESTS,
                 "Un coffre rendu comme un bloc ordinaire, maillé une fois dans son chunk.",
@@ -262,6 +266,65 @@ public final class Dials extends Screen {
                 Dials::cycleItems,
                 "Vanilla dessine une pile au sol jusqu'à QUATRE fois, légèrement décalée.",
                 "1 500 piles pleines : ×2,35. Prix : une pile de 64 paraît seule.",
+                "Effet immédiat."));
+        // --- Quatre réglages VANILLA, pas Lanterne — voir la note ci-dessous ---
+        //
+        // Le patron a raison de s'inquiéter : OptionsScreenMixin (voir Graft) laisse Sodium
+        // remplacer entièrement l'écran vidéo vanilla, et tout réglage que son propre écran ne
+        // reprend pas devient injoignable — Sodium ne relaie QUE ce que son auteur a choisi de
+        // relayer. Vérification faite sur le jar réellement présent (Sodium 0.9.2+mc26.3,
+        // désassemblage de SodiumConfigBuilder.class) : sa page « Quality » relaie déjà particles,
+        // clouds, render_cloud_distance et weather — ce ne sont donc PAS des réglages perdus.
+        //
+        // Mais le mod doit fonctionner SEUL : sans Sodium, VideoOptionsMixin pose la porte
+        // « Lanterne » dans l'écran vidéo vanilla lui-même, qui garde ses propres réglages — donc
+        // rien n'est perdu non plus dans ce cas précis. Le doublon avec Sodium est donc assumé et
+        // voulu : un joueur qui retire Sodium retrouve les mêmes réglages ici, sans devoir se
+        // souvenir qu'ils vivaient auparavant dans un autre menu.
+        //
+        // Chaque champ a été confirmé à deux niveaux sur minecraft_26.3_client.jar : présent dans
+        // Options.class (javap, avec ses bornes réelles lues dans le constructeur), ET encore lu
+        // par le moteur de rendu — fog, disparu du bytecode dans ce build, n'a donc pas de ligne
+        // ici, et Options.particles reste un vrai enum à trois crans (ALL/DECREASED/MINIMAL) : ce
+        // moteur ne connaît PAS de quatrième valeur « désactivé ». Chaque clic écrit dans
+        // Minecraft.getInstance().options puis appelle options.save() — jamais commit(), qui
+        // sauvegarderait le fichier du MOD au lieu du fichier du JEU. Même principe que
+        // Pivot.toggle() pour le backend Vulkan, seul autre réglage vanilla déjà câblé sur cet
+        // écran.
+        decor.add(Dial.cycle("Particules", Dials::particleLabel, Dials::particleColour,
+                Dials::cycleParticles,
+                "Combien de particules le jeu affiche : fumée, flammes, éclaboussures, bulles.",
+                "Options.particles() est un vrai enum à trois crans (ALL/DECREASED/MINIMAL, "
+                        + "net.minecraft.server.level.ParticleStatus) — confirmé lu à chaque particule "
+                        + "par ClientLevel.calculateParticleLevel(), appelé depuis doAddParticle(). Le "
+                        + "voile de particules de Lanterne (famille « Le Voile ») s'ajoute par-dessus : "
+                        + "il coupe une particule cachée derrière un mur AVANT que ce réglage-ci ne "
+                        + "décide de la dessiner ou non.",
+                "Effet immédiat, dès la prochaine particule créée."));
+        decor.add(Dial.cycle("Nuages", Dials::cloudLabel, Dials::cloudColour,
+                Dials::cycleClouds,
+                "La couche de nuages plats au-dessus du monde : coupée, simplifiée, ou soignée.",
+                "Options.cloudStatus() (enum CloudStatus, OFF/FAST/FANCY, défaut FANCY) est lu à "
+                        + "chaque image par GameRenderer.extractOptions(), qui le transmet à "
+                        + "LevelRenderer puis à CloudRenderer.prepare()/.render(). Rien dans le moteur "
+                        + "Vulkan réécrit ne court-circuite ce chemin.",
+                "Effet immédiat."));
+        decor.add(Dial.cycle("Distance des nuages", Dials::cloudRangeLabel, () -> AMBER,
+                Dials::cycleCloudRange,
+                "Jusqu'où la couche de nuages s'étend autour du joueur.",
+                "Options.cloudRange() (entier, bornes RÉELLES 2 à 128 lues dans le constructeur "
+                        + "d'Options.class, défaut 128) est un champ SÉPARÉ de « Nuages » ci-dessus : "
+                        + "on peut avoir des nuages soignés mais proches, ou rapides mais lointains. "
+                        + "Même chemin de lecture que « Nuages » (GameRenderer.extractOptions()).",
+                "Effet immédiat."));
+        decor.add(Dial.cycle("Rayon météo", Dials::weatherLabel, () -> AMBER,
+                Dials::cycleWeather,
+                "Le rayon, en blocs autour du joueur, où la pluie et la neige sont dessinées.",
+                "Options.weatherRadius() (entier, bornes réelles 3 à 10, défaut 10) est LE SEUL "
+                        + "réglage vanilla de pluie/neige dans ce moteur : pas de bascule marche/arrêt "
+                        + "séparée, pas de distinction pluie/neige. Confirmé lu par "
+                        + "WeatherEffectRenderer.extractRenderState(), qui boucle sur une colonne de "
+                        + "blocs de rayon exactement égal à cette valeur.",
                 "Effet immédiat."));
         this.families.add(decor);
     }
@@ -366,6 +429,36 @@ public final class Dials extends Screen {
                         + " qu'un mod d'inspection générique ne peut pas savoir.",
                 "Effet immédiat. Une petite requête réseau, au plus toutes les dix images, et"
                         + " seulement en visant un vrai conteneur."));
+        // Les trois réglages qui suivent sont vanilla, pas Lanterne — même justification et même
+        // câblage (Minecraft.getInstance().options, jamais commit()) que « Vulkan » ci-dessus, et
+        // que particules/nuages/météo dans buildScenery() (voir la note qui les accompagne pour la
+        // preuve complète). Rangés ici et non avec leurs cousins de buildScenery() : ce sont des
+        // réglages de FINESSE DE RENDU (géométrie, couleur, ombre portée), pas des phénomènes
+        // atmosphériques.
+        image.add(Dial.cycle("Mélange de biomes", Dials::biomeBlendLabel, () -> AMBER,
+                Dials::cycleBiomeBlend,
+                "La zone lissée pour mélanger la couleur de l'herbe/feuillage entre biomes voisins.",
+                "Options.biomeBlendRadius() (entier, bornes réelles 0 à 7, défaut 2) est confirmé lu "
+                        + "dans ClientLevel pour le calcul de couleur de biome. Les crans reprennent le"
+                        + " libellé NxN de vanilla (options.biomeBlendRadius.<taille>, lang réel du"
+                        + " jar) : 1x1 au minimum, 15x15 au maximum. Un mélange large coûte plus cher à"
+                        + " chaque bloc de bordure entre deux biomes.",
+                "Visible au prochain rendu du chunk concerné."));
+        image.add(Dial.cycle("Éclairage lisse", Dials::ambientOcclusionLabel, Dials::ambientOcclusionColour,
+                Dials::toggleAmbientOcclusion,
+                "Adoucit les coins de blocs en les assombrissant légèrement (« ambient occlusion »).",
+                "Options.ambientOcclusion() est un booléen (défaut actif) — confirmé lu chaque image"
+                        + " par GameRenderer.extractOptions(). Le lang de Sodium garde encore des clés"
+                        + " mortes pour un ancien réglage à trois crans (OFF/MIN/MAX) ; ce moteur n'en"
+                        + " a plus que deux, vérifié au bytecode : le troisième cran n'existe plus.",
+                "Visible au prochain rendu du chunk concerné, sans redémarrage."));
+        image.add(Dial.cycle("Ombres des entités", Dials::entityShadowsLabel, Dials::entityShadowsColour,
+                Dials::toggleEntityShadows,
+                "Le disque d'ombre au sol sous les créatures et les joueurs.",
+                "Options.entityShadows() est un booléen (défaut actif) — confirmé lu par"
+                        + " EntityRenderer.extractShadow(), qui vide la liste des ombres de l'entité"
+                        + " si ce réglage est coupé.",
+                "Effet immédiat."));
         this.families.add(image);
     }
 
@@ -788,6 +881,133 @@ public final class Dials extends Screen {
             case TOUJOURS -> "Toujours";
             case JAMAIS -> "Jamais";
         };
+    }
+
+    // --- Quatre réglages VANILLA, pas Lanterne — voir la note au-dessus dans buildScenery() -------
+    //
+    // Aucun d'eux n'appelle jamais commit() : ce n'est pas ClientConfig.SPEC qu'il faut sauvegarder,
+    // mais le vrai options.txt du jeu, via Options.save() — exactement comme cyclePivot() le fait
+    // déjà pour Vulkan.
+
+    private static Options vanillaOptions() {
+        return Minecraft.getInstance().options;
+    }
+
+    private static void cycleParticles(int step) {
+        ParticleStatus[] all = ParticleStatus.values();
+        int from = vanillaOptions().particles().get().ordinal();
+        vanillaOptions().particles().set(all[Math.floorMod(from + step, all.length)]);
+        vanillaOptions().save();
+    }
+
+    private static String particleLabel() {
+        return switch (vanillaOptions().particles().get()) {
+            case ALL -> "Toutes";
+            case DECREASED -> "Réduites";
+            case MINIMAL -> "Minimales";
+        };
+    }
+
+    /** Ambre quand le joueur s'est écarté du défaut vanilla (ALL) pour gagner en images/s. */
+    private static int particleColour() {
+        return vanillaOptions().particles().get() == ParticleStatus.ALL ? DIM : AMBER;
+    }
+
+    private static void cycleClouds(int step) {
+        CloudStatus[] all = CloudStatus.values();
+        int from = vanillaOptions().getCloudStatus().ordinal();
+        vanillaOptions().cloudStatus().set(all[Math.floorMod(from + step, all.length)]);
+        vanillaOptions().save();
+    }
+
+    private static String cloudLabel() {
+        return switch (vanillaOptions().getCloudStatus()) {
+            case OFF -> "Désactivés";
+            case FAST -> "Rapides";
+            case FANCY -> "Soignés";
+        };
+    }
+
+    private static int cloudColour() {
+        return vanillaOptions().getCloudStatus() == CloudStatus.FANCY ? DIM : AMBER;
+    }
+
+    /**
+     * Un clic vaut 16 : huit crans couvrent tout l'intervalle réel (2 à 128), et un pas de 1 aurait
+     * demandé 126 clics pour aller d'un bout à l'autre.
+     */
+    private static void cycleCloudRange(int step) {
+        int was = vanillaOptions().cloudRange().get();
+        int now = Math.clamp((long) was + 16 * step, 2, 128);
+        if (now != was) {
+            vanillaOptions().cloudRange().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String cloudRangeLabel() {
+        return String.valueOf(vanillaOptions().cloudRange().get());
+    }
+
+    private static void cycleWeather(int step) {
+        int was = vanillaOptions().weatherRadius().get();
+        int now = Math.clamp((long) was + step, 3, 10);
+        if (now != was) {
+            vanillaOptions().weatherRadius().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String weatherLabel() {
+        return vanillaOptions().weatherRadius().get() + " blocs";
+    }
+
+    // --- Encore vanilla, mais rangés dans « L'image » : finesse de rendu, pas atmosphère ----------
+
+    /**
+     * Les huit crans reprennent le libellé NxN que vanilla affiche lui-même pour ce champ
+     * (clés {@code options.biomeBlendRadius.1/.3/.5/.7/.9/.11/.13/.15} du lang réel du jar) — un
+     * rayon de 0 à 7 s'y traduit en diamètre 2r+1.
+     */
+    private static void cycleBiomeBlend(int step) {
+        int was = vanillaOptions().biomeBlendRadius().get();
+        int now = Math.clamp((long) was + step, 0, 7);
+        if (now != was) {
+            vanillaOptions().biomeBlendRadius().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String biomeBlendLabel() {
+        int radius = vanillaOptions().biomeBlendRadius().get();
+        int side = 2 * radius + 1;
+        return side + "x" + side;
+    }
+
+    private static void toggleAmbientOcclusion(int ignoredDirection) {
+        vanillaOptions().ambientOcclusion().set(!vanillaOptions().ambientOcclusion().get());
+        vanillaOptions().save();
+    }
+
+    private static String ambientOcclusionLabel() {
+        return vanillaOptions().ambientOcclusion().get() ? "actif" : "coupé";
+    }
+
+    private static int ambientOcclusionColour() {
+        return vanillaOptions().ambientOcclusion().get() ? ON : OFF;
+    }
+
+    private static void toggleEntityShadows(int ignoredDirection) {
+        vanillaOptions().entityShadows().set(!vanillaOptions().entityShadows().get());
+        vanillaOptions().save();
+    }
+
+    private static String entityShadowsLabel() {
+        return vanillaOptions().entityShadows().get() ? "actif" : "coupé";
+    }
+
+    private static int entityShadowsColour() {
+        return vanillaOptions().entityShadows().get() ? ON : OFF;
     }
 
     // --- Ce que le serveur a décidé ----------------------------------------
