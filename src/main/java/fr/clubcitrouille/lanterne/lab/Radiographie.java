@@ -491,6 +491,17 @@ public final class Radiographie {
         // Le reflet : voir fr.clubcitrouille.lanterne.core.Reflet — MC-228976, allume par defaut,
         // cumule depuis le demarrage du client comme Greedy ci-dessus.
         sb.append(fr.clubcitrouille.lanterne.core.Reflet.report()).append('\n');
+        // La grêle : voir fr.clubcitrouille.lanterne.core.Grele — plafond de particules de degat,
+        // cumule depuis le demarrage du client, cote serveur (integre en solo).
+        sb.append(fr.clubcitrouille.lanterne.core.Grele.report()).append('\n');
+        // Le transfert par lots : voir fr.clubcitrouille.lanterne.core.Bulk — cumule depuis le
+        // demarrage du client, cote serveur ; reste a "aucun transfert" si le reglage "bulk" est
+        // eteint ou si aucun entonnoir n'a travaille cette session.
+        sb.append(fr.clubcitrouille.lanterne.core.Bulk.report()).append('\n');
+        // Le pont AutoMiner pour la durabilite : voir fr.clubcitrouille.lanterne.core.Increvable —
+        // cumule depuis le demarrage du client, cote serveur ; reste a "aucune durabilite epargnee"
+        // sans client AutoMiner detecte, quel que soit l'etat du reglage.
+        sb.append(fr.clubcitrouille.lanterne.core.Increvable.report()).append('\n');
         sb.append('\n');
 
         sb.append(String.format(Locale.ROOT,

@@ -1,5 +1,8 @@
 package fr.clubcitrouille.lanterne.core;
 
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
+
 /**
  * Le pont AutoMiner pour la durabilité : une API explicite, pas une détection cachée de plus.
  *
@@ -33,13 +36,42 @@ package fr.clubcitrouille.lanterne.core;
 public final class Increvable {
     private Increvable() {}
 
+    // Combien de fois ce pont a reellement epargne une durabilite — la seule question qu'on se
+    // pose en lisant un rapport de session : "ce module a-t-il fait quelque chose, cette fois-ci,
+    // ou le reglage etait-il simplement eteint / aucun client AutoMiner connecte ?". AtomicLong :
+    // ecrit depuis le thread du serveur integre (voir IncrevableMixin), lu depuis
+    // Radiographie.report() sur un autre thread en fin de session — meme raison que
+    // Grele.TRIMMED_CALLS.
+    private static final AtomicLong EPARGNES = new AtomicLong();
+
     /**
      * Ce joueur doit-il garder son outil intact en minant ? Vrai seulement si le réglage est actif
      * ET que son client a réellement déclaré le canal d'identité AutoMiner à la connexion — jamais
      * pour un joueur ordinaire, quel que soit l'état du réglage.
+     *
+     * <p>Incrémente {@link #EPARGNES} à chaque fois que la réponse est vraie : voir {@link #report}.
      */
     public static boolean epargne(net.minecraft.server.level.ServerPlayer player) {
-        return Settings.increvable() && player.connection.hasChannel(
+        boolean vrai = Settings.increvable() && player.connection.hasChannel(
                 fr.clubcitrouille.lanterne.core.network.AutominerPresence.TYPE);
+        if (vrai) {
+            EPARGNES.incrementAndGet();
+        }
+        return vrai;
+    }
+
+    /**
+     * Un résumé lisible, même statut que {@link Grele#report()} : cumulé depuis le démarrage du
+     * client, pas remis à zéro par une session de {@code Radiographie}.
+     */
+    public static String report() {
+        long n = EPARGNES.get();
+        if (n == 0L) {
+            return "increvable : aucune durabilite epargnee (reglage \"increvable\" eteint, ou "
+                    + "aucun client AutoMiner detecte depuis le demarrage)";
+        }
+        return String.format(Locale.ROOT,
+                "increvable : %d durabilite(s) d'outil epargnee(s) au bris de bloc (pont AutoMiner)",
+                n);
     }
 }
