@@ -202,6 +202,9 @@ public final class Lanterne {
             // Le Guichet : reception des instantanes de stock, et enregistrement de son ecran (ce
             // dernier via @EventBusSubscriber, comme Phare — cet appel-ci ne branche que le reseau).
             fr.clubcitrouille.lanterne.client.screen.GuichetScreen.register(modBus);
+            // La lueur du Trieur et du Reseau (Aiguillage, Guichet, Coffre de depot/reception) :
+            // cinq BlockEntityRenderer, une seule porte cliente — voir client.reseau.Renderers.
+            fr.clubcitrouille.lanterne.client.reseau.Renderers.register(modBus);
             // Portails immersifs : detection seule, journalisee si le reglage est allume — rien
             // n'est installe. Voir client.portals.Portail et notes/immersive-portals-faisabilite.md.
             // Plus d'appel direct ici : Portail s'enregistre desormais lui-meme aupres du bus
