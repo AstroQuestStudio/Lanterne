@@ -284,7 +284,7 @@ public final class Sight {
             return;
         }
 
-        Card card = buildCard(mc);
+        Card card = maybeRebuildCard(mc);
         long now = System.nanoTime();
 
         if (card != null) {
@@ -347,6 +347,47 @@ public final class Sight {
     }
 
     /** La cible du moment, telle que {@code Minecraft} l'a déjà calculée — voir la Javadoc de classe. */
+    /** Dernier tick de jeu où {@link #buildCard} a réellement tourné — voir {@link #maybeRebuildCard}. */
+    private static long lastFullBuildTick = Long.MIN_VALUE;
+
+    /**
+     * {@link #buildCard} tournait jusqu'ici à CHAQUE image, sans condition — allocations (Card,
+     * ItemStack, chaînes concaténées) et recherche registre (BuiltInRegistries.BLOCK.getKey) refaites
+     * 60+ fois par seconde même en regardant fixement le même bloc immobile. Trouvé en comparant à
+     * l'architecture de Jade (analyse du 21/09/2026, viewer trop lourd signalé par le patron).
+     *
+     * <p>Ici, la cible visée (déjà calculée gratuitement par vanilla dans {@code crosshairPickEntity}/
+     * {@code hitResult}, aucun calcul supplémentaire) est comparée à peu de frais avant de décider s'il
+     * faut vraiment reconstruire. Une carte n'est reconstruite que si la cible a changé, ou si
+     * {@link #ASK_PERIOD_TICKS} ticks se sont écoulés depuis la dernière reconstruction — la même
+     * cadence que {@link #maybeAsk} : reconstruire plus vite que la donnée serveur ne peut arriver
+     * n'apporterait rien. Entre deux reconstructions, {@link #lastCard} est simplement rejoué — le
+     * lissage des barres dans {@code paint} continue de tourner à chaque image sur cet objet, donc
+     * aucune perte de fluidité visuelle, seulement moins de travail pour produire le contenu.
+     */
+    private static Card maybeRebuildCard(Minecraft mc) {
+        Entity target = mc.crosshairPickEntity;
+        BlockPos targetPos = null;
+        if (target == null && mc.hitResult instanceof BlockHitResult blockHit
+                && blockHit.getType() == HitResult.Type.BLOCK) {
+            targetPos = blockHit.getBlockPos();
+        }
+        if (target == null && targetPos == null) {
+            return null;
+        }
+        String cheapKey = target != null ? "entity:" + target.getUUID() : "block:" + targetPos.asLong();
+        long nowTick = mc.level.getGameTime();
+        if (cheapKey.equals(lastKey) && lastCard != null
+                && nowTick - lastFullBuildTick < ASK_PERIOD_TICKS) {
+            return lastCard;
+        }
+        Card card = buildCard(mc);
+        if (card != null) {
+            lastFullBuildTick = nowTick;
+        }
+        return card;
+    }
+
     private static Card buildCard(Minecraft mc) {
         Entity target = mc.crosshairPickEntity;
         if (target != null) {
