@@ -200,9 +200,13 @@ public class Palette extends Screen {
         drawStatus(graphics, left, top + HEADER);
 
         if (noms.isEmpty()) {
-            graphics.text(this.font, this.font.plainSubstrByWidth(
-                            "Aucun trouvé sous config/lanterne/shaderpacks/.", WIDTH - 20),
-                    left + 10, top + HEADER + STATUS + 4, DIM, false);
+            int egares = Nuancier.misplaced();
+            String mot = egares > 0
+                    ? egares + " fichier(s) trouvé(s) dans shaderpacks/ (format Iris, pas le"
+                            + " nôtre) — voir config/lanterne/shaderpacks/."
+                    : "Aucun trouvé sous config/lanterne/shaderpacks/.";
+            graphics.text(this.font, this.font.plainSubstrByWidth(mot, WIDTH - 20),
+                    left + 10, top + HEADER + STATUS + 4, egares > 0 ? AMBER : DIM, false);
         }
 
         super.extractRenderState(graphics, mouseX, mouseY, partial);

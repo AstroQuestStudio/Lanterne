@@ -304,6 +304,35 @@ public final class Nuancier {
     }
 
     /**
+     * Des fichiers attendent-ils dans le {@code shaderpacks/} de la racine — celui qu'Iris et
+     * OptiFine utilisent depuis toujours — plutôt que dans le nôtre ?
+     *
+     * <h2>Pourquoi ce test existe</h2>
+     *
+     * <p>Un joueur qui a déjà utilisé un shaderpack ailleurs connaît {@code shaderpacks/} à la
+     * racine de l'instance ; c'est là qu'il en dépose un nouveau par réflexe, même averti que ce mod
+     * a son propre système. {@link #listNames} disant alors « aucun trouvé » sans plus de précision,
+     * la conclusion la plus naturelle est « le système est cassé » — alors que les fichiers sont
+     * juste au mauvais endroit, à quelques dossiers de distance. Ce test-ci ne lit ni n'active rien
+     * de ce dossier : Iris ne s'installera de toute façon jamais ici, il plante face à un moteur de
+     * rendu Vulkan natif — voir la note « Vulkan » en tête de fichier. Il ne fait que dire, quand la
+     * liste est vide, qu'il y a bien quelque chose à côté, pour éviter à un joueur de chercher une
+     * panne qui n'existe pas.
+     */
+    public static int misplaced() {
+        Path racine = Path.of("").toAbsolutePath().resolve("shaderpacks");
+        if (!Files.isDirectory(racine)) {
+            return 0;
+        }
+        try (var entrees = Files.list(racine)) {
+            return (int) entrees.filter(candidat -> Files.isDirectory(candidat)
+                    || candidat.getFileName().toString().endsWith(".zip")).count();
+        } catch (IOException problem) {
+            return 0;
+        }
+    }
+
+    /**
      * Enregistre chaque sous-dossier de {@code shaderpacks/} comme pack de ressources séparé.
      *
      * <p>Plusieurs nuanciers peuvent cohabiter — celui qui définit effectivement
