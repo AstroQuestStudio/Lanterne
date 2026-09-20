@@ -4,10 +4,8 @@ import net.irisshaders.iris.api.v0.IrisApi;
 import net.irisshaders.iris.api.v0.IrisProgram;
 import net.irisshaders.iris.gui.screen.ShaderPackScreen;
 import net.minecraft.client.KeyMapping;
-import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.NeoForgeRenderPipelines;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
@@ -15,7 +13,16 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import java.util.ArrayList;
 import java.util.List;
 
-@Mod(value = "iris", dist = Dist.CLIENT)
+/**
+ * Point d'entree ORIGINAL d'Iris (@Mod("iris") retire) : ce code n'est pas encore un vrai mod
+ * embarque dans Lanterne (mixins iris.*.json non copies, rien n'appelle ce constructeur), mais sa
+ * seule presence dans le jar avec l'annotation @Mod faisait planter NeoForge au demarrage -
+ * ModLoadingException "contains mod entrypoint class ... for mod with id iris, which does not
+ * exist or is not in the same file" (FML scanne les classes @Mod independamment de
+ * neoforge.mods.toml). Retirer l'annotation neutralise completement cette classe : code mort
+ * dans le jar, jamais instancie, jamais scanne par FML. A revoir quand l'integration reelle sera
+ * branchee (voir MIGRATION-IRIS.md).
+ */
 public class IrisForgeMod {
 	public static List<KeyMapping> KEYLIST = new ArrayList<>();
 
