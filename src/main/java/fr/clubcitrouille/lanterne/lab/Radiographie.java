@@ -79,6 +79,15 @@ public final class Radiographie {
     private static long windowFrames;
     private static long windowNanos;
 
+    // --- Histogramme FPS : une fenetre de 1s = un coup dans une tranche, sur toute la session.
+    // Complementaire des "creux" (qui ne capturent que les fenetres sous seuilCreuxFps, donc
+    // aveugles a une fluctuation moderee comme "20 FPS parfois, 60-90 sinon" - signale par un
+    // joueur le 20/09/2026, ni catastrophique ni invisible, juste hors de portee de l'outil tel
+    // qu'il existait avant). Bornes choisies pour separer "injouable" (<20), "saccade sensible"
+    // (20-40), "correct" (40-60), "bon" (60-90), "tres bon" (90-120), "excellent" (120+).
+    private static final int[] FPS_HISTOGRAMME_BORNES = {20, 40, 60, 90, 120};
+    private static final long[] fpsHistogramme = new long[FPS_HISTOGRAMME_BORNES.length + 1];
+
     // --- L'état de la lentille, releve a chaque transition plutot qu'a chaque image. ---
     private static final List<String> lentilleTimeline = new ArrayList<>();
     private static String lastLentilleState;
@@ -146,6 +155,7 @@ public final class Radiographie {
         lastFrameLogNanos = 0;
         windowFrames = 0;
         windowNanos = 0;
+        java.util.Arrays.fill(fpsHistogramme, 0L);
         lentilleTimeline.clear();
         lastLentilleState = null;
         synchronized (treeLock) {
@@ -333,6 +343,20 @@ public final class Radiographie {
         if (fps > fpsMax) {
             fpsMax = fps;
         }
+        // Seulement les fenetres "normales" (~1s) : une fenetre etiree par un gel (voir
+        // noterCreuxSiBesoin) est deja comptee a part dans les CREUX, la compter ICI aussi
+        // fausserait la repartition (un seul evenement pese comme une seconde, alors qu'il a pu
+        // durer 12s reelles).
+        if (dureeReelle <= 1.1d) {
+            int tranche = FPS_HISTOGRAMME_BORNES.length;
+            for (int i = 0; i < FPS_HISTOGRAMME_BORNES.length; i++) {
+                if (fps < FPS_HISTOGRAMME_BORNES[i]) {
+                    tranche = i;
+                    break;
+                }
+            }
+            fpsHistogramme[tranche]++;
+        }
         noterCreuxSiBesoin(fps, (now - sessionStartNanos) / 1e9d, dureeReelle);
         windowFrames = 0;
         windowNanos = 0;
@@ -500,6 +524,22 @@ public final class Radiographie {
         sb.append(String.format(Locale.ROOT, "FPS moyen : %.1f (%.2f ms/image en moyenne)%n", avgFps, avgFrameMs));
         if (fpsMin <= fpsMax) {
             sb.append(String.format(Locale.ROOT, "FPS min/max (fenêtres de 1s) : %.1f / %.1f%n", fpsMin, fpsMax));
+        }
+        long totalFenetres = 0;
+        for (long compte : fpsHistogramme) {
+            totalFenetres += compte;
+        }
+        if (totalFenetres > 0) {
+            sb.append("Répartition FPS (part du temps de jeu réel, hors gels déjà comptés en CREUX) :\n");
+            String[] etiquettes = {"< 20", "20-40", "40-60", "60-90", "90-120", "120+"};
+            for (int i = 0; i < fpsHistogramme.length; i++) {
+                double part = 100.0 * fpsHistogramme[i] / totalFenetres;
+                if (fpsHistogramme[i] == 0) {
+                    continue; // une tranche jamais atteinte n'aide pas a lire le rapport
+                }
+                sb.append(String.format(Locale.ROOT, "  %-7s : %5.1f %% (%d s)%n",
+                        etiquettes[i], part, fpsHistogramme[i]));
+            }
         }
         // Fusion de faces (terrain) : voir fr.clubcitrouille.lanterne.client.terrain.Greedy — cumulé
         // depuis le démarrage du client, pas juste cette session, mais suffisant pour comparer un
