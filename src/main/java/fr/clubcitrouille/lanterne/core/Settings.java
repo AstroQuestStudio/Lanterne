@@ -392,6 +392,11 @@ public final class Settings {
     private static final boolean AIRSKIP_REMOVED_AFTER_MEASUREMENT = true;
     /** Le court-circuit de bousculade pour les amas immobiles. */
     private static boolean jam = true;
+    /** MC-228976 : pousseEntities annule cote client. Voir {@link Reflet}. */
+    private static boolean reflet = true;
+    /** Plafond des particules d'indicateur de degats en combat de masse. Voir {@link Grele}. */
+    private static boolean grele = true;
+    private static int greleCap = 40;
     /** Le sommeil à échéance des blocs-entités dont l'issue est connue d'avance. */
     private static boolean sleep = true;
     /** Le raccourci de recette : essayer d'abord la dernière recette qui a matché. Voir {@link Raccourci}. */
@@ -1197,6 +1202,23 @@ public final class Settings {
         return master && jam;
     }
 
+    /**
+     * Le reflet : {@code pushEntities} annulé côté client (MC-228976). Voir {@link Reflet}.
+     *
+     * <p>Distinct de {@link #jam()} et {@link #collisions()} bien qu'ils ciblent la même méthode :
+     * ce module agit sur un côté (client) que les deux autres excluent explicitement d'eux-mêmes.
+     * Un interrupteur par optimisation, pas un seul pour toute la méthode — voir l'en-tête de ce
+     * fichier.
+     */
+    public static boolean reflet() {
+        return master && reflet;
+    }
+
+    /** La grêle : plafond des particules d'indicateur de dégâts. Voir {@link Grele}. */
+    public static boolean grele() {
+        return master && grele;
+    }
+
     public static boolean sleep() {
         return master && sleep;
     }
@@ -1600,6 +1622,10 @@ public final class Settings {
         decode = wanted.contains("decode") || wanted.contains("decodage") || wanted.contains("restitution");
         explosions = wanted.contains("explosion") || wanted.contains("blast");
         jam = wanted.contains("jam");
+        // « reflet » n'appartient qu'à ce module : ne pas reprendre « push » ni « collision », deja
+        // pris par jam/collisions plus haut et plus bas dans ce fichier.
+        reflet = wanted.contains("reflet");
+        grele = wanted.contains("grele");
         sleep = wanted.contains("sleep") || wanted.contains("sommeil");
         raccourci = wanted.contains("raccourci") || wanted.contains("shortcut");
         bulk = wanted.contains("bulk") || wanted.contains("lot") || wanted.contains("entonnoir");
@@ -1808,6 +1834,10 @@ public final class Settings {
         epoch++;
         save = Config.SAVE.get();
         jam = Config.JAM.get();
+        reflet = Config.REFLET.get();
+        grele = Config.GRELE.get();
+        greleCap = Config.GRELE_CAP.get();
+        Grele.setCap(greleCap);
         sleep = Config.SLEEP.get();
         raccourci = Config.RACCOURCI.get();
         bulk = Config.BULK.get();
@@ -1886,6 +1916,12 @@ public final class Settings {
         }
         if (jam) {
             text.append("amas ");
+        }
+        if (reflet) {
+            text.append("reflet ");
+        }
+        if (grele) {
+            text.append("grele ");
         }
         if (sleep) {
             text.append("sommeil ");

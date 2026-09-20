@@ -50,6 +50,9 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue BOXES;
     public static final ModConfigSpec.BooleanValue SAVE;
     public static final ModConfigSpec.BooleanValue JAM;
+    public static final ModConfigSpec.BooleanValue REFLET;
+    public static final ModConfigSpec.BooleanValue GRELE;
+    public static final ModConfigSpec.IntValue GRELE_CAP;
     public static final ModConfigSpec.BooleanValue SLEEP;
     public static final ModConfigSpec.BooleanValue RACCOURCI;
     public static final ModConfigSpec.BooleanValue BULK;
@@ -224,6 +227,25 @@ public final class Config {
                 .define("positions", true);
         JAM = BUILDER.comment("Court-circuit de bousculade dans les amas immobiles.")
                 .define("amas", true);
+        REFLET = BUILDER.comment(
+                "MC-228976 : pushEntities() tourne aussi sur le fil de rendu du client, sans",
+                "condition (verifie au javap sur LivingEntity.aiStep de ce moteur). Le resultat",
+                "cote client ne sert a rien d'observable : les entites distantes sont positionnees",
+                "par interpolation reseau, pas par cette physique locale. Annule l'appel entier",
+                "cote client uniquement ; le serveur, seul concerne par Jam et Shove ci-dessus,",
+                "n'est pas touche par ce reglage.")
+                .define("reflet", true);
+        GRELE = BUILDER.comment(
+                "Plafonne le nombre de particules d'indicateur de degats envoyees par coup",
+                "(Player.damageStatsAndHearts, verifie au javap : compte = degats * 0,5, sans",
+                "plafond vanilla). Chaque particule au-dela du plafond est un paquet reseau",
+                "construit et envoye pour un point invisible dans un nuage deja dense.")
+                .define("grele", true);
+        GRELE_CAP = BUILDER.comment(
+                "Particules envoyees au maximum par coup, au-dela du seuil ci-dessus.",
+                "40 (defaut) : un coup a 80 degats ou plus ne se distingue deja plus a l'oeil",
+                "d'un coup a 40 degats sur ce seul indicateur.")
+                .defineInRange("grele_plafond", 40, 1, 1000);
         SLEEP = BUILDER.comment(
                 "Sommeil des blocs-entites dont l'echeance est connue : un four qui cuit sait",
                 "quand il aura fini, et n'a rien a faire d'ici la.")

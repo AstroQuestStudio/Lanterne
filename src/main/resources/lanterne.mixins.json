@@ -11,6 +11,7 @@
     "ProfilerMixin",
     "ManneMixin",
     "LivingEntityMixin",
+    "DamageIndicatorMixin",
     "NetworkRegistryMixin",
     "FurnaceMixin",
     "RaccourciCraftingMixin",

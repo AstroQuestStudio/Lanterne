@@ -297,6 +297,9 @@ public final class Radiographie {
         // (reglage "guet"), rapporte donc "guet : desactive" tant qu'un joueur ne l'a pas active
         // explicitement pour une session de mesure.
         sb.append(fr.clubcitrouille.lanterne.client.terrain.Guet.report()).append('\n');
+        // Le reflet : voir fr.clubcitrouille.lanterne.core.Reflet — MC-228976, allume par defaut,
+        // cumule depuis le demarrage du client comme Greedy ci-dessus.
+        sb.append(fr.clubcitrouille.lanterne.core.Reflet.report()).append('\n');
         sb.append('\n');
 
         sb.append("LENTILLE (mise à l'échelle) — chronologie\n").append("-".repeat(60)).append('\n');
