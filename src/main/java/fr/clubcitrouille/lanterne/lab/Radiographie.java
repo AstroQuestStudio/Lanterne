@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -82,6 +83,23 @@ public final class Radiographie {
     private static final List<String> lentilleTimeline = new ArrayList<>();
     private static String lastLentilleState;
 
+    // --- Creux de FPS : capture la pile echantillonnee PENDANT une fenetre de 1s trop lente. ---
+    // Seuil sous lequel une fenetre de 1s est consideree comme un creux qui merite d'etre expliqué
+    // dans le rapport, pas juste compté dans fpsMin. 10 FPS : sous ce chiffre, une image dure plus
+    // de 100 ms — un gel perceptible, jamais une simple fluctuation de charge.
+    private static double seuilCreuxFps = 10.0d;
+    // Nombre maximal de creux conserves AVEC leur pile dans un rapport : borne la taille du
+    // rapport final pour une session ou le jeu resterait durablement sous le seuil (le probleme,
+    // alors, n'est plus de savoir OU chercher — il est ailleurs, et un rapport de 500 piles
+    // identiques n'aiderait pas plus qu'un chiffre de FPS seul).
+    private static final int CREUX_MAX = 15;
+    // Echantillons (tableaux de frames DEJA captures par le fil d'echantillonnage, voir record())
+    // vus depuis le debut de la fenetre de 1s en cours. Vide a chaque fin de fenetre (creux ou
+    // non) par recordFrame, sous treeLock.
+    private static final List<StackTraceElement[]> fenetreEnCours = new ArrayList<>();
+    // Un bloc de texte deja mis en forme par creux detecte, pret a etre colle dans le rapport.
+    private static final List<String> creuxDetectes = new ArrayList<>();
+
     /**
      * Appelée depuis {@code Pane.onFrame}, chaque image, sans condition. Doit rester la méthode la
      * moins chère de ce fichier : c'est la seule qui tourne soixante fois par seconde même quand
@@ -130,6 +148,10 @@ public final class Radiographie {
         windowNanos = 0;
         lentilleTimeline.clear();
         lastLentilleState = null;
+        synchronized (treeLock) {
+            fenetreEnCours.clear();
+        }
+        creuxDetectes.clear();
         renderThreadId = -1L;
         running.set(true);
 
@@ -277,6 +299,13 @@ public final class Radiographie {
                     ? node.name + "  [via invokedynamic/MethodHandle]"
                     : node.name;
             selfByMethod.merge(leafKey, 1, Integer::sum);
+
+            // Conserve une référence vers ce tableau pour la fenêtre FPS en cours (voir
+            // recordFrame/noterCreuxSiBesoin) : ThreadMXBean#getThreadInfo a DÉJÀ été appelé par
+            // loop() avant record() — on ne fait ici que garder le résultat un peu plus longtemps
+            // (le temps d'une fenêtre, une seconde) plutôt que de le laisser partir au ramasse-
+            // miettes immédiatement. Coût : une référence ajoutée à une liste, rien de plus.
+            fenetreEnCours.add(frames);
         }
     }
 
@@ -303,9 +332,113 @@ public final class Radiographie {
         if (fps > fpsMax) {
             fpsMax = fps;
         }
+        noterCreuxSiBesoin(fps, (now - sessionStartNanos) / 1e9d);
         windowFrames = 0;
         windowNanos = 0;
         lastFrameLogNanos = now;
+    }
+
+    /**
+     * Si la fenêtre de 1s qui vient de se terminer est passée sous {@link #seuilCreuxFps}, fige un
+     * aperçu des piles échantillonnées PENDANT cette fenêtre dans le rapport final — un horodatage
+     * et une vraie pile d'appel, plutôt qu'un chiffre de FPS isolé sans aucun moyen de savoir ce qui
+     * se passait à ce moment-là (voir le rapport réel du 20/09 : « FPS min/max : 0.4 / 326.0 » sur
+     * 613 s, sans aucune piste sur le gel de ~2,5 s qu'un FPS de 0.4 implique).
+     *
+     * <h2>Pourquoi ce n'est pas un coût ajouté à chaque échantillon</h2>
+     *
+     * <p>Aucun relevé de pile supplémentaire n'a lieu ici : {@link #record} garde déjà, sans coût
+     * réel, une référence vers chaque tableau de frames dans {@link #fenetreEnCours} — l'appel à
+     * {@link ThreadMXBean#getThreadInfo} a déjà eu lieu dans {@link #loop}, on retient juste le
+     * résultat un peu plus longtemps. Le travail réellement coûteux — dédupliquer et formater ces
+     * piles en texte lisible, dans {@link #formatCreux} — n'a lieu QUE si un creux est confirmé,
+     * ce qui reste rare par construction (un seuil de {@link #seuilCreuxFps} FPS n'est, par
+     * définition, pas la norme d'une session jouable).
+     */
+    private static void noterCreuxSiBesoin(double fps, double sec) {
+        List<StackTraceElement[]> echantillons;
+        synchronized (treeLock) {
+            if (fenetreEnCours.isEmpty()) {
+                return;
+            }
+            echantillons = new ArrayList<>(fenetreEnCours);
+            fenetreEnCours.clear();
+        }
+        if (fps >= seuilCreuxFps || creuxDetectes.size() >= CREUX_MAX) {
+            return;
+        }
+        creuxDetectes.add(formatCreux(sec, fps, echantillons));
+    }
+
+    /**
+     * Formate un creux détecté : horodatage, FPS de la fenêtre, et les piles DISTINCTES vues
+     * pendant cette fenêtre — dédupliquées et comptées, plutôt que répétées une fois par
+     * échantillon. Un gel bloque généralement sur la même instruction pendant toute sa durée ;
+     * répéter soixante fois la même pile de vingt lignes n'aiderait pas plus qu'une seule copie
+     * avec un compte à côté.
+     */
+    private static String formatCreux(double sec, double fps, List<StackTraceElement[]> echantillons) {
+        // LinkedHashMap : conserve l'ordre de première apparition, pour un rapport reproductible
+        // (deux lectures du même fichier donnent le même ordre) plutôt que l'ordre de hachage.
+        Map<String, Integer> comptes = new LinkedHashMap<>();
+        Map<String, StackTraceElement[]> exemples = new LinkedHashMap<>();
+        for (StackTraceElement[] frames : echantillons) {
+            String cle = signatureCourte(frames);
+            comptes.merge(cle, 1, Integer::sum);
+            exemples.putIfAbsent(cle, frames);
+        }
+        List<Map.Entry<String, Integer>> tri = new ArrayList<>(comptes.entrySet());
+        tri.sort(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue).reversed());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format(Locale.ROOT,
+                "  t+%.0fs : %.1f FPS — %d échantillon(s) capturé(s) pendant cette fenêtre, "
+                        + "%d pile(s) distincte(s)%n",
+                sec, fps, echantillons.size(), tri.size()));
+        int rang = 0;
+        for (Map.Entry<String, Integer> entry : tri) {
+            rang++;
+            if (rang > 3) {
+                sb.append(String.format(Locale.ROOT,
+                        "    ... %d pile(s) distincte(s) supplémentaire(s), non affichée(s)%n",
+                        tri.size() - 3));
+                break;
+            }
+            StackTraceElement[] frames = exemples.get(entry.getKey());
+            sb.append(String.format(Locale.ROOT, "    pile n°%d (%d/%d échantillons) :%n",
+                    rang, entry.getValue(), echantillons.size()));
+            int montrees = 0;
+            for (StackTraceElement frame : frames) {
+                if (estFrameOpaque(frame)) {
+                    continue; // même résolution que le reste du rapport, voir estFrameOpaque
+                }
+                sb.append("      ").append(frame.getClassName()).append('.')
+                        .append(frame.getMethodName()).append('\n');
+                montrees++;
+                if (montrees >= 25) {
+                    sb.append("      ... (pile tronquée)\n");
+                    break;
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Une clef courte pour regrouper deux échantillons de la même fenêtre s'ils viennent du même
+     * endroit — les six frames du sommet (sommet de pile en premier) suffisent à distinguer deux
+     * piles vraiment différentes sans comparer les 128 frames possibles à chaque fois.
+     */
+    private static String signatureCourte(StackTraceElement[] frames) {
+        StringBuilder sig = new StringBuilder();
+        int max = Math.min(frames.length, 6);
+        for (int i = 0; i < max; i++) {
+            if (estFrameOpaque(frames[i])) {
+                continue;
+            }
+            sig.append(frames[i].getClassName()).append('.').append(frames[i].getMethodName()).append('|');
+        }
+        return sig.toString();
     }
 
     private static void recordLentille() {
@@ -358,6 +491,24 @@ public final class Radiographie {
         // Le reflet : voir fr.clubcitrouille.lanterne.core.Reflet — MC-228976, allume par defaut,
         // cumule depuis le demarrage du client comme Greedy ci-dessus.
         sb.append(fr.clubcitrouille.lanterne.core.Reflet.report()).append('\n');
+        sb.append('\n');
+
+        sb.append(String.format(Locale.ROOT,
+                "CREUX DE FPS DÉTECTÉS (fenêtres de 1s sous %.1f FPS)%n", seuilCreuxFps))
+                .append("-".repeat(60)).append('\n');
+        if (creuxDetectes.isEmpty()) {
+            sb.append("  (aucune fenêtre sous le seuil pendant cette session)\n");
+        } else {
+            for (String creux : creuxDetectes) {
+                sb.append(creux);
+            }
+            if (creuxDetectes.size() >= CREUX_MAX) {
+                sb.append(String.format(Locale.ROOT,
+                        "  (limite de %d creux capturés atteinte — d'autres ont pu survenir sans "
+                                + "être capturés)%n",
+                        CREUX_MAX));
+            }
+        }
         sb.append('\n');
 
         sb.append("LENTILLE (mise à l'échelle) — chronologie\n").append("-".repeat(60)).append('\n');
