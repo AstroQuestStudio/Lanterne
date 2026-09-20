@@ -18,22 +18,21 @@ import fr.clubcitrouille.lanterne.Lanterne;
 /**
  * La greffe JEI : nos recettes rendues à l'afficheur quand le serveur ne les lui donne pas.
  *
- * <h2>CE FICHIER N'EST PAS COMPILÉ EN L'ÉTAT — ce qu'il faut faire pour l'allumer</h2>
+ * <h2>Activée le 20/09/2026 — ce qu'il a fallu pour ça</h2>
  *
- * <p>Il porte l'extension {@code .java.a-activer} et {@code javac} l'ignore donc entièrement. Ce
- * n'est pas de la coquetterie : il est le seul fichier du dépôt qui nomme {@code mezz.jei}, et
- * cette dépendance de compilation <b>n'est pas encore déclarée</b>. Le laisser en {@code .java}
- * casserait la compilation de tout le mod, pour tout le monde, tant que les deux lignes ci-dessous
- * manquent. Un correctif d'affichage ne vaut pas ce prix-là.
- *
- * <p>Pour l'allumer, dans l'ordre — et le premier point seul ne suffit pas :
+ * <p>Ce fichier a porté l'extension {@code .java.a-activer} pendant tout le développement
+ * précédent : il est le seul fichier du dépôt qui nomme {@code mezz.jei}, et cette dépendance de
+ * compilation n'était pas encore déclarée. Trois choses ont manqué jusqu'ici, faites ensemble le
+ * jour de l'activation — un correctif d'affichage ne valait pas le risque de casser la compilation
+ * du mod pour tout le monde en ne faisant que la moitié :
  *
  * <ol>
- *   <li>dans {@code build.gradle}, bloc {@code repositories} :
- *       <pre>maven { url = 'https://maven.blamejared.com' }</pre></li>
- *   <li>dans {@code build.gradle}, bloc {@code dependencies} :
- *       <pre>compileOnly 'mezz.jei:jei-26.2-neoforge-api:30.29.0.201'</pre></li>
- *   <li>renommer ce fichier en {@code GreffeJei.java}.</li>
+ *   <li>{@code build.gradle}, bloc {@code repositories} : le dépôt BlameJared.</li>
+ *   <li>{@code build.gradle}, bloc {@code dependencies} :
+ *       {@code compileOnly 'mezz.jei:jei-26.3-neoforge-api:31.1.0.12'} — la version « 26.3 », pas
+ *       la « 26.2 » qu'une note plus ancienne de ce fichier citait encore : vérifiée contre le jar
+ *       réellement installé dans l'instance de test au moment de l'activation.</li>
+ *   <li>renommage de ce fichier, de {@code .java.a-activer} vers {@code .java}.</li>
  * </ol>
  *
  * <p>{@code compileOnly} et non {@code implementation}, pour la raison déjà écrite à propos de

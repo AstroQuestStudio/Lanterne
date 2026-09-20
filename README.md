@@ -2443,13 +2443,35 @@ Note de cohabitation à trois : avec DH et Sodium ensemble, l'écran d'options p
 et les réglages de Lanterne sont dans **sa colonne à lui**. Trois mods, trois membres différents,
 aucune collision — mais trois endroits à connaître.
 
-### 🍲 JEI — aucune dépendance, et c'est mieux ainsi
+### 🍲 JEI — deux passerelles, une seule avec une vraie dépendance
 
-Le guide illustré de Lanterne s'ouvre en maintenant une touche sur un objet. Chez Create, ce geste
-passe par une greffe JEI ; ici il passe par `ItemTooltipEvent`, que `ItemStack.getTooltipLines`
-déclenche et que JEI emploie lui-même pour bâtir ses infobulles. Conséquence : **cela marche dans
-l'inventaire, dans JEI, et dans EMI ou REI** si le pack en change un jour — sans une ligne de plus
-dans `build.gradle`. Voir `client/ponder/Hint.java`.
+**Le guide illustré, toujours sans dépendance.** Il s'ouvre en maintenant une touche sur un objet.
+Chez Create, ce geste passe par une greffe JEI ; ici il passe par `ItemTooltipEvent`, que
+`ItemStack.getTooltipLines` déclenche et que JEI emploie lui-même pour bâtir ses infobulles.
+Conséquence : **cela marche dans l'inventaire, dans JEI, et dans EMI ou REI** si le pack en change un
+jour — sans une ligne de plus dans `build.gradle`. Voir `client/ponder/Hint.java`.
+
+**Les recettes, elles, ont fini par en avoir besoin d'une — et c'est le bon compromis.** Le défaut
+rapporté par un joueur : *« sur JEI ça me montre pas de craft pour tes items et blocs ! »*. Cause,
+vérifiée en jeu, pas supposée — voir `compat/RecettesEmbarquees.java` pour le raisonnement complet :
+depuis la refonte du livre de recettes, **le serveur n'envoie plus au client les recettes complètes**,
+seulement de quoi peindre le livre vanilla. JEI comble ce trou en installant sa **propre moitié
+serveur**, qui lui expédie les vraies recettes — mais un serveur qui n'a pas JEI n'a pas cette moitié,
+et JEI se rabat alors sur `mezz.jei.common.recipes.VanillaClientRecipeLoader`, qui **ne lit qu'un seul
+pack : celui de vanilla**. Nos onze recettes ne sont pas mal formées, ne sont pas mal chargées —
+elles ne sont **jamais lues** par ce chemin de secours.
+
+`compat/GreffeJei.java` comble ce trou précis, et seulement lui : sur un serveur distant sans JEI, il
+relit `data/lanterne/recipe/*.json` **dans notre propre jar** — déjà sur le disque du joueur, un mod
+commun étant obligatoire — et les donne à JEI par `IRecipeRegistration.addRecipes`. Il se tait dans
+les deux autres cas (JEI a déjà les vraies recettes du serveur, ou il n'y a pas de serveur distant) :
+voir `RecettesEmbarquees.necessaire()`. Aucune catégorie n'est déclarée — les onze recettes sont des
+recettes d'établi ordinaires, celle de vanilla suffit.
+
+Ceci **est** une vraie dépendance de compilation (`compileOnly 'mezz.jei:jei-26.3-neoforge-api:…'`,
+dépôt BlameJared, JEI étant MIT), à la différence du guide ci-dessus — mais `compileOnly` seul, pour
+les mêmes raisons que Sodium plus haut : `@JeiPlugin` n'est chargé que si JEI le trouve lui-même par
+scan d'annotation, rien de ce mod ne nomme JEI ailleurs, et un serveur sans JEI ne s'aperçoit de rien.
 
 ### ⚙️ Le préréglage — ce qu'il faut poser avant la première partie
 

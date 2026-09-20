@@ -228,6 +228,16 @@ repositories {
             includeGroup 'com.velocitypowered'
         }
     }
+
+    // Le dépôt de BlameJared, pour l'API de JEI — même raison de portée que ci-dessus. Voir
+    // compat/GreffeJei.java pour ce que cette dépendance active.
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com'
+        content {
+            includeGroup 'mezz.jei'
+        }
+    }
 }
 
 // <h2>Le décodeur vidéo : les liaisons embarquées, les binaires téléchargés</h2>
@@ -297,6 +307,21 @@ dependencies {
     // « catch (Throwable) » qui bascule sur les deux autres voies (lien, dossier surveillé) si le
     // sélecteur natif est absent au lancement — voir Reach.java.
     compileOnly 'org.lwjgl:lwjgl-tinyfd:3.4.1'
+
+    // <h2>L'API de JEI : « compileOnly », pour une raison différente de Sodium</h2>
+    //
+    // JEI est MIT — aucun souci de licence ici, contrairement à Sodium ci-dessus. « compileOnly »
+    // reste le bon choix pour deux autres raisons : JEI ne charge « compat.GreffeJei » que s'il
+    // trouve lui-même l'annotation « @JeiPlugin » sur le classpath du jeu — rien de ce mod ne nomme
+    // JEI ailleurs, et un serveur sans JEI ne remarque rien. Et l'embarquer annoncerait dans les
+    // métadonnées publiées une dépendance que ce mod n'impose à personne. Voir
+    // compat/GreffeJei.java pour tout le raisonnement, et compat/RecettesEmbarquees.java pour le
+    // défaut que cette greffe corrige.
+    //
+    // La version suit celle du jeu, comme Sodium ci-dessus — vérifiée contre le jar réellement
+    // installé dans l'instance de test (« jei-26.3-neoforge-31.1.0.12.jar »), pas supposée depuis
+    // une version antérieure du mod.
+    compileOnly 'mezz.jei:jei-26.3-neoforge-api:31.1.0.12'
 
     jarJar(implementation('javazoom:jlayer:[1.0.1,1.1)')) {
         version {
