@@ -304,6 +304,55 @@ public final class Pregen {
         return running;
     }
 
+    /**
+     * Le fichier qui dit « une pré-génération était en cours, à ce rayon » — pour la reprendre
+     * automatiquement après un crash/redémarrage du serveur, pas seulement après une pause
+     * volontaire (déjà gérée en mémoire par {@link #suspended}). Une seule ligne, le rayon en
+     * chunks ; son absence veut dire « rien à reprendre ».
+     */
+    private static Path stateFile() {
+        return Path.of("").toAbsolutePath().resolve("config").resolve("lanterne")
+                .resolve("pregen-en-cours.txt");
+    }
+
+    private static void writeState(int radius) {
+        try {
+            Path path = stateFile();
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, String.valueOf(radius));
+        } catch (IOException ignored) {
+            // Pas grave : au pire, pas de reprise automatique apres un crash, mais rien de casse.
+        }
+    }
+
+    private static void clearState() {
+        try {
+            Files.deleteIfExists(stateFile());
+        } catch (IOException ignored) {
+        }
+    }
+
+    /**
+     * Relance automatiquement une pré-génération interrompue par un crash/redémarrage, si le
+     * fichier d'état en atteste une. Appelée une fois au démarrage du serveur, sur le niveau
+     * principal (voir Cadence.java). Sans effet si aucun fichier n'existe — le cas normal.
+     */
+    public static void resumeIfPending(ServerLevel overworld) {
+        Path path = stateFile();
+        if (!Files.isRegularFile(path)) {
+            return;
+        }
+        try {
+            int radius = Integer.parseInt(Files.readString(path).trim());
+            Lanterne.LOG.info("[PRÉGÉN] reprise automatique apres redemarrage : rayon {} chunks "
+                    + "(la reprise est gratuite, ce qui existe deja est saute).", radius);
+            begin(overworld, radius);
+        } catch (IOException | NumberFormatException corrupted) {
+            Lanterne.LOG.warn("[PRÉGÉN] fichier de reprise illisible, ignore : {}", corrupted.toString());
+            clearState();
+        }
+    }
+
     /** Vrai tant que le log d'activation de {@link #keepServerAwake(int)} reste à écrire. */
     private static boolean pauseSuppressAnnounced;
 
@@ -376,6 +425,7 @@ public final class Pregen {
         int side = radiusChunks * 2 + 1;
         wanted = (long) side * side;
 
+        writeState(radiusChunks);
         ALREADY.clear();
         long known = readExistingChunks(target);
         Lanterne.LOG.info("[PRÉGÉN] {} chunk(s) visés autour de l'origine (rayon {}), dont {} déjà "
@@ -1006,6 +1056,7 @@ public final class Pregen {
         running = false;
         hideBar();
         releaseKnownChunks();
+        clearState();
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[PRÉGÉN] terminé — %d chunk(s) générés et %d sautés en %s de travail, soit "
                 + "%.1f par seconde. Ces chunks seront désormais servis depuis le disque, ce qui "
@@ -1039,6 +1090,7 @@ public final class Pregen {
             }
             running = false;
             hideBar();
+            clearState();
             Lanterne.LOG.info("[PRÉGÉN] interrompu — {} chunk(s) générés, {} sautés, {} encore en "
                     + "vol qui aboutiront et seront écrits. La reprise est gratuite : relancer "
                     + "sautera d'emblée tout ce qui vient d'être écrit.",

@@ -314,6 +314,21 @@ dependencies {
     // sélecteur natif est absent au lancement — voir Reach.java.
     compileOnly 'org.lwjgl:lwjgl-tinyfd:3.4.1'
 
+    // <h2>L'API de BlueMap : jar local, pas de coordonnee Maven trouvee fiable dans le temps</h2>
+    //
+    // BlueMap est LGPL-3.0 (compatible avec notre GPL-3.0, absorbe sans souci) mais son API n'a pas
+    // de coordonnee Maven verifiee cette nuit (pas d'acces web pour la confirmer en toute fiabilite,
+    // et deviner un depot risquerait un artefact fantome qui casse le build de quelqu'un d'autre
+    // plus tard). Le jar complet installe sur le VPS a ete copie tel quel dans libs/ - seules les
+    // classes de l'API publique (de.bluecolored.bluemap.api.*) sont utilisees, jamais empaquetees
+    // (compileOnly), jamais executees si BlueMap est absent (voir Cadence.java, garde
+    // BlueMapAPI.getInstance() en Optional).
+    compileOnly files('libs/bluemap-api-5.27.jar')
+    // flow-math : dependance transitive de l'API BlueMap (Vector2i), embarquee par BlueMap via
+    // jarJar dans son propre jar donc absente du jar API seul ci-dessus - vue reellement chargee
+    // sur le VPS ("mods/bluemap-5.27-neoforge.jar > flow-math-1.0.3.jar").
+    compileOnly 'com.flowpowered:flow-math:1.0.3'
+
     // <h2>L'API de JEI : « compileOnly », pour une raison différente de Sodium</h2>
     //
     // JEI est MIT — aucun souci de licence ici, contrairement à Sodium ci-dessus. « compileOnly »
