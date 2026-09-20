@@ -52,7 +52,7 @@ l'instance `test 1` (minecraftinstance.json ?).
 ## Prochaines tâches réelles (pas juste la liste générique du goal)
 
 1. Régler la visibilité "Iris" pour Sodium/reeses-sodium-options (voir ci-dessus).
-2. Continuer le retrait de Sodium (33 fichiers, voir `RECHERCHE-VULKAN-SANS-SODIUM.md`).
+2. Continuer le retrait de Sodium : nouvelle categorie trouvee (mixins sur cibles vanilla important Sodium, 4 fichiers - MixinLevelRenderer/MixinWindow/MixinRenderPipeline/MixinDebugScreenEntriesList), fix propose (etendre IrisMixinPlugin.shouldApplyMixin), pas applique - voir RECHERCHE-VULKAN-SANS-SODIUM.md.
 3. Continuer Vulkan (`lab/ShadercProbe.java` prouve GLSL→SPIR-V fonctionnel, prochaine étape :
    l'intégrer réellement au pipeline de rendu, pas juste un prototype isolé).
 4. Construire un vrai lanceur de client jetable pour tester sans dépendre d'un humain éveillé.

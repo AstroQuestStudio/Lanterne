@@ -80,3 +80,39 @@ zéro, pour ces ~33 fichiers.
 **Conclusion honnête** : c'est un vrai sous-projet scopé (pas un retrait d'une
 ligne), centré sur `vertices/sodium/terrain/` en premier — mais borné à ~33
 fichiers, pas 980. Faisable, pas cette nuit dans son intégralité.
+
+## Découverte complémentaire (2e passe) : mixins sur cibles VANILLA qui importent Sodium
+
+Nouvelle catégorie trouvée, distincte des 21 mixins `compat/sodium/mixin/` (sans risque, cible
+Sodium-only, jamais chargée si Sodium absent) : **4 fichiers dans `mixin/` (pas `compat/sodium/
+mixin/`) ciblent des classes VANILLA/moteur, toujours chargées, tout en import­ant des types
+Sodium dans leurs champs/paramètres** :
+
+- `MixinLevelRenderer.java` — `@Mixin(LevelRenderer.class)` (vanilla), importe
+  `net.caffeinemc.mods.sodium.client.util.GameRendererStorage`.
+- `MixinWindow.java` — `@Mixin(GlBackend.class)` (`com.mojang.renderpearl.backend.opengl`,
+  moteur vanilla), importe `SodiumClientMod`/`SodiumOptions`.
+- `MixinRenderPipeline.java` — `@Mixin(RenderPipeline.class)` (`com.mojang.renderpearl.api.
+  pipeline`, moteur vanilla), importe `ChunkMeshFormats` (Sodium).
+- `MixinDebugScreenEntriesList.java` — `@Mixin(DebugScreenEntryList.class)` (l'écran de debug
+  F3 vanilla, systématiquement chargé), importe `SodiumClientMod`/`PlatformRuntimeInformation`.
+
+**Pourquoi c'est un vrai risque, contrairement aux mixins `compat/sodium/mixin/`** : ces 4
+cibles sont vanilla et se chargent TOUJOURS (pas seulement si Sodium est présent), donc le
+classe-mixin elle-même ELLE sera transformée/appliquée dans tous les cas — si un champ ou
+paramètre référence un type Sodium absent, ça peut planter à l'application du mixin, pas juste
+rester silencieusement inactif.
+
+**Pourquoi PAS corrigé cette nuit (correctement, pas par flemme)** : le vrai correctif est de
+faire filtrer CES 4 mixins précisément par `IrisMixinPlugin.shouldApplyMixin(...)` (déjà présent,
+gère aujourd'hui uniquement le choix OpenGL/Vulkan via `usingVulkan`) en ajoutant une garde
+Sodium. C'est un changement de LOGIQUE DE MIXIN, la même catégorie de modification qui a causé
+2 des 5 crashs client de cette nuit (mixins mal appliqués) — donc à tester avec un vrai lancement
+CLIENT (pas juste serveur) avant tout déploiement, ce qui n'était pas possible cette nuit sans
+lanceur client jetable (voir TACHES-NUIT.md, tâche en cours ailleurs). Risque non-urgent
+aujourd'hui : Sodium reste présent et fonctionnel dans tous les tests actuels, ce cas ne se
+déclenche que dans l'hypothèse future "Sodium retiré".
+
+**Piste concrète pour la suite** : étendre `IrisMixinPlugin.shouldApplyMixin` avec une liste des
+mixins Sodium-dépendants hors `compat/sodium/`, refusés si `!Compagnons.present(SODIUM)` (accès
+à `IrisPlatformHelpers.getInstance().isModLoaded("sodium")`, déjà utilisé ailleurs dans le code).
