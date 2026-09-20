@@ -21,6 +21,7 @@ import net.minecraft.client.Minecraft;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 import fr.clubcitrouille.lanterne.client.upscale.Upscale;
+import fr.clubcitrouille.lanterne.report.Compagnons;
 
 /**
  * La radiographie : un profileur d'échantillonnage façon Spark, embarqué, qui se déclenche tout
@@ -78,6 +79,13 @@ public final class Radiographie {
     private static long lastFrameLogNanos;
     private static long windowFrames;
     private static long windowNanos;
+    // Vrai des qu'une image de la fenetre en cours a ete rendue fenetre INACTIVE (alt-tab, jeu en
+    // arriere-plan) - remis a false a l'ouverture de chaque fenetre. Signale le 20/09/2026 par un
+    // joueur : le limiteur de FPS vanilla (Minecraft.isWindowActive -> FramerateLimiter) ralentit
+    // volontairement le jeu en arriere-plan, et ces fenetres polluaient fpsMin/l'histogramme avec
+    // des chiffres qui ne refletent aucune vraie perf de jeu - juste le fait que le joueur avait
+    // alt-tab.
+    private static boolean fenetreInactive;
 
     // --- Histogramme FPS : une fenetre de 1s = un coup dans une tranche, sur toute la session.
     // Complementaire des "creux" (qui ne capturent que les fenetres sous seuilCreuxFps, donc
@@ -155,6 +163,7 @@ public final class Radiographie {
         lastFrameLogNanos = 0;
         windowFrames = 0;
         windowNanos = 0;
+        fenetreInactive = false;
         java.util.Arrays.fill(fpsHistogramme, 0L);
         lentilleTimeline.clear();
         lastLentilleState = null;
@@ -327,6 +336,9 @@ public final class Radiographie {
 
         windowFrames++;
         windowNanos += frameNs;
+        if (!mc.isWindowActive()) {
+            fenetreInactive = true;
+        }
         if (lastFrameLogNanos == 0L) {
             lastFrameLogNanos = now;
             return;
@@ -337,6 +349,20 @@ public final class Radiographie {
         }
         double dureeReelle = elapsed / 1e9d;
         double fps = windowFrames / dureeReelle;
+        boolean etaitInactive = fenetreInactive;
+        fenetreInactive = false;
+        if (etaitInactive) {
+            // Le limiteur de FPS vanilla ralentit volontairement le jeu en arriere-plan -
+            // exclure entierement cette fenetre de fpsMin/fpsMax/histogramme/CREUX : ces chiffres
+            // ne mesureraient rien d'autre que "le joueur avait alt-tab", pas une vraie perf.
+            windowFrames = 0;
+            windowNanos = 0;
+            lastFrameLogNanos = now;
+            synchronized (treeLock) {
+                fenetreEnCours.clear();
+            }
+            return;
+        }
         if (fps < fpsMin) {
             fpsMin = fps;
         }
@@ -502,6 +528,55 @@ public final class Radiographie {
     // Le rapport
     // ------------------------------------------------------------------------------------------
 
+    /**
+     * Reglages video + presence des mods qui changent le plus le rendu, en tete du rapport.
+     *
+     * <p>Comparer deux rapports (avec/sans shaders, iGPU/dGPU) sans savoir ce qui differait vraiment
+     * cote joueur revenait a deviner — demande explicite du 20/09/2026. Tout ici vient d'un accès
+     * direct, jamais de reflexion fragile : {@code Options} pour les reglages vanilla, {@code
+     * GL11.glGetString} pour le GPU reel (deja utilise ailleurs dans le moteur), {@link Compagnons}
+     * pour la presence des mods de rendu déjà suivis (Sodium, Distant Horizons, Iris).
+     */
+    private static String parametresJoueur() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("PARAMÈTRES\n").append("-".repeat(60)).append('\n');
+        try {
+            var options = Minecraft.getInstance().options;
+            sb.append("Backend graphique : ").append(options.preferredGraphicsBackend().get()).append('\n');
+            sb.append(String.format(Locale.ROOT, "Distance de vue/simulation : %d / %d chunks%n",
+                    options.renderDistance().get(), options.simulationDistance().get()));
+            sb.append("Limite FPS (réglage joueur) : ").append(options.framerateLimit().get()).append('\n');
+            sb.append("Particules : ").append(options.particles().get()).append('\n');
+            sb.append("Ombres des entités : ").append(options.entityShadows().get()).append('\n');
+        } catch (Throwable pasEncorePret) {
+            sb.append("(réglages indisponibles à cet instant)\n");
+        }
+        try {
+            String renderer = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER);
+            String vendor = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VENDOR);
+            if (renderer != null) {
+                sb.append("GPU utilisé : ").append(renderer)
+                        .append(vendor != null ? " (" + vendor + ")" : "").append('\n');
+            }
+        } catch (Throwable pasDeContexteGl) {
+            // Rien : hors d'un contexte GL courant, glGetString ne repond pas — pas une erreur a
+            // remonter, juste une ligne en moins dans un rapport qui reste lisible sans elle.
+        }
+        sb.append("Mods de rendu présents : ");
+        List<String> presents = new ArrayList<>();
+        for (var entry : Map.of(
+                Compagnons.SODIUM, "Sodium",
+                Compagnons.HORIZONS, "Distant Horizons",
+                Compagnons.IRIS, "Iris").entrySet()) {
+            if (Compagnons.present(entry.getKey())) {
+                presents.add(entry.getValue());
+            }
+        }
+        sb.append(presents.isEmpty() ? "(aucun)" : String.join(", ", presents)).append('\n');
+        sb.append('\n');
+        return sb.toString();
+    }
+
     private static Path writeReport(String why) throws IOException {
         double sessionSec = Math.max(0.001d, (System.nanoTime() - sessionStartNanos) / 1e9d);
         double avgFps = framesSeen / sessionSec;
@@ -519,6 +594,8 @@ public final class Radiographie {
         sb.append(String.format(Locale.ROOT, "Durée observée  : %.1f s (%d image(s))%n", sessionSec, framesSeen));
         sb.append(String.format(Locale.ROOT, "Échantillons    : %d (un toutes les %d ms)%n", totalSamples, INTERVAL_MS));
         sb.append('\n');
+
+        sb.append(parametresJoueur());
 
         sb.append("RÉSUMÉ\n").append("-".repeat(60)).append('\n');
         sb.append(String.format(Locale.ROOT, "FPS moyen : %.1f (%.2f ms/image en moyenne)%n", avgFps, avgFrameMs));

@@ -69,6 +69,9 @@ public final class Compagnons {
     /** JEI — la liste des objets. Voir {@code client.ponder.Hint}. */
     public static final String JEI = "jei";
 
+    /** Iris — shaders. Officiel ou notre portage NeoForge non-officiel, meme modId. */
+    public static final String IRIS = "iris";
+
     /**
      * Club Citrouille AutoMiner — le bot de minage automatique du serveur. Strictement client, sans
      * paquet propre : voir son {@code neoforge.mods.toml} ({@code clientSideOnly = "true"}, aucune
