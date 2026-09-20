@@ -55,6 +55,9 @@ public final class MecheNet {
         registrar.playToClient(MecheChunk.TYPE, MecheChunk.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         fr.clubcitrouille.lanterne.client.MecheClient.acceptChunk(payload)));
+        registrar.playToClient(MechePeerList.TYPE, MechePeerList.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        fr.clubcitrouille.lanterne.client.MecheClient.acceptPeerList(payload)));
         registrar.playToServer(MecheRequest.TYPE, MecheRequest.STREAM_CODEC, MecheNet::onRequest);
     }
 
@@ -81,6 +84,14 @@ public final class MecheNet {
             } catch (RuntimeException clientWithoutChannel) {
                 // Voir la Javadoc de classe : un client sur une version antérieure à ce mécanisme ne
                 // reçoit rien — il continue exactement comme si ce module n'existait pas.
+            }
+        }
+        String peers = Meche.peerListEncoded();
+        if (!peers.isEmpty()) {
+            try {
+                player.connection.send(new MechePeerList(peers));
+            } catch (RuntimeException clientWithoutChannel) {
+                // Même raison que ci-dessus : un client d'avant ce paquet ne reçoit rien.
             }
         }
     }

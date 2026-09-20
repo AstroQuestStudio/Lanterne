@@ -157,6 +157,65 @@ public final class MecheClient {
         Lanterne.LOG.info("[MÈCHE] téléchargement de « {} » {} demandé.", modId, version);
     }
 
+    /**
+     * Le serveur vient d'annoncer la liste complète de ses mods (voir {@code MechePeerList}). Compare
+     * à la liste locale et AFFICHE les différences — ne télécharge jamais rien : voir la Javadoc de
+     * classe de {@code MechePeerList} pour pourquoi (mods tiers, aucune empreinte de référence à
+     * vérifier).
+     */
+    public static void acceptPeerList(fr.clubcitrouille.lanterne.core.network.MechePeerList list) {
+        String encoded = list.encoded();
+        if (encoded == null || encoded.isEmpty()) {
+            return;
+        }
+        java.util.Map<String, String> serverMods = new java.util.LinkedHashMap<>();
+        for (String line : encoded.split("\n")) {
+            int eq = line.indexOf('=');
+            if (eq <= 0) {
+                continue; // ligne malformee, ignoree plutot que de faire echouer tout le lot
+            }
+            serverMods.put(line.substring(0, eq), line.substring(eq + 1));
+        }
+        java.util.Map<String, String> localMods = new java.util.HashMap<>();
+        try {
+            for (var mod : net.neoforged.fml.ModList.get().getMods()) {
+                localMods.put(mod.getModId(), mod.getVersion().toString());
+            }
+        } catch (Throwable tooEarly) {
+            return;
+        }
+
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        java.util.List<String> different = new java.util.ArrayList<>();
+        for (var entry : serverMods.entrySet()) {
+            String local = localMods.get(entry.getKey());
+            if (local == null) {
+                missing.add(entry.getKey() + " (" + entry.getValue() + ")");
+            } else if (!local.equals(entry.getValue())) {
+                different.add(entry.getKey() + " : serveur " + entry.getValue() + ", toi " + local);
+            }
+        }
+        if (missing.isEmpty() && different.isEmpty()) {
+            Lanterne.LOG.info("[MÈCHE] liste de mods du serveur comparée : rien à signaler.");
+            return;
+        }
+        Lanterne.LOG.info("[MÈCHE] mods absents : {} — versions differentes : {}", missing, different);
+        Minecraft.getInstance().execute(() -> {
+            if (!missing.isEmpty()) {
+                tell(Component.literal("Mods du serveur absents chez toi (" + missing.size() + ") : "
+                        + String.join(", ", missing.subList(0, Math.min(5, missing.size())))
+                        + (missing.size() > 5 ? "…" : ""))
+                        .withStyle(ChatFormatting.YELLOW));
+            }
+            if (!different.isEmpty()) {
+                tell(Component.literal("Versions différentes (" + different.size() + ") : "
+                        + String.join(" ; ", different.subList(0, Math.min(3, different.size())))
+                        + (different.size() > 3 ? "…" : ""))
+                        .withStyle(ChatFormatting.YELLOW));
+            }
+        });
+    }
+
     /** Une tranche du jar demandé vient d'arriver. */
     public static void acceptChunk(MecheChunk chunk) {
         Download download = active;

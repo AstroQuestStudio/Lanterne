@@ -190,6 +190,39 @@ public final class Meche {
     }
 
     /**
+     * La liste de TOUS les mods que ce serveur fait tourner (pas seulement {@link #MANAGED}),
+     * encodée pour {@link fr.clubcitrouille.lanterne.core.network.MechePeerList}. Voir sa Javadoc de
+     * classe pour pourquoi c'est de l'information, jamais un téléchargement automatique.
+     *
+     * <p>{@code ModList.get().getMods()} plutôt qu'un parcours du dossier {@code mods/} : la liste
+     * des mods CHARGÉS est le contrat qui compte pour un joueur — un jar présent mais désactivé, ou
+     * une dépendance embarquée (jarJar) qui n'a pas son propre fichier, doivent apparaître pareil.
+     *
+     * @return jamais {@code null} — au pire une chaîne vide, si l'appel est trop précoce.
+     */
+    public static String peerListEncoded() {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (var mod : net.neoforged.fml.ModList.get().getMods()) {
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(mod.getModId()).append('=').append(mod.getVersion().toString());
+            }
+            String encoded = sb.toString();
+            if (encoded.length() > fr.clubcitrouille.lanterne.core.network.MechePeerList.ENCODED_LIMIT) {
+                // Coupe plutôt que de refuser d'envoyer : un joueur voit une liste tronquée mais
+                // utile, plutôt que rien du tout parce qu'un modpack a fini par dépasser la marge.
+                encoded = encoded.substring(0,
+                        fr.clubcitrouille.lanterne.core.network.MechePeerList.ENCODED_LIMIT);
+            }
+            return encoded;
+        } catch (Throwable tooEarly) {
+            return "";
+        }
+    }
+
+    /**
      * Les octets du jar de référence, mis en cache après la première demande — voir la Javadoc de
      * classe : ce n'est jamais plus qu'un seul fichier, connu et fixe pour toute la session.
      */
