@@ -50,6 +50,24 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue RESEAU_LUEUR;
     public static final ModConfigSpec.BooleanValue GAUGE;
     public static final ModConfigSpec.BooleanValue ECRAN_VIDEO;
+
+    // --- Les réglages de performance (client.reglage.Reglages) : valeurs par défaut IMPERCEPTIBLES. ---
+    public static final ModConfigSpec.IntValue PARTICULES_DENSITE;
+    public static final ModConfigSpec.IntValue PARTICULES_EXPLOSIONS;
+    public static final ModConfigSpec.IntValue PARTICULES_FUMEE;
+    public static final ModConfigSpec.IntValue PARTICULES_EAU;
+    public static final ModConfigSpec.IntValue PARTICULES_FEUILLES;
+    public static final ModConfigSpec.IntValue PARTICULES_MAGIE;
+    public static final ModConfigSpec.IntValue PARTICULES_DISTANCE;
+    public static final ModConfigSpec.BooleanValue METEO_DESSINEE;
+    public static final ModConfigSpec.BooleanValue CIEL_ASTRES;
+    public static final ModConfigSpec.BooleanValue CIEL_ETOILES;
+    public static final ModConfigSpec.IntValue BLOCS_ENTITES_DISTANCE;
+    public static final ModConfigSpec.IntValue PLAQUES_DISTANCE;
+    public static final ModConfigSpec.IntValue TEXTURES_ANIMEES;
+    public static final ModConfigSpec.IntValue FPS_HORS_FOCUS;
+    public static final ModConfigSpec.IntValue CADRES_DISTANCE;
+    public static final ModConfigSpec.IntValue ARMOR_STANDS_DISTANCE;
     public static final ModConfigSpec.BooleanValue REGARD;
     public static final ModConfigSpec.BooleanValue ZOOM;
     public static final ModConfigSpec.IntValue ZOOM_FACTOR;
@@ -696,6 +714,75 @@ public final class ClientConfig {
                 "Le comportement vanilla du glisse gauche sans Shift (deplacement de fenetre dans",
                 "certains ecrans) n'est pas affecte - seule la molette ET le shift+glisse changent.")
                 .define("souris_avancee", true);
+
+        BUILDER.comment(
+                "LES REGLAGES DE PERFORMANCE : chacun a un effet reel (voir REGLAGES-LANTERNE.md).",
+                "Les valeurs par defaut ne changent RIEN a l'image : un reglage a son defaut ne",
+                "coute rien (aucun hook actif). Modifiables aussi dans l'ecran Lanterne et par",
+                "la commande /lanterne reglage <nom> <valeur>.").push("reglages");
+
+        PARTICULES_DENSITE = BUILDER.comment(
+                "Densite globale des particules, 0 a 100 %. 100 = vanilla (rien n'est retire).",
+                "Retire au hasard cette part de particules AVANT leur creation : gain de CPU et de",
+                "GPU dans les scenes chargees (explosions, feux, pluie).")
+                .defineInRange("particules_densite", 100, 0, 100);
+        PARTICULES_EXPLOSIONS = BUILDER.comment(
+                "Densite des particules d'explosion et de feu d'artifice, 0 a 100 %.")
+                .defineInRange("particules_explosions", 100, 0, 100);
+        PARTICULES_FUMEE = BUILDER.comment(
+                "Densite des fumees (feu de camp, torches, chaudron, poof), 0 a 100 %.")
+                .defineInRange("particules_fumee", 100, 0, 100);
+        PARTICULES_EAU = BUILDER.comment(
+                "Densite des particules d'eau (eclaboussures, bulles, gouttes), 0 a 100 %.")
+                .defineInRange("particules_eau", 100, 0, 100);
+        PARTICULES_FEUILLES = BUILDER.comment(
+                "Densite des feuilles et petales qui tombent, 0 a 100 %.")
+                .defineInRange("particules_feuilles", 100, 0, 100);
+        PARTICULES_MAGIE = BUILDER.comment(
+                "Densite des particules de magie, redstone, enchantement et portails, 0 a 100 %.")
+                .defineInRange("particules_magie", 100, 0, 100);
+        PARTICULES_DISTANCE = BUILDER.comment(
+                "Distance maximale (en blocs) au-dela de laquelle une particule n'est pas creee.",
+                "0 = illimitee (vanilla). Defaut 128 : une particule a cette distance tient en quelques pixels,",
+                "c est le prereglage Equilibre, imperceptible.")
+                .defineInRange("particules_distance", 128, 0, 256);
+        METEO_DESSINEE = BUILDER.comment(
+                "Dessiner la pluie et la neige (les gouttes et flocons). A faux : le monde reste",
+                "mouille/enneige et la meteo continue, seule l'animation des gouttes n'est pas dessinee.")
+                .define("meteo_dessinee", true);
+        CIEL_ASTRES = BUILDER.comment("Dessiner le soleil et la lune.")
+                .define("ciel_soleil_lune", true);
+        CIEL_ETOILES = BUILDER.comment("Dessiner les etoiles.")
+                .define("ciel_etoiles", true);
+        BLOCS_ENTITES_DISTANCE = BUILDER.comment(
+                "Distance maximale (en blocs) d'affichage des blocs animes (coffres, panneaux, lits...).",
+                "0 = vanilla. Au-dela, le bloc reste en place mais n'est plus dessine comme bloc anime.")
+                .defineInRange("blocs_entites_distance", 0, 0, 256);
+        PLAQUES_DISTANCE = BUILDER.comment(
+                "Distance maximale (en blocs) d'affichage des plaques de nom au-dessus des entites.",
+                "0 = vanilla (64).")
+                .defineInRange("plaques_distance", 0, 0, 64);
+        TEXTURES_ANIMEES = BUILDER.comment(
+                "Fluidite des textures animees (eau, lave, feu, portails) : 0 = toutes les images",
+                "(vanilla), 1 = une image sur deux, 2 = une sur quatre, 3 = figees. Les animations",
+                "gardent leur rythme ; seules certaines images intermediaires ne sont pas envoyees au GPU.")
+                .defineInRange("textures_animees", 0, 0, 3);
+        FPS_HORS_FOCUS = BUILDER.comment(
+                "Images par seconde maximales quand la fenetre du jeu n'a PAS le focus (mais n'est pas",
+                "reduite). Vanilla ne bride que la fenetre reduite (10 FPS) : une fenetre visible mais",
+                "en arriere-plan tourne a plein regime pour rien. 0 = pas de limite (vanilla).",
+                "Defaut 60 : invisible pour le joueur, gros gain si plusieurs jeux ou applis tournent.")
+                .defineInRange("fps_hors_focus", 60, 0, 240);
+        CADRES_DISTANCE = BUILDER.comment(
+                "Distance maximale (en blocs) d'affichage des cadres d'objets et des peintures.",
+                "0 = vanilla.")
+                .defineInRange("cadres_distance", 0, 0, 256);
+        ARMOR_STANDS_DISTANCE = BUILDER.comment(
+                "Distance maximale (en blocs) d'affichage des supports d'armure (armor stands).",
+                "0 = vanilla.")
+                .defineInRange("armor_stands_distance", 0, 0, 256);
+
+        BUILDER.pop();
 
         BUILDER.pop();
         SPEC = BUILDER.build();

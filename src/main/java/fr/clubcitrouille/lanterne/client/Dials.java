@@ -22,6 +22,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ParticleStatus;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import fr.clubcitrouille.lanterne.client.reglage.Reglages;
 import fr.clubcitrouille.lanterne.client.screen.Palette;
 import fr.clubcitrouille.lanterne.client.upscale.Nuancier;
 import fr.clubcitrouille.lanterne.client.upscale.Pivot;
@@ -195,6 +196,84 @@ public final class Dials extends Screen {
         buildWorld();
         buildMachine();
         buildExtras();
+        buildReglages();
+    }
+
+    // --- Les réglages de performance : particules, météo, entités, préréglages. -------------------
+
+    /**
+     * Les trois familles de réglages de performance : {@link Reglages.Famille} donne les deux
+     * premières (chaque réglage y est un cadran généré depuis sa fiche), et la troisième porte les
+     * préréglages, la remise à zéro et l'export/import par le presse-papiers.
+     */
+    private void buildReglages() {
+        for (Reglages.Famille famille : Reglages.Famille.values()) {
+            Family family = new Family(famille.titre(), false, famille.sousTitre());
+            for (Reglages.Reglage reglage : Reglages.deLaFamille(famille)) {
+                family.add(Dial.cycle(reglage.nom(), reglage::texte,
+                        () -> reglage.estDefaut() ? DIM : AMBER, reglage::cran,
+                        reglage.quoi(),
+                        "Perte visible : " + reglage.perte().texte() + ". Gain : " + reglage.gain() + ".",
+                        "Effet immédiat. Commande : /lanterne reglage " + reglage.id() + " <valeur>."));
+            }
+            if (famille == Reglages.Famille.PERFORMANCES) {
+                family.add(Dial.cycle("Inactivité (AFK)", Dials::afkLabel,
+                        () -> vanillaOptions().inactivityFpsLimit().get()
+                                == net.minecraft.client.InactivityFpsLimit.AFK ? DIM : AMBER,
+                        Dials::toggleAfk,
+                        "Ce que fait le jeu quand tu n'as touché ni clavier ni souris depuis une minute.",
+                        "Vanilla bride à 30 FPS après 1 minute (10 après 10 minutes), ce qui fausse toute"
+                                + " mesure de FPS sans entrée. « Fenêtre réduite » ne bride que la fenêtre réduite.",
+                        "Option vanilla « inactivityFpsLimit » ; effet immédiat."));
+            }
+            this.families.add(family);
+        }
+        Family presets = new Family("Préréglages", false, "qualité max, équilibré, FPS max, petite config");
+        presets.add(presetDial("Qualité max", "qualite_max",
+                "Rien n'est retiré : particules illimitées, tout est dessiné.",
+                "Aucune perte visible ; c'est la référence."));
+        presets.add(presetDial("Équilibré", "equilibre",
+                "Seulement des réductions imperceptibles : particules coupées au-delà de 128 blocs.",
+                "Perte visible : aucune. C'est la valeur d'origine."));
+        presets.add(presetDial("FPS max", "fps_max",
+                "Moins de particules, de plaques de nom et de blocs animés lointains, textures animées "
+                        + "une image sur deux.",
+                "Perte visible : faible à moyenne."));
+        presets.add(presetDial("Petite config", "petite_config",
+                "Réductions plus fortes pour un ordinateur sans carte graphique dédiée.",
+                "Perte visible : moyenne. Le régulateur adaptatif peut les compléter."));
+        presets.add(Dial.cycle("Tout restaurer", () -> "cliquer", () -> AMBER,
+                direction -> Reglages.restaurer(),
+                "Remet chaque réglage de performance à sa valeur d'origine.",
+                "Gratuit.", "Effet immédiat."));
+        presets.add(Dial.cycle("Exporter", () -> "presse-papiers", () -> AMBER, direction -> {
+            Minecraft.getInstance().keyboardHandler.setClipboard(Reglages.exporter());
+        }, "Copie tes réglages dans le presse-papiers, pour les partager ou les sauvegarder.",
+                "Gratuit.", "Coller ensuite dans un message ou un fichier."));
+        presets.add(Dial.cycle("Importer", () -> "presse-papiers", () -> AMBER, direction -> {
+            Reglages.importer(Minecraft.getInstance().keyboardHandler.getClipboard());
+        }, "Applique les réglages copiés par « Exporter » (le texte commence par lanterne-reglages;).",
+                "Gratuit.", "Un texte illisible est ignoré."));
+        this.families.add(presets);
+    }
+
+    private static String afkLabel() {
+        return vanillaOptions().inactivityFpsLimit().get() == net.minecraft.client.InactivityFpsLimit.AFK
+                ? "bridé après 1 min" : "fenêtre réduite seulement";
+    }
+
+    private static void toggleAfk(int ignored) {
+        var option = vanillaOptions().inactivityFpsLimit();
+        option.set(option.get() == net.minecraft.client.InactivityFpsLimit.AFK
+                ? net.minecraft.client.InactivityFpsLimit.MINIMIZED
+                : net.minecraft.client.InactivityFpsLimit.AFK);
+        vanillaOptions().save();
+    }
+
+    private static Dial presetDial(String nom, String id, String quoi, String cout) {
+        return Dial.cycle(nom, () -> "appliquer", () -> AMBER,
+                direction -> Reglages.appliquerPrereglage(id), quoi, cout,
+                "Effet immédiat. Commande : /lanterne reglage preset " + id + ".");
     }
 
     // --- La vidéo : les réglages de base que l'écran de Sodium portait, rendus par Lanterne. -----
@@ -1461,26 +1540,42 @@ public final class Dials extends Screen {
     }
 
     private void drawFamilies(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY) {
+        int tab = tabHeight();
+        boolean roomy = tab >= 26;
         for (int i = 0; i < this.families.size(); i++) {
-            int top = y + HEADER + 4 + i * TAB;
-            boolean over = inside(mouseX, mouseY, x + 4, top, x + SIDEBAR - 5, top + TAB - 4);
+            int top = y + HEADER + 4 + i * tab;
+            boolean over = inside(mouseX, mouseY, x + 4, top, x + SIDEBAR - 5, top + tab - 4);
             if (i == this.picked) {
-                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + TAB - 4, PICKED);
-                graphics.fill(x + 4, top, x + 6, top + TAB - 4, AMBER);
+                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + tab - 4, PICKED);
+                graphics.fill(x + 4, top, x + 6, top + tab - 4, AMBER);
             } else if (over) {
-                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + TAB - 4, HOVER);
+                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + tab - 4, HOVER);
             }
             Family family = this.families.get(i);
             graphics.text(this.font,
-                    this.font.plainSubstrByWidth(family.name, SIDEBAR - 24), x + 14, top + 3,
+                    this.font.plainSubstrByWidth(family.name, SIDEBAR - 24), x + 14,
+                    roomy ? top + 3 : top + (tab - 4 - 8) / 2,
                     i == this.picked ? AMBER : over ? TEXT : DIM, false);
             // « serveur » plutôt qu'un compte : ce qu'il faut savoir avant de cliquer sur un onglet
             // n'est pas combien de lignes il porte, c'est si l'on pourra y toucher.
-            graphics.text(this.font,
-                    family.server ? family.dials.size() + " · serveur"
-                            : family.dials.size() + " réglages",
-                    x + 14, top + 14, FAINT, false);
+            if (roomy) {
+                graphics.text(this.font,
+                        family.server ? family.dials.size() + " · serveur"
+                                : family.dials.size() + " réglages",
+                        x + 14, top + 14, FAINT, false);
+            }
         }
+    }
+
+    /**
+     * La hauteur d'un onglet : {@link #TAB} tant que toutes les familles tiennent dans la colonne, et
+     * plus petite sinon. Avec dix familles, la colonne débordait déjà du panneau ; avec treize, elle
+     * aurait disparu sous le pied de page. Le second libellé (« n réglages ») saute quand la place
+     * manque.
+     */
+    private int tabHeight() {
+        int count = Math.max(1, this.families.size());
+        return Math.min(TAB, (HEIGHT - HEADER - 8) / count);
     }
 
     private void drawRows(GuiGraphicsExtractor graphics, int x, int y, int right,
@@ -1613,9 +1708,9 @@ public final class Dials extends Screen {
         int mouseY = (int) this.fit.y(event.y());
 
         for (int i = 0; i < this.families.size(); i++) {
-            int top = this.panelY + HEADER + 4 + i * TAB;
+            int top = this.panelY + HEADER + 4 + i * tabHeight();
             if (inside(mouseX, mouseY, this.panelX + 4, top,
-                    this.panelX + SIDEBAR - 5, top + TAB - 4)) {
+                    this.panelX + SIDEBAR - 5, top + tabHeight() - 4)) {
                 if (i != this.picked) {
                     this.picked = i;
                     // Le défilement appartient à la famille qu'on quitte : le garder ferait ouvrir
