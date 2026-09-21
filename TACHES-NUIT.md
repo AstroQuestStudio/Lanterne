@@ -1,3 +1,22 @@
+# VÉRIFICATION FINALE AUTOMINER — BLOQUÉE PAR UN PROBLÈME MACHINE (~06h57)
+
+`git log`/`git status` sur `ClubCitrouilleAutoMiner` confirmés propres (rien en attente non commité,
+dernier commit `a33b207`). Mais le build Gradle a échoué à répétition (`Could not connect to the
+Gradle daemon`), testé via Bash, PowerShell, `--no-daemon`, et un `gradlew help` minimal — **le même
+échec touche AUSSI le dépôt Lanterne** (`./gradlew help` échoue pareil), donc ce n'est PAS un bug de
+code AutoMiner ni Lanterne : c'est un problème MACHINE transitoire (probablement épuisement de
+ressources après une nuit entière à faire tourner des dizaines de daemons Gradle en parallèle sur
+tous les forks). `netstat` ne montre rien d'anormant en apparence (16 connexions locales, 0
+TIME_WAIT), donc la cause exacte reste incertaine — pas creusée plus loin, hors périmètre de cette
+vérification précise et risque de s'enliser sur un problème d'infra machine plutôt que de code.
+
+**Conséquence pratique** : toute vérification de build par un futur fork risque d'échouer pour la
+même raison tant que ce problème machine persiste — si ça arrive, ne pas conclure à un bug de code
+sans avoir d'abord confirmé que `Lanterne` lui-même compile (sinon c'est la machine, pas le code).
+Recommandation pour le patron au réveil : un redémarrage de session/machine réglera probablement ça.
+
+---
+
 # RÉSUMÉ POUR LE RÉVEIL DU PATRON (réécrit en fin de nuit, version finale et complète)
 
 Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche `26.3`), **78 commits**
