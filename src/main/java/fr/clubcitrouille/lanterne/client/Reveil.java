@@ -127,23 +127,90 @@ public final class Reveil {
      */
     public static void install() {
         Path options = FMLPaths.GAMEDIR.get().resolve(OPTIONS_FILE);
+        String backend = incompatibleAvecVulkan() ? "opengl" : "vulkan";
         try {
             if (Files.exists(options)) {
                 // Un fichier existe déjà : quelqu'un — ce joueur, une installation précédente, un
-                // pack qui l'a fourni — a déjà une opinion écrite. On ne la lit même pas.
+                // pack qui l'a fourni — a déjà une opinion écrite. On ne la modifie pas, SAUF pour
+                // un seul cas où l'opinion « vulkan » mène à un jeu figé : voir replieVulkan.
+                replieVulkan(options);
                 return;
             }
             Files.writeString(options,
-                    "enableVsync:false\npreferredGraphicsBackend:\"vulkan\"\n",
+                    "enableVsync:false\npreferredGraphicsBackend:\"" + backend + "\"\n",
                     StandardCharsets.UTF_8);
             Lanterne.LOG.info("[RÉVEIL] Premier lancement détecté : synchronisation verticale "
-                    + "désactivée et backend graphique préféré réglé sur Vulkan par défaut ({} créé, "
+                    + "désactivée et backend graphique préféré réglé sur {} par défaut ({} créé, "
                     + "deux lignes) — voir la Javadoc de cette classe pour pourquoi \"default\" ne "
-                    + "suffit pas. Un fichier déjà présent n'est jamais modifié.", OPTIONS_FILE);
+                    + "suffit pas. Un fichier déjà présent n'est modifié que par replieVulkan.",
+                    backend, OPTIONS_FILE);
         } catch (IOException problem) {
             Lanterne.LOG.warn("[RÉVEIL] Impossible d'écrire {} au premier lancement — vanilla "
                     + "prendra ses propres défauts (synchronisation verticale activée, OpenGL "
                     + "essayé avant Vulkan).", options, problem);
+        }
+    }
+
+    /** Vrai si une propriété système demande de laisser Vulkan même avec un mod qui l'exclut. */
+    private static boolean vulkanForce() {
+        return Boolean.getBoolean("lanterne.vulkan.force");
+    }
+
+    /**
+     * Un mod présent dans {@code mods/} rend-il Vulkan inutilisable ?
+     *
+     * <p>Distant Horizons 3.3.0 : dès qu'un mod {@code iris} est chargé (Lanterne en déclare un, Iris
+     * étant intégré), DH impose son moteur OpenGL. Si Minecraft tourne en Vulkan, il affiche alors la
+     * boîte « the rendering engine [OpenGL] cannot be used since its API doesn't match what Minecraft
+     * is currently set to use [VULKAN] » et son thread d'initialisation attend qu'on clique dessus
+     * pendant que le chargement des mods l'attend — le jeu reste figé (thread dump vérifié :
+     * {@code AbstractModInitializer.postClientInit} en attente d'un {@code CompletableFuture} que la
+     * boîte n'a pas rendu). Détecté ici par le nom du jar, car {@code ModList} n'existe pas encore.
+     */
+    private static boolean incompatibleAvecVulkan() {
+        if (vulkanForce()) {
+            return false;
+        }
+        try (var jars = Files.list(FMLPaths.MODSDIR.get())) {
+            return jars.anyMatch(jar -> {
+                String name = jar.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+                return name.endsWith(".jar") && name.contains("distanthorizons");
+            });
+        } catch (IOException | RuntimeException unreadable) {
+            return false;
+        }
+    }
+
+    /**
+     * Un {@code options.txt} déjà là demande Vulkan alors qu'un mod l'exclut : on le repasse en
+     * OpenGL, en le disant, plutôt que de laisser le joueur devant un jeu figé. Le réglage
+     * {@code -Dlanterne.vulkan.force=true} garde Vulkan à ses risques. Ne touche rien d'autre.
+     */
+    private static void replieVulkan(Path options) {
+        if (!incompatibleAvecVulkan()) {
+            return;
+        }
+        try {
+            java.util.List<String> lines = Files.readAllLines(options, StandardCharsets.UTF_8);
+            boolean changed = false;
+            for (int i = 0; i < lines.size(); i++) {
+                String line = lines.get(i);
+                if (line.startsWith("preferredGraphicsBackend:")
+                        && line.toLowerCase(java.util.Locale.ROOT).contains("vulkan")) {
+                    lines.set(i, "preferredGraphicsBackend:\"opengl\"");
+                    changed = true;
+                }
+            }
+            if (changed) {
+                Files.write(options, lines, StandardCharsets.UTF_8);
+                Lanterne.LOG.warn("[RÉVEIL] Vulkan était demandé, mais Distant Horizons est présent "
+                        + "et exige OpenGL avec Iris (sinon : jeu figé sur une boîte de dialogue DH). "
+                        + "Backend repassé en OpenGL dans {}. Pour garder Vulkan quand même : "
+                        + "-Dlanterne.vulkan.force=true, ou retirer Distant Horizons.", OPTIONS_FILE);
+            }
+        } catch (IOException problem) {
+            Lanterne.LOG.warn("[RÉVEIL] Repli Vulkan → OpenGL impossible ({}) : {}", OPTIONS_FILE,
+                    problem.toString());
         }
     }
 }
