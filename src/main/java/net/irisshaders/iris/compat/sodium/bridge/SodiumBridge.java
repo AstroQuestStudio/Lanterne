@@ -68,6 +68,10 @@ final class SodiumBridge {
 		}
 	}
 
+	static net.minecraft.client.renderer.culling.Frustum newNonCullingFrustum(Matrix4fc modelView, org.joml.Matrix4f projection) {
+		return new net.irisshaders.iris.shadows.frustum.fallback.NonCullingFrustum(modelView, projection);
+	}
+
 	static boolean noErrorContextEnabled() {
 		return SodiumClientMod.options().performance.useNoErrorGLContext;
 	}

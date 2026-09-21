@@ -83,6 +83,13 @@ public final class IrisRenderBridge {
 		}
 	}
 
+	/** Frustum qui ne coupe rien : version Sodium (interfaces de viewport) ou version vanilla pure. */
+	public static net.minecraft.client.renderer.culling.Frustum newNonCullingFrustum(Matrix4fc modelView, Matrix4f projection) {
+		return sodium()
+				? SodiumBridge.newNonCullingFrustum(modelView, projection)
+				: new net.irisshaders.iris.helpers.VanillaNonCullingFrustum(modelView, projection);
+	}
+
 	/** Format de bloc vanilla : ce que fournit le maillage vanilla quand Sodium est absent. */
 	private static final class VanillaVertexFormatSource implements VertexFormatSource {
 		static final VanillaVertexFormatSource INSTANCE = new VanillaVertexFormatSource();
