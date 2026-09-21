@@ -1,5 +1,7 @@
 package fr.clubcitrouille.lanterne.lab;
 
+import java.nio.file.Path;
+
 import net.minecraft.client.Minecraft;
 
 import net.neoforged.api.distmarker.Dist;
@@ -31,6 +33,14 @@ import fr.clubcitrouille.lanterne.Lanterne;
 @EventBusSubscriber(modid = Lanterne.ID, value = Dist.CLIENT)
 public final class ShadercProbeSelfCheck {
     private static final boolean ARMED = "1".equals(System.getenv("LANTERNE_SHADERC_COMPOSITE_TEST"));
+
+    /**
+     * Chemin du dossier {@code shaders/} extrait d'un VRAI shaderpack (ex: ComplementaryReimagined),
+     * pour {@link ShadercProbe#testRealPackVanillaInClient} — armé independamment de
+     * {@link #ARMED} (n'a pas besoin de repeter les tests deja acquis cette nuit). Vide/absent =
+     * desactive, comme le reste de ce laboratoire.
+     */
+    private static final String REAL_PACK_SHADERS_ROOT = System.getenv("LANTERNE_SHADERC_REALPACK_TEST");
 
     /**
      * Fragment composite autonome, sans {@code #include} (voir la Javadoc de
@@ -108,12 +118,13 @@ public final class ShadercProbeSelfCheck {
             """;
 
     private static boolean ran;
+    private static boolean ranRealPack;
 
     private ShadercProbeSelfCheck() {}
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
-        if (!ARMED || ran) {
+        if ((!ARMED || ran) && (REAL_PACK_SHADERS_ROOT == null || REAL_PACK_SHADERS_ROOT.isBlank() || ranRealPack)) {
             return;
         }
         // Le menu principal suffit (voir TACHES-NUIT.md, TÂCHE C : la fenêtre/le device GPU sont
@@ -122,19 +133,32 @@ public final class ShadercProbeSelfCheck {
         if (Minecraft.getInstance().getWindow() == null) {
             return;
         }
-        ran = true;
-        Lanterne.LOG.info("[SHADERC-TEST] contexte client prêt, lancement de la chaîne complète "
-                + "jcpp -> glsl-transformer -> shaderc (composite)...");
-        boolean compositeOk = ShadercProbe.testCompositeInClient(COMPOSITE_SOURCE);
-        Lanterne.LOG.info("[SHADERC-TEST] RESULTAT COMPOSITE: {}", compositeOk ? "SUCCES" : "ECHEC");
 
-        Lanterne.LOG.info("[SHADERC-TEST] meme chaîne sur patchVanilla (gbuffers, vertex+fragment)...");
-        boolean vanillaOk = ShadercProbe.testVanillaInClient(VANILLA_VERTEX_SOURCE, VANILLA_FRAGMENT_SOURCE);
-        Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VANILLA: {}", vanillaOk ? "SUCCES" : "ECHEC");
+        if (ARMED && !ran) {
+            ran = true;
+            Lanterne.LOG.info("[SHADERC-TEST] contexte client prêt, lancement de la chaîne complète "
+                    + "jcpp -> glsl-transformer -> shaderc (composite)...");
+            boolean compositeOk = ShadercProbe.testCompositeInClient(COMPOSITE_SOURCE);
+            Lanterne.LOG.info("[SHADERC-TEST] RESULTAT COMPOSITE: {}", compositeOk ? "SUCCES" : "ECHEC");
 
-        Lanterne.LOG.info("[SHADERC-TEST] patchVanilla + re-blocage des uniforms en UBO (reponse au "
-                + "blocage 'non-opaque uniforms outside a block')...");
-        boolean vanillaReblockedOk = ShadercProbe.testVanillaReblockedInClient(VANILLA_VERTEX_SOURCE, VANILLA_FRAGMENT_SOURCE);
-        Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VANILLA REBLOCKED: {}", vanillaReblockedOk ? "SUCCES" : "ECHEC");
+            Lanterne.LOG.info("[SHADERC-TEST] meme chaîne sur patchVanilla (gbuffers, vertex+fragment)...");
+            boolean vanillaOk = ShadercProbe.testVanillaInClient(VANILLA_VERTEX_SOURCE, VANILLA_FRAGMENT_SOURCE);
+            Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VANILLA: {}", vanillaOk ? "SUCCES" : "ECHEC");
+
+            Lanterne.LOG.info("[SHADERC-TEST] patchVanilla + re-blocage des uniforms en UBO (reponse au "
+                    + "blocage 'non-opaque uniforms outside a block')...");
+            boolean vanillaReblockedOk = ShadercProbe.testVanillaReblockedInClient(VANILLA_VERTEX_SOURCE, VANILLA_FRAGMENT_SOURCE);
+            Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VANILLA REBLOCKED: {}", vanillaReblockedOk ? "SUCCES" : "ECHEC");
+        }
+
+        if (REAL_PACK_SHADERS_ROOT != null && !REAL_PACK_SHADERS_ROOT.isBlank() && !ranRealPack) {
+            ranRealPack = true;
+            Lanterne.LOG.info("[SHADERC-TEST] VRAI shaderpack ({}) : #include reels + patchVanilla + reblock "
+                    + "sur shaders/world0/gbuffers_terrain...", REAL_PACK_SHADERS_ROOT);
+            boolean realPackOk = ShadercProbe.testRealPackVanillaInClient(
+                    Path.of(REAL_PACK_SHADERS_ROOT), "/world0/gbuffers_terrain.vsh", "/world0/gbuffers_terrain.fsh");
+            Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VRAI SHADERPACK (gbuffers_terrain): {}",
+                    realPackOk ? "SUCCES" : "ECHEC");
+        }
     }
 }

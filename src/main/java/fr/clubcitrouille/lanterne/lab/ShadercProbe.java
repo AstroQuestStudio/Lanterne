@@ -9,6 +9,8 @@ import java.util.Set;
 
 import org.lwjgl.util.shaderc.Shaderc;
 
+import com.google.common.collect.ImmutableList;
+
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMaps;
 
@@ -18,6 +20,9 @@ import net.irisshaders.iris.helpers.Tri;
 import net.irisshaders.iris.gl.texture.TextureType;
 import net.irisshaders.iris.pipeline.transform.PatchShaderType;
 import net.irisshaders.iris.pipeline.transform.TransformPatcher;
+import net.irisshaders.iris.shaderpack.include.AbsolutePackPath;
+import net.irisshaders.iris.shaderpack.include.IncludeGraph;
+import net.irisshaders.iris.shaderpack.include.IncludeProcessor;
 import net.irisshaders.iris.shaderpack.preprocessor.JcppProcessor;
 import net.irisshaders.iris.shaderpack.texture.TextureStage;
 
@@ -250,6 +255,40 @@ public final class ShadercProbe {
         } catch (Throwable problem) {
             Lanterne.LOG.warn("[SHADERC] Echec de patchVanilla+reblock (contexte client, device GPU requis) : {}",
                     problem.toString());
+            return false;
+        }
+    }
+
+    /**
+     * Sixieme preuve isolee (21/09/2026, suite de {@link #testVanillaReblockedInClient}) : les
+     * preuves precedentes utilisaient un shader "gbuffers" minimal ecrit a la main, pas un VRAI
+     * fichier d'un VRAI shaderpack (limite honnetement documentee dans {@code TACHES-NUIT.md}).
+     * Ici, {@code shadersRoot} est le dossier {@code shaders/} extrait d'un shaderpack reel
+     * (ex: ComplementaryReimagined) et {@code vertexPath}/{@code fragmentPath} des chemins
+     * absolus de pack (ex: {@code /world0/gbuffers_terrain.vsh}) — les {@code #include} sont
+     * resolus pour de vrai via {@link IncludeGraph}/{@link IncludeProcessor} (le meme mecanisme
+     * qu'utilise reellement Iris pour charger un shaderpack, deja migre cette nuit), contrairement
+     * a {@link #testVanillaInClient} qui exige un fichier autonome sans {@code #include}.
+     */
+    public static boolean testRealPackVanillaInClient(Path shadersRoot, String vertexPath, String fragmentPath) {
+        try {
+            AbsolutePackPath vertexAbs = AbsolutePackPath.fromAbsolutePath(vertexPath);
+            AbsolutePackPath fragmentAbs = AbsolutePackPath.fromAbsolutePath(fragmentPath);
+            IncludeGraph graph = new IncludeGraph(shadersRoot, ImmutableList.of(vertexAbs, fragmentAbs), false);
+            if (!graph.getFailures().isEmpty()) {
+                Lanterne.LOG.warn("[SHADERC] Resolution des #include du vrai shaderpack echouee : {}",
+                        graph.getFailures());
+                return false;
+            }
+            IncludeProcessor processor = new IncludeProcessor(graph);
+            String vertexFlat = String.join("\n", processor.getIncludedFile(vertexAbs));
+            String fragmentFlat = String.join("\n", processor.getIncludedFile(fragmentAbs));
+            Lanterne.LOG.info("[SHADERC] #include resolus pour de vrai (vertex {} lignes, fragment {} lignes), "
+                    + "tentative patchVanilla + reblock...", vertexFlat.lines().count(), fragmentFlat.lines().count());
+            return testVanillaReblockedInClient(vertexFlat, fragmentFlat);
+        } catch (Throwable problem) {
+            Lanterne.LOG.warn("[SHADERC] Echec sur le vrai fichier de shaderpack ({} / {}) : {}",
+                    vertexPath, fragmentPath, problem.toString());
             return false;
         }
     }
