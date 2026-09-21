@@ -527,6 +527,7 @@ public final class MecheClient {
                         }
                     }
                 }
+                addStaleDuplicates(mods, published, selfName, removals);
                 Set<String> registry = readRegistry();
                 for (Path file : removals) {
                     if (tryRemove(file) || scheduleDeferredRemoval(file)) {
@@ -554,6 +555,126 @@ public final class MecheClient {
                 + ". Ferme le jeu et relance-le pour appliquer (les fichiers verrouillés se "
                 + "suppriment tout seuls à la fermeture).")
                 .withStyle(failures > 0 ? ChatFormatting.GOLD : ChatFormatting.GREEN)));
+    }
+
+    /**
+     * Garde-fou « le plus récent gagne » : deux jars de {@code mods/} qui déclarent le même {@code modId}
+     * empêchent NeoForge de démarrer (reste d'une mise à jour, copie manuelle). Le jar le plus ancien
+     * est ajouté aux retraits, à une condition stricte : TOUS ses identifiants existent aussi, en
+     * version plus récente, dans un autre jar (jamais on ne retire un jar qui apporte un mod
+     * introuvable ailleurs), et toutes les versions sont lisibles. Le jar de Lanterne en cours
+     * d'exécution et les fichiers publiés par le serveur ne sont jamais retirés ici.
+     */
+    private static void addStaleDuplicates(Path mods, Set<String> published, String selfName,
+            java.util.List<Path> removals) {
+        java.util.Map<Path, java.util.Map<String, String>> byJar = new java.util.LinkedHashMap<>();
+        try (var stream = Files.list(mods)) {
+            for (Path file : (Iterable<Path>) stream::iterator) {
+                if (file.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+                    var versions = modVersionsOf(file);
+                    if (!versions.isEmpty()) {
+                        byJar.put(file, versions);
+                    }
+                }
+            }
+        } catch (Exception unreadable) {
+            return;
+        }
+        for (var entry : byJar.entrySet()) {
+            Path file = entry.getKey();
+            String name = file.getFileName().toString();
+            if (name.equals(selfName) || published.contains(name) || removals.contains(file)) {
+                continue;
+            }
+            boolean everyIdSuperseded = true;
+            for (var id : entry.getValue().entrySet()) {
+                boolean newerElsewhere = false;
+                for (var other : byJar.entrySet()) {
+                    if (other.getKey().equals(file) || removals.contains(other.getKey())) {
+                        continue;
+                    }
+                    String otherVersion = other.getValue().get(id.getKey());
+                    if (otherVersion != null && compareVersions(otherVersion, id.getValue()) > 0) {
+                        newerElsewhere = true;
+                        break;
+                    }
+                }
+                if (!newerElsewhere) {
+                    everyIdSuperseded = false;
+                    break;
+                }
+            }
+            if (everyIdSuperseded) {
+                Lanterne.LOG.info("[MÈCHE] « {} » est une version plus ancienne d'un mod déjà présent : "
+                        + "retrait (le plus récent gagne).", name);
+                removals.add(file);
+            }
+        }
+    }
+
+    /** Comparaison de versions par segments : numérique si possible, sinon lexicographique. */
+    static int compareVersions(String a, String b) {
+        String[] left = a.split("[.+\\-_]");
+        String[] right = b.split("[.+\\-_]");
+        for (int i = 0; i < Math.max(left.length, right.length); i++) {
+            String x = i < left.length ? left[i] : "0";
+            String y = i < right.length ? right[i] : "0";
+            int result;
+            if (x.matches("\\d{1,9}") && y.matches("\\d{1,9}")) {
+                result = Integer.compare(Integer.parseInt(x), Integer.parseInt(y));
+            } else {
+                result = x.compareTo(y);
+            }
+            if (result != 0) {
+                return result;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * {@code modId -> version} pour chaque section {@code [[mods]]} ; vide si illisible OU si une version
+     * n'est pas un nombre lisible (modèle {@code ${...}} non résolu) : dans le doute on ne compare pas.
+     */
+    private static java.util.Map<String, String> modVersionsOf(Path jar) {
+        java.util.Map<String, String> result = new java.util.LinkedHashMap<>();
+        try (var zip = new java.util.zip.ZipFile(jar.toFile())) {
+            var entry = zip.getEntry("META-INF/neoforge.mods.toml");
+            if (entry == null) {
+                return result;
+            }
+            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    zip.getInputStream(entry), java.nio.charset.StandardCharsets.UTF_8))) {
+                boolean inMods = false;
+                String currentId = null;
+                Pattern modId = Pattern.compile("^\\s*modId\\s*=\\s*[\"']([^\"']+)[\"']");
+                Pattern version = Pattern.compile("^\\s*version\\s*=\\s*[\"']([^\"']+)[\"']");
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.strip();
+                    if (trimmed.startsWith("[")) {
+                        inMods = trimmed.equals("[[mods]]");
+                        currentId = null;
+                    } else if (inMods) {
+                        var idMatch = modId.matcher(line);
+                        if (idMatch.find()) {
+                            currentId = idMatch.group(1);
+                        }
+                        var versionMatch = version.matcher(line);
+                        if (versionMatch.find() && currentId != null) {
+                            String v = versionMatch.group(1);
+                            if (!v.matches("\\d.*")) {
+                                return new java.util.LinkedHashMap<>();
+                            }
+                            result.put(currentId, v);
+                        }
+                    }
+                }
+            }
+        } catch (Exception unreadable) {
+            return new java.util.LinkedHashMap<>();
+        }
+        return result;
     }
 
     /** Les {@code modId} déclarés dans les sections {@code [[mods]]} d'un jar ; vide si illisible. */
