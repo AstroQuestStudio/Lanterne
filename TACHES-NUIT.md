@@ -1,3 +1,43 @@
+# VÉRIFICATION — monitoring/alerte proactive sur le VPS : aucune, clôture série infra
+
+Directive : vérifier si un système préviendrait le patron si le serveur tombait, au-delà du
+`Restart=on-failure` systemd déjà confirmé sain. Lecture seule sur le VPS, aucune modification.
+
+- **Aucune alerte applicative** (Discord/Slack/webhook/heartbeat custom) : recherche par nom de
+  fichier dans `/srv/minecraft` refusée (permission denied côté `ubuntu`, dossier appartient à
+  `minecraft`), aucun process correspondant dans `ps aux`, aucun crontab utilisateur (`crontab -l` →
+  commande absente, package `cron` non installé sur cette image).
+- **Le VPS est hébergé sur Oracle Cloud Infrastructure** (confirmé via l'endpoint metadata OCI
+  `169.254.169.254/opc/v1/instance/`, hostname `lanterne-minecraft`) — un agent `unified-monitoring-
+  agent` (fluentd, processus OCI natif) tourne déjà et remonte des métriques infra (CPU/RAM/disque) au
+  panneau OCI Monitoring, mais c'est un monitoring INFRA générique, pas applicatif : il ne sait pas si
+  le PROCESSUS Minecraft répond, seulement si la VM elle-même est vivante. Aucune alarme OCI visible
+  depuis SSH (se configure côté console web OCI, hors de portée d'une vérification SSH).
+- Le connecteur "MineStrator" (mémoire `connecteur-minestrator.md`) est un serveur DIFFÉRENT
+  (`493442`, panneau d'hébergement séparé) — sans lien avec ce VPS OCI brut, confirmé sans rapport.
+
+**Conclusion, pas un bug — une idée pour la suite** (comme demandé cette nuit, "chercher activement
+de nouvelles pistes") : aujourd'hui, si le serveur tombe pendant que personne ne regarde, seul un
+`Restart=on-failure` systemd le relève tout seul — mais rien ne prévient le patron que ça s'est
+produit, ni ne détecte un vrai blocage applicatif (process up mais serveur figé/ne répond plus aux
+connexions, cas que `Restart=on-failure` ne couvre pas). Piste concrète, dans le style RCON déjà
+utilisé toute la nuit : un petit script cron/systemd-timer côté VPS qui interroge RCON toutes les N
+minutes (`list` suffit — si la réponse timeout ou échoue, le serveur est probablement figé même si le
+process tourne) et poste sur un webhook Discord en cas d'échec. Non implémenté cette nuit — décision
+du patron (ajout d'un webhook Discord = touche à de l'infra externe, mérite sa validation).
+
+**Synthèse infra de la nuit, pour décision au réveil** :
+- Sauvegardes automatiques du monde : **absentes**, seules 2 sauvegardes ponctuelles manuelles
+  existent — recommandation forte, le monde contient 10+ joueurs réels + tout le pregen de cette nuit.
+- Monitoring/alerte applicative : **absent** (piste proposée ci-dessus, pas de décision prise).
+- Tout le reste vérifié sain cette nuit sans action requise : espace disque (88G libres), rotation des
+  logs (bornée), résilience systemd (`Restart=on-failure` déjà actif et confirmé par un incident réel
+  de cette nuit), coexistence pregen/BlueMap (aucune contention).
+
+Aucun fichier de code modifié, opération 100% lecture seule sur le VPS.
+
+---
+
 # VÉRIFICATION — coexistence Cadence/BlueMap avec le pregen en cours : sain
 
 Directive : vérifier si `Cadence.java`/`CadenceBlueMap.java` (rendu complet BlueMap auto-démarré à
