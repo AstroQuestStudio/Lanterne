@@ -10,7 +10,6 @@ import com.mojang.renderpearl.api.textures.GpuSampler;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
-import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.util.SodiumChunkSection;
@@ -504,7 +503,7 @@ public class ShadowRenderer {
             Frustum shadowFrustum = terrainFrustumHolder.getFrustum();
             sodiumWorldRenderer.setupTerrain(
                 playerCamera,
-                ((ViewportProvider) shadowFrustum).sodium$createViewport(),
+                net.irisshaders.iris.compat.sodium.SodiumViewportBridge.create((net.irisshaders.iris.shadows.frustum.SectionCullingFrustum) shadowFrustum),
                 ((FogStorage) client.gameRenderer).sodium$getFogParameters(),
                 playerCamera.entity() != null && playerCamera.entity().isSpectator(),
                 false,

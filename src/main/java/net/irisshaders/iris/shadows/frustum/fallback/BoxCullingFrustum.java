@@ -1,15 +1,13 @@
 package net.irisshaders.iris.shadows.frustum.fallback;
 
-import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.OcclusionCuller;
-import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
-import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
 import net.irisshaders.iris.shadows.frustum.BoxCuller;
+import net.irisshaders.iris.shadows.frustum.SectionCullingFrustum;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.world.phys.AABB;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 
-public class BoxCullingFrustum extends Frustum implements net.caffeinemc.mods.sodium.client.render.viewport.frustum.Frustum, ViewportProvider {
+public class BoxCullingFrustum extends Frustum implements SectionCullingFrustum {
 	private final BoxCuller boxCuller;
 	private final Vector3d position = new Vector3d();
 
@@ -37,8 +35,8 @@ public class BoxCullingFrustum extends Frustum implements net.caffeinemc.mods.so
 	}
 
 	@Override
-	public Viewport sodium$createViewport() {
-		return new Viewport(this, position);
+	public Vector3d viewportOrigin() {
+		return position;
 	}
 
 	@Override
