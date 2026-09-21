@@ -1,14 +1,13 @@
 package net.irisshaders.iris.shadows.frustum;
 
-import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
-import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
+import net.irisshaders.iris.shadows.frustum.SectionCullingFrustum;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.world.phys.AABB;
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 
-public class CullEverythingFrustum extends Frustum implements ViewportProvider, net.caffeinemc.mods.sodium.client.render.viewport.frustum.Frustum {
+public class CullEverythingFrustum extends Frustum implements SectionCullingFrustum {
 	private final Vector3d position = new Vector3d();
 
 	public CullEverythingFrustum() {
@@ -31,8 +30,8 @@ public class CullEverythingFrustum extends Frustum implements ViewportProvider, 
 	}
 
 	@Override
-	public Viewport sodium$createViewport() {
-		return new Viewport(this, position);
+	public Vector3d viewportOrigin() {
+		return position;
 	}
 
 	@Override
