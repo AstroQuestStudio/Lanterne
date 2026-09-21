@@ -398,3 +398,40 @@ comme convenu — décision laissée au coordinateur/au patron au réveil.
 (Graft + IrisConfig) pour restaurer un onglet Iris dans Sodium, documentée dans TÂCHE B comme un
 changement de comportement visible à ne pas décider seul sans le patron — toujours vrai, pas
 tenté cette nuit.
+
+## TÂCHE VULKAN — chaîne jcpp → glsl-transformer → shaderc prouvée de bout en bout, SUCCÈS réel (fork, 21/09 ~02h15)
+
+Reprise du blocage précis documenté dans `RECHERCHE-VULKAN-SANS-SODIUM.md` (étape 3,
+`RenderSystem.getDevice()` exige un device GPU vivant, jamais testable en standalone). Maintenant
+que le lanceur client jetable marche (TÂCHE C ci-dessus), ce blocage n'existe plus DANS un vrai
+client lancé.
+
+**Ajouté** (aucun fichier `net.irisshaders`/`kroppeb`/`mixins.iris*` touché) :
+`lab/ShadercProbe.testCompositeInClient` (appelle le vrai `TransformPatcher.patchComposite`
+d'Iris, jamais modifié) et `lab/ShadercProbeSelfCheck` (gated `LANTERNE_SHADERC_COMPOSITE_TEST=1`,
+même patron que `RegardSelfCheck` — jamais actif pour un joueur normal).
+
+**Résultat, dans un vrai client (copie isolée `C:\lanterne-client-vulkan-test\`, pour ne pas
+interférer avec le test TÂCHE B+D en cours dans `C:\lanterne-client-test\`)** :
+`TransformPatcher.patchComposite` a réellement fonctionné (le device GPU a répondu). Premier essai
+shaderc a échoué avec une erreur précise et honnête (`SPIR-V requires layout(binding=)/location=`
+— le GLSL "style OpenGL" produit par Iris n'a jamais eu besoin de ces décorations explicites).
+Corrigé en activant `shaderc_compile_options_set_auto_bind_uniforms`/`set_auto_map_locations` sur
+un handle d'options shaderc (jusque-là toujours 0/absent). Deuxième essai :
+```
+[SHADERC] TransformPatcher.patchComposite reussi (363 caracteres patches), tentative shaderc...
+[SHADERC] Compilation GLSL->SPIR-V reussie : 968 octets SPIR-V produits.
+[SHADERC-TEST] RESULTAT: SUCCES
+```
+`grep -ic fatal` → 0. **Première preuve de bout en bout, dans un vrai contexte de jeu, que la
+chaîne complète produit du SPIR-V valide à partir d'un vrai fragment composite.**
+
+**Ce que ça ne prouve PAS encore** (voir le détail complet dans `RECHERCHE-VULKAN-SANS-SODIUM.md`,
+étape 4) : un seul fragment composite autonome testé (pas vertex/geometry, pas `patchVanilla`/
+`patchSodium`/`patchDHTerrain`, pas de `#include`) ; le SPIR-V produit n'a jamais été chargé dans
+un vrai pipeline Vulkan ; les bindings/locations auto-assignés ne correspondraient pas forcément à
+ce qu'un vrai pipeline attend (descriptor sets).
+
+**Prochaine étape concrète** : essayer `patchVanilla` (le point d'entrée le plus utilisé, shaders
+"gbuffers") avec un vrai shader vertex+fragment, toujours via ce même lanceur/patron. **Jamais
+déployé sur le VPS ni `test 1`** — testé uniquement sur le lanceur client jetable isolé.

@@ -177,3 +177,73 @@ normalement) — plus de travail, mais reste standalone. Aucune des deux tentée
 (budget de fork insuffisant), à reprendre.
 
 Aucun fichier de code modifié cette passe (recherche/lecture seule, `ShadercProbe.java` inchangé).
+
+## Vulkan — étape 4 : chaîne complète PROUVÉE dans un vrai contexte client, SUCCÈS (21/09/2026 ~02h15)
+
+Suite directe de l'étape 3, maintenant que le lanceur client jetable fonctionne (voir TACHES-NUIT.md,
+TÂCHE C (suite)). Le blocage de l'étape 3 (`RenderSystem.getDevice()` exige un device réel) n'existe
+plus dès lors que le code tourne DANS un vrai client lancé plutôt qu'en standalone.
+
+**Ce qui a été ajouté** (aucun fichier `net.irisshaders`/`kroppeb`/`mixins.iris*` touché, comme
+demandé) :
+- `lab/ShadercProbe.testCompositeInClient(String)` — appelle réellement
+  `TransformPatcher.patchComposite(...)` (vrai code Iris migré, jamais modifié) sur un fragment
+  composite autonome (pas de `#include`), puis passe le résultat patché à shaderc via un nouveau
+  helper partagé `compileSpirv`.
+- `lab/ShadercProbeSelfCheck` (nouveau, même patron que `client.regard.RegardSelfCheck`) — gated
+  par `LANTERNE_SHADERC_COMPOSITE_TEST=1` (jamais actif pour un joueur normal), se déclenche une
+  seule fois au premier tick client une fois la fenêtre/le device GPU prêts (menu principal suffit,
+  aucun monde requis).
+
+**Premier essai, échec précis et honnête** : `TransformPatcher.patchComposite` a réellement
+fonctionné dans le vrai contexte (`RenderSystem.getDevice()` a répondu, aucune exception) — le
+blocage de l'étape 3 est donc bien résolu par le contexte client réel, pas contourné. Mais shaderc a
+rejeté le GLSL patché en sortie :
+```
+probe-composite-patched.glsl:5: error: 'binding' : sampler/texture/image requires layout(binding=X)
+probe-composite-patched.glsl:6: error: 'location' : SPIR-V requires location for user input/output
+```
+**Cause** : le GLSL produit par `TransformPatcher`/`glsl-transformer` est du GLSL "style OpenGL"
+(`uniform sampler2D colortex0;` sans `layout(binding=...)`, exactement ce qu'Iris envoie réellement
+au driver OpenGL en jeu aujourd'hui) — SPIR-V, contrairement à OpenGL, exige que CHAQUE
+uniform/entrée-sortie porte une décoration de binding/location explicite ; ce n'est pas un défaut du
+GLSL patché, juste une exigence propre à la cible SPIR-V qu'OpenGL n'a jamais eue.
+
+**Correctif, deuxième essai, SUCCÈS RÉEL confirmé en jeu** : shaderc sait assigner ces
+bindings/locations automatiquement (équivalent de `--auto-map-bindings` de `glslang`) —
+`shaderc_compile_options_set_auto_bind_uniforms(options, true)` +
+`shaderc_compile_options_set_auto_map_locations(options, true)`, passées via un handle d'options
+construit par `shaderc_compile_options_initialize()` (jusque-là toujours 0/absent dans
+`ShadercProbe`). Rebuild, relancé dans le même client jetable, log confirmé :
+```
+[SHADERC] TransformPatcher.patchComposite reussi (363 caracteres patches), tentative shaderc...
+[SHADERC] Compilation GLSL->SPIR-V reussie : 968 octets SPIR-V produits.
+[SHADERC-TEST] RESULTAT: SUCCES
+```
+`grep -ic fatal` → 0 sur stdout/stderr du lancement. **C'est la première preuve de bout en bout,
+dans un vrai contexte de jeu, que la chaîne jcpp → glsl-transformer (via le vrai `TransformPatcher`
+d'Iris, jamais modifié) → shaderc produit du SPIR-V valide à partir d'un vrai shader de
+shaderpack.**
+
+**Ce que ça NE prouve PAS encore** (pour ne pas survendre ce résultat) :
+- Un seul fragment composite autonome a été testé, pas les vertex/geometry shaders, pas
+  `patchVanilla`/`patchSodium`/`patchDHTerrain` (les autres points d'entrée de `TransformPatcher`,
+  chacun avec ses propres paramètres), et surtout pas un shader avec de vraies directives
+  `#include` (hors périmètre choisi dès l'étape 2, voir la Javadoc de `testReal`).
+- Le SPIR-V produit n'a jamais été chargé dans un vrai pipeline Vulkan (`VkShaderModule`,
+  pipeline graphique complet) — seule la compilation GLSL→SPIR-V est prouvée, pas l'exécution.
+- `auto_bind_uniforms`/`auto_map_locations` assignent des bindings arbitraires (premier
+  disponible) — un VRAI pipeline Vulkan aurait besoin d'un contrôle explicite de ces indices pour
+  faire correspondre les uniformes/textures à ce que le reste du moteur attend (descriptor sets),
+  pas juste "que ça compile".
+
+**Prochaine étape concrète pour qui reprend ça** : essayer `patchVanilla` (le point d'entrée le
+plus utilisé, pour les shaders "gbuffers") avec un shader vertex+fragment réel du même shaderpack,
+toujours via ce même lanceur client jetable et le même patron `*SelfCheck` gated par variable
+d'environnement — c'est le chemin le plus court vers "peut-on un jour se passer d'OpenGL", pas
+encore répondu par cette étape.
+
+Commits : ajout de `testCompositeInClient`/`compileSpirv`/`ShadercProbeSelfCheck`, puis l'ajout des
+options auto-bind/auto-map, sur la branche `26.3`, jamais poussés au VPS ni à `test 1` (uniquement
+testés sur le lanceur client jetable isolé `C:\lanterne-client-vulkan-test\`, copie indépendante de
+`C:\lanterne-client-test\` pour ne pas interférer avec la vérification en cours dans ce dossier-là).

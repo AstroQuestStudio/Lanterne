@@ -4,10 +4,20 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.lwjgl.util.shaderc.Shaderc;
 
+import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectMaps;
+
+import net.irisshaders.iris.helpers.Tri;
+import net.irisshaders.iris.gl.texture.TextureType;
+import net.irisshaders.iris.pipeline.transform.PatchShaderType;
+import net.irisshaders.iris.pipeline.transform.TransformPatcher;
 import net.irisshaders.iris.shaderpack.preprocessor.JcppProcessor;
+import net.irisshaders.iris.shaderpack.texture.TextureStage;
 
 import fr.clubcitrouille.lanterne.Lanterne;
 
@@ -129,6 +139,89 @@ public final class ShadercProbe {
         } finally {
             if (result != 0L) {
                 Shaderc.shaderc_result_release(result);
+            }
+            if (compiler != 0L) {
+                Shaderc.shaderc_compiler_release(compiler);
+            }
+        }
+    }
+
+    /**
+     * Troisieme preuve isolee (21/09/2026, suite de {@link #testReal}) : la chaine complete
+     * jcpp -> {@code glsl-transformer} (via {@link TransformPatcher#patchComposite}) -> shaderc,
+     * DANS un contexte client reel avec un GPU vivant. Le blocage precedent (documente dans
+     * {@code RECHERCHE-VULKAN-SANS-SODIUM.md}, commit 994df5e) etait que
+     * {@code TransformPatcher.patchComposite} appelle {@code RenderSystem.getDevice().getDeviceInfo()}
+     * comme premiere ligne de {@code patchDepth}/{@code CacheKey} — un standalone (sans fenetre GPU)
+     * ne peut jamais fournir ce device. Cette methode n'existe QUE pour etre appelee depuis un vrai
+     * client lance (voir {@code C:\lanterne-client-test\launch7.bat}), jamais au demarrage normal
+     * du mod — voir la note de classe.
+     *
+     * <p>Ne resout toujours PAS les {@code #include} (comme {@link #testReal}) — utiliser un
+     * fichier composite autonome sans dependance externe pour ce test precis.
+     */
+    public static boolean testCompositeInClient(String rawFragmentSource) {
+        try {
+            Object2ObjectMap<Tri<String, TextureType, TextureStage>, String> textureMap = Object2ObjectMaps.emptyMap();
+            Map<PatchShaderType, String> patched = TransformPatcher.patchComposite(
+                    "probe-composite", null, null, rawFragmentSource,
+                    TextureStage.COMPOSITE_AND_FINAL, textureMap, Set.of());
+            String fragmentPatched = patched.get(PatchShaderType.FRAGMENT);
+            if (fragmentPatched == null) {
+                Lanterne.LOG.warn("[SHADERC] TransformPatcher.patchComposite n'a produit aucun fragment patche.");
+                return false;
+            }
+            Lanterne.LOG.info("[SHADERC] TransformPatcher.patchComposite reussi ({} caracteres patches), tentative shaderc...",
+                    fragmentPatched.length());
+            return compileSpirv(fragmentPatched, Shaderc.shaderc_glsl_fragment_shader, "probe-composite-patched.glsl");
+        } catch (Throwable problem) {
+            Lanterne.LOG.warn("[SHADERC] Echec de patchComposite (contexte client, device GPU requis) : {}",
+                    problem.toString());
+            return false;
+        }
+    }
+
+    private static boolean compileSpirv(String glslSource, int shaderKind, String fileNameForErrors) {
+        long compiler = 0L;
+        long options = 0L;
+        long result = 0L;
+        try {
+            compiler = Shaderc.shaderc_compiler_initialize();
+            if (compiler == 0L) {
+                Lanterne.LOG.warn("[SHADERC] shaderc_compiler_initialize a renvoye 0 (natives absentes ?)");
+                return false;
+            }
+            // Le GLSL produit par TransformPatcher est du GLSL "style OpenGL" (uniforms/entrees-sorties
+            // sans layout(binding=)/layout(location=) explicite, jamais necessaire pour compiler vers
+            // du bytecode GL) — SPIR-V exige ces decorations explicitement. shaderc sait les assigner
+            // automatiquement (meme mecanisme que glslang --auto-map-bindings) plutot que de forcer une
+            // reecriture du GLSL en amont ; decouvert en reponse a l'echec precis observe dans un vrai
+            // contexte client (21/09/2026, voir RECHERCHE-VULKAN-SANS-SODIUM.md).
+            options = Shaderc.shaderc_compile_options_initialize();
+            if (options != 0L) {
+                Shaderc.shaderc_compile_options_set_auto_bind_uniforms(options, true);
+                Shaderc.shaderc_compile_options_set_auto_map_locations(options, true);
+            }
+            result = Shaderc.shaderc_compile_into_spv(compiler, glslSource, shaderKind, fileNameForErrors, "main", options);
+            int status = Shaderc.shaderc_result_get_compilation_status(result);
+            long errors = Shaderc.shaderc_result_get_num_errors(result);
+            if (status != 0 || errors > 0) {
+                String message = Shaderc.shaderc_result_get_error_message(result);
+                Lanterne.LOG.warn("[SHADERC] Compilation GLSL->SPIR-V echouee (statut={}, erreurs={}) : {}",
+                        status, errors, message);
+                return false;
+            }
+            ByteBuffer spirv = Shaderc.shaderc_result_get_bytes(result);
+            boolean ok = spirv != null && spirv.remaining() > 0;
+            Lanterne.LOG.info("[SHADERC] Compilation GLSL->SPIR-V reussie : {} octets SPIR-V produits.",
+                    ok ? spirv.remaining() : 0);
+            return ok;
+        } finally {
+            if (result != 0L) {
+                Shaderc.shaderc_result_release(result);
+            }
+            if (options != 0L) {
+                Shaderc.shaderc_compile_options_release(options);
             }
             if (compiler != 0L) {
                 Shaderc.shaderc_compiler_release(compiler);
