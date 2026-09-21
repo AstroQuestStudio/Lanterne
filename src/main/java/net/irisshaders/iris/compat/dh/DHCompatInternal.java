@@ -97,6 +97,7 @@ public class DHCompatInternal {
 		}
 
 		shouldOverride = true;
+		setDeferTransparent(true);
 	}
 
 	public static int getDhBlockRenderDistance() {
@@ -186,7 +187,26 @@ public class DHCompatInternal {
 		depthTexNoTranslucent = new DepthTexture("DH depth tex", width, height, DepthBufferFormat.DEPTH32F);
 	}
 
+	/**
+	 * DH choisit la passe (OPAQUE_AND_TRANSPARENT ou OPAQUE puis TRANSPARENT) AVANT de declencher
+	 * DhApiBeforeRenderEvent (verifie au bytecode de ClientApi.renderLodLayer, DH 3.3.0) : regler ce drapeau
+	 * dans cet evenement, comme le faisait Iris, arrive une image trop tard, d ou la passe combinee et
+	 * la NullPointerException a la premiere image sous shaders. On le regle donc a la creation et a la
+	 * destruction du pipeline, qui ont lieu avant le rendu des LOD de la meme image.
+	 */
+	static void setDeferTransparent(boolean defer) {
+		try {
+			var proxy = DhApi.Delayed.renderProxy;
+			if (proxy != null && proxy.getDeferTransparentRendering() != defer) {
+				proxy.setDeferTransparentRendering(defer);
+			}
+		} catch (Throwable notReady) {
+			// DH pas encore pret : l evenement de rendu reglera le drapeau a l image suivante.
+		}
+	}
+
 	public void clear() {
+		setDeferTransparent(false);
 		if (solidProgram != null) {
 			solidProgram.free();
 			solidProgram = null;
