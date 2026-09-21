@@ -1932,3 +1932,41 @@ non exhaustif par manque de temps : `Groove`/`Easel.onGift` (déjà vus sous l'a
 pas ré-audités ici sous l'angle dupe précise) et `Studio`/`Wheel` (transfert de fichiers audio, pas
 un vecteur d'objets) laissés de côté — aucun signal les rendant suspects. Aucun fichier de code
 modifié.
+
+## Clôture — dupe sous l'angle atomicité : Groove/Easel/Studio/Wheel (~06h20, pure lecture de code)
+
+Reprise du point laissé de côté ci-dessus, spécifiquement sous l'angle atomicité retrait/dépôt
+(pas race condition réseau, déjà couvert). **Aucun problème trouvé, rien modifié.**
+
+- **`BurnerEntity` (le graveur de `Groove`)** : un seul champ `held` (l'`ItemStack` présent, vierge
+  ou gravé), jamais deux champs séparés qui pourraient diverger. `finish()` remplace `held` en une
+  seule affectation synchrone sur le fil serveur (`this.held = pressed;`), sans jamais passer par un
+  état intermédiaire où l'objet vierge serait déjà retiré mais le disque gravé pas encore posé — la
+  Javadoc de la classe documente explicitement cette règle ("le vierge n'est jamais consommé au
+  lancement") et le code l'applique à la lettre. Le sillon (`Groove.engrave`) est choisi APRÈS que
+  le disque soit prêt, jamais réservé à l'avance — élimine le risque de sillon perdu si la gravure
+  échoue à mi-chemin.
+- **`Groove.onGift`/`Easel` équivalent** : transfert de FICHIER (octets audio/image vers le disque
+  dur du serveur), pas de mouvement d'`ItemStack` — aucune surface de dupe d'objet possible par
+  construction, seulement un fichier qui pourrait être mal écrit (déjà couvert par la validation
+  d'entrée auditée dans un cycle précédent).
+- **Les commandes `/disque prendre`/`/tableau prendre` (`give()`)** : créent un `ItemStack` à partir
+  d'une référence de catalogue (fichier disque/tableau existant) SANS consommer quoi que ce soit —
+  ce n'est pas une dupe d'un objet limité, c'est le design voulu : le disque/tableau physique n'est
+  qu'un pointeur vers un contenu déjà stocké côté serveur, réobtenable à volonté par construction
+  (même logique que reprendre un livre déjà écrit dans une bibliothèque). Rien à corriger.
+- **`Studio.java`** : aucune référence à `ItemStack`/`Inventory` dans tout le fichier — c'est un
+  pur porteur de configuration (`discMaxBytes`, `discBurn`, `paintingMaxBlocks`, etc.), aucune
+  surface de dupe.
+- **`Wheel.java`** : aucune référence à `ItemStack`/`Inventory` — c'est la partie CLIENT (lecteur
+  audio, cf. Javadoc de `Groove` : "le pont passe par `Turntable`, que seul `Wheel` implémente"),
+  le client ne peut de toute façon pas dupliquer un objet côté serveur par ce chemin.
+- **Double-déclenchement d'event** : `Groove`/`Easel` n'ont chacun qu'un seul `@SubscribeEvent` par
+  type d'event pertinent (`PlayerLoggedInEvent`/`PlayerLoggedOutEvent`/`ServerTickEvent.Post`),
+  aucune classe tierce du mod ne s'abonne au même type pour toucher aux mêmes structures.
+
+**Conclusion finale de la série sécurité de cette nuit** : 3 vrais bugs de permission trouvés et
+corrigés (`/lanterne on/off`, `/lanterne bench`, `/projection domaine`, commits `152b00e`/`08eab7a`),
+validation d'entrée/anti-spam/anti-dupe tous audités et confirmés sains sur l'ensemble du mod
+(Bazaar, Easel, Screens, Groove, Studio, Wheel, SpawnerSilk). Aucun fichier de code modifié dans ce
+dernier passage.
