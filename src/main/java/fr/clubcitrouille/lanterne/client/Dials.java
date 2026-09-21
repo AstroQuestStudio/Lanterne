@@ -214,12 +214,21 @@ public final class Dials extends Screen {
      * chaque instant, exactement comme le fait deja le cadran "Vulkan" plus haut pour un reglage
      * vanilla equivalent — jamais commit() sur une config a nous.
      *
-     * <h2>Ce qui n'est pas encore fait ici</h2>
+     * <h2>Choix du shaderpack (ajoute le 21/09/2026)</h2>
      *
-     * <p>Choisir PARMI plusieurs shaderpacks installes n'est pas cable (liste de longueur
-     * variable, meme raison que le renvoi vers un ecran a part pour les nuanciers Lanterne un peu
-     * plus haut) — seul actif/coupe l'est. Non teste visuellement (pas de lancement client
-     * possible depuis cette tache, voir TACHES-NUIT.md) : compilation verifiee uniquement.
+     * <p>Un second {@code Dial.cycle} parcourt les shaderpacks presents dans le dossier Iris
+     * ({@code Iris.getShaderpacksDirectory()}), sans dupliquer la persistance : {@code
+     * setShaderPackName} + {@code setShadersEnabledAndApply(true)} suivent exactement la sequence
+     * de {@code ShaderPackScreen.applyChanges()} (sauvegarde iris.properties puis {@code
+     * Iris.reload()}). La liste est rafraichie uniquement a l'ouverture de cet ecran ({@link
+     * #init()} n'appelle {@code build*()} qu'une fois par ouverture, voir son early-return
+     * sur {@code families.isEmpty()}) — jamais recalculee a chaque image, pour rester aussi bon
+     * marche que le reste de cette classe. {@code Files.list} n'ouvre aucun zip (contrairement a
+     * {@code Iris.isValidShaderpack}) : un dossier/zip mal forme peut donc apparaitre dans la
+     * liste, mais {@code setShadersEnabledAndApply} degrade deja proprement si le pack choisi est
+     * invalide (voir {@code Iris.loadShaderpack}, catch existant en amont). Non teste
+     * visuellement (pas d'ecran interactif depuis un fork) : compile et verifie via un client
+     * jetable jusqu'au menu principal uniquement.
      */
     private void buildShaders() {
         Family shaders = new Family("Shaders", false, "Iris, migre dans Lanterne");
@@ -232,7 +241,73 @@ public final class Dials extends Screen {
                         + " pour en reduire le prix.",
                 "Effet immediat : le pipeline de rendu se reconstruit au clic, un court gel est"
                         + " normal (compilation des shaders)."));
+        refreshShaderPackNames();
+        shaders.add(Dial.cycle("Shaderpack", Dials::irisShaderPackLabel, Dials::irisShaderPackColour,
+                Dials::cycleIrisShaderPack,
+                "Choisit le shaderpack a utiliser parmi ceux du dossier shaderpacks d'Iris.",
+                "Changer de shaderpack recompile tout le pipeline de rendu — un gel de quelques"
+                        + " secondes est normal, plus long qu'un simple actif/coupe.",
+                "Active automatiquement les shaders si eteints. Vide si aucun shaderpack n'est"
+                        + " installe."));
         this.families.add(shaders);
+    }
+
+    private static List<String> shaderPackNames = List.of();
+
+    private static void refreshShaderPackNames() {
+        try {
+            java.nio.file.Path dir = net.irisshaders.iris.Iris.getShaderpacksDirectory();
+            try (java.util.stream.Stream<java.nio.file.Path> entries = java.nio.file.Files.list(dir)) {
+                List<String> found = new ArrayList<>();
+                entries.filter(net.irisshaders.iris.Iris::isValidToShowPack)
+                        .map(p -> p.getFileName().toString())
+                        .sorted(String.CASE_INSENSITIVE_ORDER)
+                        .forEach(found::add);
+                shaderPackNames = found;
+            }
+        } catch (Throwable listeIndisponible) {
+            shaderPackNames = List.of();
+        }
+    }
+
+    private static String irisShaderPackLabel() {
+        try {
+            return net.irisshaders.iris.Iris.getCurrentPackName();
+        } catch (Throwable irisIndisponible) {
+            return "indisponible";
+        }
+    }
+
+    private static int irisShaderPackColour() {
+        try {
+            return net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse()
+                    ? ON : FAINT;
+        } catch (Throwable irisIndisponible) {
+            return FAINT;
+        }
+    }
+
+    private static void cycleIrisShaderPack(int direction) {
+        try {
+            List<String> noms = shaderPackNames;
+            if (noms.isEmpty()) {
+                return;
+            }
+            String actuel = net.irisshaders.iris.Iris.getIrisConfig().getShaderPackName().orElse(null);
+            int indexActuel = actuel == null ? -1 : noms.indexOf(actuel);
+            int suivant = Math.floorMod(indexActuel + (direction >= 0 ? 1 : -1), noms.size());
+            String nom = noms.get(suivant);
+
+            if (!nom.equals(actuel)) {
+                net.irisshaders.iris.Iris.clearShaderPackOptionQueue();
+            }
+            net.irisshaders.iris.Iris.getIrisConfig().setShaderPackName(nom);
+            net.irisshaders.iris.api.v0.IrisApi.getInstance().getConfig()
+                    .setShadersEnabledAndApply(true);
+        } catch (Throwable echecBascule) {
+            // Meme discipline que toggleIrisShaders : jamais faire planter l'ecran de reglages
+            // pour un seul cadran.
+        }
     }
 
     private static String irisShaderLabel() {
