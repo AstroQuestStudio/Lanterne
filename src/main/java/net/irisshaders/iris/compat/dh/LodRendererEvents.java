@@ -39,6 +39,9 @@ import org.lwjgl.opengl.GL46C;
 public class LodRendererEvents {
 	private static boolean eventHandlersBound = false;
 
+	/** Repli garanti : pas de LOD DH pendant qu'un shaderpack est actif (voir setupSetDeferredBeforeRenderingEvent). */
+	private static final boolean SHADERS_WITHOUT_DH = !Boolean.getBoolean("lanterne.dhshaders");
+
 	private static boolean atTranslucent = false;
 	private static int textureWidth;
 	private static int textureHeight;
@@ -87,6 +90,16 @@ public class LodRendererEvents {
 			// canceling it will prevent DH from rendering for that frame
 			@Override
 			public void beforeRender(DhApiCancelableEventParam<DhApiRenderParam> event) {
+
+				// REPLI GARANTI (Club Citrouille) : DH 3.3.0 execute des passes (OPAQUE_AND_TRANSPARENT) que
+				// l'integration Iris ne sait pas gerer -> NullPointerException, LOD dessines a travers les
+				// shaders, artefacts. Tant qu'un shaderpack est actif, DH ne dessine RIEN (evenement annule
+				// a chaque image) ; il reprend seul des que les shaders sont coupes. Pour retenter
+				// l'integration : -Dlanterne.dhshaders=true.
+				if (SHADERS_WITHOUT_DH && Iris.isPackInUseQuick()) {
+					event.cancelEvent();
+					return;
+				}
 
 				DhApi.Delayed.renderProxy.setDeferTransparentRendering(Iris.isPackInUseQuick() && getInstance().shouldOverride);
 				DhApi.Delayed.configs.graphics().fog().drawMode().setValue(getInstance().shouldOverride ? EDhApiFogDrawMode.FOG_DISABLED : EDhApiFogDrawMode.FOG_ENABLED);

@@ -54,7 +54,13 @@ public class DHCompat {
 	}
 
 	static Matrix4f getProjection(float nearPlane, float farPlane) {
-		Matrix4f projection = new Matrix4f(CapturedRenderingState.INSTANCE.getGbufferProjection());
+		var captured = CapturedRenderingState.INSTANCE.getGbufferProjection();
+		if (captured == null) {
+			// Pas encore de projection capturee (premiere image, passe imprevue) : une matrice neutre
+			// plutot qu'une NullPointerException qui desactive le rendu de DH.
+			return new Matrix4f().setPerspective((float) Math.toRadians(70.0), 16f / 9f, nearPlane, farPlane);
+		}
+		Matrix4f projection = new Matrix4f(captured);
 		return new Matrix4f().setPerspective(projection.perspectiveFov(), projection.m11() / projection.m00(), nearPlane, farPlane);
 	}
 
