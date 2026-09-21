@@ -1645,3 +1645,30 @@ cohérence : tous les sites `Compagnons.present(X)` du code sont-ils protégés 
 Le pattern défensif établi cette nuit (isolation dans une classe dédiée + réflexion toujours en
 `catch(Throwable)`) est donc déjà appliqué partout où c'est pertinent — pas de "bombe à retardement"
 supplémentaire trouvée. Aucun fichier de code modifié, aucune compilation nécessaire (pure lecture).
+
+## Audit code mort / duplication dans le code Iris migré (pure lecture)
+
+Recherche de code mort issu de la migration (~714 fichiers copiés tels quels depuis Iris upstream,
+qui gérait plusieurs plateformes Fabric/Forge) et de dépendances/duplications devenues inutiles
+dans un contexte NeoForge-only.
+
+**Résultat : rien à nettoyer, aucune modification.**
+
+- Aucune trace de code multi-plateforme mort : recherche exhaustive de `isFabric`, `FabricLoader`,
+  `net.irisshaders.iris.fabric`, `Platform.isFabric`, `@Environment(EnvType...)` dans tout
+  `src/main/java` → zéro résultat. Le code migré semble avoir déjà été un module `neoforge`/`common`
+  propre côté Iris upstream (cohérent avec `MIGRATION-IRIS.md`, qui documente une migration depuis
+  les modules `common`+`neoforge` du dépôt Iris, pas le module `fabric`).
+- `build.gradle` (dépendances `compileOnly`/`jarJar` liées à Iris) : chaque déclaration est déjà
+  accompagnée d'un commentaire expliquant pourquoi elle est là (`compileOnly` vs `jarJar`, raison de
+  licence ou de présence conditionnelle) — aucune dépendance orpheline identifiable sans risque de
+  se tromper sur une utilisation runtime non visible statiquement (leçon de cette nuit : les
+  `META-INF/services`/mixins ne sont pas toujours visibles par une recherche textuelle simple).
+- Piste "classes dupliquées" : `find ... -name "*.java" | uniq -d` remonte plusieurs noms de fichiers
+  en double (`Cadence.java`, `Quarry.java`, `Sight.java`, `Scene.java`, etc.) — vérifié en détail :
+  **ce sont TOUS des doublons internes à Lanterne lui-même** (`fr.clubcitrouille.lanterne.core.Cadence`
+  vs `fr.clubcitrouille.lanterne.lab.Cadence`, etc.), aucun n'implique une classe Iris migrée — faux
+  positif du nom simple, pas une vraie duplication de logique entre Lanterne et Iris, et hors du
+  périmètre de cette tâche (code pré-existant, pas issu de la migration de cette nuit).
+
+Aucun fichier de code modifié, aucune compilation nécessaire (pure lecture). Commit doc uniquement.
