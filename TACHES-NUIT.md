@@ -1672,3 +1672,44 @@ dans un contexte NeoForge-only.
   périmètre de cette tâche (code pré-existant, pas issu de la migration de cette nuit).
 
 Aucun fichier de code modifié, aucune compilation nécessaire (pure lecture). Commit doc uniquement.
+
+## Audit mixins — comptage total, conflits/redondances (pure lecture de code)
+
+**300 mixins actifs au total**, répartis sur 6 fichiers `*.mixins.json` :
+`lanterne.mixins.json` (113 : 27 client + 86 common), `mixins.iris.json` (145, tout client),
+`mixins.iris.compat.sodium.json` (21, client), `mixins.iris.forge.json` (10, client),
+`mixins.iris.vertexformat.json` (7, client), `mixins.iris.compat.dh.json` (4, client).
+
+**7 classes vanilla ciblées à la fois par un mixin Lanterne natif et un/des mixin(s) Iris migré(s)** :
+`BlockEntityRenderDispatcher`, `ClientPacketListener`, `GameRenderer`, `ItemStack`, `LevelExtractor`,
+`RenderTarget`, `VideoSettingsScreen`. **Aucun `@Overwrite` trouvé nulle part sur ces classes** —
+uniquement des `@Inject`/`@Redirect`/`@ModifyVariable`/`@WrapOperation`/`@ModifyArgs`, que Mixin
+gère nativement sans conflit tant qu'ils ne visent pas le même point d'injection exact. Vérifié
+méthode par méthode pour les 7 classes : **aucun conflit dur trouvé**.
+
+Un seul recoupement notable (pas un bug, juste à savoir) : `VideoOptionsMixin` (Lanterne) et
+`net.irisshaders.iris.mixin.gui.MixinVideoSettingsScreen` (Iris) injectent TOUS LES DEUX en
+`@At("TAIL")` de la même méthode `addOptions()` — chacun ajoute ses propres entrées d'options vidéo
+à la liste. Fonctionnellement sûr (Mixin exécute les deux, pas de `@Overwrite`), mais l'ORDRE
+d'apparition des entrées Lanterne vs Iris dans le menu dépend de l'ordre d'application des mixins
+(non garanti sans `priority` explicite) — cosmétique seulement, pas un risque de crash.
+
+**2 mixins Iris upstream avec leur `@Inject` commenté/désactivé** (donc chargés par Mixin mais
+fonctionnellement no-op) — hérités tels quels du code source Iris migré cette nuit, PAS introduits
+par Lanterne, à ne pas "réparer" sans comprendre le pipeline complet et sans pouvoir retester en
+jeu :
+- `net.irisshaders.iris.mixin.state_tracking.MixinRenderTarget` : `@Inject(method =
+  "bindWrite(Z)V", ...)` commenté avec `// TODO 1.21.5 1.21.5` (commentaire des auteurs Iris
+  eux-mêmes) — la détection "quel framebuffer est actuellement bindé" pour désactiver les shaders
+  sur les rendus hors-écran (effet Glowing, mods type Lifts) ne se déclenche donc pas par ce
+  chemin dans notre version.
+- `net.irisshaders.iris.mixin.MixinTweakFarPlane` : `@Inject(method = "renderLevel", ...)`
+  également commenté (ligne 72) — un second point d'ajustement du plan de coupe lointain est
+  désactivé, en plus de son `@Redirect` actif (ligne 47) qui fonctionne.
+
+Ces 2 points sont des limitations connues du portage Iris pour cette version de Minecraft
+(commentaires originaux des auteurs, pas une régression de la migration) — à garder en tête pour
+la reprise si un comportement visuel lié au Glowing effect ou au far plane semble incohérent.
+
+Aucun fichier de code modifié (audit pur, aucun conflit assez clair/sûr pour justifier une
+correction sans test client réel). Commit doc uniquement.
