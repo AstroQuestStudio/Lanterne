@@ -2515,3 +2515,41 @@ lui-même a été vérifié sain et robuste par un fork précédent (reprise aut
 pilotage par présence de joueurs, `O(1)` au boot). Aucune action corrective nécessaire sur le code,
 seulement relancer la commande. Aucun fichier modifié, aucune compilation, rien déployé.
 tout le reste du mod confirmé sain par lecture de code exhaustive).
+
+## Audit ClubCitrouilleAutoMiner — inventaire plein / bloc protégé / pénurie de matériaux — pure lecture de code
+
+Directive : vérifier trois cas limites du bot AutoMiner pendant une longue séance de minage/construction.
+
+**Résultat : les trois cas sont déjà gérés proprement, aucun bug trouvé, aucun code modifié.**
+
+1. **Inventaire plein pendant le minage** : `JunkDropper.java` jette le remblai sans valeur par piles
+   constituées (32) dès que 4 cases se libèrent (1 seule sous contrainte), avec un cooldown de 5 ticks
+   pour ne pas spammer le serveur ; le minerai/bois/outils ne sont jamais jetés (`isJunk` exclut tout ce
+   qui n'est pas dans une liste explicite de blocs sans valeur). Quand le sac contient du vrai butin,
+   `ChestDepositor.java` prend le relais : il vote pour le coffre connu le plus pertinent (consolidation
+   par contenu, pas juste la proximité), et surtout **gère le cas « ce coffre est plein » sans boucler**
+   — `tickDeposit` détecte qu'un même slot ne bouge plus après 20 ticks (`sameSlotTicks`), s'arrête et
+   positionne un drapeau `stalled` distinct d'un dépôt terminé, pour que l'appelant aille consolider
+   ailleurs plutôt que de tourner en rond.
+
+2. **Bloc protégé/inaccessible** : `BlockBreaker.java` passe par un point de contrôle unique
+   (`refuse(mc, pos, raison)`) avant tout cassage — `ProtectedZone.covers(pos)` (base protégée),
+   `Config.isBreakable(state)`/`getDestroySpeed() < 0f` (bloc incassable/protégé vanilla, ex: bedrock,
+   claim), et une vérification de ligne de vue en mode furtif. Aucune exception levée, retour propre
+   avec message loggé — la cible est simplement écartée et le pathfinding continue sur autre chose.
+
+3. **Pénurie de matériaux pendant une construction (pont Rafale inclus)** : `BuildSupply.request()`
+   renvoie un enum à 3 états (`IN_PROGRESS`/`GATHERING`/`IMPOSSIBLE`) — `IMPOSSIBLE` seulement quand
+   coffre, fabrication, fonte ET taille ont tous échoué. `BuildSite.fetch()` traite `IMPOSSIBLE` en
+   inscrivant le matériau comme manquant, compte précisément le nombre de cases abandonnées
+   (`skipped += abandoned`), logue l'échec (`BotLog.failure`), et **continue le chantier** plutôt que
+   de s'arrêter net — la Javadoc de la classe le dit explicitement : « un chantier qui s'arrête net
+   faute d'une pile de verre serait pire — le reste de la maison est bâtissable ». Le bilan de fin
+   annonce clairement un chantier incomplet.
+
+Seul point noté (pas un bug, une limite de portée) : le chemin `GATHERING` (récolte de matière première
+brute pendant une construction) est explicitement documenté dans la Javadoc de `BuildSupply` comme
+« le recoin le moins éprouvé de ce pont » — nécessite une vérification en jeu, pas un défaut prouvé.
+
+Aucun fichier modifié, rien à compiler. Cette investigation portait sur le repo
+`ClubCitrouilleAutoMiner` (séparé de Lanterne) ; seule cette note de synthèse est ajoutée ici.
