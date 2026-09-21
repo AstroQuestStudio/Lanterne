@@ -2276,3 +2276,29 @@ Corrigé en répliquant exactement le pattern vanilla : `TagValueOutput.createWi
 poussé. Pas de test client jetable (logique pure NBT, pas de dépendance rendu — un test réel en
 jeu par le patron reste la confirmation ultime, mais le mécanisme est le même que celui déjà
 utilisé par vanilla pour un besoin identique, donc à haute confiance).
+
+## Extension audit dupe NBT — Beamer (projecteur) corrigé, Panel écarté à raison
+
+Suite au bug `SpawnerSilk.java` (spawner vierge au Silk Touch), recherche du même pattern ailleurs.
+
+**Bug trouvé et corrigé** : `Beamer` (projecteur, bloc unique) rendait un item vierge à la casse —
+sa table de butin (`projecteur.json`) n'a qu'une entrée plate, aucune copie du bloc-entité, donc le
+flux configuré (URL vidéo/image) et le propriétaire étaient perdus. Corrigé via
+`core/BeamerDrops.java` (commit `de0110a`), même mécanisme que `SpawnerSilk.java`
+(`TagValueOutput`/`saveCustomOnly`/`BlockItem.setBlockEntityData`), déclenché sur `BlockDropsEvent`
+plutôt qu'une fonction de table de butin. Compilé sain, pas de test client (logique NBT pure, même
+pattern que `SpawnerSilk` déjà validé cette nuit par lecture de bytecode).
+
+**Panel/Wall (mur d'écran) volontairement écarté** : sa logique de recomposition (`Wall.java`)
+efface et reconstruit délibérément l'assemblage à chaque changement de forme du mur — le flux n'y
+est jamais un état qu'un seul bloc porte seul, donc rien à préserver à la casse d'un panneau
+individuel. Pas creusé plus loin par manque de certitude suffisante sur le fonctionnement exact de
+`Wall.java` en une seule passe — à revérifier si un doute subsiste.
+
+**Burner (graveur)** : déjà correct — `playerWillDestroy` existant éjecte le disque contenu via
+`spill()` avant que le bloc-entité ne disparaisse, pattern différent (éjection d'objet séparé plutôt
+que copie NBT) mais tout aussi valide, rien à changer.
+
+**Trieur/Guichet/CoffreDepot/CoffreReception/Aiguillage** : pas d'override `playerWillDestroy`/
+`getDrops` trouvé, cohérent avec le constat du fork précédent ("état recalculé au `onLoad()`") — leur
+configuration réseau n'est pas un état utilisateur à préserver à la casse, rien à corriger.
