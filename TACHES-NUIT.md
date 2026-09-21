@@ -1,4 +1,23 @@
-**CONTRÔLE PREGEN + AUDIT — quatrième lot de 8 mixins Lanterne natifs**, aucun problème trouvé.
+**CONTRÔLE PREGEN + AUDIT — cinquième lot de 5 mixins Lanterne natifs**, aucun problème trouvé.
+
+- Pregen VPS (lecture seule) : 18,7 % (186 962/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- `PregenActivityMixin` : injection unique dans `MinecraftServer.tickServer` qui neutralise la pause
+  vanilla "pause_a_l_absence" pendant une pré-génération active — **c'est ce mixin précis qui a permis
+  au pregen de tourner toute la nuit à 0 joueur** (sans lui, vanilla coupe le tick au bout d'1 minute
+  sans joueur). Vérifié sain, source unique (`Pregen.keepServerAwake`), repli sûr.
+- `LeurreConnexionMixin` : point unique où le système `Leurre` (voile anti-détection pour AutoMiner)
+  apprend quelle connexion reçoit un chunk — Javadoc exceptionnelle avec preuve `javap` que c'est le
+  SEUL appelant du constructeur de paquet dans tout `net.minecraft.server`. Défaut sûr (`EXEMPT=false`).
+- `SleepBedMixin` : évite qu'un villageois charge le chunk de son lit lointain juste pour apprendre
+  qu'il est trop loin pour dormir (bug vanilla identifié par désassemblage : lecture du bloc AVANT le
+  test de proximité) — retourne de l'air plutôt qu'annuler la méthode, prouvé sans effet de bord.
+- `CompressionMixin` : niveau de compression réseau posé une fois à la connexion (jamais en cours de
+  flux, cohérent avec la doc `Deflater`), format zlib inchangé (compatible client vanilla).
+- `RegionFileVersionMixin` : point de choix UNIQUE pour la compression de sauvegarde (`getSelected()`),
+  directement pertinent pour le pregen en cours (767+ fichiers région à écrire) — garantit qu'identifiant
+  et contenu ne peuvent jamais diverger.
+
+Aucune modification de code (rien à corriger). 42 mixins Lanterne natifs vérifiés au total sur 112.
 
 - Pregen VPS (lecture seule) : 18,5 % (185 669/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
 - Mixins lus intégralement (nouveaux, différents des 29 déjà vérifiés) : `ServerEntityMixin`,
