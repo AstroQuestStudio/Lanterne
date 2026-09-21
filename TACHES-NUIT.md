@@ -1713,3 +1713,34 @@ la reprise si un comportement visuel lié au Glowing effect ou au far plane semb
 
 Aucun fichier de code modifié (audit pur, aucun conflit assez clair/sûr pour justifier une
 correction sans test client réel). Commit doc uniquement.
+
+## Audit threads/executors custom (pure lecture de code, aucune modification)
+
+Recherche de fuite de threads dans tout le code Lanterne natif (hors Iris migré, déjà audité).
+
+**Résultat : rien à corriger, conception déjà saine.**
+
+- 13 sites créent un `Thread`/`ExecutorService` custom (`MecheClient.WORKSHOP`, `ChunkDecode.POOL`,
+  `Wheel.LATHE`, `Reach.ERRANDS`, `Hoard.KITCHEN`, `Radiographie`/`RadiographieServeur.samplerThread`,
+  `Sampler.worker`, `Machine.worker`, `Easel.worker`, `Fetch.worker`, `Pump.worker`,
+  `ShadercProbe.runWithLargeStack`). **Les 12 threads de production sont tous `setDaemon(true)`**
+  (vérifié par grep exhaustif `setDaemon`) — aucun ne peut bloquer la fermeture de la JVM. Le seul
+  thread non-daemon (`ShadercProbe.runWithLargeStack`, prototype de test isolé) est `join()`é
+  de façon synchrone juste après son démarrage — pas de fuite possible.
+- `Hote.java` (serveur HTTP embarqué pour l'embed YouTube, revu cette nuit pour le fix Error 153) :
+  le `HttpServer` est un singleton statique créé paresseusement au premier visionnage (`ensure()`),
+  jamais explicitement arrêté (`server.stop(...)` introuvable dans tout le fichier) — il reste actif
+  pour le reste de la session client une fois qu'une vidéo a été ouverte une fois, même après
+  fermeture de l'écran vidéo. **Ce n'est pas une vraie fuite au sens strict** (singleton borné à la
+  durée de vie du process client, pas de création répétée), mais le thread dispatcher interne de
+  `HttpServer` (`setExecutor(null)` → exécuteur synchrone JDK) hérite du statut daemon du thread
+  appelant (probablement le thread de rendu client, non-daemon) — donc en théorie non-daemon lui
+  aussi. Sans impact pratique : la fermeture du client Minecraft passe par `System.exit()`, qui
+  termine la JVM sans attendre les threads non-daemon. **Volontairement non modifié** : `Hote.java`
+  a déjà été touché 2 fois cette nuit (Error 153, mute/unmute) et reste documenté comme fragile —
+  ajouter un `stop()` sur un event de fermeture d'écran nécessiterait un vrai test client visuel
+  (vidéo qui se rouvre après fermeture) pour ne pas régresser, hors de portée sans écran interactif
+  cette nuit. Piste précise pour la reprise si jugé utile : appeler `server.stop(0)` sur un event
+  de fermeture du dernier écran vidéo actif, avec re-création paresseuse déjà gérée par `ensure()`.
+
+Aucun fichier modifié, rien compilé, commit doc uniquement.
