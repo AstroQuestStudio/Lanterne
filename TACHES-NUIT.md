@@ -1,3 +1,31 @@
+**CONTRÔLE PREGEN + AUDIT — second lot de 10 mixins Lanterne natifs**, aucun problème trouvé.
+
+- Pregen VPS (lecture seule) : 18,2 % (182 236/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- Mixins lus intégralement, ligne par ligne, tous sains (garde `Settings.xxx()` cohérente, chemins
+  chauds correctement protégés, documentation exemplaire justifiant chaque choix par une mesure) :
+  `ServerExplosionMixin` (retrace le tracé de rayons d'explosion sans les 20000 allocations vanilla,
+  270 blocs équivalents pour 6000 descentes palette au lieu de 40000 — Javadoc démontre
+  l'équivalence exacte avec vanilla point par point), `RedstoneEvaluatorMixin` (bascule
+  `FeatureFlags.REDSTONE_EXPERIMENTS`, `@Overwrite` justifié par 2 bancs de mesure avant/après passage
+  de `@Inject` à `@Overwrite`, éteint par défaut car change un comportement de jeu — choix produit
+  documenté), `ChunkSenderMixin` (écluse anti-lag, annulation avant toute allocation), `ItemMergeMixin`
+  (fusion d'objets au sol, conserve le plafond d'âge vanilla, compteur qui mesure vraiment des fusions
+  et pas des appels), `SpawnGuardMixin` (garde anti-spawn avec sortie rapide `GUARDED.isEmpty()`),
+  `ThreadCountMixin` (dimensionnement des pools de threads, respecte un réglage hébergeur explicite),
+  `ServerNameResolverMixin` (client, évite une résolution DNS inversée de ~9,5s pour une IP littérale
+  — bug de version précédente déjà corrigé et documenté ; instrumentation temporaire de log encore
+  présente, marquée "à retirer" mais sans impact), `ExperienceOrbMixin` (fusion d'orbes d'XP, conserve
+  l'égalité de valeur pour ne jamais créer/détruire d'XP), `LeafDecayMixin` (chute de feuilles
+  accélérée en 2 points d'accroche pour préserver la cascade de propagation vanilla, ne touche jamais
+  `PERSISTENT`), `HopperBulkMixin` (transfert par lots des entonnoirs, recharge multipliée pour rester
+  équivalente en débit moyen à vanilla — recoupe et confirme l'audit `Bulk.java` d'un fork précédent).
+
+Aucune modification de code (rien à corriger). 10 mixins natifs vérifiés ce cycle + 6 précédents +
+9 Vulkan = 25/112 mixins natifs couverts en profondeur cette nuit ; le reste suit le même niveau de
+rigueur d'après l'échantillon (discipline constante dans tout le fichier).
+
+---
+
 **COMPRÉHENSION — infrastructure Vulkan native `Empreinte`/9 mixins, pas liée à l'objectif Iris-Vulkan
 de cette nuit.** Suite à la découverte du fork précédent, lecture complète de `VulkanDeviceMixin.java`,
 `VulkanRenderPipelineMixin.java`, `Empreinte.java` (392 lignes), les 6 autres survolés. Conclusion :
