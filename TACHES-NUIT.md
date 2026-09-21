@@ -1,3 +1,28 @@
+# VÉRIFICATION — espace disque VPS face à la croissance monde+pregen : marge très confortable
+
+Directive : vérifier `df -h`, extrapoler la croissance du pregen 500 chunks (~1.8-2G de monde actuel
+selon le résumé, pregen à ~6% au moment du contrôle), et la rotation des logs serveur.
+
+- **Disque** : `/dev/sda1` — 96G total, 8.6G utilisés, **88G libres (9% d'occupation)**. Marge très
+  large.
+- **Taille du monde réelle** : `sudo du -sh /srv/minecraft/world` → **1.9G** (monde officiel importé +
+  exploration + pregen en cours). Même en extrapolant largement une fin de pregen à 5-10x cette taille
+  (hypothèse très pessimiste, l'estimation antérieure de cette nuit tablait sur 1-3G pour l'overworld
+  complet à ce rayon), ça reste très en dessous des 88G disponibles — **aucun risque de saturation
+  disque identifié**, même sans backup automatique et sur plusieurs jours de pregen actif.
+- **Logs** : `journalctl --disk-usage` → seulement **100.4M** utilisés actuellement par les journaux
+  systemd (qui reçoivent tout le flux `[PRÉGÉN]` par seconde). `/etc/systemd/journald.conf` n'a pas de
+  `SystemMaxUse`/`MaxRetentionSec` explicite — donc comportement par défaut de `systemd-journald`
+  (vacuum automatique borné, généralement ~10% du système de fichiers ou un plafond raisonnable selon
+  la distribution) : pas de risque de croissance illimitée en pratique, mais pas de garantie chiffrée
+  précise sans config explicite — point mineur, pas urgent vu la marge disque énorme par ailleurs.
+
+**Conclusion honnête** : aucune action requise, l'espace disque n'est pas un point d'inquiétude pour
+ce pregen ni pour la croissance générale du monde à court/moyen terme. Aucune modification faite
+(lecture seule, comme demandé). Rapport concis conformément à la directive.
+
+---
+
 # VÉRIFICATION — Mèche est immunisé contre le saut de version bizarre de cette nuit (59→60→100)
 
 Directive : vérifier si Mèche (auto-update client/serveur) compare les versions numériquement/
