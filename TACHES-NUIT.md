@@ -1744,3 +1744,28 @@ Recherche de fuite de threads dans tout le code Lanterne natif (hors Iris migré
   de fermeture du dernier écran vidéo actif, avec re-création paresseuse déjà gérée par `ensure()`.
 
 Aucun fichier modifié, rien compilé, commit doc uniquement.
+
+## Audit `LanterneCommand.java` (permissions, travail synchrone, aide) — BUG TROUVÉ ET CORRIGÉ
+
+Audit du fichier central des commandes `/lanterne ...` (717 lignes).
+
+**Bug réel trouvé et corrigé** : `/lanterne on` et `/lanterne off` (coupent/rallument TOUTES les
+dégradations/optimisations du serveur, effet global visible par tous les joueurs) n'avaient AUCUNE
+vérification de permission dans le code — n'importe quel joueur pouvait les exécuter. Preuve de
+l'incohérence : `Guide.java` (l'aide intégrée) n'affiche ces deux commandes QUE dans son bloc
+`if (admin)` (lignes 121-126) — l'intention était clairement de les réserver aux admins, mais la
+garde `.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))` manquait à l'exécution.
+Corrigé (commit `152b00e`) en l'alignant sur le pattern déjà appliqué juste au-dessus dans le même
+fichier pour `clear on/off` et `marée on/off`. Compilé sain (`BUILD SUCCESSFUL`).
+
+**Reste du fichier audité, rien d'autre trouvé** :
+- Travail synchrone : `pregen` est O(1) (déjà confirmé par un audit précédent), `memoire`
+  (déclenche un GC complet) et `test`/`charge` (spawn jusqu'à 20 000 entités) sont bien documentés
+  comme coûteux ET déjà gardés par `LEVEL_GAMEMASTERS` — c'est voulu (outils de labo/admin).
+- Aide (`Guide.java`) cohérente avec les commandes réelles : `/lanterne on`, `/lanterne off`,
+  `/lanterne bench` tous documentés et existants, rien d'orphelin trouvé.
+- `/lanterne bench` reste sans permission (ouvert à tous, comme `/lanterne recettes`) — semble
+  intentionnel (mesure l'existant, ne spawn rien, protégé contre l'exécution concurrente par
+  `Bench.running()`), pas creusé plus loin faute de preuve d'un vrai risque.
+
+Commit code : `152b00e`. Commit doc : à la suite de ce même message dans ce fichier.
