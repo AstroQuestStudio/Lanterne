@@ -387,6 +387,15 @@ public class ShadowRenderer {
 	}
 
 	public void renderShadows(LevelRendererAccessor levelRenderer, Camera playerCamera, CameraRenderState renderState) {
+		ShadowMapCache.statsBegin();
+		try {
+			renderShadowsPass(levelRenderer, playerCamera, renderState);
+		} finally {
+			ShadowMapCache.statsEnd();
+		}
+	}
+
+	private void renderShadowsPass(LevelRendererAccessor levelRenderer, Camera playerCamera, CameraRenderState renderState) {
 		if (IrisVideoSettings.getOverriddenShadowDistance(IrisVideoSettings.shadowDistance) == 0) {
 			return;
 		}

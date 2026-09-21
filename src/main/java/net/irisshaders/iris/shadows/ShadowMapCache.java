@@ -117,4 +117,47 @@ public final class ShadowMapCache {
 	public static void invalidate() {
 		valid = false;
 	}
+
+	// --- Mesure de la passe d'ombres (-Dlanterne.shadowstats=true) : allocation et temps CPU par image ---------------
+
+	private static final boolean STATS = Boolean.getBoolean("lanterne.shadowstats");
+	private static final com.sun.management.ThreadMXBean THREADS = STATS
+		? (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean() : null;
+	private static long statFrames;
+	private static long statBytes;
+	private static long statNanos;
+	private static long statStartNanos;
+	private static long statStartBytes;
+	private static long statLastReport = System.nanoTime();
+
+	/** Début d'une mesure ; sans effet si les statistiques sont coupées. */
+	public static void statsBegin() {
+		if (!STATS) {
+			return;
+		}
+		statStartBytes = THREADS.getCurrentThreadAllocatedBytes();
+		statStartNanos = System.nanoTime();
+	}
+
+	/** Fin d'une mesure ; journalise une moyenne toutes les 10 s. */
+	public static void statsEnd() {
+		if (!STATS) {
+			return;
+		}
+		long now = System.nanoTime();
+		statNanos += now - statStartNanos;
+		statBytes += THREADS.getCurrentThreadAllocatedBytes() - statStartBytes;
+		statFrames++;
+		if (now - statLastReport > 10_000_000_000L && statFrames > 0) {
+			Iris.logger.info("[OMBRES-MESURE] {} images : {} Ko alloues et {} us CPU par appel de renderShadows "
+				+ "(cache {}, reutilisees depuis le dernier bilan : {}).", statFrames,
+				String.format(java.util.Locale.ROOT, "%.1f", statBytes / 1024.0 / statFrames),
+				String.format(java.util.Locale.ROOT, "%.0f", statNanos / 1000.0 / statFrames),
+				ENABLED ? "actif" : "coupe", reused);
+			statFrames = 0;
+			statBytes = 0;
+			statNanos = 0;
+			statLastReport = now;
+		}
+	}
 }
