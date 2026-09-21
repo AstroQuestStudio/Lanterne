@@ -185,6 +185,7 @@ public final class Dials extends Screen {
             return;
         }
 
+        buildVideo();
         buildVeil();
         buildScenery();
         buildImage();
@@ -194,6 +195,142 @@ public final class Dials extends Screen {
         buildWorld();
         buildMachine();
         buildExtras();
+    }
+
+    // --- La vidéo : les réglages de base que l'écran de Sodium portait, rendus par Lanterne. -----
+
+    private static final int[] FPS_STEPS = {10, 15, 20, 30, 40, 60, 75, 90, 120, 144, 165, 200, 240, 260};
+
+    private void buildVideo() {
+        Family video = new Family("La vidéo", false, "distance, luminosité, images par seconde");
+        video.add(Dial.cycle("Distance de rendu", () -> vanillaOptions().renderDistance().get() + " chunks",
+                () -> AMBER, step -> cycleInt(vanillaOptions().renderDistance(), step, 2, 32),
+                "Nombre de chunks dessinés autour de toi.",
+                "C'est le réglage qui pèse le plus sur les images par seconde : le coût croît avec le"
+                        + " carré de la distance.",
+                "Effet immédiat. Avec un shaderpack, chaque chunk est aussi redessiné dans les ombres."));
+        video.add(Dial.cycle("Distance de simulation",
+                () -> vanillaOptions().simulationDistance().get() + " chunks", () -> AMBER,
+                step -> cycleInt(vanillaOptions().simulationDistance(), step, 5, 32),
+                "Distance jusqu'où le monde vit : cultures, créatures, machines.",
+                "Pèse sur le tick (le serveur intégré en solo), pas sur le dessin.",
+                "Effet immédiat en solo ; sur un serveur, c'est lui qui décide."));
+        video.add(Dial.cycle("Luminosité", Dials::gammaLabel, () -> AMBER, Dials::cycleGamma,
+                "Éclaircit les zones sombres. 0 % sombre, 100 % éclatant.",
+                "Gratuit.", "Effet immédiat. Certains shaderpacks règlent leur propre exposition."));
+        video.add(Dial.cycle("Images par seconde max", Dials::fpsLabel, () -> AMBER, Dials::cycleFps,
+                "Plafond d'images par seconde. « Illimité » retire le plafond.",
+                "Un plafond bas économise le GPU et la batterie, et rend la charge plus régulière.",
+                "Effet immédiat."));
+        video.add(Dial.cycle("VSync", () -> vanillaOptions().enableVsync().get() ? "actif" : "coupé",
+                () -> vanillaOptions().enableVsync().get() ? ON : FAINT, Dials::toggleVsync,
+                "Synchronise l'affichage sur l'écran : plus de déchirement, mais un plafond de FPS.",
+                "Peut ajouter une latence d'un ou deux images.", "Effet immédiat."));
+        video.add(Dial.cycle("Plein écran", () -> vanillaOptions().fullscreen().get() ? "actif" : "coupé",
+                () -> vanillaOptions().fullscreen().get() ? ON : FAINT, Dials::toggleFullscreen,
+                "Bascule la fenêtre en plein écran (touche F11 aussi).",
+                "Gratuit.", "Effet immédiat."));
+        video.add(Dial.cycle("Échelle d'interface", Dials::guiScaleLabel, () -> AMBER, Dials::cycleGuiScale,
+                "Taille des menus et de la barre d'objets. Auto choisit la plus grande qui tienne.",
+                "Gratuit.", "Effet immédiat ; cet écran se recale."));
+        video.add(Dial.cycle("Distance des entités", Dials::entityScalingLabel, () -> AMBER,
+                Dials::cycleEntityScaling,
+                "Jusqu'où les créatures et objets sont dessinés, en proportion de la valeur de base.",
+                "Chaque entité a un coût de dessin et de mise à jour.", "Effet immédiat."));
+        video.add(Dial.cycle("Moteur graphique", Dials::backendLabel, () -> ON, null,
+                "Le moteur qui dessine réellement, et sur quelle carte.",
+                "Lecture seule : le moteur se change dans « L'image » (cadran Vulkan), au prochain"
+                        + " lancement.", "Vulkan et OpenGL partagent le même rendu du terrain."));
+        this.families.add(video);
+    }
+
+    private static void cycleInt(net.minecraft.client.OptionInstance<Integer> option, int step, int low,
+            int high) {
+        int was = option.get();
+        int now = Math.clamp((long) was + step, low, high);
+        if (now != was) {
+            option.set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String gammaLabel() {
+        return Math.round(vanillaOptions().gamma().get() * 100d) + " %";
+    }
+
+    private static void cycleGamma(int step) {
+        double was = vanillaOptions().gamma().get();
+        double now = Math.clamp(Math.round((was + 0.1d * step) * 10d) / 10d, 0d, 1d);
+        if (now != was) {
+            vanillaOptions().gamma().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String fpsLabel() {
+        int limit = vanillaOptions().framerateLimit().get();
+        return limit >= 260 ? "illimité" : limit + " i/s";
+    }
+
+    private static void cycleFps(int step) {
+        int was = vanillaOptions().framerateLimit().get();
+        int index = 0;
+        for (int i = 0; i < FPS_STEPS.length; i++) {
+            if (FPS_STEPS[i] <= was) {
+                index = i;
+            }
+        }
+        int next = Math.clamp((long) index + (step > 0 ? 1 : -1), 0, FPS_STEPS.length - 1);
+        if (FPS_STEPS[next] != was) {
+            vanillaOptions().framerateLimit().set(FPS_STEPS[next]);
+            vanillaOptions().save();
+        }
+    }
+
+    private static void toggleVsync(int ignored) {
+        vanillaOptions().enableVsync().set(!vanillaOptions().enableVsync().get());
+        vanillaOptions().save();
+    }
+
+    private static void toggleFullscreen(int ignored) {
+        vanillaOptions().fullscreen().set(!vanillaOptions().fullscreen().get());
+        Minecraft.getInstance().getWindow().updateFullscreenIfChanged();
+        vanillaOptions().save();
+    }
+
+    private static String guiScaleLabel() {
+        int scale = vanillaOptions().guiScale().get();
+        return scale == 0 ? "auto" : String.valueOf(scale);
+    }
+
+    private static void cycleGuiScale(int step) {
+        cycleInt(vanillaOptions().guiScale(), step, 0, 6);
+    }
+
+    private static String entityScalingLabel() {
+        return Math.round(vanillaOptions().entityDistanceScaling().get() * 100d) + " %";
+    }
+
+    private static void cycleEntityScaling(int step) {
+        double was = vanillaOptions().entityDistanceScaling().get();
+        double now = Math.clamp(Math.round((was + 0.25d * step) * 100d) / 100d, 0.5d, 5d);
+        if (now != was) {
+            vanillaOptions().entityDistanceScaling().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String backendLabel() {
+        try {
+            var device = com.mojang.blaze3d.systems.RenderSystem.tryGetDevice();
+            if (device == null) {
+                return "inconnu";
+            }
+            var info = device.getDeviceInfo();
+            return info.backendName() + " · " + info.name();
+        } catch (Throwable inconnu) {
+            return "inconnu";
+        }
     }
 
     // --- Les shaders (Iris), migres dans le code source de Lanterne le 20-21/09/2026. Voir -----
@@ -231,10 +368,19 @@ public final class Dials extends Screen {
      * jetable jusqu'au menu principal uniquement.
      */
     private void buildShaders() {
-        if (!fr.clubcitrouille.lanterne.report.Compagnons.present("sodium")) {
-            return; // Iris est inerte sans Sodium (voir IrisMixinPlugin.sodiumPresent) : pas de cadran.
-        }
         Family shaders = new Family("Shaders", false, "Iris, migre dans Lanterne");
+        if (!fr.clubcitrouille.lanterne.report.Compagnons.present("sodium")) {
+            // Iris est inerte sans Sodium (voir IrisMixinPlugin.sodiumPresent) : on le DIT au lieu
+            // de cacher la famille, pour que le joueur comprenne pourquoi rien ne s'active.
+            shaders.add(Dial.cycle("Shaders (Iris)", () -> "inerte", () -> FAINT, null,
+                    "Iris est intégré à Lanterne, mais son rendu du terrain s'appuie encore sur"
+                            + " Sodium : sans Sodium, aucun shaderpack ne s'affiche.",
+                    "Le rendu est celui de Minecraft, sans surcoût de shaders.",
+                    "Le moteur de terrain propre à Lanterne, qui rendra Sodium inutile, est en"
+                            + " cours de construction."));
+            this.families.add(shaders);
+            return;
+        }
         shaders.add(Dial.cycle("Shaders (Iris)", Dials::irisShaderLabel, Dials::irisShaderColour,
                 Dials::toggleIrisShaders,
                 "Active ou coupe le shaderpack actuellement selectionne (touche K par defaut,"
@@ -252,6 +398,12 @@ public final class Dials extends Screen {
                         + " secondes est normal, plus long qu'un simple actif/coupe.",
                 "Active automatiquement les shaders si eteints. Vide si aucun shaderpack n'est"
                         + " installe."));
+        shaders.add(Dial.cycle("Distance des ombres", Dials::shadowDistanceLabel, () -> AMBER,
+                Dials::cycleShadowDistance,
+                "Jusqu'où le shaderpack calcule les ombres, en chunks. 0 les coupe.",
+                "C'est le premier levier de coût d'un shaderpack : le terrain est redessiné une"
+                        + " seconde fois dans la carte d'ombres.",
+                "Effet immédiat. Maj + clic : pas de 4. Enregistré dans iris.properties."));
         this.families.add(shaders);
 
         Family regul = new Family("Régulateur", false, "petites configs, GPU intégrés");
@@ -273,6 +425,28 @@ public final class Dials extends Screen {
                 "30 pour une très petite config, 60 pour un usage normal, 120-144 pour un écran"
                         + " rapide."));
         this.families.add(regul);
+    }
+
+    private static String shadowDistanceLabel() {
+        try {
+            int d = net.irisshaders.iris.gui.option.IrisVideoSettings.shadowDistance;
+            return d <= 0 ? "coupées" : d + " chunks";
+        } catch (Throwable indisponible) {
+            return "indisponible";
+        }
+    }
+
+    private static void cycleShadowDistance(int step) {
+        try {
+            int was = net.irisshaders.iris.gui.option.IrisVideoSettings.shadowDistance;
+            int now = Math.clamp((long) was + step, 0, 32);
+            if (now != was) {
+                net.irisshaders.iris.gui.option.IrisVideoSettings.shadowDistance = now;
+                net.irisshaders.iris.Iris.getIrisConfig().save();
+            }
+        } catch (Throwable echec) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.debug("Cadran Ombres : {}", echec.toString());
+        }
     }
 
     private static List<String> shaderPackNames = List.of();

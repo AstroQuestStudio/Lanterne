@@ -49,6 +49,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue VEIL_BLOCK_ENTITIES;
     public static final ModConfigSpec.BooleanValue RESEAU_LUEUR;
     public static final ModConfigSpec.BooleanValue GAUGE;
+    public static final ModConfigSpec.BooleanValue ECRAN_VIDEO;
     public static final ModConfigSpec.BooleanValue REGARD;
     public static final ModConfigSpec.BooleanValue ZOOM;
     public static final ModConfigSpec.IntValue ZOOM_FACTOR;
@@ -244,6 +245,13 @@ public final class ClientConfig {
                 "Seize sommets par bloc actif visible, pas de particule, pas d'allocation par image -",
                 "voir client.reseau.Lueur pour le detail. Effet immediat.")
                 .define("lueur_reseau", true);
+
+        ECRAN_VIDEO = BUILDER.comment(
+                "L ECRAN VIDEO DE LANTERNE : quand vous ouvrez Options > Video (l ecran vanilla OU celui",
+                "de Sodium), c est l ecran Lanterne qui s ouvre : distance de rendu, luminosite, FPS,",
+                "shaders, moteur graphique, et tous les cadrans du mod. Maintenir Maj en cliquant sur",
+                "Video ouvre l ecran d origine. A faux : l ecran d origine s ouvre toujours.")
+                .define("ecran_video_lanterne", true);
 
         GAUGE = BUILDER.comment(
                 "LA JAUGE : ce que le mod fait, lisible pendant qu'on joue.",
