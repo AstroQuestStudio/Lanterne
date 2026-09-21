@@ -1584,3 +1584,33 @@ fichier modifié, rien compilé, rien commité pour cette tâche précise.
 **Décision : ARRÊT sur consigne explicite du coordinateur** avant de corriger et retenter — le coordinateur a identifié un risque de reproduire le pattern d'enlisement de 2h déjà vécu deux fois cette nuit sur des tests client similaires. Aucun process Java parasite créé (le lancement a échoué avant tout démarrage JVM, `tasklist` confirmé propre). Aucun fichier de code modifié.
 
 **Recommandation pour la reprise** : la piste `SendKeys`/mixin de screenshot reste valable et probablement rapide à faire marcher avec le chemin absolu déjà connu pour `cmd.exe //C` — mais à tenter avec un budget de temps explicite et borné (ex: 10 minutes max), pas en boucle ouverte.
+
+## Audit — chargement JourneyMap/Distant Horizons côté Lanterne + cohérence script de migration (pure lecture de code, aucun client jetable)
+
+**Directive** : vérifier si du code Lanterne charge/scanne des fichiers de cache JourneyMap/DH de façon synchrone sur le thread principal client, et si le script de migration créé plus tôt cette nuit (`C:\Users\trufa\Downloads\migration-club-citrouille.bat`/`.sh`) est resté cohérent avec les changements de cette nuit.
+
+**Résultat : rien à corriger, aucun risque trouvé.**
+
+- Le seul code Lanterne qui touche JourneyMap est `client/Eclaireur.java` (commit `cc719da`) : une
+  écriture UNIQUE d'un fichier de config minimal (`renderDelay: 1000`) au premier lancement, et
+  UNIQUEMENT si le fichier n'existe pas déjà (`Files.exists` avant tout). Ce n'est ni une lecture de
+  cache, ni du travail répété, ni synchrone sur un chemin chaud — une écriture ponctuelle de
+  quelques octets à la construction du mod. Rien à optimiser.
+- Aucun code Lanterne n'existe pour Distant Horizons : les seules références DH dans le dépôt sont
+  des commentaires/constantes (`report/Compagnons.java` liste `DISTANT_HORIZONS` comme identifiant
+  de présence, `report/LanterneCommand.java` mentionne DH dans un commentaire sur Chunky/pregen,
+  `client/portals/Portail.java` cite DH dans une Javadoc comparative) — aucune lecture/écriture de
+  fichier LOD. Le seul lien réel DH↔Lanterne découvert cette nuit est indirect : DH lit
+  `ModList.isLoaded("iris")` en interne (trouvé par bytecode plus tôt cette nuit), pas un chemin de
+  code que Lanterne possède ou pourrait rendre asynchrone.
+- **Aucun cache JourneyMap/DH n'est chargé par du code Lanterne, point.** C'est entièrement géré par
+  ces mods eux-mêmes, hors du périmètre d'optimisation de ce dépôt.
+- **Cohérence du script de migration** : vérifié via `git log --name-only` sur toute la nuit — aucun
+  commit ne touche à un chemin lié à JourneyMap/Distant Horizons (le seul faux-positif du grep était
+  `HorizonRenderer.java`, une classe Iris sans rapport, coïncidence de nom). Les dossiers de sauvegarde
+  JourneyMap/DH visés par le script vivent entièrement dans le `.minecraft`/instance du joueur, hors
+  du dépôt Lanterne — aucun commit de cette nuit (fusion de config, migration Iris, fixes Sodium) ne
+  pouvait les affecter de toute façon, puisqu'aucun ne touche à la structure de dossiers de sauvegarde
+  du jeu. Script toujours cohérent avec l'état actuel du code.
+
+Aucun fichier de code modifié, aucune compilation nécessaire (pure lecture). Commit doc uniquement.
