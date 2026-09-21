@@ -3861,3 +3861,7 @@ Livré/déployé : VPS = 26.3.106 (NON redémarré depuis ; consigne patron : ne
 ## 21/09 — DÉPLOIEMENT VPS 26.3.116 (ordre du patron : « déploie, je teste avec test 1 sous 106 »)
 - VPS : 0 joueur au moment du déploiement ; 106 sauvegardé dans /srv/minecraft/mods-anciens-backup/ ; 116 dans mods/ ; restart OK, « Done », 0 FATAL, BlueMap rendu relancé. Reprise du pregen NON vérifiée (rcon « lanterne pregen status » invalide : syntaxe à retrouver).
 - Attendu : test 1 (106) se met à jour via la Mèche à la connexion. Résultat du patron en attente. Pas d'agents ni de tests tant qu'il joue.
+
+## 21/09 — MÈCHE CONFIRMÉE EN RÉEL PAR LE PATRON
+- test 1 (106) connecté au VPS (116) : jar 116 téléchargé, vérifié, ancien 106 supprimé après fermeture. « ça semble marcher ». Goal levé (/goal clear). Plus d'agents/tests tant qu'il ne redonne pas d'ordre.
+- Reste à confirmer par lui : rendu/ciel/FPS en 116, absence d'erreur DH. Pregen VPS : reprise à vérifier (syntaxe rcon).
