@@ -447,3 +447,135 @@ soit présent ou pas) est sur la branche `26.3`, jamais poussé.
 ci-dessus, PUIS reprendre ce même test (lanceur isolé, Sodium absent) pour voir si un 3e crash
 apparaît plus loin dans la chaîne — probable vu que `vertices/sodium/terrain/` (`XHFPModelVertexType`
 etc.) a la même nature de couplage par TYPE DE CHAMP, pas seulement par appel de méthode.
+
+## AUDIT — appelants de `WorldRenderingSettings.getVertexFormat()`/`setVertexFormat()`, verdict : trop risqué pour cette nuit (fork, 21/09 ~02h50)
+
+Reprise de la « prochaine étape concrète » ci-dessus. Audit complet fait (`grep -rn "getVertexFormat\|setVertexFormat"`
+sur tout `src/main/java`, 30 occurrences, triées manuellement), **aucun code modifié** — verdict honnête : correctif (a)/(b) trop risqué à improviser cette nuit, documenté ici pour la suite.
+
+**Constat qui aggrave le diagnostic précédent** : `VanillaRenderingPipeline.java:34` (le constructeur du
+pipeline de secours, PAS le pipeline shader) fait lui aussi, sans aucune garde :
+```java
+WorldRenderingSettings.INSTANCE.setVertexFormat(ChunkMeshFormats.COMPACT);
+```
+`VanillaRenderingPipeline` est la classe utilisée par défaut dès qu'aucun shaderpack n'est actif OU en
+repli après un `catch (Throwable)` dans `Iris.createPipeline` — donc même le chemin « rendu vanilla sans
+shaders » touche directement une classe Sodium (`ChunkMeshFormats`). Ça veut dire qu'un simple garde sur
+le SEUL constructeur de `WorldRenderingSettings` (piste envisagée initialement) ne suffirait pas : il
+faudrait AUSSI garder ce site d'appel, et tous les autres listés ci-dessous.
+
+**Inventaire des appelants réels (hors mixins ciblant des classes Sodium, ceux-là ne se déclenchent
+jamais si Sodium est absent — le mixin ne s'applique pas si sa cible ne charge pas)** :
+
+| Fichier | Ligne(s) | Usage réel |
+|---|---|---|
+| `shaderpack/materialmap/WorldRenderingSettings.java` | 27, 37, 138-148 | déclaration du champ + constructeur (`ChunkMeshFormats.COMPACT` non gardé) + accesseurs |
+| `pipeline/VanillaRenderingPipeline.java` | 34 | `setVertexFormat(ChunkMeshFormats.COMPACT)` dans le constructeur, **chemin de repli par défaut**, non gardé |
+| `pipeline/IrisRenderingPipeline.java` | 232 | `setVertexFormat(...)` au chargement d'un shaderpack réel |
+| `gl/state/ShaderAttributeInputs.java` | 36 | `.getVertexFormat().getVertexFormat()` — appel CHAÎNÉ : récupère le `ChunkVertexType` Sodium PUIS appelle SA PROPRE méthode `getVertexFormat()` (qui renvoie le vrai `net.minecraft.client.renderer.VertexFormat` vanilla) pour construire les attributs d'un shader réel — usage d'ENCODAGE réel, pas juste transmis |
+| `pipeline/programs/ShaderCreator.java` | 72, 254, 292, 327 | même appel chaîné `.getVertexFormat().getVertexFormat()`, 4 sites, pour construire chaque programme shader (`createShader`/variantes) — usage d'ENCODAGE réel |
+
+**Conclusion honnête** : ce n'est PAS un champ « juste stocké/transmis » — `ShaderAttributeInputs` et
+les 4 sites de `ShaderCreator` utilisent le résultat pour construire le VRAI format de vertex GL utilisé
+par les shaders actifs (y compris quand Sodium est présent et qu'un shaderpack tourne, ce qui est
+CONFIRMÉ STABLE cette nuit — Complementary Reimagined, 80-124 FPS). Un correctif (a)/(b) demanderait de
+toucher au minimum 5 fichiers, dont 2 (`ShaderAttributeInputs`, `ShaderCreator`) sur le chemin chaud de
+construction des shaders réellement utilisés en jeu avec Sodium présent — donc un risque de régression
+directe sur le rendu shader déjà validé par le patron, si le correctif est mal fait ou mal testé. Pas un
+travail à improviser en fin de nuit sans pouvoir retester ensuite avec Sodium présent ET un shaderpack
+actif (pas seulement au menu principal du lanceur jetable, mais en jeu, plusieurs minutes, comme la
+leçon de migration Iris l'exige déjà pour tout changement touchant ce chemin).
+
+**Piste de reprise recommandée pour la suite** (à faire de jour, avec plus de marge pour retester) :
+créer une interface neutre côté Lanterne (ex. `fr.clubcitrouille.lanterne.compat.VertexFormatHandle`,
+avec une méthode `net.minecraft.client.renderer.VertexFormat resolve()`), avec deux implémentations :
+une qui délègue à un vrai `ChunkVertexType` Sodium (utilisée quand `Compagnons.present(SODIUM)`), une
+qui renvoie directement un `VertexFormat` vanilla codé en dur équivalent à `ChunkMeshFormats.COMPACT`
+(pour le cas Sodium absent). Remplacer le champ de `WorldRenderingSettings` par ce type neutre, adapter
+les 5 sites d'appel un par un, RETESTER dans les DEUX configurations (Sodium présent + shaderpack actif
+en jeu ; Sodium absent) avant de considérer ça terminé — pas seulement compiler.
+
+Rien modifié dans le dépôt pour cette tâche (audit seul). Rien à compiler, rien à tester.
+
+## RE-CONFIRMATION — verdict inchangé, une précision utile pour la reprise (fork, 21/09 ~03h05)
+
+Repris ce même audit avec un œil neuf, hypothèse testée : une interface neutre minimale serait-elle
+suffisante ? Vérifié par `javap` sur le vrai jar Sodium embarqué (`test 1/mods/sodium-neoforge-0.9.2+mc26.3.jar`,
+jar imbriqué `META-INF/jarjar/net.caffeinemc.sodium-neoforge-0.9.2+mc26.3-mod.jar`) : l'interface
+`ChunkVertexType` n'a que DEUX méthodes :
+```java
+public interface ChunkVertexType {
+    VertexFormat getVertexFormat();
+    ChunkVertexEncoder getEncoder();
+}
+```
+Confirmé par grep exhaustif (`getVertexFormat()\.getEncoder\|WorldRenderingSettings.INSTANCE.getVertexFormat()`) :
+**`getEncoder()` n'est jamais appelé** sur le résultat de `WorldRenderingSettings.INSTANCE.getVertexFormat()`
+— seule `.getVertexFormat()` (renvoyant le `VertexFormat` vanilla) l'est, aux 5 sites déjà listés. Ça confirme
+que l'interface neutre proposée (une seule méthode `resolve(): VertexFormat`) est bien suffisamment large,
+pas besoin d'exposer plus.
+
+Ça ne change PAS le verdict : `VanillaRenderingPipeline.java:34` reste le vrai blocage de fond — sans Sodium,
+il n'existe aucune valeur `VertexFormat` "équivalente" évidente à `ChunkMeshFormats.COMPACT` sans revalider
+manuellement le format vanilla exact attendu par `ShaderAttributeInputs`/`ShaderCreator` (risque de mesh
+corrompu si mal choisi, pas juste un crash — un bug plus sournois). Les 2 mixins `MixinChunkMeshFormats`/
+`MixinRenderSectionManager` (retour direct de `ChunkVertexType`) sont sans risque car dans un package mixin
+(`mixins.iris.compat.sodium.json`) qui ne s'applique de toute façon jamais sans Sodium (cibles Sodium
+introuvables) — pas un obstacle supplémentaire, juste une confirmation.
+
+**Verdict final de cette passe : ne pas implémenter cette nuit.** Le risque reste concentré sur `ShaderAttributeInputs`
+et `ShaderCreator` (chemin chaud du rendu shader confirmé stable avec Sodium+shaderpack ce soir), pas sur une
+simple substitution de type. Aucun fichier modifié, rien compilé, rien testé — audit seul, comme la passe précédente.
+
+## ÉTAPE 7 — Vulkan : test sur un VRAI fichier de shaderpack (pas un shader de test écrit à la main) (fork, 21/09 ~03h50-04h07)
+
+Toutes les preuves Vulkan précédentes (fragment 3532 octets, puis vertex+fragment 5576+3428 octets) portaient
+sur un shader "gbuffers" minimal écrit à la main dans `ShadercProbeSelfCheck.java` — limite honnêtement
+documentée. Cette passe teste pour de vrai `shaders/world0/gbuffers_terrain.{vsh,fsh}` du shaderpack
+**ComplementaryReimagined_r5.9.zip** (`test 1/shaderpacks/`), le point d'entrée le plus utilisé réellement en
+jeu.
+
+**Nouveau code** : `ShadercProbe.testRealPackVanillaInClient(Path shadersRoot, String vertexPath, String fragmentPath)`
+réutilise `net.irisshaders.iris.shaderpack.include.{IncludeGraph,IncludeProcessor,AbsolutePackPath}` — déjà
+migrés cette nuit, jamais utilisés jusqu'ici dans ce laboratoire — pour résoudre les VRAIS `#include` du
+shaderpack (contrairement à `testVanillaInClient`/`testReal` qui exigent un fichier autonome). Gate séparé
+(`LANTERNE_SHADERC_REALPACK_TEST=<dossier shaders/ extrait>`), jamais actif sans variable d'environnement.
+
+**Premier test empirique (commit `8b256d4`)** : `#include` résolus avec succès (10446 lignes produites pour
+chaque étage — la richesse réelle de Complementary Shaders, pas un fichier jouet). Échec précis obtenu :
+```
+[SHADERC] Echec de patchVanilla+reblock (contexte client, device GPU requis) :
+net.irisshaders.iris.gl.shader.ShaderCompileException: probe-vanilla-reblocked:
+java.lang.IllegalArgumentException: Unparsed preprocessor directives such as '#define' may not be
+present at this stage of shader processing!
+```
+Cause exacte : le flatten `#include` préserve les lignes `#define VERTEX_SHADER`/`#ifdef ...` littéralement
+(comportement voulu de `IncludeProcessor`, qui ne fait QUE de la substitution de lignes) — mais
+`TransformPatcher.patchVanilla` attend un GLSL DÉJÀ préprocessé (comme le fait réellement le pipeline Iris
+avant d'appeler `patchVanilla` en jeu), pas les directives C brutes.
+
+**Correctif (commit `3baf822`)** : ajout d'un passage par `JcppProcessor.glslPreprocessSource` (déjà prouvé
+fonctionnel sur le composite via `testReal` plus tôt cette nuit) avant `patchVanilla`+`UniformReblocker`+shaderc
+— exactement l'étape manquante. Compile sain.
+
+**Re-test empirique : INCONCLUANT, pas par un défaut de code.** Une première instance de lanceur client
+isolée (`C:\lanterne-client-vulkan-test-4\`) a bien reproduit l'échec ci-dessus (preuve du bug AVANT
+correctif). Une seconde instance fraîche (`C:\lanterne-client-vulkan-test-5\`, jar rebuild avec le correctif
+JcppProcessor) a été lancée pour confirmer le fix, mais s'est bloquée ~17 minutes sur le chargement des
+providers de police unicode (`UnihexProvider`, étape normalement rapide) sans jamais progresser jusqu'au menu
+principal ni exécuter le moindre log `[SHADERC-TEST]` — 8 process `java.exe` tournaient simultanément sur la
+machine à ce moment (plusieurs autres forks actifs cette nuit), c'est la cause la plus probable (contention
+CPU/IO), pas un bug du correctif — le même setup avait fonctionné sans accroc quelques minutes plus tôt sur
+`test-4` avec un nombre de process similaire, donc **pas une certitude non plus**, juste l'hypothèse la plus
+probable. Processus laissé actif (pas de kill, `tasklist` vérifié, jamais de kill global) pour qui veut
+vérifier son état plus tard.
+
+**État pour la reprise** : le correctif JcppProcessor est logiquement sain (même mécanisme que `testReal`,
+déjà prouvé ailleurs) et compilé, mais SANS confirmation empirique fraîche sur le vrai fichier gbuffers_terrain
+avec le fix appliqué — ne pas présenter comme résolu. Prochaine étape triviale pour qui reprend : relancer
+`C:\lanterne-client-vulkan-test-5\launch7_v5.bat` (ou une nouvelle copie si celle-ci reste bloquée) à un moment
+où moins de process concurrents tournent, puis `grep "SHADERC-TEST" logs/latest.log`. Si l'échec persiste même
+isolé, ce sera un vrai nouveau signal à creuser (pas juste de la contention).
+
+Commits `8b256d4` (nouvelle méthode de test) et `3baf822` (fix JcppProcessor) sur `26.3`, jamais poussés. Rien
+déployé sur le VPS ni `test 1`.

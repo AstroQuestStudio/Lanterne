@@ -1086,3 +1086,72 @@ menu principal, `sodium-workaround-cleanup` observé dans les logs) — pas de k
 -i java` vérifié avant toute action, jamais de kill global, laissé à surveiller/nettoyer par la
 suite). Rien déployé sur le VPS ni `test 1`. Commit du fork précédent `0456255` reste la seule
 modification de code liée à cette tâche.
+
+## AUDIT ClubCitrouilleAutoMiner — rien trouvé, verdict négatif honnête (fork, 21/09 ~04h05)
+
+Directive : auditer `C:\Users\trufa\Documents\ClubCitrouilleAutoMiner` (repo séparé, client-only,
+jamais retouché cette nuit depuis les fixes YouTube/kick/navigation du tout début de session) à la
+recherche d'un vrai bug ou d'un gain de perf, avec preuve.
+
+**Vérifications faites** :
+- `git log`/`git status` : dépôt propre, `26.3` à jour avec `origin/26.3`, dernier commit
+  `a33b207` ("Quarry : etend le pont Rafale au minage general").
+- Recherche du 4e cas potentiel du bug déjà connu (« confisque le tick en créatif faute de check
+  `hasInfiniteMaterials()` ») : les 14 sites qui référencent `hasInfiniteMaterials`/`instabuild`
+  sont tous déjà correctement gardés (`GoalPlanner.java:388`, `BotController.java:1037`,
+  `BuildSite.java:960,1123`, `CreativeBuildSelfCheck.java:106`) — aucun trou du même pattern.
+- `Quarry.java` (1168 lignes, module touché en dernier par le repo, étend le pont Rafale au
+  minage général) : aucune mention de `creative`/`instabuild`/`hasInfiniteMaterials` — cohérent,
+  ce module gère du minage en survie normale, pas de logique dépendante du mode de jeu. Aucun
+  `while(true)`/boucle sans condition de sortie trouvé.
+- `autominer.log` (`Club Citrouille/logs/autominer.log`, seule instance où ce fichier existe —
+  ancienne instance 26.1.2 du patron, hors `test 1` où se fait le test Lanterne ce soir) : 0
+  occurrence de "exception"/"error"/"bloqué"/"stuck" sur tout le fichier ; dernière séance loguée
+  se termine par « rien qui se soit repete anormalement ». Aucune trace fraîche de problème.
+  `test 1` n'a pas de fichier `autominer.log` distinct dans ses logs cette nuit (le bot n'a
+  probablement pas tourné sur cette instance pendant les tests Iris).
+- Cohérence avec les changements Lanterne cette nuit (retrait partiel de Sodium, migration Iris) :
+  AutoMiner n'a aucune dépendance directe sur les classes Sodium/Iris (vérifié par absence totale
+  de référence `net.irisshaders`/`net.caffeinemc` dans le repo) — ses fonctions (détection
+  d'item/inventaire/pathfinding) passent par l'API vanilla/NeoForge standard, pas de rendu. Aucun
+  risque de régression croisée identifié.
+
+**Conclusion honnête** : rien trouvé après audit raisonnable et ciblé (log + pattern de bug connu +
+module le plus récent + couplage croisé avec le reste de la nuit). Pas un audit exhaustif ligne par
+ligne de tout le repo (35 fichiers dans `bot/`, hors périmètre d'un fork borné) — un futur audit
+plus profond pourrait creuser les allocations dans le pathfinding (`GoalPlanner`/`Passability`),
+non fait cette nuit faute de piste concrète pour orienter la recherche.
+
+Aucun fichier modifié, aucune compilation nécessaire, aucun process lancé.
+
+## VULKAN — test sur un VRAI fichier de shaderpack (gbuffers_terrain, Complementary Reimagined) (fork, 21/09 ~04h07)
+
+Suite directe des preuves Vulkan précédentes (fragment 3532 octets, puis vertex+fragment 5576+3428
+octets) — toutes obtenues sur un shader "gbuffers" écrit à la main, limite honnêtement documentée.
+Cette passe teste `shaders/world0/gbuffers_terrain.{vsh,fsh}` du VRAI shaderpack
+`ComplementaryReimagined_r5.9.zip` (`test 1/shaderpacks/`).
+
+**Nouveau code** : `ShadercProbe.testRealPackVanillaInClient` réutilise `IncludeGraph`/`IncludeProcessor`
+(déjà migrés, jamais utilisés jusqu'ici) pour résoudre les VRAIS `#include` du shaderpack — chose que
+les tests précédents ne pouvaient pas faire. Gate séparé, `LANTERNE_SHADERC_REALPACK_TEST`.
+
+**Résultat en 2 temps, voir `RECHERCHE-VULKAN-SANS-SODIUM.md` (ÉTAPE 7) pour le détail complet** :
+1. Premier test (commit `8b256d4`) : `#include` résolus avec succès (10446 lignes réelles produites),
+   mais échec précis `Unparsed preprocessor directives such as '#define'...` — `patchVanilla` attend
+   un GLSL déjà préprocessé, pas les `#define`/`#ifdef` bruts issus du flatten `#include`.
+2. Correctif (commit `3baf822`) : ajout d'un passage `JcppProcessor.glslPreprocessSource` avant
+   `patchVanilla`+reblock. Compile sain.
+
+**Re-test du correctif : INCONCLUANT.** Une instance de lanceur client fraîche
+(`C:\lanterne-client-vulkan-test-5\`) s'est bloquée ~17 minutes sur `UnihexProvider` sans jamais
+atteindre le menu principal — 8 process `java.exe` tournaient en même temps cette nuit (plusieurs
+autres forks actifs), cause la plus probable (contention), mais pas une certitude absolue. Processus
+laissé actif (pas de kill, jamais de kill global). **Le correctif JcppProcessor n'a PAS de
+confirmation empirique fraîche — ne pas le présenter comme résolu.**
+
+**Pour qui reprend** : relancer `C:\lanterne-client-vulkan-test-5\launch7_v5.bat` (ou une nouvelle
+copie si bloquée) à un moment avec moins de charge machine concurrente, puis
+`grep "SHADERC-TEST" logs/latest.log`. Si l'échec `#define` a disparu et qu'un nouveau résultat
+(succès ou nouvel échec précis) apparaît, documenter la suite ici.
+
+Commits `8b256d4`, `3baf822` sur `26.3`, jamais poussés. Rien déployé VPS/test1.
