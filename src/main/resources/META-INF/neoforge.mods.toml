@@ -52,6 +52,10 @@ ModList.isLoaded("iris") (Sodium, Distant Horizons) continuent de fonctionner co
 [[mixins]]
 config = "lanterne.mixins.json"
 
+# Modules de performance integres (desactives par defaut, voir PERF-MODS-INTEGRES.md).
+[[mixins]]
+config = "lanterne.perf.mixins.json"
+
 # Mixins Iris (portage interne, voir MIGRATION-IRIS.md) - toujours sous le seul modId
 # "lanterne" declare plus haut, "iris" n'existe plus comme mod separe (voir commit e8138a6).
 [[mixins]]
