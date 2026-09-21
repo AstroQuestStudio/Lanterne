@@ -1556,3 +1556,17 @@ croisé à documenter.
 autres audits perf négatifs de cette nuit (tick handlers, paquets réseau, démarrage serveur, fichiers
 de profil Radiographie) : ce dépôt a déjà une discipline de mesure/throttle systématique. Aucun
 fichier modifié, rien compilé, rien commité pour cette tâche précise.
+
+---
+
+## Audit — connexion joueur (paquets envoyés, recalcul JEI, rafale de connexions)
+
+**Directive** : auditer ce qui se passe côté serveur/client à la connexion d'un joueur (`PlayerLoggedInEvent`), avec en tête un risque de rafale (plusieurs joueurs qui rejoignent en même temps après un redémarrage serveur).
+
+**Constat, avec preuve (lecture de code)** :
+
+- 9 handlers `@SubscribeEvent` réagissent à `PlayerLoggedInEvent` : `Cadence` (force une maj Cadence + éventuellement dépause BlueMap), `Envol` (réapplique mayfly), `Arrival` (envoie un paquet waypoints), `Groove` (envoie le catalogue disques, `Slots.all()`), `Easel` (envoie le catalogue tableaux), `MecheNet` (envoie les manifestes de mods gérés), `Screens` (envoie les règles du courrier), `SouvenirNet` (envoie l'UUID du monde), `Bazaar` (ouvre/synchronise le compte boutique si `Tariff.active()`). Chacun fait un travail **O(1) ou O(taille du contenu du mod)** — jamais O(nombre de joueurs) ni recalcul lourd par joueur — et envoie au plus 1-2 paquets ciblés (`sendToPlayer`/`player.connection.send`), jamais de broadcast.
+- **JEI (`GreffeJei`)** : `registerRecipes` est un point d'entrée du plugin JEI (`IModPlugin`), appelé UNE SEULE FOIS par JEI côté client à son initialisation — pas à chaque connexion de joueur, et entièrement côté client (JEI ne tourne pas côté serveur). Aucun recalcul par joueur, confirmé par la nature même de l'API JEI utilisée.
+- **Rafale de connexions** (ex: redémarrage serveur, tout le monde se reconnecte) : aucun throttle explicite n'existe entre ces handlers, mais ce n'est pas nécessaire — chaque handler individuel est déjà si léger (un envoi de paquet, une lecture de champ) que même 10-20 joueurs se reconnectant à la même seconde ne représentent qu'une poignée de handlers synchrones triviaux exécutés en séquence sur le thread serveur, pas un pic mesurable.
+
+**Verdict : rien à corriger.** Cohérent avec tous les autres audits perf négatifs de cette nuit (tick handlers, paquets réseau, démarrage serveur, fichiers de profil, CEF/Chrome) — la discipline de conception du dépôt (petits handlers ciblés, pas de travail O(n) caché) tient aussi sur cet axe. Aucun fichier de code modifié.
