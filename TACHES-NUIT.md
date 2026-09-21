@@ -1,3 +1,20 @@
+# VÉRIFIÉ — catégorie d'affichage JEI des recettes Lanterne : aucun problème possible (fork, lecture pure)
+
+Directive : auditer `compat/GreffeJei.java` sous l'angle catégorie d'affichage JEI — recettes bien
+dans "Crafting" standard, icône de catégorie custom valide, ordre `registerCategories`/`registerRecipes`.
+
+**Résultat : les trois points sont sans objet, par construction.** `GreffeJei` n'implémente QUE
+`registerRecipes` — aucune méthode `registerCategories` n'existe dans la classe, donc aucun risque
+d'inversion d'ordre. Le Javadoc du fichier (déjà écrit, lignes 57-65) explique explicitement pourquoi
+aucune catégorie custom n'a jamais été créée : les 17 recettes du mod (dont les 4 de cette nuit) sont
+de simples recettes d'établi, enregistrées via `inscription.addRecipes(RecipeTypes.CRAFTING, notres)`
+— la catégorie "Crafting" VANILLA de JEI, jamais une catégorie custom. Donc pas d'icône `IDrawable` à
+vérifier non plus (aucune catégorie = aucune icône). Design déjà correct, rien à corriger.
+
+Aucun fichier modifié, aucune compilation nécessaire.
+
+---
+
 # VÉRIFIÉ — pause du pregen à la connexion d'un joueur : ~50ms pire cas, pas graduelle (lecture de code, fork)
 
 Directive : chiffrer précisément le pire cas de délai avant que le pregen se mette en pause une fois
