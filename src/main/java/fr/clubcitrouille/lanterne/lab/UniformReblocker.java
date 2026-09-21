@@ -48,8 +48,20 @@ final class UniformReblocker {
     private static final Pattern OPAQUE_TYPE = Pattern.compile(
             "^(sampler|image|isampler|usampler|isubpassInput|usubpassInput|subpassInput|atomic_uint).*");
 
+    /**
+     * Groupe 5 (optionnel) : initialiseur {@code = <valeur>} — extension Iris/OptiFine courante sur
+     * un {@code uniform} de niveau ligne (valeur par defaut appliquee cote CPU si le shaderpack ne la
+     * fournit pas, ex {@code uniform bool heavyFog = false;} dans les vrais fichiers de
+     * ComplementaryReimagined). Illegal a l'interieur d'un bloc UBO GLSL — {@link #reblock} le
+     * capture pour le retirer, jamais pour le reporter dans le bloc. Trouve en testant ce pass sur
+     * un vrai fichier de shaderpack (21/09/2026, "3 uniforms non captures" documente dans
+     * RECHERCHE-VULKAN-SANS-SODIUM.md etape 8) : sans ce groupe, ces 3 declarations echappaient
+     * entierement au regroupement et restaient hors bloc, provoquant encore l'erreur SPIR-V
+     * 'non-opaque uniforms outside a block' que ce fichier existe pour resoudre.
+     */
     private static final Pattern UNIFORM_DECL = Pattern.compile(
-            "^([ \\t]*)uniform\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\[[^\\]]*\\])?\\s*;[ \\t]*$",
+            "^([ \\t]*)uniform\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\[[^\\]]*\\])?"
+                    + "\\s*(=\\s*[^;]+)?\\s*;[ \\t]*$",
             Pattern.MULTILINE);
 
     /**

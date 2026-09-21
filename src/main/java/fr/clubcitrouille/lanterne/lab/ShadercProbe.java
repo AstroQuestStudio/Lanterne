@@ -271,6 +271,20 @@ public final class ShadercProbe {
      * a {@link #testVanillaInClient} qui exige un fichier autonome sans {@code #include}.
      */
     public static boolean testRealPackVanillaInClient(Path shadersRoot, String vertexPath, String fragmentPath) {
+        // Pile JVM par defaut du thread appelant potentiellement trop petite pour cette chaine sur
+        // un VRAI fichier de shaderpack (10k+ lignes apres #include, ~100k caracteres) : un
+        // "java.lang.OutOfMemoryError: Out of stack space" reel a ete observe cette nuit sur le
+        // fragment (21/09/2026, RECHERCHE-VULKAN-SANS-SODIUM.md etape 8) — suspect le plus probable
+        // est le parseur recursif-descendant de glslang (sous shaderc, natif, JNI, partage la pile
+        // OS du thread appelant) sur les expressions imbriquees d'un shader de cette taille reelle ;
+        // JcppProcessor (aussi recursif pour l'expansion de macros) et UniformReblocker (regex sur
+        // gros texte) restent des suspects secondaires, donc toute la chaine est executee ici dans
+        // un thread dedie a pile large (64 Mo) plutot que de cibler un seul appel — solution de
+        // prototype (pile fixe genereuse), pas un correctif de production.
+        return runWithLargeStack(() -> testRealPackVanillaInClientOnCurrentThread(shadersRoot, vertexPath, fragmentPath));
+    }
+
+    private static boolean testRealPackVanillaInClientOnCurrentThread(Path shadersRoot, String vertexPath, String fragmentPath) {
         try {
             AbsolutePackPath vertexAbs = AbsolutePackPath.fromAbsolutePath(vertexPath);
             AbsolutePackPath fragmentAbs = AbsolutePackPath.fromAbsolutePath(fragmentPath);
@@ -302,6 +316,38 @@ public final class ShadercProbe {
                     vertexPath, fragmentPath, problem.toString());
             return false;
         }
+    }
+
+    /**
+     * Execute {@code task} dans un thread dedie avec une pile OS de 64 Mo (au lieu de la pile par
+     * defaut du thread appelant, souvent 512 Ko-1 Mo sur Windows pour un thread non-principal) puis
+     * attend son resultat. Reponse ciblee au "Out of stack space" reel rencontre sur un VRAI fichier
+     * de shaderpack cette nuit (voir {@link #testRealPackVanillaInClient}) — jamais utilise sur le
+     * chemin de rendu normal du mod, uniquement par ce prototype de preuve isole.
+     */
+    private static boolean runWithLargeStack(java.util.concurrent.Callable<Boolean> task) {
+        boolean[] resultHolder = {false};
+        Throwable[] errorHolder = {null};
+        Thread worker = new Thread(null, () -> {
+            try {
+                resultHolder[0] = task.call();
+            } catch (Throwable problem) {
+                errorHolder[0] = problem;
+            }
+        }, "lanterne-shaderc-probe-large-stack", 64L * 1024 * 1024);
+        worker.start();
+        try {
+            worker.join();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            Lanterne.LOG.warn("[SHADERC] Thread a pile etendue interrompu avant la fin.");
+            return false;
+        }
+        if (errorHolder[0] != null) {
+            Lanterne.LOG.warn("[SHADERC] Echec dans le thread a pile etendue (64 Mo) : {}", errorHolder[0].toString());
+            return false;
+        }
+        return resultHolder[0];
     }
 
     private static boolean compileSpirv(String glslSource, int shaderKind, String fileNameForErrors) {
