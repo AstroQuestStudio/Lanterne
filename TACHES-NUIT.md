@@ -2028,3 +2028,30 @@ impossible à diagnostiquer si un joueur signale "le cadran ne marche pas". Ajou
 pas les label/colour suppliers appelés en boucle de rendu, pour éviter tout risque de spam de logs).
 Compilé sain (`BUILD SUCCESSFUL`). Commit code : `[voir git log, fait par le coordinateur directement
 après ce fork]`.
+
+## Audit génération de monde/biome/structure custom (~06h45, pure lecture de code)
+
+Piste : Lanterne ajoute-t-il de la génération de monde custom (`Feature`/`BiomeModification`/
+`ChunkGenerator`) qui pourrait ralentir le pregen ou être incohérente avec le dossier
+`data/citrouille` du monde officiel importé cette nuit ?
+
+**Résultat : hors périmètre, rien à auditer — confirmé par lecture directe, pas supposé.**
+
+- Recherche exhaustive (`Feature`/`BiomeModification`/`ChunkGenerator`/`StructureType`) dans tout
+  `fr.clubcitrouille.lanterne.*` : aucun résultat pertinent. Les classes qui remontent
+  (`lab/Filon.java`, `core/Calque.java`, `core/Ciel.java`, `core/Horizon.java`, `lab/Bourg.java`)
+  sont toutes des instruments de PROFILAGE/optimisation de la génération VANILLA existante
+  (mesure de coût, cache de décalque climatique, court-circuit de rendu de nuages, éloignement
+  d'horizon de spawn de mobs, essais de structures) — aucune n'ajoute de contenu de génération.
+- `data/lanterne/` (le seul namespace de datapack propre à Lanterne) ne contient que
+  `dimension/`, `loot_table/`, `recipe/` — pas de `worldgen/`. Le seul fichier sous `dimension/`
+  est `monde_test.json` : une dimension plate de debug (`minecraft:flat`, `features: false`,
+  3 couches bedrock/stone/grass), clairement un outil de développement, pas du contenu joueur.
+- `data/citrouille` (mentionné dans le résumé matinal comme présent dans le monde officiel
+  importé) N'EST DONC PAS produit par Lanterne — c'est un datapack externe séparé, propre au
+  monde lui-même, sans lien avec le code du mod. Rien à vérifier côté cohérence code/monde sur ce
+  point : aucun décalage possible puisque Lanterne ne déclare rien sous ce namespace.
+- Conclusion pour le pregen (500 chunks de rayon) : aucun risque de ralentissement lié à une
+  feature de génération Lanterne, puisqu'il n'en existe aucune.
+
+Aucun fichier de code modifié (rien à corriger — audit négatif propre, hors périmètre confirmé).
