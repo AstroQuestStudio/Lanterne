@@ -1,3 +1,33 @@
+# SANTÉ VPS — charge CPU réelle pendant le pregen à plein régime (~05h43 UTC, lecture seule, fork)
+
+Directive : chiffres RÉELS de charge CPU/RAM du process Java pendant que le pregen tourne (15.3 %,
+17.2 chunks/s stable, `[PRÉGÉN]` toujours propre dans les logs).
+
+**Constat chiffré (`top`/`free`/`nproc`)** :
+- VPS de test = **4 vCPUs**. `load average: 7.61, 7.82, 7.79` — le process Java utilise **372.7 %
+  CPU** (~3.7 cœurs sur 4, en continu). **Le VPS est CPU-saturé pendant le pregen** — cohérent avec
+  17 chunks/s stable (le pregen n'est visiblement PAS bridé pour rester discret, il consomme tout le
+  CPU disponible tant qu'aucun joueur n'est connecté — comportement voulu par construction, `Cadence`
+  met en pause automatiquement dès qu'un joueur se connecte, déjà confirmé sain cette nuit).
+- RAM : `RES 16.0G` / 23.9G total (68.5 %), cohérent avec le tas plafonné à 8028 Mo vu dans les logs
+  de démarrage + le reste en régions de monde mmap'ées (`buff/cache` à 21 Gi, largement récupérable,
+  pas une fuite — `available` reste à 6.7 Gi malgré `free` affichant seulement 220 Mi, signe normal
+  de cache Linux agressif, pas de pression mémoire réelle).
+- **Aucun signe d'accumulation anormale** — cohérent avec un pregen qui tourne depuis des heures sans
+  dérive.
+
+**Point d'attention réel pour la cible finale (Xeon 6230R MONO-CŒUR, mémoire `cible-serveur-un-coeur.md`)** :
+sur ce VPS de test à 4 cœurs, le pregen utilise ~3.7 cœurs dès qu'il tourne seul — sur la vraie prod
+mono-cœur, ce même pregen saturerait TOTALEMENT le seul cœur disponible pendant toute sa durée. Le
+mécanisme de pause à la connexion d'un joueur protège le gameplay (déjà vérifié sain), mais si jamais
+d'autres tâches serveur devaient tourner EN PARALLÈLE du pregen avec 0 joueur (webhooks, tâches cron
+externes, etc.), elles seraient en concurrence directe pour ce cœur unique. Pas un bug — juste une
+donnée chiffrée utile pour dimensionner la fenêtre de pregen en prod.
+
+Aucune modification, opération 100 % lecture seule sur le VPS.
+
+---
+
 # VÉRIFIÉ — licence propre de Lanterne (`LICENSE`, GPL-3.0-only) déjà conforme
 
 Par cohérence avec la vérification LGPL-3.0/Iris ci-dessous, vérification du fichier `LICENSE` à la
