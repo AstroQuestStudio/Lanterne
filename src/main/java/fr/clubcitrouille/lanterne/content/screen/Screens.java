@@ -447,7 +447,7 @@ public final class Screens {
                     return known.size();
                 }))
                 .then(Commands.literal("domaine")
-                        .requires(Commands.hasPermission(Commands.LEVEL_ADMINS))
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .then(Commands.literal("ajouter")
                                 .then(Commands.argument("domaine", StringArgumentType.string())
                                         .executes(context -> edit(context.getSource(),

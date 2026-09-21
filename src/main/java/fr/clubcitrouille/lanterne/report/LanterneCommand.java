@@ -482,7 +482,9 @@ public final class LanterneCommand {
                             .withStyle(ChatFormatting.YELLOW), true);
                     return 1;
                 }))
-                .then(Commands.literal("bench").executes(context -> {
+                .then(Commands.literal("bench")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
                     if (Bench.running()) {
                         context.getSource().sendFailure(Component.literal("Un banc est déjà en cours."));
                         return 0;
