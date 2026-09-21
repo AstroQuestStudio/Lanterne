@@ -95,6 +95,7 @@
     "SansVolKickMixin"
   ],
   "client": [
+    "JourneyMapTraductionMixin",
     "EntityCullMixin",
     "StaticChestRendererMixin",
     "StaticChestShapeMixin",
