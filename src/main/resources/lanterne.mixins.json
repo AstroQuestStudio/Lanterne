@@ -123,6 +123,14 @@
     "VulkanRenderPipelineMixin",
     "PortailRenderMixin",
     "DynamicGpuDataMixin",
-    "MouseTweaksMixin"
+    "MouseTweaksMixin",
+    "reglage.ParticleDensityMixin",
+    "reglage.WeatherToggleMixin",
+    "reglage.SkyToggleMixin",
+    "reglage.BlockEntityDistanceMixin",
+    "reglage.NameTagDistanceMixin",
+    "reglage.TextureAnimationMixin",
+    "reglage.FramerateFocusMixin",
+    "reglage.EntityTypeDistanceMixin"
   ]
 }
