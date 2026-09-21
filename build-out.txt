@@ -1,0 +1,17 @@
+> Task :createMinecraftArtifacts UP-TO-DATE
+
+> Task :compileJava
+
+> Task :processResources
+> Task :classes
+> Task :jarJar
+> Task :jar
+> Task :assemble
+> Task :check
+> Task :build
+
+[Incubating] Problems report is available at: file:///C:/lanterne-wt-bilan/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 26s
+5 actionable tasks: 4 executed, 1 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.2.1/userguide/configuration_cache_enabling.html

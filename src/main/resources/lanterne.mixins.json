@@ -96,6 +96,7 @@
   ],
   "client": [
     "EntityCullMixin",
+    "BilanLimiterMixin",
     "StaticChestRendererMixin",
     "StaticChestShapeMixin",
     "LeafCullMixin",
