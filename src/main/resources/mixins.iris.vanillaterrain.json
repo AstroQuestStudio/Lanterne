@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "mixinextras": {"minVersion": "0.5.2"},
+  "package": "net.irisshaders.iris.mixin.vanillaterrain",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "net.irisshaders.iris.mixin.vanillaterrain.VanillaTerrainMixinPlugin",
+  "client": [
+    "MixinSectionCompiler"
+  ]
+}

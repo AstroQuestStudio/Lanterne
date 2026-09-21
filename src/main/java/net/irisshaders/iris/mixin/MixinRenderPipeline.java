@@ -4,7 +4,6 @@ import com.mojang.renderpearl.api.pipeline.BlendFunction;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
-import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.shaderpack.materialmap.WorldRenderingSettings;
 import net.irisshaders.iris.vertices.ImmediateState;
@@ -28,6 +27,12 @@ import java.util.Optional;
 public class MixinRenderPipeline {
 	@Inject(method = "getVertexFormatBinding", at = @At("RETURN"), cancellable = true)
 	private void iris$change(CallbackInfoReturnable<VertexFormat> cir) {
+		// Chemin terrain vanilla (sans Sodium) : le format des sections ne depend NI du fil NI de l etat de rendu,
+		// sinon les tampons du terrain (alloues hors rendu) et les donnees (ecrites par des fils de fond) divergent.
+		if (net.irisshaders.iris.vertices.VanillaTerrainContext.enabled() && Iris.isPackInUseQuick() && Objects.equals(cir.getReturnValue(), DefaultVertexFormat.BLOCK)) {
+			cir.setReturnValue(IrisVertexFormats.TERRAIN);
+			return;
+		}
 		if (Iris.isPackInUseQuick() && Thread.currentThread().getName().contains("Render") && ImmediateState.isRenderingLevel && !ImmediateState.skipExtension.get()) {
 			VertexFormat vf = cir.getReturnValue();
 			RenderPipeline thiss = (RenderPipeline) (Object) this;
@@ -41,13 +46,17 @@ public class MixinRenderPipeline {
 				cir.setReturnValue(IrisVertexFormats.ENTITY);
 			} else if (Objects.equals(vf, DefaultVertexFormat.ENTITY_GLINT_SPECIAL)) {
 				cir.setReturnValue(IrisVertexFormats.ENTITY_GLINT_SPECIAL);
-			} else if (Objects.equals(vf, ChunkMeshFormats.COMPACT.getVertexFormat())) {
+			} else if ((net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull() != null && Objects.equals(vf, net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull()))) {
 				cir.setReturnValue(WorldRenderingSettings.INSTANCE.getVertexFormat().getVertexFormat());
 			}
 		}
 	}
 	@Inject(method = "getVertexFormatBindings", at = @At("RETURN"), cancellable = true)
 	private void iris$change2(CallbackInfoReturnable<List<VertexFormat>> cir) {
+		if (net.irisshaders.iris.vertices.VanillaTerrainContext.enabled() && Iris.isPackInUseQuick() && cir.getReturnValue() != null && !cir.getReturnValue().isEmpty() && Objects.equals(cir.getReturnValue().get(0), DefaultVertexFormat.BLOCK)) {
+			cir.setReturnValue(List.of(new VertexFormat[]{IrisVertexFormats.TERRAIN}));
+			return;
+		}
 		if (Iris.isPackInUseQuick() && Thread.currentThread().getName().contains("Render") && ImmediateState.isRenderingLevel && !ImmediateState.skipExtension.get()) {
 			VertexFormat vf = cir.getReturnValue().get(0);
 			RenderPipeline thiss = (RenderPipeline) (Object) this;
@@ -61,7 +70,7 @@ public class MixinRenderPipeline {
 				cir.setReturnValue(List.of(new VertexFormat[]{IrisVertexFormats.ENTITY}));
 			} else if (Objects.equals(vf, DefaultVertexFormat.ENTITY_GLINT_SPECIAL)) {
 				cir.setReturnValue(List.of(IrisVertexFormats.ENTITY_GLINT_SPECIAL));
-			} else if (Objects.equals(vf, ChunkMeshFormats.COMPACT.getVertexFormat())) {
+			} else if ((net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull() != null && Objects.equals(vf, net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull()))) {
                 cir.setReturnValue(List.of(new VertexFormat[]{WorldRenderingSettings.INSTANCE.getVertexFormat().getVertexFormat()}));
             }
 		}
