@@ -1,3 +1,41 @@
+# SUIVI — problème Gradle approfondi par le coordinateur (~07h00), toujours non résolu
+
+Suite à la section ci-dessous (fork "VÉRIFICATION FINALE AUTOMINER"), le coordinateur a creusé
+directement pendant ~15 min. Constats supplémentaires, cause RÉELLE toujours pas identifiée avec
+certitude :
+
+- **Pas un problème de mémoire** : 14.7 Go de RAM libre sur 32 Go (`Get-CimInstance
+  Win32_OperatingSystem`), largement suffisant.
+- **Pas un problème réseau/port** : `Test-NetConnection 127.0.0.1 <port du daemon>` réussit (TCP
+  connect OK). Pas de saturation de ports (`Get-NetTCPConnection` : 1 seul `TimeWait`).
+- **Pas une histoire de `registry.bin` corrompu** : purger `registry.bin`/`registry.bin.lock` du
+  daemon Gradle n'a rien changé — le NOUVEAU registre créé juste après échoue EXACTEMENT pareil, en
+  quelques centaines de millisecondes.
+- **Pas un état partagé pollué par la nuit** : testé avec un `GRADLE_USER_HOME` totalement neuf
+  (`-g "/c/gradle-temp-home2"`, jamais utilisé) — même échec identique, à l'identique dans le log
+  (`"... no longer found in the daemon registry"` immédiatement après `"Daemon server started"`).
+- **Pas une histoire de CPU saturé** : `Get-Process` ne montre rien d'anormal (Firefox et Claude sont
+  les plus gourmands en CPU cumulé sur la session, normal après une nuit entière, rien qui affame la
+  machine au sens strict).
+- Testé aussi avec `--no-daemon` (qui devrait éviter tout le mécanisme de daemon partagé) : échoue
+  pareil, ce qui est en fait le signal le plus troublant — même `--no-daemon` finit par tenter de
+  démarrer un processus daemon interne pour le "build client", donc le vrai problème semble être dans
+  la mécanique de démarrage/enregistrement du daemon Gradle lui-même sur cette machine, à cet
+  instant précis, indépendamment de tout état partagé.
+
+**Conclusion honnête** : cause racine non identifiée après investigation raisonnable. Piste la plus
+probable restante, non vérifiée : interférence d'un antivirus/EDR Windows sur les process Java
+fraîchement lancés (verrouillage temporaire de fichier au moment critique de l'auto-enregistrement du
+daemon), plausible après une nuit à faire naître des dizaines de process `java.exe` — mais non prouvé.
+**Le coordinateur arrête d'investiguer ce point pour ne pas s'enliser** (le repo lui-même est sain,
+compilé avec succès plusieurs fois cette nuit avant ce blocage, tous les correctifs critiques déjà
+déployés en prod — ceci bloque seulement de NOUVEAUX builds locaux, pas ce qui est déjà fait).
+**Recommandation pour le patron au réveil** : si le problème persiste, un simple redémarrage de la
+session shell/terminal (voire de la machine) résoudra probablement ce type de blocage transitoire —
+inutile de creuser plus avant sans accès interactif à la machine.
+
+---
+
 # VÉRIFICATION FINALE AUTOMINER — BLOQUÉE PAR UN PROBLÈME MACHINE (~06h57)
 
 `git log`/`git status` sur `ClubCitrouilleAutoMiner` confirmés propres (rien en attente non commité,
