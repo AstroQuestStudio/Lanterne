@@ -1,3 +1,27 @@
+# VÉRIFICATION — coexistence Cadence/BlueMap avec le pregen en cours : sain
+
+Directive : vérifier si `Cadence.java`/`CadenceBlueMap.java` (rendu complet BlueMap auto-démarré à
+0 joueur) coexistent sans problème avec le pregen 500 chunks (1-2 jours en cours).
+
+- **Pause à la connexion d'un joueur : déjà gérée, code lu directement** — `Cadence.onPlayerJoin`
+  appelle `CadenceBlueMap.pauseFullRender()` dès qu'un joueur se connecte (`manager.stop()` sur le
+  `RenderManager` BlueMap), et `onPlayerLeave` la reprend seulement une fois 0 joueur à nouveau. Donc
+  le scénario redouté (BlueMap continue de ramer pile au moment où quelqu'un se connecte) n'existe
+  pas — c'est exactement pour ça que ce mécanisme a été écrit cette nuit. Le pregen, lui, se met en
+  pause de son côté indépendamment (déjà confirmé sain par un fork précédent).
+- **Contention pregen+BlueMap simultanés (0 joueur) : aucun signe négatif dans les logs réels.**
+  `sudo journalctl -u minecraft` sur les 15 dernières minutes : zéro ligne `running slow`/`watchdog`/
+  `can't keep up`. Le débit du pregen a même ACCÉLÉRÉ depuis le déploiement (2.8 chunk/s à 04:47 →
+  10.5 chunk/s à 04:51) — aucun signe de ralentissement croisé avec le rendu BlueMap qui tourne en
+  parallèle depuis `04:46:56` (« rendu complet démarré automatiquement »).
+- Minecraft sérialise déjà l'accès aux fichiers région (`RegionFileStorage`) au niveau vanilla —
+  aucun risque de corruption par accès concurrent pregen/BlueMap, seulement une contention CPU/IO
+  possible en théorie, non observée en pratique ici.
+
+Aucune action nécessaire, aucun code modifié — lecture de code + logs VPS uniquement.
+
+---
+
 # VÉRIFICATION — rotation des logs VPS face au pregen multi-jours : aucun risque
 
 Directive : vérifier si les logs serveur risquent de croître excessivement sur les 1-2 jours du pregen
