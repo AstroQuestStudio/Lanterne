@@ -4,6 +4,17 @@ Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche 
 travail honnête, pas promotionnel — chaque point dit s'il est confirmé, partiel, ou juste une piste.
 Le détail complet, section par section, suit plus bas dans ce même fichier (rien supprimé).
 
+**PREGEN RELANCÉ (~06h45)** : un fork a confirmé que le pregen overworld 500 chunks demandé
+explicitement par le patron cette nuit n'avait en réalité jamais tourné contre la session serveur
+actuelle (reset au redémarrage `00:08:08`). Puisque c'était une demande directe explicite avec
+attente claire ("pour 8h"), le coordinateur l'a relancé lui-même via RCON à 06h45 (`/lanterne
+pregen 500`, réponse serveur confirmée : "Pré-génération lancée sur un rayon de 500 chunks. Ce qui
+existe déjà est sauté ; l'interrompre ne perd rien, la reprise est gratuite."), après avoir vérifié
+`0 joueur connecté`. Le mécanisme est piloté par la présence de joueurs (pause automatique dès
+qu'un joueur se connecte, confirmé sain par un audit dédié cette nuit) — donc sûr même si le patron
+se reconnecte avant la fin. À vérifier au réveil : progression réelle via `/lanterne pregen`
+(statut) ou les logs serveur.
+
 **CORRECTIF IMPORTANT (~06h00, vérification SSH lecture seule)** : contrairement à ce que dit la
 section 1 ci-dessous ("VPS stable en `26.3.55`", "TÂCHE A/B pas déployées sur le VPS"), le VPS
 tourne EN RÉALITÉ `lanterne-26.3.59.jar` depuis un redémarrage à `00:08:08` cette nuit (source
