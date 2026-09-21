@@ -2157,3 +2157,30 @@ l'allocation mémoire répétée évitable qui pourrait causer un stutter percep
   en jeu avec succès cette nuit.
 
 Aucun fichier modifié, aucune compilation nécessaire (pas de changement de code).
+
+## Audit déconnexion brutale en cours d'opération (pure lecture de code, aucune modification)
+
+Piste explorée : que se passe-t-il si un joueur se déconnecte (crash client, coupure réseau) au
+milieu d'une transaction Bazaar, d'une Rafale en cours, ou avec un GUI custom ouvert ?
+
+**Résultat : rien à corriger, conception déjà saine partout où c'est pertinent.**
+
+- **Bazaar/`Till.buy`/`sell`** : aucun état de "session" à nettoyer — la transaction entière est un
+  seul appel synchrone sur le fil serveur (déjà confirmé sans point de suspension lors de l'audit
+  race condition plus tôt cette nuit), donc rien ne peut rester "en vol" si le joueur part.
+- **Pont Rafale** (`core/Rafale.java:167-191`) : déjà documenté dans le code lui-même (Javadoc de
+  `onServerTick`) — si le joueur qui a lancé une Rafale se déconnecte entre l'envoi et le tick de
+  traitement, `getPlayerList().getPlayer(id)` retourne `null`, la file `FILES` est retirée
+  proprement (`FILES.remove(id)`) sans exception ni état incohérent. Comportement voulu et assumé :
+  la file restante est abandonnée (pas de reprise à la reconnexion), cohérent avec le commentaire
+  "l'inventaire n'a plus de sens pour un joueur qui n'est plus là".
+- **`TrieurMenu.removed(Player)`** : appelle `super.removed(player)` (rendu vanilla des objets) puis
+  ferme proprement `hopper`/`filtre` — pattern standard, aucun risque de perte d'objets.
+- **`GuichetMenu`** : 0 slot déclaré (confirmé lors de l'audit dupe précédent) — aucune surface de
+  perte d'objets possible à la déconnexion.
+- **`Easel`/`Groove`** (tableaux/disques, transferts par convoi) : les deux ont DÉJÀ un handler
+  `onLogout(PlayerEvent.PlayerLoggedOutEvent)` qui nettoie explicitement `CONVOYS.remove(uuid)` et
+  `LIFTS.remove(uuid)` — exactement le pattern de nettoyage qu'on cherchait à vérifier, déjà en
+  place et correct.
+
+Aucun fichier modifié, aucune compilation nécessaire (pas de changement de code).
