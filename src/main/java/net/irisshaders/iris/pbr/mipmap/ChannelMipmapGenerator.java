@@ -1,6 +1,6 @@
 package net.irisshaders.iris.pbr.mipmap;
 
-import net.caffeinemc.mods.sodium.api.util.ColorABGR;
+import net.irisshaders.iris.helpers.ColorABGR;
 
 public class ChannelMipmapGenerator extends AbstractMipmapGenerator {
 	protected final BlendFunction redFunc;

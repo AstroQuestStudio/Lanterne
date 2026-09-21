@@ -1,7 +1,7 @@
 package net.irisshaders.iris.pbr.util;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import net.caffeinemc.mods.sodium.api.util.ColorABGR;
+import net.irisshaders.iris.helpers.ColorABGR;
 
 public class ImageManipulationUtil {
 	public static NativeImage scaleNearestNeighbor(NativeImage image, int newWidth, int newHeight) {
