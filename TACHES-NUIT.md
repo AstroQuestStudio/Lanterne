@@ -1,3 +1,29 @@
+**CONTRÔLE PREGEN + AUDIT — troisième lot de 13 mixins Lanterne natifs**, aucun problème trouvé.
+
+- Pregen VPS (lecture seule) : 18,4 % (184 610/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- 13 mixins lus intégralement ligne par ligne, tous sains, même discipline d'ingénierie constante
+  (chaque optimisation prouvée par mesure réelle — javap, profileur, banc chronométré — jamais
+  supposée) : `AquiferMixin` (réutilise une boîte `MutableDouble` par instance, thread-safe car
+  jamais partagé entre threads), `ChunkMapMixin` (pur compteur diagnostique, zéro effet sur le
+  comportement), `CompressionMixin` (niveau zlib posé une fois à la connexion, jamais en cours de
+  flux, décodable par un client vanilla), `EntityCullMixin` (voile de visibilité + horizon de
+  densité, ordre des tests documenté et correct, migré de `@WrapOperation` vers `@Redirect` après
+  preuve `javap` d'un coût d'indirection réel), `FurnaceMixin` (sommeil de four avec rattrapage
+  exact au tick, piège d'égalité stricte `cookingTimer == cookingTotalTime` déjà évité), `LevelMixin`
+  (position aléatoire réutilisée, générateur pseudo-aléatoire reproduit à l'identique, désactivable),
+  `MobMixin` (examen de disparition cadencé sur la même pression que le reste du throttle, jamais une
+  pression différente), `PathfindMixin` (cache d'échec de pathfinding par instance, TTL borné),
+  `ServerEntityMixin` (throttle réseau, seul mixin volontairement PAS sur le chemin de tick le plus
+  chaud — raison documentée : casserait le JIT), `ServerLevelMixin` (court-circuit du tick d'entité
+  avant l'event NeoForge, compense explicitement les horloges de production — croissance/ponte/repro
+  — pour ne jamais réduire le rendement d'une ferme), `SleepBedMixin` (évite de charger un chunk
+  lointain juste pour répondre "trop loin", ordre des opérations vérifié par désassemblage),
+  `GateBehaviorMixin` (remplace 3 pipelines `Stream` par des boucles indicées sans allocation,
+  paresse/court-circuit/ordre du jeu reproduits à l'identique), `LivingEntityMixin` (plafond de
+  bousculade + `NoAI` temporaire pour retirer IA/déplacement SANS toucher aux compteurs de
+  croissance/ponte, protection explicite contre une race condition solo client/serveur documentée
+  avec le vrai mécanisme — MC-228976 côté client, verrou implicite via restriction au fil serveur).
+
 **CONTRÔLE PREGEN + AUDIT — second lot de 10 mixins Lanterne natifs**, aucun problème trouvé.
 
 - Pregen VPS (lecture seule) : 18,2 % (182 236/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
