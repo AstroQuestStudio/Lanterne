@@ -1,3 +1,7 @@
+**Contrôle pregen (05h46 VPS)** : 15,8 % (158 294/1 002 001), 17,3 chunk/s, 0 FATAL sur 10 min, service actif. Progression stable (14,1→14,5→15,8 %).
+
+---
+
 # VÉRIFIÉ — catégorie d'affichage JEI des recettes Lanterne : aucun problème possible (fork, lecture pure)
 
 Directive : auditer `compat/GreffeJei.java` sous l'angle catégorie d'affichage JEI — recettes bien
