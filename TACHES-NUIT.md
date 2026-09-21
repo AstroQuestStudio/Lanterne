@@ -2131,3 +2131,29 @@ Vérification : les ajouts de cette nuit (cadran Shaderpack dans `Dials.java`, `
   dérive massive).
 
 Aucun fichier modifié, aucune compilation nécessaire (pas de changement de code).
+
+## Audit pression mémoire du pont Rafale sur gros volumes (pure lecture de code)
+
+Vérification : sur une construction/démolition de masse jusqu'à 4096 blocs via le pont AutoMiner
+(`core/Rafale.java`, `BATCH_PAR_TICK=256`, cible Xeon mono-cœur sensible au GC), y a-t-il de
+l'allocation mémoire répétée évitable qui pourrait causer un stutter perceptible sur 16 ticks ?
+
+**Résultat : conception déjà saine, rien à corriger — aucune régression risquée.**
+
+- `ArrayDeque<Operation>` par joueur : créée UNE SEULE FOIS via `computeIfAbsent` dans `enqueue()`
+  (ligne 155), jamais recréée entre les ticks — `drain()` la vide directement par référence.
+- `Operation` (record `position`/`wanted`/`demolish`) : une allocation par bloc en file, mais c'est
+  la structure de données elle-même (pas une allocation transitoire évitable) — chaque bloc a une
+  position et un état distincts, aucune mutualisation possible sans réécrire tout le contrat vers
+  des tableaux primitifs parallèles (`long[]`/`int[]`), un changement de forme bien plus large que
+  le gain espéré, hors de portée pour un module déjà testé en conditions réelles (2500+ blocs).
+- `List.copyOf(FILES.keySet())` (ligne 177) : une copie par tick, mais seulement quand `FILES` n'est
+  pas vide, et sa taille = nombre de joueurs avec une file active (typiquement 1) — négligeable.
+- **Seul point mineur repéré** : `consommer()` (ligne 240-242) alloue une lambda
+  `stack -> stack.is(item)` à CHAQUE bloc posé en survie (jusqu'à 256/tick), capturant `item`. Cette
+  capture est nécessaire (l'item varie par bloc) et le coût d'une lambda capturante est faible côté
+  JVM (souvent éliminé par l'escape analysis du JIT sur un usage aussi local) — volontairement PAS
+  touché : le gain serait marginal et incertain contre le risque de régresser un chemin déjà validé
+  en jeu avec succès cette nuit.
+
+Aucun fichier modifié, aucune compilation nécessaire (pas de changement de code).
