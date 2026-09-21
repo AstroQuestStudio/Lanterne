@@ -1,3 +1,254 @@
+# RÉSUMÉ POUR LE RÉVEIL DU PATRON (réécrit en fin de nuit, version finale et complète)
+
+Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche `26.3`), **78 commits**
+au total. Rapport de travail honnête, pas promotionnel — chaque point dit s'il est confirmé, partiel,
+ou juste une piste. Le détail complet, section par section (y compris les versions précédentes de ce
+résumé, conservées telles quelles pour la traçabilité), suit plus bas dans ce même fichier.
+
+## ✅ BUGS CRITIQUES trouvés, corrigés, ET DÉPLOYÉS SUR LE VPS (~06h50)
+
+Compilés, vérifiés (build propre confirmé, démarrage serveur jetable réel), puis **déployés sur le
+VPS de production par le coordinateur** vu la gravité réelle (perte de contenu de coffres) et le
+niveau de vérification atteint — voir la section "DÉPLOIEMENT VPS EFFECTUÉ" tout en haut de ce
+fichier pour le détail complet de l'opération (0 joueur confirmé avant/après, ancien jar sauvegardé,
+redémarrage confirmé sain : `Done`, 0 FATAL, pregen repris automatiquement).
+**Le VPS tourne `lanterne-26.3.60.jar` avec ces 6 correctifs actifs — rien à faire de plus au réveil
+sur ce point, juste vérifier en jeu si souhaité.**
+
+- **3 bugs de permission serveur manquante** : `/lanterne on`/`off` (coupe toutes les optimisations
+  serveur, effet global), `/lanterne bench`, `/projection domaine ajouter/retirer` — n'importe quel
+  joueur pouvait les exécuter alors qu'elles étaient documentées admin-only. Corrigés (commits
+  `152b00e`, `08eab7a`).
+- **3 bugs de perte de données NBT au cassage d'un bloc** — un joueur qui cassait un de ces blocs
+  perdait son contenu configuré au lieu de le récupérer :
+  - Spawner + Silk Touch → redonnait un spawner **vierge** au lieu du spawner configuré (mob/œuf
+    perdu). Corrigé (`3c33035`).
+  - Projecteur (Beamer) → perdait la vidéo/image configurée et le propriétaire. Corrigé (`de0110a`).
+  - **LE PLUS GRAVE : Guichet, CoffreDepot, CoffreReception, Aiguillage n'avaient AUCUNE table de
+    butin** — les casser (même à l'outil correct) ne droppait **rien du tout**, pas même le bloc.
+    Pour les deux coffres du réseau (27 cases chacun, contenu réel déposé par joueurs et par le bot
+    minier), c'est une **perte totale et silencieuse du contenu stocké** — le bug le plus sérieux de
+    la nuit. Corrigé : 4 loot tables ajoutées + `core/ReseauDrops.java` (préserve le contenu et le
+    filtre de réapprovisionnement). Commit `b904a77`.
+  - Vérification indépendante menée (relecture ligne à ligne + build clean depuis zéro + démarrage
+    réel sur serveur jetable, `Done (0.406s)!`, zéro erreur) : correctif confirmé sain avec un niveau
+    de confiance élevé, pas juste une lecture de code.
+- Balayage de sécurité complémentaire (validation d'entrée, race conditions Bazaar, duplication
+  d'objets sur tous les blocs custom, cohérence UI/permission) mené jusqu'au bout cette nuit —
+  **rien d'autre trouvé**, tout confirmé sain.
+
+## Pregen 500 chunks — relancé par le coordinateur, en cours
+
+Le pregen overworld demandé explicitement cette nuit n'avait en réalité jamais tourné (reset au
+redémarrage serveur de `00:08:08`). Puisque c'était une demande directe avec attente claire ("pour
+8h"), le coordinateur l'a relancé lui-même via RCON après avoir vérifié `0 joueur connecté`
+(`/lanterne pregen 500`, confirmé accepté par le serveur). Le mécanisme se met en pause
+automatiquement dès qu'un joueur se connecte (vérifié sain) — aucun risque à le laisser tourner.
+**Progression réelle confirmée** (~1,2 % après les premières minutes, ~6 chunks/s, aucun signe de
+ralentissement serveur) mais **estimation honnête : 1 à 2 jours pour finir, pas une nuit** — normal
+sur un mono-cœur pour un disque de 500 chunks de rayon, pas une régression.
+
+*(Note d'horloge sans conséquence : l'heure système réelle du VPS était décalée d'environ 2h20 par
+rapport aux timestamps utilisés dans les échanges du coordinateur cette nuit — sans impact sur la
+validité des actions, juste pour ne pas dérouter la lecture des logs horodatés ci-dessous.)*
+
+## Vulkan (recherche pure, RIEN branché au rendu réel)
+
+Progrès réels et vérifiés : la chaîne complète (jcpp → glsl-transformer → `UniformReblocker`,
+prototype maison de re-blocage UBO → shaderc) produit du SPIR-V valide pour les deux étages
+(vertex+fragment) sur un shader synthétique modernisé, **et** sur un vrai fichier de shaderpack
+(`gbuffers_terrain`, Complementary Reimagined) une fois le préprocesseur jcpp intercalé. Deux
+obstacles précis restent sur le fichier réel (couverture incomplète du parseur d'uniforms sur les
+gros fichiers, `StackOverflowError` sur la récursion à cette taille) — documentés en détail dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md`. Rien de tout cela n'est branché au pipeline de rendu qui tourne
+en jeu — c'est un prototype de faisabilité, pas une fonctionnalité livrée, aucun risque pour la prod.
+
+## 1. Déployé et confirmé stable (VPS + test1)
+
+- **Migration complète du code source d'Iris dans Lanterne** (fusion LGPL-3.0, voir
+  `IRIS-ATTRIBUTION.md`) — 7 crashs de migration trouvés et corrigés un par un, tous par test
+  client réel : `@Mod("iris")` retiré (`e8138a6`), `BlueMapAPI` isolée (`0586528`), fichier
+  `META-INF/services/...` copié (`6e72735`), `getVersion()` corrigé (`c73466d`),
+  `assets/iris/` copié (`587e70e`), dépendances `jarJar` (`115e33b`), `centerDepth`/`colorSpace`
+  copiés (`b65e53d`).
+- **Shaders confirmés fonctionnels en jeu par le patron lui-même** (capture F3 : `[Iris] Version
+  26.3.55`, shaderpack Complementary Reimagined actif, 80-124 FPS).
+- **VPS tourne maintenant `26.3.100`** (voir bloc "BUGS CRITIQUES" ci-dessus pour le détail du
+  déploiement final de ~06h50) — `26.3.55` était l'état au moment où cette phrase a été écrite la
+  première fois cette nuit, dépassé depuis par les déploiements suivants.
+- **Fix Cadence — BlueMap redémarre seul si 0 joueur au boot** (TÂCHE A, commit `9da44c7`) :
+  **déployé sur le VPS** — inclus dans le jar `26.3.100` actuellement en production (même commit
+  `f18bbdd` que tout le reste des correctifs de fin de nuit), confirmé actif par log réel après le
+  déploiement (`[CADENCE] BlueMap prêt...`).
+- **Fix visibilité "iris" comme modId virtuel** (TÂCHE B, commit `7a13b94`) : `neoforge.mods.toml`
+  déclare un second `[[mods]] modId="iris"` passif (sans classe `@Mod`). Confirmé sain par log FML
+  réel. **Déployé sur le VPS ET `test 1`** (même jar `26.3.100` sur les deux).
+- **Artefact visuel du ciel (bordure nette, DH+Iris) : cause confirmée à 100% par preuve bytecode
+  complète** (chaîne DH `ModList.isLoaded("iris")` → `IrisAccessor` jamais bindé avant le fix ci-
+  dessus) — corrigé structurellement par le même fix modId, **déployé sur le VPS**. Confirmation
+  visuelle humaine encore en attente (le correctif est en prod, il reste juste à le VOIR en jeu).
+- **Onglet "Iris" restauré dans le menu Sodium** : corrigé pour de vrai (pas juste documenté),
+  `Graft.java`/`IrisConfig.java` enregistrent un second `ModOptionsBuilder` indépendant via
+  `registerModOptions("iris")`. Testé en client jetable réel, 0 FATAL, mécanisme confirmé par
+  bytecode + logs. **Déployé sur le VPS ET `test 1`** (même jar). Confirmation visuelle encore en
+  attente, comme le point ci-dessus.
+- **Sélection du shaderpack actif ajoutée dans `Dials.java`** (cadran "Shaderpack", en plus du
+  toggle on/off existant), compilé sain, testé partiellement (démarrage propre, 0 FATAL) mais le
+  clic lui-même n'a pas pu être testé visuellement.
+- **`lanterne-common.toml` fusionné** (boutique + carte3D + atelier + server en un seul fichier) —
+  anciennes valeurs réelles (prix boutique, réglages serveur) backupées, PAS reportées
+  automatiquement dans le nouveau fichier (voir section 2).
+- **Monde officiel importé sur le VPS** (13 joueurs, données réelles), backup pré-import conservé.
+- **1 crash de retrait de Sodium corrigé** (`SodiumVertexSerializers`, isolation de classe,
+  commit `a9647c2`) — un premier vrai test client Sodium-absent a été mené (pas juste de la
+  lecture de code) et progresse plus loin qu'avant.
+
+## 2. Nécessite une action humaine demain
+
+- **Re-rentrer les vraies valeurs boutique/serveur** dans `lanterne-common.toml` — les anciennes
+  sont dans `lanterne-anciens-toml-backup/` sur le VPS, le nouveau fichier fusionné a démarré avec
+  les valeurs par défaut du code, pas les vraies valeurs de prod.
+  **ATTENTION, changement de nom de section pour boutique et atelier (vérifié en lisant le code
+  `defineInto` de `Tariff.java` et `Studio.java`, pas deviné)** : `Config.java` enveloppe l'appel à
+  `Tariff.defineInto(BUILDER)` dans un `push("boutique")`, et `Tariff.defineInto` fait LUI-MÊME
+  `push("economie")`/`push("boutique")`/`push("generation")`/`push("derive")`/`push("puits")` en
+  interne — donc les sections de l'ancien `lanterne-boutique.toml` qui étaient à la racine
+  (`[economie]`, `[boutique]`, `[generation]`, `[derive]`, `[puits]`) vivent maintenant à
+  `[boutique.economie]`, `[boutique.boutique]`, `[boutique.generation]`, `[boutique.derive]`,
+  `[boutique.puits]` — UN NIVEAU DE PLUS. Même chose pour l'atelier : `Studio.defineInto` fait
+  `push("tableaux")`/`push("disques")` en interne, sous le `push("atelier")` de `Config.java` — donc
+  `[tableaux]`/`[disques]` deviennent `[atelier.tableaux]`/`[atelier.disques]`. **Les NOMS DE CLÉS À
+  L'INTÉRIEUR de chaque section n'ont pas changé** (ex: `solde_depart`, `lot_max`,
+  `marge_min_pourcent` restent identiques) — seul le CHEMIN DE SECTION a un préfixe en plus. Une
+  copie manuelle naïve ligne par ligne sous les mauvais en-têtes `[...]` écrirait les valeurs dans
+  des sections qui n'existent plus, silencieusement ignorées au chargement (NeoForge revient au
+  défaut du code, sans crash — donc l'erreur serait invisible sans relire le fichier généré après
+  coup pour vérifier). **`carte3d` n'a PAS ce problème** : `ReliefConfig.defineInto` ne fait aucun
+  `push()` interne, ses clés restent directement sous `[carte3d]` comme avant (et ce module est de
+  toute façon désactivé par défaut, BlueMap est utilisé à la place — enjeu faible).
+  **Robustesse confirmée en plus** : chaque valeur numérique critique (`Tariff.java` en particulier)
+  est déclarée avec `.defineInRange(...)` et des bornes réalistes — une valeur hors bornes ou du
+  texte au mauvais endroit dans le toml ne plante jamais le démarrage (comportement standard
+  `ModConfigSpec` NeoForge : rejet silencieux, retour au défaut, juste un warning dans le journal).
+  Une section entière oubliée en recopiant se comporte pareil (valeurs par défaut du code). Aucun
+  risque de crash au démarrage lié à une erreur de saisie humaine dans ce fichier.
+  **CONFIRMATION DIRECTE (~07h00, lecture seule sur le VPS réel, pas une déduction)** : le fichier
+  `config/lanterne-common.toml` RÉELLEMENT présent sur le VPS (généré au premier démarrage après la
+  fusion cette nuit) a bien la structure imbriquée prédite ci-dessus — vérifié via `grep -n '^\['` :
+  sections racine `[socle]`, `[ajouts]`, `[pregeneration]`, `[treve_bluemap]`, `[etalon]`,
+  `[boutique]`, `[carte3d]`, `[atelier]`, et À L'INTÉRIEUR de `[boutique]` se trouvent bien
+  `[boutique.economie]` puis `[boutique.boutique]` (contenu lu directement : `active`, `symbole`,
+  `solde_depart`, `virements`, `classement_taille` sous `.economie` ; `rachat`, `lot_max`,
+  `marge_min_pourcent` sous `.boutique`) — exactement la structure documentée ci-dessus, pas
+  l'ancienne à plat. Le patron peut donc suivre ce guide de section en confiance demain matin.
+  NeoForge génère bien le fichier avec commentaires/structure complets par défaut (comportement
+  standard `ModConfigSpec`, confirmé sur ce fichier précis) — pas besoin de créer les sections à la
+  main, juste de coller les bonnes valeurs sous les bons en-têtes déjà présents.
+- **Confirmation visuelle en jeu** : onglet Iris dans Sodium, disparition de l'artefact du ciel,
+  fonctionnement réel du cadran shaderpack dans Dials — tout ça est prouvé "mécaniquement sain"
+  (bytecode/logs) mais jamais vu par un œil humain.
+- **Décision à prendre** : déployer TÂCHE A (Cadence boot) et TÂCHE B (modId iris) sur le VPS de
+  prod, une fois les tests `test 1` confirmés visuellement.
+- **Le pregen 500 chunks (rayon 8000 blocs) demandé cette nuit N'A PAS ÉTÉ EXÉCUTÉ sur le VPS** —
+  vérifié en lecture seule par SSH (~06h30) : aucun `pregen-en-cours.txt`, zéro mention "pregen"
+  dans `latest.log` depuis le redémarrage de `00h08` (import du monde officiel), et seulement 184
+  fichiers région overworld (loin des ~767 attendus pour un rayon de 500 chunks). À relancer via
+  `/lanterne pregen 500` (RCON ou en jeu) si toujours souhaité — détail dans la nouvelle section
+  "VÉRIFICATION PREGEN" tout en bas de ce fichier.
+- **Idée proposée, pas implémentée** : un cadran "Preset perf" optionnel dans `Dials.java` (pas un
+  défaut imposé) — jugé être une vraie décision produit, pas une correction, donc pas fait seul
+  cette nuit.
+
+## 3. Progrès Vulkan (recherche pure, RIEN branché au rendu réel)
+
+Chaîne complète prouvée de bout en bout sur des shaders synthétiques modernisés :
+jcpp → glsl-transformer (`patchComposite`/`patchVanilla`) → `UniformReblocker` (prototype maison,
+re-bloque les uniforms en UBO pour respecter SPIR-V/Vulkan) → shaderc → SPIR-V valide, vertex ET
+fragment (5576+3428 octets). Sur un VRAI fichier de shaderpack (`gbuffers_terrain`, Complementary
+Reimagined), deux nouveaux blocages précis et documentés restent à résoudre : couverture
+incomplète du parseur d'uniforms sur les gros fichiers, et un `StackOverflow`/`OutOfMemoryError`
+sur la récursion pour les fichiers de taille réelle (~100K caractères). Tout ceci vit dans
+`lab/ShadercProbe*.java`/`UniformReblocker.java`, jamais connecté au pipeline de rendu qui tourne
+réellement en jeu — c'est un prototype de faisabilité, pas une fonctionnalité livrée.
+
+**Note de clôture (~05h30)** : le fork qui travaillait sur ces 2 derniers blocages (uniforms non
+capturés + stack overflow) s'est enlisé ~2h à relancer des clients de test jetables
+(`-test-5`, `-test-6`) sans jamais conclure — arrêté de force par le coordinateur, process orphelin
+`PID 16636` (`-test-5`) fermé proprement après vérification de son `gameDir`. Aucune régression :
+le dépôt était propre, seule une note de doc en attente a été commitée (`bb23226`), rien d'autre
+perdu. **Recommandation pour la reprise** : l'axe Vulkan a déjà reçu énormément de temps cette
+nuit (8+ passes) pour un résultat qui reste un prototype non branché au rendu réel — la suite
+(couverture du parseur `UniformReblocker` sur gros fichiers, conversion récursion→itération) est un
+vrai travail de dev normal, PAS un test client répété. Éviter de redispatcher un fork dessus en
+boucle sans borne de temps explicite ; si repris, fixer un budget clair (ex: "1 tentative de test
+client max, sinon documenter et arrêter").
+
+## 4. Bugs documentés mais non corrigés cette nuit (avec raison)
+
+- **Halo/chute FPS à l'exploration** : cause réelle trouvée avec preuve directe (upload GPU
+  synchrone de `Sodium BufferArena` quand plusieurs sections de chunk finissent de compiler en
+  même temps). Un correctif de plafonnement a été évalué puis ABANDONNÉ après preuve bytecode
+  qu'il aurait causé un bug pire (chunks invisibles en permanence) — le vrai correctif est plus
+  large que prévu (patcher `RenderSectionManager.processChunkBuildResults`), nécessite un test
+  humain en vol rapide, hors de portée d'un fork cette nuit.
+- **Retrait complet de Sodium** : mise à jour par rapport à la première version de ce paragraphe —
+  le couplage `WorldRenderingSettings.chunkVertexFormat` a ENTRE-TEMPS été abstrait proprement
+  (interface `VertexFormatSource` + adaptateur `SodiumVertexFormatSource`, commit `b1a7838`), testé
+  SANS régression avec Sodium présent (client jetable réel, 0 FATAL). Il ne reste qu'UN SEUL point
+  dur, confirmé structurellement impossible à contourner trivialement : `VanillaRenderingPipeline`
+  (repli sans shaderpack) utilise `ChunkMeshFormats.COMPACT` (Sodium), dont le format encodé
+  (positions/UV quantifiés en entiers) diffère structurellement de `DefaultVertexFormat.BLOCK`
+  (vanilla, floats bruts) — pas de substitution triviale, confirmé par comparaison directe des deux
+  formats (javap). Le retrait complet nécessiterait de réécrire ce chemin de rendu terrain sans
+  Sodium — hors de portée d'une nuit, mais le périmètre restant est désormais totalement clos et
+  documenté dans `RECHERCHE-VULKAN-SANS-SODIUM.md` (étapes 7 à 11).
+
+## Audit démarrage serveur (~06h15, pure lecture de code, aucune modification)
+
+Piste explorée : le démarrage serveur (Xeon mono-cœur, monde réel 1.58GB) fait-il du travail
+synchrone évitable qui retarderait la disponibilité du serveur ?
+
+**Résultat : rien à corriger, conception déjà saine.**
+
+- Seul `ServerStartedEvent` (jamais `ServerStartingEvent`/`ServerAboutToStartEvent`) est utilisé
+  côté Lanterne pour tout travail applicatif (`Lanterne.onServerStarted` : bannière/diagnostics,
+  `Cadence.onServerStarted` : reprise pregen). Cet évènement se déclenche APRÈS que le serveur ait
+  déjà ouvert son port et affiché `Done` — donc rien ici ne retarde la disponibilité aux joueurs.
+- `Pregen.resumeIfPending` → `begin()` : vérifié en détail, ne fait qu'initialiser des compteurs
+  (`O(1)`, pas de scan disque ni de génération synchrone) ; la génération réelle des 500 chunks de
+  rayon est étalée sur les ticks suivants via un curseur incrémental (déjà connu du système,
+  documenté dans sa Javadoc — "la reprise est gratuite, ce qui existe déjà est sauté").
+- `CadenceBlueMap.startOnReady` s'enregistre en callback dès le constructeur du mod (pas besoin
+  d'attendre `ServerStartedEvent`), et le vrai rendu BlueMap est géré par le plugin BlueMap
+  lui-même de façon asynchrone (hors du contrôle direct de Lanterne).
+
+Pas de gain trouvé sur cet axe — le design existant évite déjà le piège classique (travail lourd
+dans `ServerStartingEvent`, avant l'ouverture du port). Aucun fichier modifié, rien compilé, rien
+commité.
+
+## 5. Aucun risque pris
+
+Un seul déploiement VPS réel a eu lieu cette nuit, décrit en détail dans le bloc "BUGS CRITIQUES"
+tout en haut de ce résumé : à 0 joueur connecté (vérifié par RCON avant ET après), sur un correctif
+compilé, testé sur serveur jetable, et vérifié indépendamment par un second fork avant le
+déploiement. Rien d'expérimental (pas de Vulkan/Sodium-removal) n'est parti en prod — uniquement la
+branche `26.3` stable telle quelle. Le dépôt est resté compilable à chaque étape
+(`./gradlew compileJava`/`build` vérifié avant et après chaque commit important, build complet
+depuis zéro confirmé sain en toute fin de nuit). Aucun process Java du patron n'a été touché —
+chaque fermeture de process de test a été faite individuellement par PID après vérification qu'il
+s'agissait bien d'un dossier de test jetable, jamais un `taskkill` global.
+
+---
+
+---
+
+# DÉTAILS COMPLÉMENTAIRES DE FIN DE NUIT (audits infra/déploiement, ~04h40-07h00)
+
+Ces sections ont été écrites APRÈS le résumé ci-dessus par des forks qui ont, par erreur, préfixé
+leur section au tout début du fichier au lieu de la placer sous le résumé comme demandé — déplacées
+ici lors d'une relecture de cohérence pour que le résumé reste bien la première chose lue.
+Contenu inchangé, seulement l'ordre corrigé.
+
 # VÉRIFICATION — cohérence du catalogue boutique.txt (1471 articles) : sain, rien à corriger
 
 Directive : auditer la robustesse du parsing de `boutique.txt` (1471 articles) et sa cohérence avec
@@ -238,234 +489,6 @@ preuve — voir le résumé détaillé juste en dessous, puis le détail section
 
 ---
 
-# RÉSUMÉ POUR LE RÉVEIL DU PATRON (réécrit en fin de nuit, version finale et complète)
-
-Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche `26.3`), **78 commits**
-au total. Rapport de travail honnête, pas promotionnel — chaque point dit s'il est confirmé, partiel,
-ou juste une piste. Le détail complet, section par section (y compris les versions précédentes de ce
-résumé, conservées telles quelles pour la traçabilité), suit plus bas dans ce même fichier.
-
-## ✅ BUGS CRITIQUES trouvés, corrigés, ET DÉPLOYÉS SUR LE VPS (~06h50)
-
-Compilés, vérifiés (build propre confirmé, démarrage serveur jetable réel), puis **déployés sur le
-VPS de production par le coordinateur** vu la gravité réelle (perte de contenu de coffres) et le
-niveau de vérification atteint — voir la section "DÉPLOIEMENT VPS EFFECTUÉ" tout en haut de ce
-fichier pour le détail complet de l'opération (0 joueur confirmé avant/après, ancien jar sauvegardé,
-redémarrage confirmé sain : `Done`, 0 FATAL, pregen repris automatiquement).
-**Le VPS tourne `lanterne-26.3.60.jar` avec ces 6 correctifs actifs — rien à faire de plus au réveil
-sur ce point, juste vérifier en jeu si souhaité.**
-
-- **3 bugs de permission serveur manquante** : `/lanterne on`/`off` (coupe toutes les optimisations
-  serveur, effet global), `/lanterne bench`, `/projection domaine ajouter/retirer` — n'importe quel
-  joueur pouvait les exécuter alors qu'elles étaient documentées admin-only. Corrigés (commits
-  `152b00e`, `08eab7a`).
-- **3 bugs de perte de données NBT au cassage d'un bloc** — un joueur qui cassait un de ces blocs
-  perdait son contenu configuré au lieu de le récupérer :
-  - Spawner + Silk Touch → redonnait un spawner **vierge** au lieu du spawner configuré (mob/œuf
-    perdu). Corrigé (`3c33035`).
-  - Projecteur (Beamer) → perdait la vidéo/image configurée et le propriétaire. Corrigé (`de0110a`).
-  - **LE PLUS GRAVE : Guichet, CoffreDepot, CoffreReception, Aiguillage n'avaient AUCUNE table de
-    butin** — les casser (même à l'outil correct) ne droppait **rien du tout**, pas même le bloc.
-    Pour les deux coffres du réseau (27 cases chacun, contenu réel déposé par joueurs et par le bot
-    minier), c'est une **perte totale et silencieuse du contenu stocké** — le bug le plus sérieux de
-    la nuit. Corrigé : 4 loot tables ajoutées + `core/ReseauDrops.java` (préserve le contenu et le
-    filtre de réapprovisionnement). Commit `b904a77`.
-  - Vérification indépendante menée (relecture ligne à ligne + build clean depuis zéro + démarrage
-    réel sur serveur jetable, `Done (0.406s)!`, zéro erreur) : correctif confirmé sain avec un niveau
-    de confiance élevé, pas juste une lecture de code.
-- Balayage de sécurité complémentaire (validation d'entrée, race conditions Bazaar, duplication
-  d'objets sur tous les blocs custom, cohérence UI/permission) mené jusqu'au bout cette nuit —
-  **rien d'autre trouvé**, tout confirmé sain.
-
-## Pregen 500 chunks — relancé par le coordinateur, en cours
-
-Le pregen overworld demandé explicitement cette nuit n'avait en réalité jamais tourné (reset au
-redémarrage serveur de `00:08:08`). Puisque c'était une demande directe avec attente claire ("pour
-8h"), le coordinateur l'a relancé lui-même via RCON après avoir vérifié `0 joueur connecté`
-(`/lanterne pregen 500`, confirmé accepté par le serveur). Le mécanisme se met en pause
-automatiquement dès qu'un joueur se connecte (vérifié sain) — aucun risque à le laisser tourner.
-**Progression réelle confirmée** (~1,2 % après les premières minutes, ~6 chunks/s, aucun signe de
-ralentissement serveur) mais **estimation honnête : 1 à 2 jours pour finir, pas une nuit** — normal
-sur un mono-cœur pour un disque de 500 chunks de rayon, pas une régression.
-
-*(Note d'horloge sans conséquence : l'heure système réelle du VPS était décalée d'environ 2h20 par
-rapport aux timestamps utilisés dans les échanges du coordinateur cette nuit — sans impact sur la
-validité des actions, juste pour ne pas dérouter la lecture des logs horodatés ci-dessous.)*
-
-## Vulkan (recherche pure, RIEN branché au rendu réel)
-
-Progrès réels et vérifiés : la chaîne complète (jcpp → glsl-transformer → `UniformReblocker`,
-prototype maison de re-blocage UBO → shaderc) produit du SPIR-V valide pour les deux étages
-(vertex+fragment) sur un shader synthétique modernisé, **et** sur un vrai fichier de shaderpack
-(`gbuffers_terrain`, Complementary Reimagined) une fois le préprocesseur jcpp intercalé. Deux
-obstacles précis restent sur le fichier réel (couverture incomplète du parseur d'uniforms sur les
-gros fichiers, `StackOverflowError` sur la récursion à cette taille) — documentés en détail dans
-`RECHERCHE-VULKAN-SANS-SODIUM.md`. Rien de tout cela n'est branché au pipeline de rendu qui tourne
-en jeu — c'est un prototype de faisabilité, pas une fonctionnalité livrée, aucun risque pour la prod.
-
-## 1. Déployé et confirmé stable (VPS + test1)
-
-- **Migration complète du code source d'Iris dans Lanterne** (fusion LGPL-3.0, voir
-  `IRIS-ATTRIBUTION.md`) — 7 crashs de migration trouvés et corrigés un par un, tous par test
-  client réel : `@Mod("iris")` retiré (`e8138a6`), `BlueMapAPI` isolée (`0586528`), fichier
-  `META-INF/services/...` copié (`6e72735`), `getVersion()` corrigé (`c73466d`),
-  `assets/iris/` copié (`587e70e`), dépendances `jarJar` (`115e33b`), `centerDepth`/`colorSpace`
-  copiés (`b65e53d`).
-- **Shaders confirmés fonctionnels en jeu par le patron lui-même** (capture F3 : `[Iris] Version
-  26.3.55`, shaderpack Complementary Reimagined actif, 80-124 FPS).
-- **VPS stable en `26.3.55`**, `Done` confirmé à chaque redémarrage.
-- **Fix Cadence — BlueMap redémarre seul si 0 joueur au boot** (TÂCHE A, commit `9da44c7`),
-  testé et confirmé par log sur le serveur jetable. **Pas encore déployé sur le VPS** — décision
-  volontairement laissée au réveil (touche le comportement au redémarrage, préférence pour un œil
-  humain avant prod même si le test jetable est concluant).
-- **Fix visibilité "iris" comme modId virtuel** (TÂCHE B, commit `7a13b94`) : `neoforge.mods.toml`
-  déclare un second `[[mods]] modId="iris"` passif (sans classe `@Mod`). Confirmé sain par log FML
-  réel (`{lanterne,iris}` dans le jar `26.3.59`). **Déployé sur `test 1`, PAS sur le VPS.**
-- **Artefact visuel du ciel (bordure nette, DH+Iris) : cause confirmée à 100% par preuve bytecode
-  complète** (chaîne DH `ModList.isLoaded("iris")` → `IrisAccessor` jamais bindé avant le fix ci-
-  dessus) — corrigé structurellement par le même fix modId. **Confirmation visuelle humaine encore
-  en attente.**
-- **Onglet "Iris" restauré dans le menu Sodium** : corrigé pour de vrai (pas juste documenté),
-  `Graft.java`/`IrisConfig.java` enregistrent un second `ModOptionsBuilder` indépendant via
-  `registerModOptions("iris")`. Testé en client jetable réel, 0 FATAL, mécanisme confirmé par
-  bytecode + logs. **Non déployé nulle part** (laissé au réveil comme les autres correctifs UI).
-- **Sélection du shaderpack actif ajoutée dans `Dials.java`** (cadran "Shaderpack", en plus du
-  toggle on/off existant), compilé sain, testé partiellement (démarrage propre, 0 FATAL) mais le
-  clic lui-même n'a pas pu être testé visuellement.
-- **`lanterne-common.toml` fusionné** (boutique + carte3D + atelier + server en un seul fichier) —
-  anciennes valeurs réelles (prix boutique, réglages serveur) backupées, PAS reportées
-  automatiquement dans le nouveau fichier (voir section 2).
-- **Monde officiel importé sur le VPS** (13 joueurs, données réelles), backup pré-import conservé.
-- **1 crash de retrait de Sodium corrigé** (`SodiumVertexSerializers`, isolation de classe,
-  commit `a9647c2`) — un premier vrai test client Sodium-absent a été mené (pas juste de la
-  lecture de code) et progresse plus loin qu'avant.
-
-## 2. Nécessite une action humaine demain
-
-- **Re-rentrer les vraies valeurs boutique/serveur** dans `lanterne-common.toml` — les anciennes
-  sont dans `lanterne-anciens-toml-backup/` sur le VPS, le nouveau fichier fusionné a démarré avec
-  les valeurs par défaut du code, pas les vraies valeurs de prod.
-  **ATTENTION, changement de nom de section pour boutique et atelier (vérifié en lisant le code
-  `defineInto` de `Tariff.java` et `Studio.java`, pas deviné)** : `Config.java` enveloppe l'appel à
-  `Tariff.defineInto(BUILDER)` dans un `push("boutique")`, et `Tariff.defineInto` fait LUI-MÊME
-  `push("economie")`/`push("boutique")`/`push("generation")`/`push("derive")`/`push("puits")` en
-  interne — donc les sections de l'ancien `lanterne-boutique.toml` qui étaient à la racine
-  (`[economie]`, `[boutique]`, `[generation]`, `[derive]`, `[puits]`) vivent maintenant à
-  `[boutique.economie]`, `[boutique.boutique]`, `[boutique.generation]`, `[boutique.derive]`,
-  `[boutique.puits]` — UN NIVEAU DE PLUS. Même chose pour l'atelier : `Studio.defineInto` fait
-  `push("tableaux")`/`push("disques")` en interne, sous le `push("atelier")` de `Config.java` — donc
-  `[tableaux]`/`[disques]` deviennent `[atelier.tableaux]`/`[atelier.disques]`. **Les NOMS DE CLÉS À
-  L'INTÉRIEUR de chaque section n'ont pas changé** (ex: `solde_depart`, `lot_max`,
-  `marge_min_pourcent` restent identiques) — seul le CHEMIN DE SECTION a un préfixe en plus. Une
-  copie manuelle naïve ligne par ligne sous les mauvais en-têtes `[...]` écrirait les valeurs dans
-  des sections qui n'existent plus, silencieusement ignorées au chargement (NeoForge revient au
-  défaut du code, sans crash — donc l'erreur serait invisible sans relire le fichier généré après
-  coup pour vérifier). **`carte3d` n'a PAS ce problème** : `ReliefConfig.defineInto` ne fait aucun
-  `push()` interne, ses clés restent directement sous `[carte3d]` comme avant (et ce module est de
-  toute façon désactivé par défaut, BlueMap est utilisé à la place — enjeu faible).
-  **Robustesse confirmée en plus** : chaque valeur numérique critique (`Tariff.java` en particulier)
-  est déclarée avec `.defineInRange(...)` et des bornes réalistes — une valeur hors bornes ou du
-  texte au mauvais endroit dans le toml ne plante jamais le démarrage (comportement standard
-  `ModConfigSpec` NeoForge : rejet silencieux, retour au défaut, juste un warning dans le journal).
-  Une section entière oubliée en recopiant se comporte pareil (valeurs par défaut du code). Aucun
-  risque de crash au démarrage lié à une erreur de saisie humaine dans ce fichier.
-  **CONFIRMATION DIRECTE (~07h00, lecture seule sur le VPS réel, pas une déduction)** : le fichier
-  `config/lanterne-common.toml` RÉELLEMENT présent sur le VPS (généré au premier démarrage après la
-  fusion cette nuit) a bien la structure imbriquée prédite ci-dessus — vérifié via `grep -n '^\['` :
-  sections racine `[socle]`, `[ajouts]`, `[pregeneration]`, `[treve_bluemap]`, `[etalon]`,
-  `[boutique]`, `[carte3d]`, `[atelier]`, et À L'INTÉRIEUR de `[boutique]` se trouvent bien
-  `[boutique.economie]` puis `[boutique.boutique]` (contenu lu directement : `active`, `symbole`,
-  `solde_depart`, `virements`, `classement_taille` sous `.economie` ; `rachat`, `lot_max`,
-  `marge_min_pourcent` sous `.boutique`) — exactement la structure documentée ci-dessus, pas
-  l'ancienne à plat. Le patron peut donc suivre ce guide de section en confiance demain matin.
-  NeoForge génère bien le fichier avec commentaires/structure complets par défaut (comportement
-  standard `ModConfigSpec`, confirmé sur ce fichier précis) — pas besoin de créer les sections à la
-  main, juste de coller les bonnes valeurs sous les bons en-têtes déjà présents.
-- **Confirmation visuelle en jeu** : onglet Iris dans Sodium, disparition de l'artefact du ciel,
-  fonctionnement réel du cadran shaderpack dans Dials — tout ça est prouvé "mécaniquement sain"
-  (bytecode/logs) mais jamais vu par un œil humain.
-- **Décision à prendre** : déployer TÂCHE A (Cadence boot) et TÂCHE B (modId iris) sur le VPS de
-  prod, une fois les tests `test 1` confirmés visuellement.
-- **Le pregen 500 chunks (rayon 8000 blocs) demandé cette nuit N'A PAS ÉTÉ EXÉCUTÉ sur le VPS** —
-  vérifié en lecture seule par SSH (~06h30) : aucun `pregen-en-cours.txt`, zéro mention "pregen"
-  dans `latest.log` depuis le redémarrage de `00h08` (import du monde officiel), et seulement 184
-  fichiers région overworld (loin des ~767 attendus pour un rayon de 500 chunks). À relancer via
-  `/lanterne pregen 500` (RCON ou en jeu) si toujours souhaité — détail dans la nouvelle section
-  "VÉRIFICATION PREGEN" tout en bas de ce fichier.
-- **Idée proposée, pas implémentée** : un cadran "Preset perf" optionnel dans `Dials.java` (pas un
-  défaut imposé) — jugé être une vraie décision produit, pas une correction, donc pas fait seul
-  cette nuit.
-
-## 3. Progrès Vulkan (recherche pure, RIEN branché au rendu réel)
-
-Chaîne complète prouvée de bout en bout sur des shaders synthétiques modernisés :
-jcpp → glsl-transformer (`patchComposite`/`patchVanilla`) → `UniformReblocker` (prototype maison,
-re-bloque les uniforms en UBO pour respecter SPIR-V/Vulkan) → shaderc → SPIR-V valide, vertex ET
-fragment (5576+3428 octets). Sur un VRAI fichier de shaderpack (`gbuffers_terrain`, Complementary
-Reimagined), deux nouveaux blocages précis et documentés restent à résoudre : couverture
-incomplète du parseur d'uniforms sur les gros fichiers, et un `StackOverflow`/`OutOfMemoryError`
-sur la récursion pour les fichiers de taille réelle (~100K caractères). Tout ceci vit dans
-`lab/ShadercProbe*.java`/`UniformReblocker.java`, jamais connecté au pipeline de rendu qui tourne
-réellement en jeu — c'est un prototype de faisabilité, pas une fonctionnalité livrée.
-
-**Note de clôture (~05h30)** : le fork qui travaillait sur ces 2 derniers blocages (uniforms non
-capturés + stack overflow) s'est enlisé ~2h à relancer des clients de test jetables
-(`-test-5`, `-test-6`) sans jamais conclure — arrêté de force par le coordinateur, process orphelin
-`PID 16636` (`-test-5`) fermé proprement après vérification de son `gameDir`. Aucune régression :
-le dépôt était propre, seule une note de doc en attente a été commitée (`bb23226`), rien d'autre
-perdu. **Recommandation pour la reprise** : l'axe Vulkan a déjà reçu énormément de temps cette
-nuit (8+ passes) pour un résultat qui reste un prototype non branché au rendu réel — la suite
-(couverture du parseur `UniformReblocker` sur gros fichiers, conversion récursion→itération) est un
-vrai travail de dev normal, PAS un test client répété. Éviter de redispatcher un fork dessus en
-boucle sans borne de temps explicite ; si repris, fixer un budget clair (ex: "1 tentative de test
-client max, sinon documenter et arrêter").
-
-## 4. Bugs documentés mais non corrigés cette nuit (avec raison)
-
-- **Halo/chute FPS à l'exploration** : cause réelle trouvée avec preuve directe (upload GPU
-  synchrone de `Sodium BufferArena` quand plusieurs sections de chunk finissent de compiler en
-  même temps). Un correctif de plafonnement a été évalué puis ABANDONNÉ après preuve bytecode
-  qu'il aurait causé un bug pire (chunks invisibles en permanence) — le vrai correctif est plus
-  large que prévu (patcher `RenderSectionManager.processChunkBuildResults`), nécessite un test
-  humain en vol rapide, hors de portée d'un fork cette nuit.
-- **Retrait complet de Sodium** : 1 crash corrigé, un 2e trouvé et bien scopé
-  (`WorldRenderingSettings.chunkVertexFormat` typé directement par une interface Sodium, utilisé
-  sur le chemin chaud du rendu shader) — correctif possible (5 fichiers) mais jugé trop risqué à
-  improviser en fin de nuit sans pouvoir retester en jeu après coup. Piste précise documentée dans
-  `RECHERCHE-VULKAN-SANS-SODIUM.md`.
-
-## Audit démarrage serveur (~06h15, pure lecture de code, aucune modification)
-
-Piste explorée : le démarrage serveur (Xeon mono-cœur, monde réel 1.58GB) fait-il du travail
-synchrone évitable qui retarderait la disponibilité du serveur ?
-
-**Résultat : rien à corriger, conception déjà saine.**
-
-- Seul `ServerStartedEvent` (jamais `ServerStartingEvent`/`ServerAboutToStartEvent`) est utilisé
-  côté Lanterne pour tout travail applicatif (`Lanterne.onServerStarted` : bannière/diagnostics,
-  `Cadence.onServerStarted` : reprise pregen). Cet évènement se déclenche APRÈS que le serveur ait
-  déjà ouvert son port et affiché `Done` — donc rien ici ne retarde la disponibilité aux joueurs.
-- `Pregen.resumeIfPending` → `begin()` : vérifié en détail, ne fait qu'initialiser des compteurs
-  (`O(1)`, pas de scan disque ni de génération synchrone) ; la génération réelle des 500 chunks de
-  rayon est étalée sur les ticks suivants via un curseur incrémental (déjà connu du système,
-  documenté dans sa Javadoc — "la reprise est gratuite, ce qui existe déjà est sauté").
-- `CadenceBlueMap.startOnReady` s'enregistre en callback dès le constructeur du mod (pas besoin
-  d'attendre `ServerStartedEvent`), et le vrai rendu BlueMap est géré par le plugin BlueMap
-  lui-même de façon asynchrone (hors du contrôle direct de Lanterne).
-
-Pas de gain trouvé sur cet axe — le design existant évite déjà le piège classique (travail lourd
-dans `ServerStartingEvent`, avant l'ouverture du port). Aucun fichier modifié, rien compilé, rien
-commité.
-
-## 5. Aucun risque pris
-
-Aucun déploiement VPS n'a eu lieu cette nuit en dehors de ce qui est explicitement listé en
-section 1 (versions confirmées stables par log/test). Le dépôt est resté compilable à chaque
-étape (`./gradlew compileJava` vérifié avant chaque commit). Aucun process Java du patron n'a été
-touché — chaque fermeture de process de test a été faite individuellement par PID après
-vérification qu'il s'agissait bien d'un dossier de test jetable, jamais un `taskkill` global.
-
----
 
 # Tâches de la nuit 20-21/09/2026 — continuité de contexte
 
