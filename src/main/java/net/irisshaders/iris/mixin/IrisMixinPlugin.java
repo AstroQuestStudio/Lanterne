@@ -83,12 +83,37 @@ public class IrisMixinPlugin implements IMixinConfigPlugin {
         "net.irisshaders.iris.mixin.MixinDebugScreenEntriesList"
     );
 
+	private static Boolean sodiumPresent;
+
+	/**
+	 * Sodium est-il sur le chemin de classes ? Detecte par la presence d'une de ses classes plutot que
+	 * par {@code ModList}, qui n'existe pas encore quand les mixins s'appliquent (il repondait « non »
+	 * meme avec Sodium).
+	 *
+	 * <p>Sans Sodium, Iris entier reste INERTE : aucun de ses mixins ne s'applique, donc aucune de
+	 * ses classes (qui importent toutes Sodium : format de sommet, frustums, ombres) n'est chargee.
+	 * Le jeu tourne alors en rendu vanilla, sans shaders. Verifie par lancement client, voir
+	 * RECHERCHE-VULKAN-SANS-SODIUM.md.
+	 */
+	public static synchronized boolean sodiumPresent() {
+		if (sodiumPresent == null) {
+			boolean found = false;
+			try {
+				found = IrisMixinPlugin.class.getClassLoader()
+						.getResource("net/caffeinemc/mods/sodium/client/SodiumClientMod.class") != null;
+			} catch (Throwable ignored) {
+			}
+			sodiumPresent = found;
+			System.out.println("[Lanterne/Iris] Sodium " + (found ? "present : Iris actif"
+					: "absent : Iris inerte (rendu vanilla, pas de shaders)"));
+		}
+		return sodiumPresent;
+	}
+
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (!sodiumPresent()) return false;
         if (mixinClassName.contains("VKOnly")) return usingVulkan;
-        if (VANILLA_MIXINS_IMPORTANT_SODIUM.contains(mixinClassName) && !Compagnons.present(Compagnons.SODIUM)) {
-            return false;
-        }
 		return !usingVulkan;
 	}
 

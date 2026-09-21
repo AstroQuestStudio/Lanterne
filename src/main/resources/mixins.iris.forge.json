@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "net.irisshaders.iris.mixin.forge",
+  "plugin": "net.irisshaders.iris.mixin.IrisSodiumGate",
   "compatibilityLevel": "JAVA_8",
   "client": [
     "MixinFluidRendererImpl",

@@ -231,6 +231,9 @@ public final class Dials extends Screen {
      * jetable jusqu'au menu principal uniquement.
      */
     private void buildShaders() {
+        if (!fr.clubcitrouille.lanterne.report.Compagnons.present("sodium")) {
+            return; // Iris est inerte sans Sodium (voir IrisMixinPlugin.sodiumPresent) : pas de cadran.
+        }
         Family shaders = new Family("Shaders", false, "Iris, migre dans Lanterne");
         shaders.add(Dial.cycle("Shaders (Iris)", Dials::irisShaderLabel, Dials::irisShaderColour,
                 Dials::toggleIrisShaders,
