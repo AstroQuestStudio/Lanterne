@@ -96,6 +96,7 @@
   ],
   "client": [
     "JourneyMapTraductionMixin",
+    "TranslatableContentsMixin",
     "EntityCullMixin",
     "StaticChestRendererMixin",
     "StaticChestShapeMixin",
