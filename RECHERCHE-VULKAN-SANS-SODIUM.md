@@ -936,3 +936,18 @@ Solution retenue : Iris inerte sans Sodium (garde précoce par classe + coupe de
 - `IrisConfig`/`compat/sodium/config` : interface d'options Sodium (paliers 4).
 - Ensuite seulement : la passe d'ombres (`ShadowRenderer.java:444-645`, contre `SodiumWorldRenderer`), puis le format compact (item 9 de `ANALYSE-SODIUM-ET-ECARTS.md` : 28-32 octets au lieu de 52).
 - Non vérifié : stride des `UberGpuBuffer` vanilla avec le format 52 octets (`SectionRenderDispatcher` lit `pipeline.getVertexFormatBinding(0).getVertexSize()` à la construction : mon patch de `MixinRenderPipeline` vise à ce que cette valeur soit 52 dès que le pack est actif, mais la construction peut avoir lieu AVANT le chargement du pack → à valider quand le rendu démarrera).
+
+## ÉTAPE 15 — intégration `integ-nosodium` : fusion faite et compilée, AUCUN rendu sans Sodium vérifié (21/09/2026, ~13h40)
+
+**Ce qui est fait (vérifié)**
+- Branche `integ-nosodium` = `26.3` (98a06d6) + `feat-vertex` (W1) + `feat-decouple` (W3) + `feat-shadow` (W2). Les 4 conflits (gradle.properties, IrisMixinPlugin, MixinRenderPipeline, VanillaRenderingPipeline) sont résolus en gardant l'intention des deux côtés : garde double sur les mixins (liste connue + analyse du bytecode pour `net/caffeinemc`), un seul point d'entrée du format de sommet (`VertexFormatSources.terrain()`), ponts Sodium isolés (`IrisRenderBridge` / `SodiumBridge` / `SodiumViewportBridge`).
+- `./gradlew build -x test` : **BUILD SUCCESSFUL** (41 s), jar `lanterne-26.3.230.jar` (branche `integ-nosodium`, non déployé).
+
+**Ce qui n'est PAS vérifié**
+- Palier **A (menu atteint) : non atteint dans ce banc.** Les deux lancements du client d'intégration (`C:\integbench`, sans Sodium, `-Dlanterne.irisvanilla=true`) se sont arrêtés au démarrage avec `ClassNotFoundException: net.neoforged.fml.startup.Client` — c'est un défaut du LANCEUR de test (classpath copié d'un autre banc), pas une preuve sur le code Iris/Lanterne. Cause exacte non établie (mon test de chemins était lui-même erroné). Aucun crash-report, aucun `latest.log` produit.
+- Paliers **B (monde), C (terrain visible), D (shaders) : non atteints.**
+- **Stride des sommets : non vérifié.** Le patron a signalé une capture (écran noir, grandes surfaces translucides rouge/vert/bleu, HUD normal) qui ressemble à un décalage de format/stride (52 octets d'Iris vs tampons du terrain vanilla). Je n'ai pas pu la reproduire ni la corriger : aucun rendu obtenu avec cette build. C'est le point « non vérifié » déjà noté par W1 (étape 14) et il reste ouvert.
+
+**État du chemin sans Sodium : EXPÉRIMENTAL, désactivé par défaut** derrière `-Dlanterne.irisvanilla=true` (Sodium absent). Avec Sodium, ou sans la propriété, comportement inchangé (Iris actif / inerte). Ne pas déployer.
+
+**Reste à faire (dans l'ordre)** : (1) corriger le lanceur de test (partir d'une copie complète d'un banc qui démarre déjà, ex. `C:\w1bench`, avec `--gameDir` et natives corrigés) ; (2) atteindre A puis B ; (3) tester le stride vs `SectionRenderDispatcher`/`UberGpuBuffer` avec captures avant/après ; (4) écrire la passe d'ombres sans Sodium (`ShadowRenderer.renderShadows` importe encore `SodiumWorldRenderer`, `ChunkRenderMatrices`, `SodiumChunkSection`, `FogStorage`, `LevelRendererExtension`, `FrustumAccessor`).
