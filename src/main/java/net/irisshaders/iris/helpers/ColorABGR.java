@@ -1,12 +1,12 @@
 package net.irisshaders.iris.helpers;
 
 /**
- * Couleur 32 bits en ordre ABGR (octet de poids fort = alpha), l'ordre de {@code NativeImage}.
- * Ecrit pour Lanterne (aucune dependance a un mod de rendu tiers) : de simples decalages de bits.
+ * Empaquetage de couleurs ABGR (alpha en poids fort, puis bleu, vert, rouge). Équivalent local
+ * d'un utilitaire de couleur : écrit ici, sans Sodium, pour qu'Iris n'en dépende plus pour de
+ * simples opérations sur des octets (voir AUDIT-IRIS-BESOINS-TERRAIN.md, palier 0).
  */
 public final class ColorABGR {
-	private ColorABGR() {
-	}
+	private ColorABGR() {}
 
 	public static int pack(int r, int g, int b, int a) {
 		return (a & 0xFF) << 24 | (b & 0xFF) << 16 | (g & 0xFF) << 8 | (r & 0xFF);
@@ -25,6 +25,6 @@ public final class ColorABGR {
 	}
 
 	public static int unpackAlpha(int color) {
-		return color >>> 24;
+		return color >> 24 & 0xFF;
 	}
 }
