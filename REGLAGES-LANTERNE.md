@@ -104,6 +104,47 @@ Crédits à ajouter au README et à `IRIS-ATTRIBUTION.md` par le coordinateur lo
 | 9 | Entités par type | cadres, peintures, armor stands, plaques **faits** ; pistons, balise, table d'enchantement non faits |
 | 10-15 | mises à jour de lumière, culling de faces, cache HUD/minimap, priorité de fil, HUD debug stable | non faits |
 
-## Preuves
+## Ce qui est PROUVÉ et ce qui ne l'est PAS (état au 21/09, fin de mission)
 
-À compléter : build, lancement d'un vrai client, captures.
+### Prouvé (avec la source de la preuve)
+
+| Fait | Preuve |
+|---|---|
+| Le code **compile** (jar `26.3.270`), avec les 8 hooks + 2 hooks (FPS hors focus, entités par type) | `BUILD SUCCESSFUL`, `lanterne-26.3.270.jar` |
+| Le jeu **démarre et entre en monde** avec tous les mixins de réglages chargés (aucun `InjectionError`) | jobs banc `settings_base`, `settings_ciel_off`, `settings_meteo_particules` : statut OK, GPU RTX 3080 vérifié dans le log, ~412–438 FPS moyens à 720p (mesure de démarrage, **pas** une mesure de gain) |
+| La propriété `-Dlanterne.reglage.<id>` est **passée au jeu** | `launch-args.txt` du job `settings_ciel_off` contient `lanterne.reglage.ciel_etoiles=0` et `ciel_soleil_lune=0` |
+| Les cibles de mixin existent dans le jar 26.3 (`ParticleEngine.createParticle`, `WeatherEffectRenderer.prepare/render/renderOit`, `SkyRenderer.renderSun/renderMoon/renderStars`, `BlockEntityRenderDispatcher.tryExtractRenderState` (5 args), `EntityRenderer.extractNameTags`, `TextureAtlas.uploadAnimationFrames`, `FramerateLimitTracker.getFramerateLimit`, `EntityRenderDispatcher.shouldRender`) | `javap` sur `minecraft-patched-26.3.0.7-beta-merged.jar` et sources du jar ; le démarrage sans erreur d'injection le confirme |
+
+### NON prouvé (à ne pas croire sur parole)
+
+| Ce qui manque | Pourquoi |
+|---|---|
+| **L'effet visuel de chaque réglage** (ciel, pluie, particules, cadres, armor stands, plaques, textures animées) | Les captures du premier essai regardent un tronc d'arbre (voir ci-dessous) : elles ne montrent pas ce que les réglages changent. Aucune paire de captures pertinente n'a été prise. |
+| **Que la valeur du réglage atteint le hook** | Le log des trois jobs ne contient **aucune** ligne `[REGLAGES]` : le scénario `ReglageScene`, qui les écrit, n'existait pas encore dans le jar de ces jobs. Il est compilé (jar `26.3.270`, 13:24) mais **jamais lancé**. |
+| **Le gain de FPS** de chacun | Aucune mesure sous protocole (`OBJECTIFS-FPS.md`, règle n°0). Les 412–438 FPS ci-dessus sont des mesures de démarrage, sans scène chargée. |
+| **FPS hors focus** | Le banc garde la fenêtre au premier plan : le réglage n'a rien à limiter. Preuve possible par le log seulement. |
+| Écran Lanterne (onglets, préréglages, export/import) | Non ouvert dans un vrai client, aucune capture. |
+| Commande `/lanterne reglage …` | Jamais exécutée. |
+
+### Le résultat des comparaisons d'images, dit honnêtement
+
+Deux comparaisons ont été faites avec `Cmp.java` sur les captures des jobs (même jar, seule la propriété change) :
+
+| Paire | PSNR / SSIM | Pixels différents | Écart max |
+|---|---|---|---|
+| `settings_base` vs `settings_ciel_off` | 53,34 dB / 0,9988 | 2 837 sur 884 480 | 54 |
+| `settings_base` vs `settings_meteo_particules` | 58,97 dB / 0,9997 | 368 sur 884 480 | 38 |
+
+Ces différences sont **dispersées** sur presque toute l'image (zone des écarts ≥ 8 : de x=363 à x=1079) et ne coïncident avec aucun soleil, aucune pluie, aucune particule : la scène ne les montre pas. C'est le bruit normal d'un rendu vivant (feuillage, animations, images prises à des instants différents), **pas** la preuve d'un effet. Ces paires ne prouvent donc rien, ni pour ni contre les réglages.
+
+### Pour terminer la preuve (à reprendre)
+
+1. Jar `26.3.270` (branche `feat-settings`, contient `ReglageScene`).
+2. Jobs du banc en paires, **même jar, même scène**, seule la propriété change :
+   - ciel : `-Dlanterne.reglage.scene=ciel` avec et sans `-Dlanterne.reglage.ciel_soleil_lune=0` ;
+   - météo : `-Dlanterne.reglage.scene=meteo` avec et sans `-Dlanterne.reglage.meteo_dessinee=0` ;
+   - particules : `-Dlanterne.reglage.scene=particules` avec et sans `-Dlanterne.reglage.particules_densite=0` ;
+   - entités : `-Dlanterne.reglage.scene=entites` (distance `-Dlanterne.reglage.scene.distance=12`) avec et sans `-Dlanterne.reglage.cadres_distance=8`.
+3. Lire dans le log les lignes `[REGLAGES] … réglages écartés du défaut : …` (preuve que la valeur atteint les hooks).
+4. Comparer chaque paire avec `Cmp.java` : une différence **localisée** sur ce que le réglage supprime (soleil, gouttes, nuage de particules, cadres) est la preuve. Une différence dispersée n'en est pas une.
+5. Mesures de gain sous verrou (`OBJECTIFS-FPS.md`).
