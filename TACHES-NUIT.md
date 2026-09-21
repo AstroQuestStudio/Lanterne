@@ -1,4 +1,26 @@
-# VÉRIFICATION — monitoring/alerte proactive sur le VPS : aucune, clôture série infra
+# VÉRIFICATION — cohérence du catalogue boutique.txt (1471 articles) : sain, rien à corriger
+
+Directive : auditer la robustesse du parsing de `boutique.txt` (1471 articles) et sa cohérence avec
+les mods actuellement installés (après la migration Iris de cette nuit).
+
+- **Parsing déjà exemplaire** (`Stall.java`) : `reload()` ne vide le catalogue en mémoire qu'APRÈS
+  une lecture disque réussie (échec de lecture = catalogue précédent conservé, jamais une boutique
+  vide par accident). `absorb()` traite chaque ligne indépendamment via `readLine()` — une ligne
+  fautive est journalisée avec son numéro et la raison exacte du refus (`[BOUTIQUE] ... ligne N
+  ignorée : ...`), puis sautée ; **aucune ligne mal formée ne peut planter le chargement du reste
+  du catalogue.**
+- **Validation d'item déjà en place** : `put()` vérifie `BuiltInRegistries.ITEM.containsKey(item)`
+  avant d'accepter une ligne — un item retiré (mod désinstallé) ou mal orthographié est rejeté avec
+  un message clair ("Aucun objet ne s'appelle « ... » dans ce jeu."), jamais une exception qui
+  remonterait.
+- **État réel du VPS confirmé propre** : `boutique.txt` sur le VPS fait 1541 lignes (dont 1471
+  articles réellement acceptés, le reste commentaires/en-tête/lignes vides) — logs du dernier
+  redémarrage (`journalctl`) ne contiennent AUCUNE ligne `[BOUTIQUE] ... ligne N ignorée`, donc le
+  catalogue actuel est 100% cohérent avec les mods installés, zéro item orphelin détecté.
+
+Aucun fichier de code modifié (rien à corriger). Aucun accès en écriture au VPS.
+
+---
 
 Directive : vérifier si un système préviendrait le patron si le serveur tombait, au-delà du
 `Restart=on-failure` systemd déjà confirmé sain. Lecture seule sur le VPS, aucune modification.
