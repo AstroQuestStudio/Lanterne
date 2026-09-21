@@ -89,6 +89,12 @@ ci-dessous est partiellement dépassée sur ce point précis (TÂCHE A/B sont be
   (bytecode/logs) mais jamais vu par un œil humain.
 - **Décision à prendre** : déployer TÂCHE A (Cadence boot) et TÂCHE B (modId iris) sur le VPS de
   prod, une fois les tests `test 1` confirmés visuellement.
+- **Le pregen 500 chunks (rayon 8000 blocs) demandé cette nuit N'A PAS ÉTÉ EXÉCUTÉ sur le VPS** —
+  vérifié en lecture seule par SSH (~06h30) : aucun `pregen-en-cours.txt`, zéro mention "pregen"
+  dans `latest.log` depuis le redémarrage de `00h08` (import du monde officiel), et seulement 184
+  fichiers région overworld (loin des ~767 attendus pour un rayon de 500 chunks). À relancer via
+  `/lanterne pregen 500` (RCON ou en jeu) si toujours souhaité — détail dans la nouvelle section
+  "VÉRIFICATION PREGEN" tout en bas de ce fichier.
 - **Idée proposée, pas implémentée** : un cadran "Preset perf" optionnel dans `Dials.java` (pas un
   défaut imposé) — jugé être une vraie décision produit, pas une correction, donc pas fait seul
   cette nuit.
@@ -2439,4 +2445,40 @@ liste de drops déjà calculée).
 **Conclusion : aucun risque de double-drop trouvé, aucun conflit d'ordre d'exécution entre les 3
 nouveaux hooks de cette nuit et un `onRemove`/`playerWillDestroy` préexistant.** Clôture définitive
 de la série de bugs NBT/dupe/drop de cette nuit (4 passes cumulées, 3 bugs réels trouvés et corrigés,
+
+## VÉRIFICATION PREGEN — le pregen 500 chunks n'a PAS été exécuté sur le VPS (fork, 21/09 ~06h30)
+
+Directive : vérifier l'état réel (lecture seule SSH) du pregen overworld 500 chunks (rayon 8000
+blocs) demandé explicitement par le patron cette nuit. Le résumé plus haut dans ce fichier laissait
+entendre qu'il avait été lancé plus tôt via un script RCON Python après le retrait/remplacement de
+Chunky. **Ce n'est pas ce qui est observé sur le VPS actuellement.**
+
+**Preuves (SSH lecture seule, `sudo` disponible passwordless, aucune écriture effectuée)** :
+- `sudo ls /srv/minecraft/config/lanterne/` → contient `boutique.txt`, `disques/`, `tableaux/`,
+  `vol.properties`. **Aucun `pregen-en-cours.txt`.**
+- `sudo grep -i pregen /srv/minecraft/logs/latest.log` → **zéro résultat.** Idem sur tous les logs
+  `.gz` archivés (`zgrep`). Le mot "pregen" n'apparaît nulle part dans les logs disponibles.
+- Structure réelle du monde (26.3, pas `world/region` à la racine mais
+  `world/dimensions/minecraft/<dim>/region/`) :
+  - `overworld/region` : **184 fichiers `.mca`**
+  - `the_end/region` : 172 fichiers
+  - `the_nether/region` : 22 fichiers
+  - `sudo du -sh /srv/minecraft/world` → 1.6G au total (monde importé + exploration jusqu'ici).
+  - Un rayon de 500 chunks au centre couvrirait un disque de ~785 000 chunks, soit ~767 fichiers
+    région (32×32 chunks/région) s'il était complet. **184 fichiers overworld est très loin de ce
+    compte** — cohérent avec de l'exploration normale de joueurs + le monde importé, pas avec un
+    pregen systématique de ce rayon.
+- Le serveur a redémarré à `00:08:08` cette nuit (import du monde officiel, confirmé par ailleurs
+  dans ce fichier) — `latest.log` couvre cette période jusqu'à maintenant. Si le script RCON
+  mentionné dans le résumé a réellement été exécuté, ce n'était PAS contre cette session serveur
+  (aucune trace), ou la commande a échoué silencieusement côté RCON, ou le pregen a été relancé
+  puis son état a été perdu/écrasé par le redémarrage/import qui a suivi.
+
+**Conclusion honnête** : à l'heure de ce contrôle, **le pregen overworld 500 chunks n'est pas en
+cours et ne semble jamais avoir tourné contre le monde actuellement en service.** Rien de cassé,
+aucune corruption détectée — juste une tâche demandée qui reste à faire. Si toujours souhaité, il
+suffit de relancer `/lanterne pregen 500` (en jeu en admin, ou via RCON) sur le VPS — le mécanisme
+lui-même a été vérifié sain et robuste par un fork précédent (reprise automatique au redémarrage,
+pilotage par présence de joueurs, `O(1)` au boot). Aucune action corrective nécessaire sur le code,
+seulement relancer la commande. Aucun fichier modifié, aucune compilation, rien déployé.
 tout le reste du mod confirmé sain par lecture de code exhaustive).
