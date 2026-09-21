@@ -3857,3 +3857,7 @@ Livré/déployé : VPS = 26.3.106 (NON redémarré depuis ; consigne patron : ne
 - Jar 26.3.116 construit dans C:\lanterne-jar (26.3 = fix DH + cache traduction + silence chat), NON lancé en jeu, NON déployé.
 - VPS : 0 joueur, toujours en 106. Déploiement en attente du « go » de l'utilisateur (sauvegarde -> jar -> restart -> vérif Done/FATAL/pregen).
 - ORDRES ACTUELS : pas d'agents, pas de tests client/serveur en arrière-plan pendant qu'il joue ; test client 116 seulement sur son feu vert.
+
+## 21/09 — DÉPLOIEMENT VPS 26.3.116 (ordre du patron : « déploie, je teste avec test 1 sous 106 »)
+- VPS : 0 joueur au moment du déploiement ; 106 sauvegardé dans /srv/minecraft/mods-anciens-backup/ ; 116 dans mods/ ; restart OK, « Done », 0 FATAL, BlueMap rendu relancé. Reprise du pregen NON vérifiée (rcon « lanterne pregen status » invalide : syntaxe à retrouver).
+- Attendu : test 1 (106) se met à jour via la Mèche à la connexion. Résultat du patron en attente. Pas d'agents ni de tests tant qu'il joue.
