@@ -97,6 +97,7 @@
   "client": [
     "JourneyMapTraductionMixin",
     "EntityCullMixin",
+    "BilanLimiterMixin",
     "StaticChestRendererMixin",
     "StaticChestShapeMixin",
     "LeafCullMixin",
