@@ -3827,3 +3827,44 @@ Documents produits : `RENDU-LANTERNE-DESIGN.md` (le vanilla 26.3 fournit déjà 
 Branches (worktrees C:\lanterne-wt-*) : feat-vertex (W1, c36c8d8), feat-decouple (W3, be9287c), feat-ui (écran vidéo Lanterne, d9f7ecc), feat-shadow (W2), feat-dh (D1), feat-regul (iGPU) ; 26.3 : 5e3ea47 repli Vulkan→OpenGL avec DH. Fusion vers 26.3 par le coordinateur APRÈS tests réels.
 Livré/déployé : VPS = 26.3.106 (NON redémarré depuis ; consigne patron : ne pas le toucher). Correctif artefacts DH+shaders = 26.3.108 (repli : DH coupé sous shaders) non déployé. Canaux Mèche optionnels (95bcb66) non déployés au VPS.
 À faire : fusion des branches, mesures sous verrou (bisect 38/59/100/106/108, N0), pack client/serveur reconstruits avec le jar final, test Mèche ancien→nouveau, puis déploiement VPS SEULEMENT sur ordre du patron.
+
+## 21/09 — W2 « ombres » (branche feat-shadow) : état exact, mesures VALIDES seulement
+
+**Commits (feat-shadow)** : `6aa36da` cache de shadow map (DÉSACTIVÉ par défaut, `-Dlanterne.shadowopt=true`) ;
+`c189621` frustums d'ombre découplés de Sodium (interface neutre `SectionCullingFrustum` + pont `SodiumViewportBridge`,
+0 référence `caffeinemc` dans `shadows/frustum/**`, vérifié par `javap -v` sur le jar 182) ; `ceb4371` mesure
+d'allocation/temps CPU de `renderShadows` (`-Dlanterne.shadowstats=true`) ; `e9b3ab2` interrupteur de diagnostic du
+culling d'ombre (`-Dlanterne.shadownocull=true`, désactivé par défaut).
+Jars produits : 26.3.182 (frustums), 183 (+stats), 184 (+nocull). Rien déployé (ni VPS ni « test 1 »).
+
+**Le cache de shadow map n'est dans AUCUN jar livré** : `git grep shadowopt 26.3` est vide ; la branche 26.3 (jar 200 du
+patron) ne le contient pas. Il n'est donc pas la cause du « on/off bizarre » de la lumière signalé par le patron.
+
+**Mesures VALIDES** (banc C:\w2bench, RTX 3080 Laptop, shaders Complementary, DH coupé, Sodium présent, distance 12,
+ombres 20, `inactivityFpsLimit:"minimized"`, heure figée 12500, verrou de mesure, aucun autre client vérifié toutes les 5 s) :
+
+| Jar | Cache d'ombre | FPS moyen | ms/image | Remarque |
+|---|---|---|---|---|
+| 26.3.183 | ACTIF (`shadowopt`) | **118,5** | 6,83 | 71,8 % du temps à 120+ FPS ; 73-81 % des passes d'ombre évitées ; 37 Ko alloués / appel |
+
+**Mesures INVALIDES (à ne pas citer)** : A (33 FPS, 33,0 puis 30,3) — un client de l'agent DH (`C:\dhbench`) utilisait 59 %
+du GPU 3D en même temps (preuve `GPU Engine engtype_3D`) ; toute mesure en priorité BelowNormal du 1er banc (bridage) ;
+**F1 (jar 200) et F3 (jar 184) : les captures sont celles du TERMINAL du coordinateur, pas du jeu** (fenêtre non au premier
+plan) → leur « diff 0,000 » est sans valeur. **La mesure « cache OFF » de comparaison n'a donc jamais été obtenue en
+condition valide** : le gain du cache (118,5 FPS) n'est PAS prouvé faute de référence propre.
+
+**Constat réel (F2, jar 106, RTX, capture valide)** : rendu **explosé** (traînées magenta/violettes, géométrie éclatée),
+diff image-à-image 3,449 en moyenne (12,9 % de pixels changés). Le jar 106 est celui des amis.
+
+**Hypothèse forte NON prouvée par un lancement** : dans le jar 106, `IrisMixinPlugin.shouldApplyMixin` écartait les 4
+mixins `MixinLevelRenderer/MixinWindow/MixinRenderPipeline/MixinDebugScreenEntriesList` quand
+`!Compagnons.present(SODIUM)`, or `Compagnons.present` s'appuie sur `ModList.get()` qui n'existe pas encore à
+l'application des mixins et répond « non » (voir sa Javadoc) même avec Sodium présent. Le commit `bff38e7` (jar 107+) le
+remplace par une détection de classe (`SodiumClientMod`). À prouver : lancer 106 et 108 sur le même banc, captures VALIDES
+lues, et vérifier l'application des 4 mixins (option Mixin `-Dmixin.debug.verbose=true` ou log).
+
+**Prochaines étapes (rien lancé)** : (1) refaire F1/F2/F3 avec la capture corrigée (script `bench.ps1` a maintenant
+ALT + TOPMOST + vérif `GetForegroundWindow`, sinon « CAPTURE INVALIDE ») et LIRE chaque image ; (2) obtenir la référence
+« cache OFF » valide puis conclure sur le cache ; (3) si le rendu explosé de 106 est confirmé et absent de 108/184,
+l'ancien jar 106 doit être remplacé chez les amis (Mèche) ; (4) pistes d'ombres non faites : liste de sections cachée,
+distance adaptative, culling par direction du soleil (voir `ANALYSE-SODIUM-ET-ECARTS.md` §3-4).
