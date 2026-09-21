@@ -75,3 +75,10 @@ Sodium ne quitte le pack (ligne `sodium-neoforge-*` dans RETIRER.txt, retrait du
 3. 1 % low ≥ 60 % de la moyenne ; aucune régression de stabilité (creux > 50 ms).
 4. Test de mise à jour réel : ancien client (avec Sodium) → nouveau serveur : la Mèche retire Sodium, le client relancé démarre et joue.
 Si une seule condition échoue : Sodium reste, le chantier continue.
+
+## Protocole v3 (21/09 13h30, coordinateur) — REMPLACE le protocole révisé précédent
+Preuve de pollution (agent W2) : le client d'un autre agent en priorité BelowNormal utilisait 59 % puis 21 % du moteur 3D de la RTX pendant une mesure sous verrou. La priorité basse ne protège pas le GPU.
+1. **TOUT lancement de client Minecraft (mesure OU test fonctionnel, même caché, même en priorité basse) exige le verrou `C:\bench-lock`.** Une seule instance de jeu à la fois sur la machine. Le verrou se prend pour UN lancement (≤ 5 min), se libère à la fermeture du client, puis on attend ≥ 60 s avant de le reprendre.
+2. Un client qui reste ouvert après usage est un incident : le fermer immédiatement (PID lancé seulement).
+3. Gradle/compilation restent autorisés sans verrou (CPU seulement, priorité BelowNormal, workers ≤ 2) ; aucune mesure de FPS n'est lancée pendant qu'une compilation est en cours.
+4. Dès que le **banc central** (C:\bench, file d'attente) est validé par le coordinateur, plus aucun agent ne lance de client lui-même : il dépose un job et lit le résultat.
