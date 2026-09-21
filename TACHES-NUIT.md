@@ -1,3 +1,29 @@
+**AUDIT — système Souvenir (mémoire client des chunks entre sessions)**, jamais audité en profondeur
+malgré sa mention en passant cette nuit. Lu en entier `core/Souvenir.java`, `client/SouvenirVault.java`,
+`core/network/SouvenirNet.java`, `SouvenirManifest.java`, `SouvenirSendMixin.java`.
+
+**Résultat : rien à corriger, conception déjà rigoureuse et honnête sur ses propres limites.**
+- Module **désactivé par défaut** (`Config.souvenir` = `false`), donc aucun risque en usage actuel.
+- Révisions de chunk jamais comparables entre exécutions serveur (repart à zéro à chaque redémarrage,
+  garantie explicite documentée et vérifiée dans le code : `revisionFor`/`bump` n'assignent une valeur
+  qu'au moment où le chunk est réellement envoyé, jamais avant).
+- Identité de monde : UUID aléatoire tiré une fois, jamais dérivé de la seed — empêche une fuite de
+  seed si un cache client était un jour partagé/publié.
+- Sécurité réseau : `SouvenirManifest` (déclaratif client→serveur) est borné à `CAP=20000` entrées
+  au niveau du codec réseau lui-même (`ByteBufCodecs.list(CAP)`), pas juste en logique métier — un
+  client malveillant ne peut pas forcer une allocation illimitée côté serveur.
+- Modèle de menace explicitement documenté dans la Javadoc de classe : un client modifié pourrait
+  mentir sur ce qu'il connaît pour ne jamais recevoir une mise à jour visuelle, mais ça ne change
+  JAMAIS l'arbitrage du jeu (collisions/coups calculés sur l'état serveur réel, cache ou pas) — risque
+  borné à du cosmétique en retard, jamais un avantage de jeu.
+- `SouvenirVault` (persistance disque client) : cohérent avec le pattern déjà vu cette nuit sur
+  `Bulk.java`/`AnchorCompass.java` — Javadoc qui documente honnêtement ses propres limites connues
+  (fichier append-only sans compaction, plafond sans éviction) plutôt que de les cacher.
+
+Aucun fichier de code modifié, aucun commit de code — juste cette entrée de documentation.
+
+---
+
 **AUDIT SÉCURITÉ — système Meche (protocole réseau/chiffrement de l'auto-update)**, jamais vérifié
 cette nuit malgré sa surface de sécurité potentiellement significative. Lu en entier : `Meche.java`,
 `MecheManifest.java`, `MecheChunk.java`, `MecheClient.java`, `MecheConsent.java`, `MecheRequest.java`,
