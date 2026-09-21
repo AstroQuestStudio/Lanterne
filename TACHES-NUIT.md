@@ -1,6 +1,26 @@
-**CONTRÔLE PREGEN + AUDIT — cinquième lot de 5 mixins Lanterne natifs**, aucun problème trouvé.
+**CONTRÔLE PREGEN + AUDIT — sixième lot de 6 mixins Lanterne natifs (47 sur 112 cumulés)**, aucun
+problème trouvé.
 
-- Pregen VPS (lecture seule) : 18,7 % (186 962/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- Pregen VPS (lecture seule) : 18,8 % (188 456/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- `AquiferMixin` : boîte `MutableDouble` réutilisée par instance (pas partagée entre threads, preuve
+  javap), évite une allocation par bloc proche d'une frontière d'aquifère pendant la génération.
+- `BeeHiveMixin`/`BeeHomingMixin` : corrigent un vrai piège du mod dont ils s'inspirent — protéger
+  UN SEUL des deux chargements de chunk synchrones déclenchés par une abeille cherchant sa ruche
+  aurait rendu l'abeille amnésique (elle oublie sa ruche pour de bon plutôt que d'attendre). Les deux
+  points d'accroche sont couverts, avec repli explicite « je ne sais pas » plutôt que « ça n'existe
+  pas ».
+- `BehaviorMemoryMixin` + `MemoryPulseMixin` + `BrainMixin` (lus comme un trio cohérent, pas isolément) :
+  optimisation IA villageois (38,7 % du temps CPU mesuré sur `Brain.startEachNonRunningBehavior` selon
+  la Javadoc), remplace un parcours O(n) par tick par des collections maintenues incrémentalement.
+  Vérifié le point le plus subtil (interaction `@WrapMethod`/`@Inject` entre les deux mixins pour la
+  invalidation du cache mémoire) : cohérent, documenté avec preuve, sûr par construction (repli total
+  vers vanilla via `Settings.mind()`/`epoch()` en cas de doute ou d'extinction du mod).
+- `EntityCullMixin` : `@Redirect` scopé au seul appelant pertinent (pas toute méthode `shouldRender`
+  du jeu), migration `@WrapOperation`→`@Redirect` justifiée par preuve `javap` réelle (élimination
+  d'un site `invokedynamic` chaud, mesuré via Radiographie sur scène synthétique reproductible).
+
+Build vérifié sain après lecture (`BUILD SUCCESSFUL`). Aucune modification de code — tous les mixins
+vérifiés étaient déjà corrects.
 - `PregenActivityMixin` : injection unique dans `MinecraftServer.tickServer` qui neutralise la pause
   vanilla "pause_a_l_absence" pendant une pré-génération active — **c'est ce mixin précis qui a permis
   au pregen de tourner toute la nuit à 0 joueur** (sans lui, vanilla coupe le tick au bout d'1 minute
