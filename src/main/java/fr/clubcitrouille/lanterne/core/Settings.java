@@ -1279,15 +1279,15 @@ public final class Settings {
     }
 
     public static boolean shroud() {
-        return master && shroud;
+        return master && shroud && !fr.clubcitrouille.lanterne.client.culling.CullingSwitch.SHROUD_OFF;
     }
 
     public static boolean horizon() {
-        return master && horizon;
+        return master && horizon && !fr.clubcitrouille.lanterne.client.culling.CullingSwitch.HORIZON_OFF;
     }
 
     public static boolean staticChests() {
-        return master && staticChests;
+        return master && staticChests && !fr.clubcitrouille.lanterne.client.culling.CullingSwitch.CHESTS_OFF;
     }
 
     public static boolean decay() {
@@ -1374,11 +1374,11 @@ public final class Settings {
     }
 
     public static boolean veilParticles() {
-        return master && veilParticles;
+        return master && veilParticles && !fr.clubcitrouille.lanterne.client.culling.CullingSwitch.PARTICLES_OFF;
     }
 
     public static boolean veilBlockEntities() {
-        return master && veilBlockEntities;
+        return master && veilBlockEntities && !fr.clubcitrouille.lanterne.client.culling.CullingSwitch.BLOCKS_OFF;
     }
 
     public static boolean din() {
