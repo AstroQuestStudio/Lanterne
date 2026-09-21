@@ -48,7 +48,10 @@ public final class MecheNet {
     }
 
     private static void onRegisterPayloads(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(PROTOCOL);
+        // TOUS les canaux de la Mèche sont OPTIONNELS : un client dont le jar est plus ancien (sans
+        // ce canal) doit pouvoir rejoindre le serveur au lieu d'être refusé (« channel missing on the
+        // client side », vu chez le patron avec lanterne:meche_pairs) — et donc pouvoir se mettre à jour.
+        var registrar = event.registrar(PROTOCOL).optional();
         registrar.playToClient(MecheManifest.TYPE, MecheManifest.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         fr.clubcitrouille.lanterne.client.MecheClient.acceptManifest(payload)));
