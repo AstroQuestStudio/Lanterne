@@ -48,5 +48,6 @@ public class MixinFogRenderer {
 	@Inject(method = "setupFog", at = @At("RETURN"))
 	private void render(Camera camera, int i, DeltaTracker deltaTracker, float f, ClientLevel clientLevel, CallbackInfoReturnable<FogData> cir) {
 		CapturedRenderingState.INSTANCE.setFogColor(cir.getReturnValue().color.x, cir.getReturnValue().color.y, cir.getReturnValue().color.z);
+		net.irisshaders.iris.uniforms.IrisFogState.capture(cir.getReturnValue());
 	}
 }

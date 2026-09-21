@@ -6,7 +6,6 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.renderpearl.api.commands.RenderPass;
-import net.caffeinemc.mods.sodium.client.util.GameRendererStorage;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.mixin.GameRendererAccessor;
 import net.irisshaders.iris.pbr.texture.PBRAtlasTexture;

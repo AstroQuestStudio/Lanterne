@@ -1,6 +1,5 @@
 package net.irisshaders.iris.gui.debug;
 
-import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.gui.option.IrisVideoSettings;
 import net.irisshaders.iris.shadows.ShadowRenderer;
@@ -21,11 +20,16 @@ public class IrisDebugEntry implements DebugScreenEntry {
 			debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Shaderpack: " + Iris.getCurrentPackName() + (Iris.isFallback() ? " (fallback)" : ""));
 			Iris.getCurrentPack().ifPresent(pack -> debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] " + pack.getProfileInfo()));
 			debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Color space: " + IrisVideoSettings.colorSpace.name());
-			ShadowRenderer.ACTIVE = true;
-			if (level != null) {
-				debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Shadows: " + SodiumWorldRenderer.instance().getChunksDebugString());
+			boolean sodiumChunks = net.irisshaders.iris.mixin.IrisMixinPlugin.sodiumPresent();
+			if (sodiumChunks) {
+				ShadowRenderer.ACTIVE = true;
 			}
-			ShadowRenderer.ACTIVE = false;
+			if (level != null && sodiumChunks) {
+				debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Shadows: " + java.util.Objects.requireNonNullElse(net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.shadowChunksDebugString(), "n/a"));
+			}
+			if (sodiumChunks) {
+				ShadowRenderer.ACTIVE = false;
+			}
 		} else {
 			debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Shaders are disabled");
 		}

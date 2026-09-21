@@ -6,7 +6,6 @@ import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
 import com.mojang.logging.LogUtils;
-import net.caffeinemc.mods.sodium.client.render.chunk.ShaderChunkRenderer;
 import net.irisshaders.iris.compat.SkipList;
 import net.irisshaders.iris.gl.GLDebug;
 import net.irisshaders.iris.gl.IrisRenderSystem;
@@ -136,7 +135,7 @@ public class ExtendedShader extends GlProgram implements IrisProgram {
             layouts.addAll(BindGroupLayouts.GLOBALS.uniforms());
             layouts.addAll(BindGroupLayouts.FOG.uniforms());
         } else {
-            layouts.addAll(ShaderChunkRenderer.BIND_GROUP.uniforms());
+            net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.addChunkBindGroup(layouts);
         }
 
 		super.setupBindGroupLayouts(layouts);

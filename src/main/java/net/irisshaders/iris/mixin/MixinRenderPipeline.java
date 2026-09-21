@@ -4,7 +4,6 @@ import com.mojang.renderpearl.api.pipeline.BlendFunction;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
-import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.shaderpack.materialmap.WorldRenderingSettings;
 import net.irisshaders.iris.vertices.ImmediateState;
@@ -41,7 +40,7 @@ public class MixinRenderPipeline {
 				cir.setReturnValue(IrisVertexFormats.ENTITY);
 			} else if (Objects.equals(vf, DefaultVertexFormat.ENTITY_GLINT_SPECIAL)) {
 				cir.setReturnValue(IrisVertexFormats.ENTITY_GLINT_SPECIAL);
-			} else if (Objects.equals(vf, ChunkMeshFormats.COMPACT.getVertexFormat())) {
+			} else if (net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.isCompactTerrainFormat(vf)) {
 				cir.setReturnValue(WorldRenderingSettings.INSTANCE.getVertexFormat().getVertexFormat());
 			}
 		}
@@ -61,7 +60,7 @@ public class MixinRenderPipeline {
 				cir.setReturnValue(List.of(new VertexFormat[]{IrisVertexFormats.ENTITY}));
 			} else if (Objects.equals(vf, DefaultVertexFormat.ENTITY_GLINT_SPECIAL)) {
 				cir.setReturnValue(List.of(IrisVertexFormats.ENTITY_GLINT_SPECIAL));
-			} else if (Objects.equals(vf, ChunkMeshFormats.COMPACT.getVertexFormat())) {
+			} else if (net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.isCompactTerrainFormat(vf)) {
                 cir.setReturnValue(List.of(new VertexFormat[]{WorldRenderingSettings.INSTANCE.getVertexFormat().getVertexFormat()}));
             }
 		}

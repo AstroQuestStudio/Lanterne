@@ -7,8 +7,6 @@ import com.mojang.blaze3d.platform.WindowEventHandler;
 import com.mojang.renderpearl.api.device.GpuDebugOptions;
 import com.mojang.renderpearl.api.pipeline.ShaderSource;
 import com.mojang.renderpearl.api.device.GpuBackend;
-import net.caffeinemc.mods.sodium.client.SodiumClientMod;
-import net.caffeinemc.mods.sodium.client.gui.SodiumOptions;
 import net.irisshaders.iris.Iris;
 import org.lwjgl.sdl.SDLMessageBox;
 import org.lwjgl.sdl.SDLVideo;
@@ -21,7 +19,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.io.IOException;
 
 @Mixin(value = GlBackend.class, priority = 1010)
 public class MixinWindow {
@@ -31,7 +28,7 @@ public class MixinWindow {
 			SDLVideo.SDL_GL_SetAttribute(SDLVideo.SDL_GL_CONTEXT_DEBUG_FLAG, 1);
 			SDLVideo.SDL_GL_SetAttribute(SDLVideo.SDL_GL_CONTEXT_NO_ERROR, 0);
 			Iris.logger.info("OpenGL debug context activated.");
-			if (SodiumClientMod.options().performance.useNoErrorGLContext) {
+			if (net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.noErrorContextEnabled()) {
 				SDLMessageBox.SDL_ShowSimpleMessageBox(
 					SDLMessageBox.SDL_MESSAGEBOX_WARNING,
 					"Iris",
@@ -39,12 +36,7 @@ public class MixinWindow {
 						"This has been fixed automatically for the next launch.",
 					0L
 				);
-				SodiumClientMod.options().performance.useNoErrorGLContext = false;
-				try {
-					SodiumOptions.writeToDisk(SodiumClientMod.options());
-				} catch (IOException e) {
-					throw new RuntimeException(e);
-				}
+				net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.fixNoErrorContext();
 			}
 		}
 	}

@@ -15,7 +15,6 @@ import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.GpuSampler;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
-import net.caffeinemc.mods.sodium.client.util.GameRendererStorage;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.MojLambdas;
 import net.irisshaders.iris.NeoLambdas;
@@ -112,7 +111,7 @@ public abstract class MixinLevelRenderer {
 		IrisTimeUniforms.updateTime();
 		CapturedRenderingState.INSTANCE.setGbufferModelView(cameraState.viewRotationMatrix);
 		CapturedRenderingState.INSTANCE.setGbufferProjection(
-			MatrixUtils.undoRevZ(new Matrix4f(((GameRendererStorage) Minecraft.getInstance().gameRenderer).sodium$getProjectionMatrix())));
+			MatrixUtils.undoRevZ(new Matrix4f(net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.levelProjection(Minecraft.getInstance().gameRenderer, cameraState))));
 		float fakeTickDelta = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
 		CapturedRenderingState.INSTANCE.setTickDelta(fakeTickDelta);
 		if (((CloudRendererAccessor) this.cloudRenderer).getTexture() != null) {

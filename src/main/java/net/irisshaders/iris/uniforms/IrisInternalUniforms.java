@@ -1,8 +1,6 @@
 package net.irisshaders.iris.uniforms;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.caffeinemc.mods.sodium.client.util.FogParameters;
-import net.caffeinemc.mods.sodium.client.util.FogStorage;
 import net.irisshaders.iris.compat.dh.DHCompat;
 import net.irisshaders.iris.gl.state.FogMode;
 import net.irisshaders.iris.gl.uniform.DynamicUniformHolder;
@@ -31,14 +29,14 @@ public class IrisInternalUniforms {
 	public static void addFogUniforms(DynamicUniformHolder uniforms, FogMode fogMode) {
 		uniforms
 			.uniform4f("iris_FogColor", () -> {
-				FogParameters fog = ((FogStorage) Minecraft.getInstance().gameRenderer).sodium$getFogParameters();
+				IrisFogState.Parameters fog = IrisFogState.current();
 
-				if (fog == FogParameters.NONE) return ONE;
+				if (fog == IrisFogState.Parameters.NONE) return ONE;
 				return new Vector4f(fog.red(), fog.green(), fog.blue(), fog.alpha());
 			}, t -> {});
 
-		uniforms.uniform1f("iris_FogStart", () -> ((FogStorage) Minecraft.getInstance().gameRenderer).sodium$getFogParameters().environmentalStart(), t -> {})
-			.uniform1f("iris_FogEnd", () -> ((FogStorage) Minecraft.getInstance().gameRenderer).sodium$getFogParameters().environmentalEnd(), t -> {});
+		uniforms.uniform1f("iris_FogStart", () -> IrisFogState.current().environmentalStart(), t -> {})
+			.uniform1f("iris_FogEnd", () -> IrisFogState.current().environmentalEnd(), t -> {});
 
 		uniforms.uniform1f("iris_FogDensity", () -> {
 			// ensure that the minimum value is 0.0
