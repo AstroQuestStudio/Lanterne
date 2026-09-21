@@ -1,5 +1,7 @@
 **Contrôle pregen (05h46 VPS)** : 15,8 % (158 294/1 002 001), 17,3 chunk/s, 0 FATAL sur 10 min, service actif. Progression stable (14,1→14,5→15,8 %).
 
+**Contrôle pregen (05h48 VPS) + audit Bulk.java** (fait directement par le coordinateur, un dispatch de fork précédent n'a jamais réellement exécuté sa mission — aucun commit produit, anomalie du harnais) : pregen à 16,0 % (160 404/1 002 001), 0 FATAL. `Bulk.java` (`core/Bulk.java`) lu en entier : optimisation de transfert par lots pour les entonnoirs (16 objets/transfert au lieu d'1, recharge proportionnelle, préserve le débit vanilla au bit près par défaut). Aucun lien ni redondance avec le pont Rafale (AutoMiner) — objets totalement distincts, l'un gère les entonnoirs vanilla, l'autre la construction en masse via bot. Code très soigné (Javadoc démontre chaque choix avec preuve du comportement vanilla réel), aucun bug trouvé.
+
 ---
 
 # VÉRIFIÉ — catégorie d'affichage JEI des recettes Lanterne : aucun problème possible (fork, lecture pure)
