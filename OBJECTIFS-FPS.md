@@ -67,3 +67,11 @@ Minecraft 26.3 : option `inactivityFpsLimit` (options.txt, défaut `"afk"`) : ap
 - Cible : sur l'iGPU du banc (AMD Radeon Graphics, Ryzen 7) avec ComplementaryReimagined actif : **≥ 60 FPS moyens et 1 % low ≥ 40**, sans à-coups (pas de creux > 50 ms), en 1080p affiché. « Sans lag » = ressenti stable, pas seulement une moyenne.
 - Leviers innovants à prototyper et MESURER (règle n°0 : jeu non bridé, GPU cité, sous verrou) : (1) échelle de résolution dynamique (rendu interne réduit + agrandissement/netteté type FSR), pilotée par le régulateur adaptatif ; (2) profil automatique d'options du shaderpack selon la classe de GPU (qualité d'ombre, distance d'ombre, réflexions, AO, nuages…), écrit dans le fichier d'options du pack ; (3) ombres en cache/alternées (W2) ; (4) régulateur adaptatif (feat-regul) qui tient la cible ; (5) DH réduit sous shaders sur petite config.
 - Tout PC : le profil se choisit au premier lancement d'après le GPU détecté (log [BILAN] : GPU, VRAM, intégré/dédié).
+
+## PORTE DE SORTIE DE SODIUM (patron, 21/09) — condition pour le retirer du pack
+Sodium ne quitte le pack (ligne `sodium-neoforge-*` dans RETIRER.txt, retrait du manifeste) QUE si TOUTES ces conditions sont mesurées (règle n°0, RTX + iGPU, sous verrou, scène de banc au coucher de soleil figé) :
+1. Sans Sodium (notre moteur) ≥ avec Sodium sur : sans shaders, avec shaders (Complementary), petite config iGPU. Cible : nettement plus (objectifs O1/O2/O6).
+2. Le client sans Sodium charge le monde, affiche le terrain et les shaders sans artefacts (captures lues), y compris avec DH.
+3. 1 % low ≥ 60 % de la moyenne ; aucune régression de stabilité (creux > 50 ms).
+4. Test de mise à jour réel : ancien client (avec Sodium) → nouveau serveur : la Mèche retire Sodium, le client relancé démarre et joue.
+Si une seule condition échoue : Sodium reste, le chantier continue.
