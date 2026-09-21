@@ -100,7 +100,7 @@ public final class Cadence {
         }
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "bluemap reload");
         fullRenderCountdown = 20 * 30;
-        Lanterne.LOG.info("[CADENCE] pré-génération terminée : BlueMap rechargé, rendu complet dans 30 s.");
+        fr.clubcitrouille.lanterne.Lanterne.LOG.info("[CADENCE] pré-génération terminée : BlueMap rechargé, rendu complet dans 30 s.");
     }
 
     @SubscribeEvent
