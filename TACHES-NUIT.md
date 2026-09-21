@@ -1,3 +1,27 @@
+**CONTRÔLE PÉRIODIQUE (~06h) + AUDIT COMPLET Portail\* (les 4 fichiers, ligne par ligne)** :
+- Pregen : 17,6% (176 151/1 002 001), 17,5 chunk/s, 0 FATAL sur les 10 dernières minutes.
+- `Portail.java`/`PortailsConfig.java` déjà audités sains par un fork précédent (système inerte,
+  détection seule). Les 2 fichiers restants (`PortailPrototype.java`, `PortailRenderMixin.java`,
+  535 lignes cumulées avec un vrai rendu GPU actif SI `TEST_PORTAL` est activé — désactivé par
+  défaut) lus intégralement cette fois : **rien à corriger**. Points vérifiés :
+  - `mainRenderTarget`/`camera.pos`/`camera.cullFrustum` sauvegardés puis restaurés dans un
+    `try/finally` — aucune fuite d'état possible même en cas d'exception pendant le second rendu.
+  - `PortailRenderMixin` coupe le prototype pour TOUTE la session dès le premier incident
+    (`disableSession()`), plus prudent que le reste du mod (qui retente chaque image) — choix
+    explicitement justifié en Javadoc ("trop neuf, trop profond dans un rendu que ce mixin ne
+    possède qu'à moitié").
+  - Deux limites structurelles assumées et documentées (pas des bugs) : entités absentes de la vue
+    de destination (listes déjà vidées par `submitFeatures` au moment du second appel), ciel non
+    rendu (éviterait de corrompre `SkyRenderer` qui capture sa cible dans un champ final).
+  - Ordre d'accroche (`renderLevel` à la QUEUE, jamais avant le vrai rendu) documenté et vérifié
+    correct : si inversé, c'est le RENDU RÉEL que le joueur voit qui perdrait ses entités à chaque
+    image — ce n'est pas le cas, le vrai rendu passe toujours en premier.
+- "Portals.java" n'existe pas comme fichier séparé (juste une inexactitude de nommage dans la
+  demande) — les 4 fichiers réels sont `Portail.java`, `PortailsConfig.java`, `PortailPrototype.java`,
+  `PortailRenderMixin.java`, tous maintenant couverts.
+
+---
+
 **AUDIT — Portail*/Foule.java (derniers grands systèmes jamais explorés)**, résultat honnête, rien à
 corriger :
 - `Foule.java` (629 lignes) : grille spatiale 2×2×2 accélérant les recherches de voisinage en foule
