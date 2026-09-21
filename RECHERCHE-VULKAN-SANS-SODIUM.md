@@ -808,6 +808,6 @@ moment du crash), test avec des tailles de shader intermédiaires pour isoler le
 inspection du bytecode SPIR-V produit pour la vertex stage (32784 octets, jamais examiné en
 détail).
 
-Commit : `1a2c3b4` — voir `git log` pour le hash réel (`ShadercProbe.java`, pile 64→256 Mo,
-commentaire mis à jour). Rien déployé sur VPS/test1. Process client de test fermé proprement après
-vérification (`taskkill //PID` ciblé, jamais de kill global).
+Commit : `b1fb25b` (`ShadercProbe.java`, pile 64→256 Mo, commentaire mis à jour). Rien déployé sur
+VPS/test1. Process client de test fermé proprement après vérification (`taskkill //PID` ciblé,
+jamais de kill global).
