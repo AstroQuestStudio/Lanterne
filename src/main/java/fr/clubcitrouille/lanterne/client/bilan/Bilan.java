@@ -374,6 +374,21 @@ public final class Bilan {
         // Bridage : la part du temps d'image passée à ATTENDRE dans le limiteur de FPS, le temps
         // d'image « utile » hors attente, la limite effective et la raison selon Minecraft.
         long frames2 = Math.max(1L, interval.count());
+        // Allocations du fil de rendu : par seconde et par image ; alerte au-delà de 2 Mo par image.
+        long allocated = BilanAlloc.take(now);
+        if (allocated >= 0) {
+            double perFrame = allocated / (double) frames2;
+            line.kv("alloc_mb_s", allocated / 1048576.0d / Math.max(0.001d, seconds), 1)
+                    .kv("alloc_mb_frame", perFrame / 1048576.0d, 2);
+            if (perFrame > BilanAlloc.ALERT_BYTES_PER_FRAME) {
+                Lanterne.LOG.warn("[BILAN] ALERTE allocations : {} Mo par image sur le fil de rendu "
+                        + "(seuil 2 Mo) — le ramasse-miettes travaille pour rien ; voir le profileur en mode "
+                        + "allocations.", String.format(java.util.Locale.ROOT, "%.1f", perFrame / 1048576.0d));
+                line.kv("alloc_alert", true);
+            }
+        } else {
+            line.kv("alloc_mb_s", "n/a");
+        }
         double share = BilanThrottle.waitShare(now - intervalStart);
         double waitMs = BilanThrottle.waitMsPerFrame(frames2);
         String causes = BilanThrottle.causes(mc, unfocusedFrames > 0, share);
@@ -494,6 +509,7 @@ public final class Bilan {
         java.util.Arrays.fill(phaseNanos, 0L);
         java.util.Arrays.fill(phaseCount, 0L);
         BilanThrottle.reset();
+        BilanAlloc.start(now);
         unfocusedFrames = 0;
         visibleSum = 0;
         sampleCount = 0;

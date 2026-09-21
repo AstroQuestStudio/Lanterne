@@ -237,7 +237,7 @@ public final class BilanBench {
             double z = pos != null ? pos[2] : player.getZ();
             player.teleportTo(player.level() instanceof ServerLevel sl ? sl : overworld,
                     x, y, z, Set.of(), yaw, pitch, true);
-            player.setInvulnerable(true);
+            player.setPermanentlyInvulnerable(true);
             player.setNoGravity(true);
             player.setDeltaMovement(0, 0, 0);
             appliedX = x;
