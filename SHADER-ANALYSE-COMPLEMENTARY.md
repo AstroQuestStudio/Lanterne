@@ -11,7 +11,7 @@ ce qui n'est pas encore mesuré en jeu est marqué **« à mesurer »**.
   (jar 26.3.260) mais rien ne les appelle : aucun joueur n'en subit l'effet.
 - **Prouvé hors jeu** (`glslang`, 8 packs) : la spécialisation d'état neutre compile aussi bien que l'original (0 régression sur les 6 packs validables),
   réduit le source de 22 à 50 %, et 15 tests automatiques passent (`FolderSelfTest`).
-- **Non mesuré en jeu** : le gain en FPS, l'iso-rendu par différence d'image, le comportement sur Bliss et Photon (non validables hors jeu). Les 4 jobs A/B ont été annulés
+- **Non mesuré en jeu** : le gain en FPS, l'iso-rendu par différence d'image, le comportement sur Bliss et Photon (non validables hors jeu). Les jobs A/B du premier essai ont planté (runner défaillant)
   (le runner du banc plantait, voir §6).
 - **Conditions pour l'activer** : (1) gain mesuré en jeu sous le protocole de `OBJECTIFS-FPS.md` ; (2) iso-rendu prouvé par différence d'image
   (seuil documenté) ; (3) **avis écrit de Complementary Development** (voir §0).
@@ -196,7 +196,7 @@ central, alternés pour neutraliser les dérives : `shopt_A1_orig`, `shopt_B1_ne
 1280×720, distance de rendu 12, heure figée 12500, 60 s, DH coupé). **Résultat : à mesurer.** Le runner du banc central a exécuté ces jobs à 12:46 mais **tous les jobs
 de la file (les miens comme ceux des autres agents) ont planté en ~8 s** : le fichier `jvm.args` généré coupe le classpath sur des lignes se terminant par `;\` et Java
 prend `;\` pour le nom de la classe principale (`Erreur : impossible de trouver ou de charger la classe principale ;\`, voir `stderr.log` dans `C:\bench\run\<job>\`). Ce n'est pas lié
-au pack. **Les 4 jobs ont été retirés de la file (chantier arrêté).** Pour reprendre, une fois le runner corrigé : `powershell -File tools\shaderopt\submit-ab.ps1`. Comparer les moyennes A et B ; un écart inférieur à la dispersion A1/A2 signifie
+au pack. Le runner a depuis été réparé (un autre job a donné 192,9 FPS sur la RTX). **Les 4 jobs A/B ont été redéposés à 13:43** (`shopt_A1_orig`, `B1_neutre`, `A2_orig`, `B2_neutre`) et **attendent que le coordinateur relance le runner** (il est arrêté depuis 13:41) ; résultats attendus dans `C:\bench\results\`. Renvoi : `powershell -File tools\shaderopt\submit-ab.ps1`. Comparer les moyennes A et B ; un écart inférieur à la dispersion A1/A2 signifie
 « pas de gain mesurable ».
 
 ## 7. Plan « rupture technologique » sous Vulkan, ordonné par le critère sans perte
