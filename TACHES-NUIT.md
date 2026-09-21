@@ -741,3 +741,182 @@ passe, à vérifier plus profondément) et que retarder un upload ne casse pas l
 
 Aucun fichier modifié, aucune compilation nécessaire (diagnostic seul, par lecture d'un rapport déjà
 généré + lecture de code). Mémoire `bug-halo-redraw-chunks.md` mise à jour avec cette conclusion.
+
+## BUG HALO/REDRAW CHUNKS (suite) — correctif de plafonnement évalué, PAS appliqué : perte de mesh confirmée par bytecode (fork, 21/09 ~03h15)
+
+Reprise de la « prochaine étape » ci-dessus (mixin de plafonnement sur `BufferArena`/
+`RenderRegionManager.uploadResults`). **Aucun code modifié — le correctif proposé est réellement
+dangereux, prouvé par bytecode, pas juste supposé.**
+
+Signatures exactes confirmées par `javap` sur le vrai jar
+(`net.caffeinemc.sodium-neoforge-0.9.2+mc26.3-mod.jar`, extrait de `test 1/.cache/jij/...`) :
+- `RenderRegionManager.uploadResults(Collection<BuilderTaskOutput>, UniformBufferManager)` (public,
+  point d'entrée par image) délègue par région à une surcharge privée, qui descend jusqu'à
+  `BufferArena.tryUploads(RegionAllocatorHandle, List<PendingUpload>)` → `tryUpload` → upload GPU
+  synchrone (`glNamedBufferSubData`), confirmant la pile déjà documentée ci-dessus.
+- **Le vrai blocage** : `RenderSectionManager.processChunkBuildResults` (l'appelant direct) itère
+  la `Collection<BuilderTaskOutput>` complète et appelle `BuilderTaskOutput.destroy()` sur CHAQUE
+  élément, **inconditionnellement, juste après** avoir appelé `uploadResults(...)` — confirmé en
+  bytecode (`javap -c`, boucle `Iterator.next()` → `destroy()` en fin de méthode, aucune branche
+  conditionnelle sur le succès de l'upload).
+
+**Conséquence** : un mixin qui plafonnerait le nombre de sections traitées par image DANS
+`uploadResults` (en gardant les sections en trop pour l'image suivante, comme prévu par la piste
+documentée plus haut) ne changerait RIEN au fait que l'appelant les `destroy()` quand même juste
+après, qu'elles aient été uploadées ou pas. Résultat réel d'un tel correctif naïf : les sections de
+chunk non uploadées dans l'image où leur build se termine verraient leurs données de mesh libérées
+(`destroy()`) SANS jamais avoir été envoyées au GPU — la géométrie de ce chunk resterait
+définitivement absente (pas "en retard d'une image" comme espéré) jusqu'à un rebuild futur
+improbable, ce qui serait un bug bien pire que le halo/chute FPS actuel (un chunk invisible en
+permanence plutôt qu'une saccade ponctuelle).
+
+**Ce que ça change pour une reprise de jour** : un correctif sûr doit intervenir soit AVANT ce
+`destroy()` (empêcher l'appelant de détruire les sections reportées — nécessite de patcher
+`RenderSectionManager.processChunkBuildResults` elle-même, pas juste `BufferArena`/
+`RenderRegionManager`, portée bien plus large que prévu cette nuit), soit en forçant un marquage
+"à reconstruire" pour toute section reportée avant sa destruction (pour qu'un futur `tick` la
+remette en file de build — à vérifier si un tel mécanisme existe déjà côté Sodium, pas exploré).
+Dans les deux cas, changement plus profond que le mixin ciblé initialement envisagé — nécessite un
+vrai test en jeu avec vol rapide pour valider qu'aucun chunk ne reste durablement invisible, donc
+hors de portée d'un fork sans écran interactif.
+
+**Décision** : ne pas appliquer de correctif ce soir. Rien compilé, rien modifié, aucun process de
+test lancé (analyse bytecode pure). Mémoire `bug-halo-redraw-chunks.md` mise à jour avec cette
+conclusion plus précise.
+
+## AUDIT — recherche de nouveaux gains de perf client (tick handlers, allocations, coût de Radiographie) : rien de solide trouvé (fork, 21/09)
+
+Directive : chercher activement de nouvelles idées d'optimisation client (au-delà de ce qui a déjà
+été traité cette nuit). **Aucune modification de code — audit seul, verdict honnête négatif.**
+
+- **13 fichiers avec `ClientTickEvent`/`RenderTickEvent`/`RenderLevelStageEvent`** recensés (grep sur
+  tout `fr.clubcitrouille.lanterne`). Lus en détail : `Vigie.java` (diagnostic Vulkan/OpenGL, ne
+  tourne qu'une seule fois via `AtomicBoolean RAPPORTE`, jamais répété — pas un coût récurrent),
+  `Hint.java::onClientTick` (appelle `Guide.all()` chaque tick, mais celui-ci fait une simple
+  comparaison de référence `bound == level` après la première construction — déjà documenté comme
+  volontairement cheap dans son propre Javadoc, vérifié vrai en lisant `Guide.all()`),
+  `Usher.java::onClientTick` (garde `if (!asked) return;` en toute première ligne — coût nul le reste
+  du temps). Aucun de ces trois ne fait d'allocation (`new ArrayList`/`new HashMap`) sur son chemin
+  chaud (tick sans action utilisateur en cours).
+- **`Radiographie.pulse()`** (appelée à chaque image, sans condition, documentée dans son propre
+  Javadoc comme devant rester "la méthode la moins chère de ce fichier") : déjà conçue pour être
+  quasi gratuite quand l'échantillonnage est arrêté (`running.get()` false → retour immédiat après
+  la vérification monde/pas-monde) — rien à améliorer sans risquer de casser la précision de l'outil
+  quand il tourne activement (déjà couvert par d'autres passes cette nuit sur ce même fichier).
+- **`Wheel.java`/`SouvenirClient.java`** : les `Map`/`Set` statiques vus au grep (`OFFERS`, `ASKED`,
+  `BUILDING`, `FILLED`, `pending`) sont des caches long terme construits une fois par entrée, pas des
+  allocations en boucle de rendu — pas un problème.
+
+**Conclusion honnête** : après ce passage, le code des tick handlers Lanterne est déjà bien gardé
+(early-return systématique, pas d'allocation par frame trouvée). Rien de solide à corriger cette
+nuit sur cet axe précis — les vrais gains identifiés cette nuit restent ailleurs (bug halo/Sodium
+`BufferArena`, retrait de Sodium, Vulkan), déjà documentés plus haut. Aucun fichier modifié, aucune
+compilation nécessaire, aucun process de test lancé (lecture de code seule).
+
+## RE-AUDIT — implémentation `chunkVertexFormat` (WorldRenderingSettings) : verdict "trop risqué" reconfirmé, précision utile ajoutée (fork, 21/09 ~03h05)
+
+Directive : décider avec jugement propre si l'interface neutre proposée par l'audit précédent
+(`WorldRenderingSettings.chunkVertexFormat`, 5 fichiers, typé par l'interface Sodium `ChunkVertexType`)
+est réellement implémentable cette nuit, pas juste redire ce qui était déjà documenté.
+
+**Vérification par `javap` sur le vrai jar Sodium** (`test 1/mods/sodium-neoforge-0.9.2+mc26.3.jar` →
+jar imbriqué `jarjar/net.caffeinemc.sodium-neoforge-0.9.2+mc26.3-mod.jar`) : l'interface
+`ChunkVertexType` n'a que 2 méthodes (`getVertexFormat()` et `getEncoder()`). Grep exhaustif confirme
+que **seule `getVertexFormat()` est utilisée** partout où `WorldRenderingSettings.INSTANCE.getVertexFormat()`
+est appelé (`getEncoder()` jamais touché) — donc l'interface neutre à une seule méthode déjà proposée
+par l'audit précédent est bien suffisante en théorie, pas besoin de plus.
+
+**Mais le verdict ne change pas** : `VanillaRenderingPipeline.java:34` (`setVertexFormat(ChunkMeshFormats.COMPACT)`,
+chemin de repli PAR DÉFAUT dès qu'aucun shaderpack n'est actif) reste le vrai blocage — sans Sodium,
+aucune valeur `VertexFormat` vanilla "équivalente" évidente à coder en dur sans revalider manuellement
+le format exact attendu par `ShaderAttributeInputs`/`ShaderCreator` (risque de MESH CORROMPU si mal
+choisi, pas juste un crash — pire qu'un simple `NoClassDefFoundError`). Les 2 mixins qui manipulent le
+vrai type Sodium (`MixinChunkMeshFormats`, `MixinRenderSectionManager`) sont sans risque car dans
+`mixins.iris.compat.sodium.json`, un config mixin qui ne s'applique jamais sans Sodium (cibles
+introuvables) — pas un obstacle de plus, juste confirmé.
+
+**Décision : ne pas implémenter cette nuit.** Risque concentré sur `ShaderAttributeInputs`/`ShaderCreator`
+(chemin chaud du rendu shader confirmé stable ce soir avec Sodium+Complementary Reimagined, 80-124 FPS)
+— un correctif mal calibré casserait ce qui marche. Détail complet ajouté dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md` (nouvelle section "RE-CONFIRMATION"). Aucun fichier de code modifié,
+rien compilé, rien déployé.
+
+## VÉRIFICATION — patch Eclaireur (renderDelay JourneyMap) : format JSON confirmé exact par bytecode, aucun bug (fork, 21/09 ~03h20)
+
+Directive : vérifier que `Eclaireur.java` (dépose `{"renderDelay": "1000"}` au 1er lancement, si
+`journeymap/config/6.0/journeymap.core.config` n'existe pas encore) est cohérent — bon nom de clé,
+bon moment, bon format JSON attendu par JourneyMap. La Javadoc de la classe était déjà très
+détaillée (nom de clé, bornes, moment de chargement tardif, tout vérifié en bytecode par un fork
+précédent) mais UN point n'avait jamais été vérifié : le format JSON exact attendu par le
+désérialiseur Gson personnalisé de JourneyMap pour un champ `IntegerField` — c'est fait ici.
+
+**Vérifié par `javap` sur le vrai jar `test 1/mods/journeymap-neoforge-26.3-6.0.9.jar`** :
+- `CoreProperties.renderDelay` est bien un champ Java nommé littéralement `renderDelay` (confirmé
+  dans la liste complète des champs `IntegerField` de la classe) — Gson utilise le nom de champ Java
+  tel quel (aucun `@SerializedName` custom vu), donc la clé JSON `"renderDelay"` écrite par
+  `Eclaireur` correspond exactement.
+- `GsonHelper$IntegerFieldSerializer.deserialize` (bytecode complet lu) : si `verbose=false` ET
+  `saveType=false` ET l'élément JSON n'est PAS un objet (`JsonObject`) — c'est-à-dire une valeur
+  brute comme une chaîne — alors `ConfigField.put("value", element.getAsString())` est appelé
+  directement. Un objet `IntegerField` neuf a déjà tous ses défauts posés par son constructeur
+  (bornes `[100, 60000]`, défaut `500`), donc seule la clé `value` est remplacée.
+- `PropertiesBase.load()` (sans argument, le point d'entrée réel utilisé au chargement normal)
+  appelle `load(false)` → `fromJsonString(..., false)` → `getGson(false)` : confirmé que le mode
+  `verbose=false` est bien celui utilisé en pratique au chargement, pas un cas rare.
+
+**Conclusion : `{"renderDelay": "1000"}` (valeur en chaîne JSON, pas un objet imbriqué) est
+exactement le format que le désérialiseur non-verbose de JourneyMap attend pour une valeur brute —
+confirmé par lecture bytecode complète du chemin de désérialisation réel, pas supposé.** Aucun bug
+trouvé, aucune modification de code nécessaire.
+
+**Ce qui reste NON vérifiable sans écran interactif** : la confirmation visuelle humaine que la
+mini-carte JourneyMap est bien moins fréquemment redessinée en jeu (le patron n'a pas encore
+confirmé ce patch en jeu, seul le mécanisme est prouvé sain à 100 % maintenant, y compris son format
+de sérialisation). Un test empirique complet (lancer un client jetable frais, sans config JourneyMap
+préexistante, et vérifier le fichier généré) n'a pas été fait par manque de copie de lanceur libre à
+ce moment (plusieurs autres forks utilisaient déjà `C:\lanterne-client-*` en parallèle) — jugé
+redondant vu le niveau de certitude déjà atteint par la preuve bytecode complète du format.
+
+Aucun fichier modifié, aucune compilation nécessaire, aucun process de test lancé. Mémoire
+`memory/eclaireur-patch-journeymap.md` laissée telle quelle (rien de nouveau qui change son statut
+"pas confirmé en jeu" — juste une couche de preuve supplémentaire sur le mécanisme).
+
+## TÂCHE — `Dials.java` : cadran de choix du shaderpack ajouté, compilé, test partiel (fork, 21/09 ~03h25)
+
+Reprise du point explicitement laissé de côté dans `buildShaders()` ("Choisir PARMI plusieurs
+shaderpacks installés n'est pas câblé"). Second `Dial.cycle` ajouté dans la famille "Shaders" à
+côté du toggle actif/coupé existant.
+
+**Implémentation** (`client/Dials.java`, commit `26565b8`) : `refreshShaderPackNames()` liste
+`Iris.getShaderpacksDirectory()` via `Files.list` + `Iris::isValidToShowPack` (léger, n'ouvre
+aucun zip — contrairement à `Iris.isValidShaderpack` qui valide vraiment le contenu ; un
+dossier/zip mal formé peut donc apparaître dans la liste, mais l'application dégrade déjà
+proprement via le `catch(Throwable)` existant côté Iris). Liste rafraîchie une seule fois à
+l'ouverture de l'écran (même early-return `families.isEmpty()` que le reste de `init()`), jamais
+par image. `cycleIrisShaderPack(direction)` calcule l'index suivant/précédent dans cette liste
+depuis le nom actuel (`IrisConfig.getShaderPackName()`), puis applique via
+`Iris.getIrisConfig().setShaderPackName(nom)` + `IrisApi.getInstance().getConfig()
+.setShadersEnabledAndApply(true)` — reproduction exacte de la séquence trouvée dans
+`ShaderPackScreen.applyChanges()` (sauvegarde `iris.properties` puis `Iris.reload()`, déjà
+wrappée `catch(IOException)` côté Iris lui-même). Tout est en plus enveloppé `catch(Throwable)`
+côté Lanterne, même discipline que le toggle existant.
+
+**Preuve réelle, partielle** : `./gradlew compileJava` propre. Testé dans une copie isolée du
+lanceur client jetable (`C:\lanterne-client-dials-shaderpack\`, `lanterne-26.3.15.jar` local +
+Sodium + un vrai shaderpack `ComplementaryReimagined_r5.9.zip` copié dans `shaderpacks/`) : le
+client a progressé jusqu'à la création du contexte OpenGL/Sodium et au rechargement des
+ressources (`Reloading ResourceManager: ... mod/lanterne,iris ...`, 148 lignes de log, GPU réel
+RTX 3080 Laptop détecté) — **0 `FATAL` dans les logs, aucun `crash-reports/`** — mais le run n'a
+**pas été suivi jusqu'au menu principal confirmé** (process introuvable dans `tasklist`/
+`Get-CimInstance` au moment de la vérification finale, sans trace de crash non plus — probable
+fin de vie normale du process après un temps d'exécution non observé, pas un signe de plantage
+avéré). **Le cadran lui-même (clic → cycle réel → rechu du pipeline) n'a PAS été testé
+visuellement** — aucun écran interactif disponible depuis un fork.
+
+**Conclusion honnête** : code compilé sain, logique vérifiée par lecture directe de l'API Iris
+réelle (pas devinée), premier segment de démarrage sans erreur avec le code actif — mais preuve
+d'exécution incomplète comparée aux autres tâches de cette nuit qui ont pu confirmer "menu
+principal atteint, 0 FATAL". À confirmer par un vrai test humain en jeu (clic sur le cadran,
+vérifier que le shaderpack change bien visuellement et que le nom affiché suit).
+
+Rien déployé sur le VPS ni `test 1`. Commit `26565b8` sur `26.3`, jamais poussé.
