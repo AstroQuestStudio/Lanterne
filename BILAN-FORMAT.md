@@ -122,3 +122,28 @@ invalid_causes sodium iris dh shaders shaderpack …`, une ligne de journal `BEN
 si vsync/plafond/attente du limiteur faussent la mesure, ou si aucune image n'a été comptée. Commande type
 (cachée, un seul fichier à lire) : JVM avec `-Dlanterne.bench=true -Dlanterne.bench.exit=true`, monde solo
 `--quickPlaySingleplayer <nom>`, puis lire `logs/lanterne-bench-result.txt`.
+
+## État de vérification (mis à jour à l'arrêt du chantier, 21/09)
+| Élément | Compilé | Observé en jeu |
+|---|---|---|
+| Lignes `boot`, `world`, `perf`, `event`, `summary` | oui (jar 26.3.220) | **NON** |
+| Bridage (`limiter_*`, `valid`, `invalid_causes`, `inactivity_fps_limit`) et `BilanLimiterMixin` | oui | **NON** |
+| Allocations (`alloc_mb_s`, `alloc_mb_frame`, alerte > 2 Mo) | oui | **NON** |
+| Mode banc `-Dlanterne.bench` et **« BENCH RESULT »** | oui | **NON — jamais observé** |
+| `tools/bilan.ps1` | jamais exécuté sur un vrai journal | **NON** |
+
+**Pourquoi rien n'a été observé** : chaque lancement de client exige le verrou `C:\bench-lock`, tenu
+en permanence par d'autres bancs ; le client de ce chantier n'a jamais démarré. Les noms d'API du mode
+banc ont été vérifiés par `javap` sur `minecraft-client-patched-26.3.0.7-beta.jar`, et une erreur réelle
+(`Entity.setInvulnerable` n'existe pas, remplacé par `setPermanentlyInvulnerable`) a été corrigée à la
+compilation. Rien d'autre n'est prouvé : le comportement réel (scène figée, `BENCH RESULT` écrit, jeu
+qui se ferme avec `-Dlanterne.bench.exit=true`, exactitude du mixin du limiteur, coût des requêtes GPU)
+reste à confirmer au premier lancement.
+
+**Pour vérifier** (banc prêt) : `C:\bilanbench\launch.bat` (javaw caché, monde `Bench`, propriétés banc
+20 s de chauffe + 30 s de mesure) ; ou `C:\bilanbench\run-bench.ps1` qui prend le verrou, lance, lit
+`logs\lanterne-bench-result.txt`, ferme ce seul client et libère le verrou. Puis
+`tools\bilan.ps1 C:\bilanbench\logs\latest.log`.
+
+**Non commencé** : le profileur intégré (échantillonnage des piles, attribution par mod, JFR
+programmatique, commande `/lanterne profil`).
