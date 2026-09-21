@@ -1,0 +1,43 @@
+CLUB CITROUILLE - modpack client (Minecraft 26.3, NeoForge 26.3.0.7-beta, Java 25)
+==================================================================================
+
+INSTALLATION
+  1. Ouvre l'application CurseForge, "Creer un profil" > "Importer" et choisis ce .zip.
+     (Prism Launcher / ATLauncher acceptent aussi le format CurseForge.)
+  2. Lance le profil. Le serveur "Club Citrouille" est deja dans ta liste multijoueur.
+  3. Jouer : Multijoueur > Club Citrouille.
+
+MISE A JOUR AUTOMATIQUE (la "Meche")
+  Tu n'as plus rien a re-telecharger. A chaque connexion, le serveur annonce a Lanterne
+  ce que tu dois avoir dans ton dossier mods/ :
+    - si Lanterne est plus ancien que celui du serveur, il est telecharge et verifie
+      (empreinte SHA-256) ;
+    - les mods que le serveur publie sont ajoutes ou remplaces ;
+    - les mods que le serveur retire (par exemple ceux qui font doublon) sont supprimes.
+  Un message vert dans le chat te dit ce qui a change : FERME LE JEU ET RELANCE-LE pour
+  appliquer. Les fichiers verrouilles par Windows pendant que le jeu tourne sont
+  supprimes tout seuls quelques secondes apres la fermeture.
+  Rien ne vient jamais d'ailleurs que du serveur auquel tu es connecte.
+
+  Reglage personnel : config/lanterne-maj-client.toml, cle  synchro_auto  (true par
+  defaut ; mets false pour seulement etre prevenu dans le chat sans rien telecharger).
+
+CE QUE CE PACK CONTIENT
+  Lanterne (le mod du serveur : optimisation, Iris integre pour les shaders, boutique...)
+  + JEI, Distant Horizons, Entity Model/Texture Features, Mouse Tweaks, Sodium,
+    Durability Tooltip, JourneyMap, MezzConfig, Rinku, SuperMartijn642 Config Lib.
+  NE PAS ajouter le mod "Iris" a la main : il est integre a Lanterne (un second
+  fichier Iris empecherait le jeu de demarrer ; la Meche le retire si elle en trouve un).
+
+EN CAS DE SOUCI
+  - Le jeu ne demarre pas apres une mise a jour : ouvre le dossier mods/ et verifie qu'il
+    n'y a qu'UN seul fichier lanterne-*.jar (garde le plus recent, supprime les autres).
+  - Message "channel missing" a la connexion : ton Lanterne est trop ancien. Remets le
+    lanterne-*.jar de ce pack dans mods/ puis reconnecte-toi.
+  - Rien ne se met a jour : verifie synchro_auto = true dans config/lanterne-maj-client.toml.
+  - Autre probleme : envoie logs/latest.log (et le dossier crash-reports/ s'il existe).
+
+NOTE POUR LES ADMINISTRATEURS
+  Reimporter ce pack sur un profil existant ecrase servers.dat (ta liste de serveurs).
+  Pour publier/retirer des mods chez tous les joueurs : voir le pack serveur
+  (config/lanterne/mods-clients/LISEZMOI.txt).

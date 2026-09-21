@@ -1,0 +1,4 @@
+# Les jars et zips sont des artefacts de build (voir outils/construire.sh), pas des sources.
+*.jar
+*.zip
+build/

@@ -1,0 +1,86 @@
+{
+  "minecraft": {
+    "version": "26.3",
+    "modLoaders": [
+      {
+        "id": "neoforge-26.3.0.7-beta",
+        "primary": true
+      }
+    ],
+    "javaVersion": 25
+  },
+  "manifestType": "minecraftModpack",
+  "manifestVersion": 1,
+  "name": "Club Citrouille",
+  "version": "26.3.106",
+  "author": "Club Citrouille",
+  "overrides": "overrides",
+  "files": [
+    {
+      "projectID": 238222,
+      "fileID": 8928169,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 508933,
+      "fileID": 8907261,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 844662,
+      "fileID": 8908908,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 60089,
+      "fileID": 8890228,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 394468,
+      "fileID": 8888038,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 511040,
+      "fileID": 8888163,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 32274,
+      "fileID": 8923679,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 1689768,
+      "fileID": 8928639,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 1366156,
+      "fileID": 8917470,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 568563,
+      "fileID": 8908953,
+      "required": true,
+      "isLocked": false
+    },
+    {
+      "projectID": 438332,
+      "fileID": 8888046,
+      "required": true,
+      "isLocked": false
+    }
+  ]
+}

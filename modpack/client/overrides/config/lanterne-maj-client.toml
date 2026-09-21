@@ -1,0 +1,21 @@
+#Lanterne - la mise a jour automatique, reglage personnel.
+#
+#Ce fichier n'engage que cette machine. Il n'est jamais envoye a un serveur, et aucun
+#serveur ne peut le changer.
+[maj]
+	#Autoriser ce client a telecharger et installer les mises a jour de Lanterne
+	#annoncees par le serveur auquel il se connecte ?
+	#
+	#A FAUX : rien n'est telecharge. Si le serveur fait tourner une autre
+	#version, ce client se contente de le DIRE dans la discussion.
+	#
+	#A VRAI (par defaut) : quand l'empreinte annoncee par le serveur differe de celle du jar installe
+	#ici, ce client le telecharge, verifie son empreinte, puis l'ecrit dans mods/ SOUS UN
+	#NOM DIFFERENT du jar en cours - jamais de remplacement a chaud. Il tente ensuite de
+	#supprimer l'ancien jar ; si l'OS refuse (le jar tournant est verrouille sur Windows
+	#tant que le jeu n'est pas ferme), un message dit exactement quoi faire a la main
+	#avant de relancer.
+	#
+	#Le fichier recu ne vient JAMAIS d'ailleurs que du serveur auquel ce client est deja
+	#connecte : aucune adresse distante n'est jamais contactee par ce mecanisme.
+	synchro_auto = true
