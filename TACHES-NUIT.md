@@ -1,3 +1,32 @@
+**CONTRÔLE PREGEN + AUDIT — neuvième lot (5 mixins Vulkan diagnostiques)**, aucun problème trouvé.
+- Pregen VPS : 19,3% (193 443/1 002 001 chunks), 17,6 chunk/s, 0 FATAL sur 10 min.
+- Recensement précis via `find` : **108 mixins natifs au total** (le chiffre "112" cité dans des
+  sections précédentes était approximatif). `grep` du nom exact de chaque fichier contre ce document
+  montre que la quasi-totalité était déjà nommée quelque part (souvent dans des listes d'inventaire,
+  pas toujours auditée en profondeur) — seuls 7 n'apparaissaient nulle part : `IOWorkerMixin`,
+  `RegionFileStorageMixin` (en réalité déjà audités en profondeur sous un intitulé différent,
+  "ChunkStreamOpener", plus tôt cette nuit — juste jamais cités par leur nom exact de fichier) et les
+  **5 mixins Vulkan diagnostiques** (`VulkanFeatureSetsMixin`, `VulkanPhysicalDeviceMixin`,
+  `VulkanQueueFamiliesMixin`, `VulkanPresentDiagMixin`, `VulkanSubmitDiagMixin`) — ceux-ci vraiment
+  jamais lus jusqu'ici, malgré la découverte de l'infra Vulkan native plus tôt cette nuit.
+- **Les 5 mixins Vulkan lus intégralement** : tous read-only/diagnostiques, gardés derrière des
+  variables d'environnement (`LANTERNE_VK_PRESENT_DIAG` etc., désactivés par défaut), aucune
+  modification de comportement de rendu. Qualité d'ingénierie identique au reste du mod — preuve
+  bytecode systématique (`javap -p -c`), investigation honnête qui explicitement REFUSE de brancher
+  une file de transfert Vulkan matérielle réelle mais jamais utilisée (`VulkanQueueFamiliesMixin`)
+  faute de pouvoir garantir la sécurité mémoire sans client réel + validation layers actives — un
+  exemple de discipline "ne pas livrer sans preuve" déjà vu partout cette nuit. `VulkanPresentDiagMixin`
+  /`VulkanSubmitDiagMixin` documentent une enquête de performance Vulkan-vs-OpenGL en cours (banc
+  "RING, dix mille vaches", écart ×3,71 mesuré le 19/09, cause désormais isolée à
+  `awaitSubmitCompletion()` — sémaphore timeline, pas une fence binaire à remplacer).
+- Note pour la suite : le compte exact "combien de mixins vraiment audités en profondeur vs juste
+  listés" n'est PAS fiable par simple grep de nom — les prochaines passes devraient tenir une vraie
+  liste plutôt que déduire du texte.
+
+Build vérifié : `BUILD SUCCESSFUL`. Aucune modification de code (lecture pure). Commit ci-dessous.
+
+---
+
 **CONTRÔLE PREGEN + AUDIT — huitième lot de 8 mixins Lanterne natifs**, aucun problème trouvé.
 - Pregen VPS : 19,2% (191 952/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
 - Mixins lus intégralement : `AureoleMixin` (balise repensée, Javadoc documente un bug historique déjà
