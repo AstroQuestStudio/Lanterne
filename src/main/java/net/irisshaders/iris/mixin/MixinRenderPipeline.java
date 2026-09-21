@@ -46,7 +46,7 @@ public class MixinRenderPipeline {
 				cir.setReturnValue(IrisVertexFormats.ENTITY);
 			} else if (Objects.equals(vf, DefaultVertexFormat.ENTITY_GLINT_SPECIAL)) {
 				cir.setReturnValue(IrisVertexFormats.ENTITY_GLINT_SPECIAL);
-			} else if ((net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull() != null && Objects.equals(vf, net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull()))) {
+			} else if (net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.isCompactTerrainFormat(vf)) {
 				cir.setReturnValue(WorldRenderingSettings.INSTANCE.getVertexFormat().getVertexFormat());
 			}
 		}
@@ -70,7 +70,7 @@ public class MixinRenderPipeline {
 				cir.setReturnValue(List.of(new VertexFormat[]{IrisVertexFormats.ENTITY}));
 			} else if (Objects.equals(vf, DefaultVertexFormat.ENTITY_GLINT_SPECIAL)) {
 				cir.setReturnValue(List.of(IrisVertexFormats.ENTITY_GLINT_SPECIAL));
-			} else if ((net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull() != null && Objects.equals(vf, net.irisshaders.iris.compat.vertexformat.VertexFormatSources.sodiumCompactOrNull()))) {
+			} else if (net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.isCompactTerrainFormat(vf)) {
                 cir.setReturnValue(List.of(new VertexFormat[]{WorldRenderingSettings.INSTANCE.getVertexFormat().getVertexFormat()}));
             }
 		}

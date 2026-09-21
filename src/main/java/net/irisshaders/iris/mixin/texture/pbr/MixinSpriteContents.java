@@ -1,6 +1,5 @@
 package net.irisshaders.iris.mixin.texture.pbr;
 
-import net.caffeinemc.mods.sodium.api.texture.SpriteUtil;
 import net.irisshaders.iris.pbr.texture.PBRSpriteHolder;
 import net.irisshaders.iris.pbr.texture.SpriteContentsExtension;
 import net.minecraft.client.renderer.texture.SpriteContents;
@@ -33,10 +32,10 @@ public class MixinSpriteContents implements SpriteContentsExtension {
 			TextureAtlasSprite normalSprite = pbrHolder.getNormalSprite();
 			TextureAtlasSprite specularSprite = pbrHolder.getSpecularSprite();
 			if (normalSprite != null) {
-				SpriteUtil.INSTANCE.markSpriteActive(normalSprite);
+				net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.markSpriteActive(normalSprite);
 			}
 			if (specularSprite != null) {
-				SpriteUtil.INSTANCE.markSpriteActive(specularSprite);
+				net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.markSpriteActive(specularSprite);
 			}
 		}
 	}

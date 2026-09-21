@@ -105,36 +105,82 @@ public class IrisMixinPlugin implements IMixinConfigPlugin {
 			}
 			sodiumPresent = found;
 			System.out.println("[Lanterne/Iris] Sodium " + (found ? "present : Iris actif"
+					: irisVanillaMode() ? "absent : mode Iris vanilla (experimental, -Dlanterne.irisvanilla=true)"
 					: "absent : Iris inerte (rendu vanilla, pas de shaders)"));
 		}
 		return sodiumPresent;
 	}
 
 	/**
-	 * Sans Sodium, un mixin Iris s'applique-t-il ? Oui seulement dans le chemin terrain vanilla
-	 * ({@code -Dlanterne.irisvanilla=true}) et si sa logique n'a pas besoin d'un type Sodium.
-	 * Par défaut (propriété absente) : non, comme avant — Iris reste inerte sans Sodium.
+	 * Mode « Iris vanilla » (experimental) : {@code -Dlanterne.irisvanilla=true}. Sans Sodium, Iris ne
+	 * reste plus inerte : ses mixins s'appliquent, sauf ceux qui dependent de Sodium.
+	 */
+	public static boolean irisVanillaMode() {
+		return Boolean.getBoolean("lanterne.irisvanilla");
+	}
+
+	/**
+	 * Sans Sodium, un mixin Iris s'applique-t-il ? Oui seulement en mode « Iris vanilla » et si ni sa
+	 * cible ni sa logique n'ont besoin d'un type Sodium (double garde : liste connue + analyse du
+	 * bytecode). Par defaut (propriete absente) : non, comme avant — Iris reste inerte sans Sodium.
 	 */
 	public static boolean allowedWithoutSodium(String mixinClassName) {
-		if (!net.irisshaders.iris.vertices.VanillaTerrainContext.enabled()) {
+		if (!irisVanillaMode()) {
 			return false;
 		}
 		if (mixinClassName.contains(".compat.sodium.")) {
 			return false;
 		}
 		String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
-		return !NEEDS_SODIUM.contains(simple);
+		return !NEEDS_SODIUM.contains(simple) && sodiumFree(mixinClassName);
 	}
 
-	/** Mixins dont le CORPS utilise un type Sodium (pas seulement une cible) : coupés sans Sodium. */
+	/** Mixins dont le CORPS utilise un type Sodium (pas seulement une cible) : coupes sans Sodium. */
 	private static final java.util.Set<String> NEEDS_SODIUM = java.util.Set.of(
 			"MixinWindow", "MixinDebugScreenEntriesList", "MixinSpriteContents", "MixinFluidRendererImpl",
 			"MixinRenderSection");
 
+	private static final java.util.Map<String, Boolean> SODIUM_FREE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/**
+	 * Le mixin est-il exempt de toute reference a Sodium ? On cherche la chaine {@code net/caffeinemc}
+	 * dans le bytecode du mixin (constantes de classe et de descripteurs) : un mixin qui la contient
+	 * ferait echouer le chargement sans Sodium, il est donc ecarte (et le dit une fois dans le log).
+	 * Les mixins cibles de classes Sodium sont ecartes de la meme facon.
+	 */
+	private static boolean sodiumFree(String mixinClassName) {
+		return SODIUM_FREE.computeIfAbsent(mixinClassName, name -> {
+			if (name.contains(".compat.sodium.")) {
+				return false;
+			}
+			String resource = name.replace('.', '/') + ".class";
+			try (java.io.InputStream in = IrisMixinPlugin.class.getClassLoader().getResourceAsStream(resource)) {
+				if (in == null) {
+					return false;
+				}
+				byte[] bytes = in.readAllBytes();
+				byte[] needle = "net/caffeinemc".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+				outer:
+				for (int i = 0; i <= bytes.length - needle.length; i++) {
+					for (int j = 0; j < needle.length; j++) {
+						if (bytes[i + j] != needle[j]) {
+							continue outer;
+						}
+					}
+					System.out.println("[Lanterne/Iris] mixin ecarte (depend de Sodium) : " + name);
+					return false;
+				}
+				return true;
+			} catch (Throwable unreadable) {
+				return false;
+			}
+		});
+	}
+
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (!sodiumPresent() && !allowedWithoutSodium(mixinClassName)) return false;
-        if (mixinClassName.contains("VKOnly")) return usingVulkan;
+		if (!sodiumPresent() && !allowedWithoutSodium(mixinClassName)) return false;
+		if (mixinClassName.contains("VKOnly")) return usingVulkan;
 		return !usingVulkan;
 	}
 

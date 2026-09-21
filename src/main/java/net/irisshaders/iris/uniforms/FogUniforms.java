@@ -1,7 +1,6 @@
 package net.irisshaders.iris.uniforms;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.caffeinemc.mods.sodium.client.util.FogStorage;
 import net.irisshaders.iris.gl.state.FogMode;
 import net.irisshaders.iris.gl.state.StateUpdateNotifiers;
 import net.irisshaders.iris.gl.uniform.DynamicUniformHolder;
@@ -43,9 +42,9 @@ public class FogUniforms {
 		}, notifier -> {
 		});
 
-		uniforms.uniform1f("fogStart", () -> ((FogStorage) Minecraft.getInstance().gameRenderer).sodium$getFogParameters().environmentalStart(), listener -> StateUpdateNotifiers.fogStartNotifier.setListener(listener));
+		uniforms.uniform1f("fogStart", () -> IrisFogState.current().environmentalStart(), listener -> StateUpdateNotifiers.fogStartNotifier.setListener(listener));
 
-		uniforms.uniform1f("fogEnd", () -> ((FogStorage) Minecraft.getInstance().gameRenderer).sodium$getFogParameters().environmentalEnd(), listener -> StateUpdateNotifiers.fogEndNotifier.setListener(listener));
+		uniforms.uniform1f("fogEnd", () -> IrisFogState.current().environmentalEnd(), listener -> StateUpdateNotifiers.fogEndNotifier.setListener(listener));
 
 		uniforms
 			// TODO: Update frequency of continuous?

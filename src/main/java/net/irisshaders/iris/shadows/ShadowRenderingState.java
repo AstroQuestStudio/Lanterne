@@ -7,10 +7,10 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 
 public class ShadowRenderingState {
 	public static boolean areShadowsCurrentlyBeingRendered() {
-		return ShadowRenderer.ACTIVE;
+		return ShadowFlags.active;
 	}
 
 	public static int getRenderDistance() {
-		return ShadowRenderer.renderDistance;
+		return ShadowFlags.renderDistance;
 	}
 }

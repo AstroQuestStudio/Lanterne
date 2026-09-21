@@ -53,7 +53,7 @@ public abstract class MixinCompiledShaderProgram implements ShaderInstanceInterf
 
 	public boolean iris$shouldSkipThis() {
 		if (Iris.getIrisConfig().shouldAllowUnknownShaders()) {
-			if (ShadowRenderer.ACTIVE) return true;
+			if (net.irisshaders.iris.shadows.ShadowFlags.active) return true;
 
 			if (!shouldOverrideShaders()) return false;
 
@@ -99,7 +99,7 @@ public abstract class MixinCompiledShaderProgram implements ShaderInstanceInterf
 				WorldRenderingPipeline pipeline = Iris.getPipelineManager().getPipelineNullable();
 
 				if (pipeline instanceof IrisRenderingPipeline) {
-					if (ShadowRenderer.ACTIVE) {
+					if (net.irisshaders.iris.shadows.ShadowFlags.active) {
 						// ((IrisRenderingPipeline) pipeline).bindDefaultShadow(); don't rn
 					} else {
 						((IrisRenderingPipeline) pipeline).bindDefault();

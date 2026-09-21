@@ -1,7 +1,5 @@
 package net.irisshaders.iris.mixin;
 
-import net.caffeinemc.mods.sodium.client.SodiumClientMod;
-import net.caffeinemc.mods.sodium.client.services.PlatformRuntimeInformation;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryList;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
@@ -28,7 +26,7 @@ public class MixinDebugScreenEntriesList {
 			this.allStatuses.put(Identifier.fromNamespaceAndPath("iris", "iris"), DebugScreenEntryStatus.IN_OVERLAY);
 		}
 
-		if (PlatformRuntimeInformation.getInstance().isDevelopmentEnvironment() && !this.allStatuses.containsKey(Identifier.fromNamespaceAndPath("iris", "debug"))) {
+		if (net.irisshaders.iris.platform.IrisPlatformHelpers.getInstance().isDevelopmentEnvironment() && !this.allStatuses.containsKey(Identifier.fromNamespaceAndPath("iris", "debug"))) {
 			this.allStatuses.put(Identifier.fromNamespaceAndPath("iris", "debug"), DebugScreenEntryStatus.IN_OVERLAY);
 		}
     }

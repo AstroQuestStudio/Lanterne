@@ -4,7 +4,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.pipeline.WorldRenderingPipeline;
-import net.irisshaders.iris.shadows.frustum.fallback.NonCullingFrustum;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
@@ -29,7 +28,7 @@ public class MixinCamera {
 		Frustum frustum;
 
 		if (Iris.getPipelineManager().getPipeline().map(WorldRenderingPipeline::shouldDisableFrustumCulling).orElse(false)) {
-			frustum = new NonCullingFrustum(modelViewMatrix, projectionMatrixForCulling);
+			frustum = net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.newNonCullingFrustum(modelViewMatrix, projectionMatrixForCulling);
 		} else {
 			frustum = original.call(modelViewMatrix, projectionMatrixForCulling);
 		}
