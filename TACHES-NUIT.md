@@ -1,3 +1,32 @@
+# AUDIT — Guide.java vs LanterneCommand.java, un vrai bug de doc trouvé et corrigé (~07h05)
+
+PURE LECTURE (aucune compilation, blocage Gradle en cours — voir section ci-dessous). Comparaison
+exhaustive de `report/Guide.java` (aide en jeu) contre `report/LanterneCommand.java` (commandes
+réelles).
+
+**Bug trouvé et corrigé** : `LanterneCommand.java` enregistre DEUX comportements distincts sous le
+même littéral `test` au même niveau de l'arbre Brigadier (fusion valide, pas un bug d'enregistrement) :
+- `/lanterne test` (sans argument, ligne ~352) : bascule vers/depuis le monde de test plat.
+- `/lanterne test <nombre> <rayon>` (ligne ~495) : pose un troupeau d'épreuve et lance le banc.
+
+`Guide.java:211` ne décrivait QUE la seconde forme ("Un troupeau d'épreuve"), laissant croire que
+`/lanterne test` tout court spawnerait un troupeau — alors qu'il bascule en réalité de/vers le monde
+de test. Le mécanisme d'auto-vérification de `Guide.java` (`lab.Aide`, documenté dans sa Javadoc) ne
+peut pas attraper ce genre d'erreur : il vérifie qu'une commande PROMISE existe vraiment, pas que sa
+description est exacte — ce bug était donc invisible à ce garde-fou.
+
+**Correctif** : description remplacée par « Seule, bascule vers/depuis le monde de test. Avec
+« <nombre> <rayon> », pose un troupeau d'épreuve et lance le banc. » — édition de String pure,
+aucun changement de logique, risque de compilation nul (syntaxe identique aux lignes voisines).
+**Non vérifié par compilation** (blocage Gradle en cours) — à confirmer par un `./gradlew
+compileJava` dès que l'environnement le permet, mais le risque est jugé négligeable vu la nature de
+l'édition.
+
+Reste du fichier comparé sans autre écart trouvé (`nbt`, `recettes`, `demo`, `wp`, `clear`, `maree`,
+`pregen`, `bench`, `charge`, `palette`, `memoire`, `on`/`off` tous cohérents entre les deux fichiers).
+
+---
+
 # SUIVI — problème Gradle approfondi par le coordinateur (~07h00), toujours non résolu
 
 Suite à la section ci-dessous (fork "VÉRIFICATION FINALE AUTOMINER"), le coordinateur a creusé

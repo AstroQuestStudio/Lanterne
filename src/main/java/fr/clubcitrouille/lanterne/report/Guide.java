@@ -208,7 +208,8 @@ public final class Guide {
             line(source, "/lanterne bench", "Le banc : la même charge deux fois, avec et sans.");
             line(source, "/lanterne charge", "Pose une charge d'entités reproductible.");
             line(source, "/lanterne demo", "Une démonstration sur une charge donnée.");
-            line(source, "/lanterne test", "Un troupeau d'épreuve.");
+            line(source, "/lanterne test", "Seule, bascule vers/depuis le monde de test. Avec "
+                    + "« <nombre> <rayon> », pose un troupeau d'épreuve et lance le banc.");
             line(source, "/lanterne palette", "Relève la largeur des palettes de terrain.");
             line(source, "/lanterne memoire", "Inventaire de la mémoire RETENUE : histogramme du "
                     + "tas après ramassage complet, puis le détail par poste de jeu.");
