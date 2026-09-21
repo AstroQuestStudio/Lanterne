@@ -1422,3 +1422,28 @@ borne, en mémoire pendant une session ou en fichiers sur disque à long terme.
 
 **Conclusion** : aucun bug, rien à corriger. Le design de cette nuit (histogramme fixe, `CREUX_MAX`)
 avait déjà anticipé ce risque. Aucun fichier modifié, aucune compilation nécessaire, rien commité.
+
+## IMPLÉMENTATION — abstraction VertexFormatSource, dernier couplage structurel Sodium résolu (fork, 21/09 ~05h30)
+
+Suite de l'étape 9 de `RECHERCHE-VULKAN-SANS-SODIUM.md` (périmètre confirmé clos : un seul champ
+`WorldRenderingSettings.chunkVertexFormat` restait typé Sodium en dur).
+
+**Fait, testé, commité (`b1a7838`)** :
+- `WorldRenderingSettings.java` n'importe plus rien de Sodium — champ retypé en interface neutre
+  `VertexFormatSource` (nouveau package `net.irisshaders.iris.compat.vertexformat`).
+- Adaptateur `SodiumVertexFormatSource` isole le vrai `ChunkVertexType` (même motif que
+  `SodiumVertexSerializers` de cette nuit).
+- 2 appelants de `setVertexFormat` + 2 mixins Sodium adaptés, 7 sites de lecture inchangés (le
+  type de retour final ne change pas).
+- Testé dans un client jetable AVEC Sodium présent (`C:\lanterne-client-dials-shaderpack\`) :
+  `Iris/: Creating pipeline for dimension minecraft:overworld`, 0 FATAL, aucune exception liée au
+  changement — comportement strictement identique confirmé.
+
+**Reste non résolu, volontairement** : `VanillaRenderingPipeline.java` référence toujours
+`ChunkMeshFormats.COMPACT` (Sodium) directement — pas de format vanilla pur équivalent identifié
+avec certitude, donc pas de fallback fabriqué à l'aveugle. C'est le VRAI dernier morceau pour un
+retrait complet de Sodium (calcul du format, pas juste son transport). Détail dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md` étape 10.
+
+Compile clean (`./gradlew compileJava` + `./gradlew build -x test`), rien déployé VPS/test1,
+process de test fermé proprement (PID vérifié via `Get-CimInstance` avant `taskkill`).
