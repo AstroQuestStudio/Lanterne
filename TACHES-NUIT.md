@@ -1,3 +1,31 @@
+**COMPRÉHENSION — infrastructure Vulkan native `Empreinte`/9 mixins, pas liée à l'objectif Iris-Vulkan
+de cette nuit.** Suite à la découverte du fork précédent, lecture complète de `VulkanDeviceMixin.java`,
+`VulkanRenderPipelineMixin.java`, `Empreinte.java` (392 lignes), les 6 autres survolés. Conclusion :
+
+- C'est un cache de `VkPipelineCache` PERSISTANT SUR DISQUE pour le backend Vulkan NATIF du jeu
+  (`com.mojang.renderpearl.backend.vulkan`, le moteur de rendu de "Minecraft 26.3" lui-même) —
+  accélère la recompilation des pipelines graphiques au démarrage (incident documenté `567e592`,
+  gel de plusieurs minutes au premier rendu de `Gbuffer`). Couvre TOUS les pipelines de ce moteur
+  (vanilla + Lanterne), preuve `javap` : `VulkanRenderPipeline.compile` est le seul point de
+  fabrication Vulkan de tout le jar patché.
+- Créé le 19/09/2026 (`78cfb77`/`94b5acd`), donc DEUX nuits avant celle-ci — pas un travail de cette
+  session, juste jamais mentionné dans `TACHES-NUIT.md` avant maintenant.
+- **Aucun rapport avec l'objectif shaders Vulkan Iris de cette nuit** (`ShadercProbe`/
+  `UniformReblocker`) : cette infrastructure agit APRÈS la compilation SPIR-V (cache l'objet pipeline
+  déjà compilé par le pilote) ; le travail de cette nuit agit AVANT (GLSL Iris → SPIR-V). Les
+  shaderpacks Iris rendent aujourd'hui en OpenGL via Sodium, pas via `VulkanRenderPipeline.compile` —
+  donc pas de raccourci possible en réutilisant cette infra maintenant. Deviendrait pertinente
+  seulement APRÈS qu'un pipeline Iris-Vulkan complet existe et passe par ce chemin — un 3e étage,
+  pas une accélération du travail actuel.
+- **État réel** : `ClientConfig.EMPREINTE` ÉTEINT par défaut, jamais testé en client réel (le
+  Javadoc de la classe le dit explicitement : "réservé au coordinateur"). Reste un chantier légitime
+  et séparé pour une prochaine session (activer + tester en jeu), sans rapport avec Iris.
+
+Aucune modification de code, compilation vérifiée saine. Détail complet dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md` (étape 12).
+
+---
+
 **AUDIT ÉCHANTILLON — 112 mixins Lanterne natifs recensés, 6 vérifiés en profondeur, zéro bug** :
 `find` confirme 112 mixins natifs (hors mixins Iris déjà audités). Échantillon de 6 lu ligne par
 ligne : `VulkanDeviceMixin` (Empreinte/cache pipeline Vulkan, constructeur vérifié par javap),

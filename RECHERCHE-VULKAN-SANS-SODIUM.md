@@ -856,3 +856,56 @@ volumineux — la preuve de faisabilité Vulkan est aussi complète et honnête 
 une nuit de recherche pure, jamais branchée au rendu réel.
 
 Commit `25c447b` sur `26.3`, jamais poussé. Rien déployé VPS/test1.
+
+---
+
+## Étape 12 : l'infrastructure Vulkan NATIVE déjà présente (pré-existante, distincte de tout ce qui précède)
+
+Un audit d'un échantillon de mixins Lanterne (pas un travail de cette nuit) a révélé 9 fichiers
+(1189 lignes cumulées) qui implémentent déjà une intégration avec `com.mojang.renderpearl.backend
+.vulkan.*` — le VRAI backend Vulkan natif de "Minecraft 26.3" (le moteur de rendu du jeu lui-même,
+pas Iris). Créés le 19/09/2026 (`78cfb77`, `94b5acd`), donc DEUX NUITS avant celle-ci, par une
+session antérieure — pas une découverte de cette nuit, juste jamais mentionnée dans ce document.
+
+**Ce que fait précisément cette infrastructure — lu ligne par ligne, `VulkanDeviceMixin.java` +
+`VulkanRenderPipelineMixin.java` + `Empreinte.java` (392 lignes) intégralement, les 6 autres
+survolés :**
+
+- **`Empreinte.java`** (client) : persiste sur disque le `VkPipelineCache` — l'objet Vulkan qui
+  mémorise, au niveau du PILOTE GPU, le résultat de la compilation d'un pipeline graphique (post-SPIR-V,
+  travail de bas niveau du pilote lui-même). Nommé par pilote via `pipelineCacheUUID` (une machine
+  iGPU+dGPU obtient deux fichiers distincts). Sans ce cache, chaque lancement force le pilote à
+  recompiler TOUS les pipelines Vulkan depuis zéro — javadoc de classe documente un vrai incident
+  (`567e592`, gel de plusieurs minutes au premier rendu de `Gbuffer`) qui a motivé ce module.
+- **`VulkanDeviceMixin.java`** : point d'accroche pur (`@Inject` sur le constructeur/`close()` de
+  `VulkanDevice`) — charge le cache à la création du device, le sauve à sa fermeture.
+- **`VulkanRenderPipelineMixin.java`** : `@Redirect` sur les 3 appels à `vkCreateGraphicsPipelines`
+  dans `VulkanRenderPipeline.compile` (vérifié par `javap` : SEUL point de fabrication Vulkan de TOUT
+  le moteur), leur passe le handle du cache au lieu de `VK_NULL_HANDLE`.
+- **Les 5 autres** (`VulkanFeatureSetsMixin`, `VulkanPhysicalDeviceMixin`, `VulkanPresentDiagMixin`,
+  `VulkanQueueFamiliesMixin`, `VulkanSubmitDiagMixin`, `DynamicGpuDataMixin`) : activation
+  d'extensions (mesh shaders/ray tracing, "prêtes pour un chantier séparé"), diagnostics temporaires
+  d'un écart de perf mesuré Vulkan/OpenGL ("×57 hors rendu" avec un mod tiers actif, banc RING du
+  19/09/2026), et redimensionnement d'un tampon UBO — aucun n'a de rapport avec la compilation de
+  shaders GLSL ou Iris.
+
+**Réponse à la question centrale — lien avec l'objectif shaders Vulkan (Iris) de cette nuit : AUCUN,
+et ce n'est PAS une lacune, c'est structurel.** Cette infrastructure agit APRÈS la compilation SPIR-V
+(elle met en cache l'objet pipeline déjà compilé par le pilote), alors que tout le travail de cette
+nuit (`ShadercProbe`/`UniformReblocker`/`JcppProcessor`) agit AVANT (transformer du GLSL Iris en
+SPIR-V). Les shaderpacks Iris rendent aujourd'hui exclusivement en OpenGL via Sodium — ils ne
+passent PAS par `VulkanRenderPipeline.compile`, donc `Empreinte`/`VulkanRenderPipelineMixin` ne les
+concernent pas, même une fois le rendu Vulkan des shaders Iris opérationnel un jour : ce serait alors
+un TROISIÈME étage (après SPIR-V, la création du pipeline lui-même), où cette infrastructure
+deviendrait pertinente — mais pas avant.
+
+**État réel, vérifié, pas supposé** : `ClientConfig.EMPREINTE` est ÉTEINT par défaut. Le Javadoc de
+classe le dit explicitement noir sur blanc : "jamais passé par un vrai lancement client — interdit à
+celui qui écrit cette classe, réservé au coordinateur." Donc cette infrastructure, bien que
+compilée et présente dans le jar, n'a jamais été validée en conditions réelles — ce serait un
+chantier légitime et distinct (test client réel avec `ClientConfig.EMPREINTE` activé) pour une
+prochaine session, mais un sujet séparé du chemin Iris-Vulkan travaillé cette nuit, pas une
+accélération de celui-ci.
+
+Aucune modification de code (mission de compréhension pure, infrastructure déjà en prod). Compilation
+vérifiée saine (`BUILD SUCCESSFUL`).
