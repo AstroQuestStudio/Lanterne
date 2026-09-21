@@ -5,8 +5,6 @@ import com.mojang.renderpearl.backend.opengl.GlDebug;
 import com.mojang.renderpearl.backend.opengl.GlDevice;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import net.caffeinemc.mods.sodium.api.vertex.serializer.VertexSerializerRegistry;
 import net.irisshaders.iris.compat.dh.DHCompat;
 import net.irisshaders.iris.config.IrisConfig;
 import net.irisshaders.iris.gl.GLDebug;
@@ -33,11 +31,7 @@ import net.irisshaders.iris.shaderpack.option.values.MutableOptionValues;
 import net.irisshaders.iris.shaderpack.option.values.OptionValues;
 import net.irisshaders.iris.shaderpack.programs.ProgramSet;
 import net.irisshaders.iris.uniforms.CapturedRenderingState;
-import net.irisshaders.iris.vertices.IrisVertexFormats;
-import net.irisshaders.iris.vertices.sodium.EntityToTerrainVertexSerializer;
-import net.irisshaders.iris.vertices.sodium.GlyphExtVertexSerializer;
-import net.irisshaders.iris.vertices.sodium.IrisEntityToTerrainVertexSerializer;
-import net.irisshaders.iris.vertices.sodium.ModelToEntityVertexSerializer;
+import net.irisshaders.iris.vertices.sodium.SodiumVertexSerializers;
 import net.minecraft.ChatFormatting;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.input.KeyEvent;
@@ -141,17 +135,14 @@ public class Iris {
 		PBRTextureManager.INSTANCE.init();
 
 		// Club Citrouille : Sodium est optionnel sur notre build NeoForge (contrairement a Fabric
-		// ou Sodium est toujours present). Sans cette garde, charger les classes *VertexSerializer
-		// ci-dessous (qui implementent l'interface Sodium VertexSerializer) leve un
-		// NoClassDefFoundError des que Sodium est absent, meme si l'appel est dans un bloc jamais
-		// execute a l'exterieur - car "new XxxVertexSerializer()" force la resolution de sa
-		// supertype des l'instanciation. Voir IrisPlatformHelpers.isModLoaded, deja utilise ligne
-		// suivante pour distanthorizons.
+		// ou Sodium est toujours present). Un simple "if (isModLoaded(sodium))" ici NE SUFFIT PAS -
+		// verifie en jeu (lanceur client jetable, Sodium retire de mods/) : la JVM resout la classe
+		// referencee par une instruction NEW au chargement/verification de la methode englobante,
+		// meme quand la branche if n'est jamais executee a l'execution. D'ou l'isolation complete
+		// dans SodiumVertexSerializers (jamais chargee tant que cet appel n'a pas lieu) - voir sa
+		// Javadoc pour le detail. Meme motif que CadenceBlueMap pour BlueMapAPI.
 		if (IrisPlatformHelpers.getInstance().isModLoaded("sodium")) {
-			VertexSerializerRegistry.instance().registerSerializer(DefaultVertexFormat.ENTITY, IrisVertexFormats.TERRAIN, new EntityToTerrainVertexSerializer());
-			VertexSerializerRegistry.instance().registerSerializer(IrisVertexFormats.ENTITY, IrisVertexFormats.TERRAIN, new IrisEntityToTerrainVertexSerializer());
-			VertexSerializerRegistry.instance().registerSerializer(DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR, IrisVertexFormats.GLYPH, new GlyphExtVertexSerializer());
-			VertexSerializerRegistry.instance().registerSerializer(DefaultVertexFormat.ENTITY, IrisVertexFormats.ENTITY, new ModelToEntityVertexSerializer());
+			SodiumVertexSerializers.registerAll();
 		}
 
 		// Only load the shader pack when we can access OpenGL
