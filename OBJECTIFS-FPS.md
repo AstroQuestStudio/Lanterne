@@ -62,3 +62,8 @@ Minecraft 26.3 : option `inactivityFpsLimit` (options.txt, défaut `"afk"`) : ap
 - OBLIGATOIRE dans l'options.txt de tout client de MESURE : `inactivityFpsLimit:"minimized"` (ou envoyer des entrées régulières).
 - Toute mesure faite sans cette option et durant > 60 s sans entrée est INVALIDE et à refaire ; les chiffres antérieurs (168,8 / 53,6 / 145,2 / 151,3 / 45,4…) sont suspects.
 - Le tableau « Suivi » indique la valeur d'`inactivityFpsLimit` de chaque mesure.
+
+## Objectif O6 (patron, 21/09 13h) — iGPU + shaders SANS lag, quel que soit le PC
+- Cible : sur l'iGPU du banc (AMD Radeon Graphics, Ryzen 7) avec ComplementaryReimagined actif : **≥ 60 FPS moyens et 1 % low ≥ 40**, sans à-coups (pas de creux > 50 ms), en 1080p affiché. « Sans lag » = ressenti stable, pas seulement une moyenne.
+- Leviers innovants à prototyper et MESURER (règle n°0 : jeu non bridé, GPU cité, sous verrou) : (1) échelle de résolution dynamique (rendu interne réduit + agrandissement/netteté type FSR), pilotée par le régulateur adaptatif ; (2) profil automatique d'options du shaderpack selon la classe de GPU (qualité d'ombre, distance d'ombre, réflexions, AO, nuages…), écrit dans le fichier d'options du pack ; (3) ombres en cache/alternées (W2) ; (4) régulateur adaptatif (feat-regul) qui tient la cible ; (5) DH réduit sous shaders sur petite config.
+- Tout PC : le profil se choisit au premier lancement d'après le GPU détecté (log [BILAN] : GPU, VRAM, intégré/dédié).
