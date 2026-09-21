@@ -1818,3 +1818,37 @@ parent s'applique à la résolution de TOUS ses enfants, pas juste au nœud lui-
 
 Compilé sain (`BUILD SUCCESSFUL`) après les 2 correctifs. Commits : `08eab7a` (code, `Screens.java`
 + `LanterneCommand.java`), ce paragraphe (doc).
+
+## Audit validation des entrées (paquets réseau et commandes) — suite du cycle sécurité
+
+Suite aux 3 bugs de permission trouvés ce cycle, angle différent cette fois : la VALIDATION DES
+ENTRÉES côté serveur (pas les permissions, déjà bien couvertes). Audit ciblé sur `Bazaar.java`/
+`Till.java` (banque/boutique, le module le plus sensible à l'argent), et échantillon des autres
+handlers `playToServer` du mod (`Easel`, `Screens`/`BeamerEntity`).
+
+**Résultat : rien à corriger, discipline de validation déjà exemplaire partout.**
+
+- **`Till.buy`/`Till.sell`** (transaction boutique) : la quantité (`wanted`) est bornée
+  `1..Tariff.batch()` AVANT tout calcul ; le prix est TOUJOURS recalculé côté serveur depuis le
+  catalogue et le volume réel (jamais transmis par le client) ; la multiplication prix×quantité est
+  protégée contre l'overflow (`Math.multiplyExact`, catch `ArithmeticException`) ; le paiement final
+  suit CE QUI A ÉTÉ RÉELLEMENT retiré de l'inventaire (`taken`/`given`), jamais la quantité demandée
+  — un joueur ne peut donc jamais obtenir plus qu'il ne paie, ni payer plus qu'il ne reçoit, même en
+  cas d'inventaire plein en cours de route. Solde vérifié avant ET protégé contre le débordement du
+  plafond (`Coin.CEILING`) côté vente.
+- **`/banque payer`/`donner`/`retirer`/`fixer`** : tous les montants passent par `Coin.parse`, qui
+  rejette `Coin.BAD` ; `pay()` refuse en plus `amount <= 0L` (pas de virement négatif/nul) ; `move()`
+  refuse `amount < 0L`.
+- **`Easel.onGift`** (upload d'image par morceaux) : taille bornée par `Studio.paintingMaxSourceBytes()`,
+  offset vérifié `>= 0` et `offset + data.length <= buffer.length` avant chaque `System.arraycopy` —
+  protection explicite contre un paquet forgé qui écrirait hors buffer.
+- **`Screens.onSet`/`onAim`** (projecteur/écran) : `reach()` (helper commun) vérifie la portée
+  (`distanceToSqr`) ET que le chunk ciblé est déjà chargé — commentaire explicite dans le code :
+  sans ce test, un paquet forgé forcerait le chargement de n'importe quel chunk du monde, un vecteur
+  de déni de service. `BeamerEntity.aim()` clamp `reach`/`span` avec `Math.clamp` en interne, donc
+  même un appel direct sans validation en amont resterait borné.
+
+Aucun fichier modifié (aucune faille trouvée), commit `<à insérer>` (ce paragraphe, doc uniquement),
+sur `26.3`, jamais poussé. Échantillon non exhaustif (temps de fork limité) : `Groove.java`/
+`Regard.java`/`Reseaux.java`/`MecheNet.java`/`SouvenirNet.java` non audités sous cet angle précis —
+piste ouverte pour une reprise si le sujet sécurité doit être creusé davantage.
