@@ -1,3 +1,20 @@
+# VÉRIFICATION — rotation des logs VPS face au pregen multi-jours : aucun risque
+
+Directive : vérifier si les logs serveur risquent de croître excessivement sur les 1-2 jours du pregen
+en cours (lignes `[PRÉGÉN]` très fréquentes observées cette nuit). Lecture seule sur le VPS.
+
+- `latest.log` : 62 Ko après ~4 min de service, croissance mesurée ~1 ligne/s → extrapolation
+  ~25 Mo/jour, négligeable vu les 88 Go libres.
+- Rotation vanilla déjà active et fonctionnelle : logs quotidiens gzippés visibles dans
+  `/srv/minecraft/logs/` (`2026-09-17-*.log.gz`, plusieurs par jour) — comportement standard, pas de
+  config externe log4j2 trouvée (bundlée dans les jars, défauts vanilla).
+- `journalctl --disk-usage` : 100.4 Mo actuellement, `SystemMaxFiles=100` par défaut (lignes
+  commentées dans `journald.conf` = valeurs par défaut du système, pas "illimité") — borné.
+
+Aucune action nécessaire, aucun code modifié.
+
+---
+
 # VÉRIFICATION — espace disque VPS face à la croissance monde+pregen : marge très confortable
 
 Directive : vérifier `df -h`, extrapoler la croissance du pregen 500 chunks (~1.8-2G de monde actuel
