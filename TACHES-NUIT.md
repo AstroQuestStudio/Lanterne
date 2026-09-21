@@ -60,6 +60,30 @@ ci-dessous est partiellement dépassée sur ce point précis (TÂCHE A/B sont be
 - **Re-rentrer les vraies valeurs boutique/serveur** dans `lanterne-common.toml` — les anciennes
   sont dans `lanterne-anciens-toml-backup/` sur le VPS, le nouveau fichier fusionné a démarré avec
   les valeurs par défaut du code, pas les vraies valeurs de prod.
+  **ATTENTION, changement de nom de section pour boutique et atelier (vérifié en lisant le code
+  `defineInto` de `Tariff.java` et `Studio.java`, pas deviné)** : `Config.java` enveloppe l'appel à
+  `Tariff.defineInto(BUILDER)` dans un `push("boutique")`, et `Tariff.defineInto` fait LUI-MÊME
+  `push("economie")`/`push("boutique")`/`push("generation")`/`push("derive")`/`push("puits")` en
+  interne — donc les sections de l'ancien `lanterne-boutique.toml` qui étaient à la racine
+  (`[economie]`, `[boutique]`, `[generation]`, `[derive]`, `[puits]`) vivent maintenant à
+  `[boutique.economie]`, `[boutique.boutique]`, `[boutique.generation]`, `[boutique.derive]`,
+  `[boutique.puits]` — UN NIVEAU DE PLUS. Même chose pour l'atelier : `Studio.defineInto` fait
+  `push("tableaux")`/`push("disques")` en interne, sous le `push("atelier")` de `Config.java` — donc
+  `[tableaux]`/`[disques]` deviennent `[atelier.tableaux]`/`[atelier.disques]`. **Les NOMS DE CLÉS À
+  L'INTÉRIEUR de chaque section n'ont pas changé** (ex: `solde_depart`, `lot_max`,
+  `marge_min_pourcent` restent identiques) — seul le CHEMIN DE SECTION a un préfixe en plus. Une
+  copie manuelle naïve ligne par ligne sous les mauvais en-têtes `[...]` écrirait les valeurs dans
+  des sections qui n'existent plus, silencieusement ignorées au chargement (NeoForge revient au
+  défaut du code, sans crash — donc l'erreur serait invisible sans relire le fichier généré après
+  coup pour vérifier). **`carte3d` n'a PAS ce problème** : `ReliefConfig.defineInto` ne fait aucun
+  `push()` interne, ses clés restent directement sous `[carte3d]` comme avant (et ce module est de
+  toute façon désactivé par défaut, BlueMap est utilisé à la place — enjeu faible).
+  **Robustesse confirmée en plus** : chaque valeur numérique critique (`Tariff.java` en particulier)
+  est déclarée avec `.defineInRange(...)` et des bornes réalistes — une valeur hors bornes ou du
+  texte au mauvais endroit dans le toml ne plante jamais le démarrage (comportement standard
+  `ModConfigSpec` NeoForge : rejet silencieux, retour au défaut, juste un warning dans le journal).
+  Une section entière oubliée en recopiant se comporte pareil (valeurs par défaut du code). Aucun
+  risque de crash au démarrage lié à une erreur de saisie humaine dans ce fichier.
 - **Confirmation visuelle en jeu** : onglet Iris dans Sodium, disparition de l'artefact du ciel,
   fonctionnement réel du cadran shaderpack dans Dials — tout ça est prouvé "mécaniquement sain"
   (bytecode/logs) mais jamais vu par un œil humain.
