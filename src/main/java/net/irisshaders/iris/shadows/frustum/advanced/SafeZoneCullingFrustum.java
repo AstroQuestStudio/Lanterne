@@ -1,13 +1,12 @@
 package net.irisshaders.iris.shadows.frustum.advanced;
 
-import net.caffeinemc.mods.sodium.client.render.viewport.frustum.Frustum;
 import net.irisshaders.iris.shadows.frustum.BoxCuller;
 import net.minecraft.world.phys.AABB;
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 
-public class SafeZoneCullingFrustum extends AdvancedShadowCullingFrustum implements Frustum {
+public class SafeZoneCullingFrustum extends AdvancedShadowCullingFrustum {
 	private final BoxCuller distanceCuller;
 
 	public SafeZoneCullingFrustum(Matrix4fc modelViewProjection, Matrix4fc shadowProjection, Vector3f shadowLightVectorFromOrigin, BoxCuller voxelCuller, BoxCuller distanceCuller) {

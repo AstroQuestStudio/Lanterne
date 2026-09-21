@@ -10,7 +10,6 @@ import com.mojang.renderpearl.api.textures.GpuSampler;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
-import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.util.SodiumChunkSection;
@@ -132,6 +131,7 @@ public class ShadowRenderer {
 	public ShadowRenderer(IrisRenderingPipeline pipeline, ProgramSource shadow, PackDirectives directives,
 						  ShadowRenderTargets shadowRenderTargets, ShadowCompositeRenderer compositeRenderer, CustomUniforms customUniforms, boolean separateHardwareSamplers) {
 
+		ShadowMapCache.invalidate();
 		this.pipeline = pipeline;
 		this.separateHardwareSamplers = separateHardwareSamplers;
 
@@ -222,7 +222,7 @@ public class ShadowRenderer {
 	private static float getShadowAngle() {
 		float shadowAngle = getSunAngle(CelestialUniforms.isDay());
 
-		return shadowAngle / 360.0f;
+		return ShadowMapCache.quantizeShadowAngle(shadowAngle / 360.0f);
 	}
 
 	public void setUsesImages(boolean usesImages) {
@@ -391,6 +391,19 @@ public class ShadowRenderer {
 			return;
 		}
 
+		// Cache de shadow map (Lanterne) : si la cellule de grille, l'angle du soleil, la distance et la
+		// resolution sont ceux de la derniere carte rendue il y a moins de MAX_AGE_MS, la carte deja presente en
+		// memoire GPU est reutilisee telle quelle (voir ShadowMapCache).
+		long shadowCacheKey = 0L;
+		if (ShadowMapCache.ENABLED) {
+			Vector3d shadowCachePos = CameraUniforms.getUnshiftedCameraPosition();
+			shadowCacheKey = ShadowMapCache.key(shadowCachePos.x(), shadowCachePos.y(), shadowCachePos.z(),
+				this.intervalSize, getShadowAngle(), IrisVideoSettings.shadowDistance, this.resolution);
+			if (ShadowMapCache.canReuse(shadowCacheKey)) {
+				return;
+			}
+		}
+
 		GpuSampler theSampler = RenderSystem.getSamplerCache().getSampler(AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, FilterMode.NEAREST, FilterMode.NEAREST, true);
 		playerCamera.extractRenderState(levelRenderState.cameraRenderState, Minecraft.getInstance().getDeltaTracker());
 		Minecraft client = Minecraft.getInstance();
@@ -493,7 +506,7 @@ public class ShadowRenderer {
             Frustum shadowFrustum = terrainFrustumHolder.getFrustum();
             sodiumWorldRenderer.setupTerrain(
                 playerCamera,
-                ((ViewportProvider) shadowFrustum).sodium$createViewport(),
+                net.irisshaders.iris.compat.sodium.SodiumViewportBridge.create((net.irisshaders.iris.shadows.frustum.SectionCullingFrustum) shadowFrustum),
                 ((FogStorage) client.gameRenderer).sodium$getFogParameters(),
                 playerCamera.entity() != null && playerCamera.entity().isSpectator(),
                 false,
@@ -668,6 +681,8 @@ public class ShadowRenderer {
 		levelRenderState.cameraRenderState.projectionMatrix = cameraProjection;
 
 		RenderSystem.getModelViewStack().popMatrix();
+
+		ShadowMapCache.markRendered(shadowCacheKey);
 
 		profiler.pop();
 		profiler.popPush("updatechunks");
