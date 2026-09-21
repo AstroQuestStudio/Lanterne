@@ -1,3 +1,16 @@
+# VÉRIFIÉ — licence propre de Lanterne (`LICENSE`, GPL-3.0-only) déjà conforme
+
+Par cohérence avec la vérification LGPL-3.0/Iris ci-dessous, vérification du fichier `LICENSE` à la
+racine (licence propre de Lanterne, `mod_license=GPL-3.0-only`). **Résultat : rien à corriger.**
+Le fichier existe déjà (674 lignes, commit `d05e4d2`, antérieur à cette nuit) et est **identique
+octet pour octet** (`diff -q` sans sortie) au texte officiel récupéré via `curl
+https://www.gnu.org/licenses/gpl-3.0.txt`. Le texte FSF de la GPLv3 est universel (pas de variante
+"-only" vs "-or-later" dans le texte lui-même — cette distinction se fait via l'en-tête/déclaration
+du projet, déjà correcte dans `gradle.properties`), donc aucune divergence possible sur ce point.
+Aucune modification nécessaire.
+
+---
+
 # RÉSOLU — texte officiel LGPL-3.0 ajouté (`LICENSE-IRIS`)
 
 Suite à la section ci-dessous, le coordinateur a récupéré le texte officiel exact de la LGPL-3.0
