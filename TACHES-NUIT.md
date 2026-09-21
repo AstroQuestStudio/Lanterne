@@ -2715,3 +2715,34 @@ introuvable) sans blocage permanent.
 
 Aucun fichier modifié, aucune compilation nécessaire. Repo `ClubCitrouilleAutoMiner` (séparé de
 Lanterne) ; seule cette note est ajoutée dans Lanterne.
+
+## Audit sauvegardes automatiques du VPS — LACUNE RÉELLE trouvée (fork, lecture seule SSH)
+
+Directive : vérifier l'existence d'un système de backup régulier du monde sur le VPS, après une
+nuit avec un déploiement critique (coffres réseau) et un pregen en cours qui enrichit le monde.
+
+**Résultat : aucun système de backup automatique/régulier n'existe sur le VPS.**
+
+Preuves (lecture seule, `sudo` passwordless disponible) :
+- `crontab` n'est même pas installé sur la machine (`command not found`) — testé pour `ubuntu`,
+  `minecraft` (via `sudo -u`) et `root`.
+- `/etc/cron.d/` ne contient que `certbot` et `e2scrub_all` (système, rien lié à Minecraft).
+- `systemctl list-timers --all` : aucun timer lié au monde/backup Minecraft parmi les 13 listés
+  (uniquement des timers système standard Ubuntu : apt, fwupd, certbot, fstrim, etc.).
+- Seules sauvegardes existantes, **toutes deux ponctuelles et manuelles** :
+  - `/srv/minecraft-world-backup-20260918-103614.tar.gz` (160 Mo, 18/09, ~3 jours avant cette nuit —
+    monde d'AVANT l'import du monde officiel, donc obsolète pour un rollback utile aujourd'hui).
+  - `/srv/minecraft/backups/world-avant-import-20260920_214246.tar.gz` (712 octets seulement —
+    probablement un tar quasi vide, le monde pré-import était minimal comme documenté ailleurs).
+- Le monde ACTUEL (`/srv/minecraft/world`) pèse **1.8 Go** — contient le monde officiel importé
+  (10+ joueurs réels), tout le travail de pregen de cette nuit (déjà 5-6 % à 04h47, va continuer
+  1-2 jours), et sera modifié par les joueurs qui reviendront. **Aucune copie récente n'existe.**
+
+**Recommandation pour le patron, non appliquée cette nuit** (touche à l'infrastructure VPS — décision
+qui mérite sa validation plutôt qu'une improvisation nocturne sur un serveur de prod) : mettre en
+place un vrai backup régulier (ex: `cron`/`systemd timer` quotidien, `tar` incrémental ou rsync vers
+un stockage externe, rotation sur N jours). Rien de cassé, juste une protection manquante face à une
+future erreur humaine, un bug non détecté, ou une panne disque.
+
+Aucun fichier modifié, aucune commande d'écriture exécutée sur le VPS. Aucun commit de code — seule
+cette note ajoutée dans `TACHES-NUIT.md`.
