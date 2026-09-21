@@ -253,6 +253,26 @@ public final class Dials extends Screen {
                 "Active automatiquement les shaders si eteints. Vide si aucun shaderpack n'est"
                         + " installe."));
         this.families.add(shaders);
+
+        Family regul = new Family("Régulateur", false, "petites configs, GPU intégrés");
+        regul.add(Dial.toggle("Régulateur de FPS",
+                fr.clubcitrouille.lanterne.client.regul.Regulateur::actif,
+                fr.clubcitrouille.lanterne.client.regul.RegulConfig.ACTIF,
+                "Tient une cible d'images par seconde en baissant la qualité par petits paliers"
+                        + " (ombres des entités, nuages, particules, distance des entités, distance"
+                        + " de rendu, ombres des shaders), puis la remonte quand il y a de la marge.",
+                "Ne dépasse jamais vos réglages vidéo : ce sont des plafonds. Coût : quelques"
+                        + " microsecondes par image.",
+                "Recommandé sur PC sans carte graphique dédiée. Les réglages d'origine sont"
+                        + " rétablis à la déconnexion ou à la coupure du régulateur."));
+        regul.add(Dial.number("Cible de FPS",
+                fr.clubcitrouille.lanterne.client.regul.RegulConfig.CIBLE_FPS, 20, 360, 10,
+                " FPS",
+                "Le nombre d'images par seconde que le régulateur essaie de tenir.",
+                "Plus la cible est haute, plus la qualité descend tôt.",
+                "30 pour une très petite config, 60 pour un usage normal, 120-144 pour un écran"
+                        + " rapide."));
+        this.families.add(regul);
     }
 
     private static List<String> shaderPackNames = List.of();
