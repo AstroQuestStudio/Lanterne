@@ -1852,3 +1852,34 @@ Aucun fichier modifié (aucune faille trouvée), commit `<à insérer>` (ce para
 sur `26.3`, jamais poussé. Échantillon non exhaustif (temps de fork limité) : `Groove.java`/
 `Regard.java`/`Reseaux.java`/`MecheNet.java`/`SouvenirNet.java` non audités sous cet angle précis —
 piste ouverte pour une reprise si le sujet sécurité doit être creusé davantage.
+
+## Audit rate-limiting / spam / race condition (pure lecture de code, aucune modification)
+
+Suite aux 3 bugs de permission trouvés ce cycle, angle différent : un joueur peut-il spammer une
+commande/paquet coûteux, ou exploiter une race condition économique (deux transactions
+quasi-simultanées qui liraient le même solde avant que l'une des deux ne l'écrive) ?
+
+**`Till.buy`/`Till.sell` (Bazaar) : aucune race condition possible, par construction, pas par
+chance.** Le fichier documente lui-même l'invariant en tête de classe (commentaire déjà présent
+avant cette nuit) : toute la transaction — lecture du solde, calcul, débit, insertion — s'exécute
+d'un seul tenant sur le **fil du serveur**, sans point de suspension ; les paquets entrants passent
+par `IPayloadContext.enqueueWork` qui les sérialise sur ce même fil. Il n'existe donc structurellement
+aucun instant où deux transactions du même joueur seraient à moitié faites, spam ou non. Vérifié en
+lisant le code réel (`buy`/`sell`, `Till.java:108-249`) : le crédit à la vente suit toujours `taken`
+(ce qui a été réellement retiré), jamais `wanted` ; le débit à l'achat est protégé par
+`Math.multiplyExact` (overflow) et un remboursement immédiat si l'insertion laisse un reste.
+
+**`/lanterne pregen`** : déjà gardé par `LEVEL_GAMEMASTERS` (corrigé plus tôt cette nuit si besoin,
+confirmé présent). Un spam de lancement par un gamemaster ne casse rien : `Pregen.begin()` est
+documenté comme idempotent ("l'interrompre ne perd rien, la reprise est gratuite") — pas un vecteur
+de déni de service côté joueur non-admin, seul un rôle de confiance peut le déclencher.
+
+**`Groove` (tourne-disque), `Easel.onGift`, `Screens.onSet/onAim`** : aucun cooldown explicite trouvé
+sur ces paquets fréquents, mais tous passent par `context.enqueueWork(...)` — donc sérialisés sur le
+fil serveur comme `Till`, pas de race condition possible même en spam. Un spam pur causerait au pire
+un surcroît de calcul CPU (pas un exploit économique/duplication), non chiffré ici faute de temps —
+piste ouverte si un vrai souci de charge est un jour mesuré (Radiographie côté serveur pourrait le
+révéler).
+
+**Conclusion : rien à corriger.** Le point le plus critique économiquement (Bazaar) est structurellement
+protégé, pas juste testé. Aucun fichier de code modifié.
