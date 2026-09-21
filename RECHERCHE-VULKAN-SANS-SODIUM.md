@@ -708,3 +708,54 @@ CALCUL du format (`FormatAnalyzer.createFormat`, `ChunkMeshFormats.COMPACT`), qu
 dans le périmètre de ce refactor précis. Le retrait complet de Sodium nécessiterait de résoudre CE
 point (trouver ou construire un format vanilla pur), qui reste documenté comme la vraie prochaine
 étape, non entamée cette nuit faute de certitude suffisante.
+
+## ÉTAPE 11 — `ChunkMeshFormats.COMPACT` vs `DefaultVertexFormat.BLOCK` : réponse certaine, PAS identiques (fork, 21/09 ~05h50)
+
+Pure recherche (javap sur les vrais jars, aucun code modifié), pour trancher la question laissée
+ouverte à l'étape 10 : existe-t-il un format vanilla pur équivalent à `ChunkMeshFormats.COMPACT`
+pour `VanillaRenderingPipeline.java:34` ?
+
+**Méthode** : javap verbose sur `net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.impl.CompactChunkVertex`
+(extrait du jar imbriqué `META-INF/jarjar/...-mod.jar` dans `sodium-neoforge-0.9.2+mc26.3.jar`, `test 1/mods/`)
+et sur `com.mojang.blaze3d.vertex.DefaultVertexFormat` (extrait de
+`minecraft-client-patched-26.3.0.7-beta.jar`, mappings officiels donc lisibles directement, pas besoin de
+remapper). Les deux exposent le même type de retour final, `com.mojang.renderpearl.api.vertex.VertexFormat`
+(confirmé à l'étape 10) — comparaison directe possible attribut par attribut.
+
+**`ChunkMeshFormats.COMPACT` (Sodium), 4 attributs, construits via `VertexFormat.builder(0)`** :
+
+| Attribut | Format GPU | Sens |
+|---|---|---|
+| `a_Position` | `RG32_UINT` | position QUANTIFIÉE, packée dans 2 entiers 32 bits (confirmé par `packPositionHi`/`packPositionLo`/`quantizePosition` présents dans la même classe — PAS un float3 brut) |
+| `a_Color` | `RGBA8_UNORM` | couleur, identique à vanilla |
+| `a_TexCoord` | `RG16_UINT` | UV QUANTIFIÉ en entiers 16 bits, PAS un float |
+| `a_LightAndData` | `RGBA8_UINT` | lumière + métadonnées packées sur 4 octets entiers |
+
+**`DefaultVertexFormat.BLOCK` (vanilla pur), 4 attributs, construits via `VertexFormat.builder(0)`** :
+
+| Attribut | Format GPU | Sens |
+|---|---|---|
+| `Position` | `RGB32_FLOAT` | position en float3 BRUT, non quantifiée |
+| `Color` | `RGBA8_UNORM` | couleur, identique |
+| `UV0` | `RG32_FLOAT` | UV en float2 BRUT, non quantifié |
+| `UV2` | `RG16_SINT` | lightmap, entiers SIGNÉS (pas `RGBA8_UINT`) |
+
+**Réponse certaine : NON, pas identiques, ni compatibles bit à bit.** Même nombre d'attributs (4) et
+même stride global dans les grandes lignes, mais Sodium encode Position et UV en entiers quantifiés
+(gain mémoire/bande passante, le sens même du nom "COMPACT") là où vanilla utilise des floats bruts, et
+le 4e attribut diffère aussi en format ET en nombre de champs sémantiques (vanilla sépare `Color`/`UV2`,
+Sodium fusionne lumière+données dans un seul `RGBA8_UINT`). Un shader qui lit l'un en s'attendant à
+l'autre lirait des bits de position comme des floats (valeurs aberrantes, mesh visuellement corrompu),
+pas un simple crash — confirme exactement le risque déjà pressenti (mais pas prouvé) à l'étape 9/10.
+
+**Conclusion définitive pour la reprise** : il n'existe PAS de substitution triviale "prendre
+`DefaultVertexFormat.BLOCK` à la place" pour `VanillaRenderingPipeline.java:34`. Un retrait complet de
+Sodium sur ce point précis demande soit (a) d'écrire un ENCODEUR de vertex dédié côté Lanterne qui
+reproduit le format `COMPACT` (quantification incluse) sans dépendre des classes Sodium — recopier la
+logique de `CompactChunkVertex`/`ChunkVertexEncoder` (LGPL/GPL selon la licence de Sodium, à vérifier
+avant de copier du code), soit (b) accepter que `VanillaRenderingPipeline` (le repli sans shaderpack)
+reste un hard-requirement Sodium et scoper le retrait de Sodium à IrisRenderingPipeline uniquement (avec
+shaderpack actif). Aucune des deux n'est un travail de reprise rapide — c'est un vrai sous-chantier,
+pas une case à cocher. Documenté ici pour éviter qu'un futur fork retente une substitution naïve.
+
+Aucun fichier de code modifié (recherche pure). Jars temporaires extraits et nettoyés après lecture.

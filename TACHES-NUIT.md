@@ -1523,3 +1523,36 @@ d'autant que le dépôt entier a déjà servi de plateforme à des dizaines de f
 `build.gradle`, puis un premier test trivial (`RadiographieHistogrammeTest` sur la logique pure de
 bucket FPS, aucune dépendance Minecraft) pour valider que le toolchain accepte les tests avant d'en
 écrire davantage. Aucun fichier modifié, rien compilé, rien commité pour cette tâche précise.
+
+## Audit coût CEF/Chromium hors champ de vision — conception déjà saine, rien trouvé (fork, 21/09 ~07h05)
+
+Directive : vérifier si le moteur CEF/Chromium (`client/screen/Chrome.java`, `content/screen/Embed.java`)
+tourne en arrière-plan quand aucun joueur ne regarde un écran vidéo (instanciation anticipée,
+absence de pool/plafond, absence de déchargement hors champ). Lecture de code seule, aucun test
+client nécessaire pour répondre.
+
+**Constat : le design existant (`Gaze.java`) couvre déjà les trois pistes de la directive, avec
+marge :**
+
+- **Lazy, pas anticipé** : un navigateur Rinku n'est créé (`Chrome.open` → `bridge.create.invoke`)
+  que depuis `Gaze.retune`, elle-même appelée uniquement pour un écran jugé `worth` (visible via
+  `notice()`, appelée depuis `extractRenderState` — donc déjà filtré par le tri de visibilité du
+  jeu, hors champ/hors portée/caché par le terrain exclus gratuitement) ET dans le budget courant.
+  Rien ne s'ouvre au démarrage du client ni à la connexion serveur.
+- **Plafond global** : `Gaze.pump()` trie les écrans par distance et n'en ouvre que `Consent.activeCap()`
+  au total (toutes sources confondues, pas juste CEF) — pas un pool CEF dédié, mais un plafond
+  strictement plus général qui borne le coût total, exactement la garantie que la Javadoc de `Gaze`
+  revendique ("un coût borné est la seule promesse qu'un mod de performance ait le droit de faire").
+- **Déchargement automatique hors champ** : un écran non revu depuis `FORGET=40` ticks (2 secondes
+  réelles) est fermé par `shut()` (`bridge.close.invoke`) dans `Gaze.pump()`, qui libère aussi le
+  son (`Blare.finish`) et la pellicule le cas échéant. Une bobine CEF orpheline ne peut donc pas
+  survivre plus de 2 secondes après avoir quitté le champ de vision.
+
+**Aucune régression cachée avec les fixes vidéo déjà appliqués cette nuit** (Error 153, mute/unmute) :
+ce mécanisme de `Gaze` existait déjà avant cette nuit, ces fixes n'y ont rien changé — pas de risque
+croisé à documenter.
+
+**Verdict : rien à corriger, conception déjà exemplaire sur cet axe précis** — cohérent avec les
+autres audits perf négatifs de cette nuit (tick handlers, paquets réseau, démarrage serveur, fichiers
+de profil Radiographie) : ce dépôt a déjà une discipline de mesure/throttle systématique. Aucun
+fichier modifié, rien compilé, rien commité pour cette tâche précise.
