@@ -1570,3 +1570,17 @@ fichier modifié, rien compilé, rien commité pour cette tâche précise.
 - **Rafale de connexions** (ex: redémarrage serveur, tout le monde se reconnecte) : aucun throttle explicite n'existe entre ces handlers, mais ce n'est pas nécessaire — chaque handler individuel est déjà si léger (un envoi de paquet, une lecture de champ) que même 10-20 joueurs se reconnectant à la même seconde ne représentent qu'une poignée de handlers synchrones triviaux exécutés en séquence sur le thread serveur, pas un pic mesurable.
 
 **Verdict : rien à corriger.** Cohérent avec tous les autres audits perf négatifs de cette nuit (tick handlers, paquets réseau, démarrage serveur, fichiers de profil, CEF/Chrome) — la discipline de conception du dépôt (petits handlers ciblés, pas de travail O(n) caché) tient aussi sur cet axe. Aucun fichier de code modifié.
+
+---
+
+## Tentative — capture d'écran automatisée du client jetable (abandonnée, sur consigne du coordinateur)
+
+**Directive** : trouver un moyen d'obtenir une vraie preuve visuelle (onglet Iris dans Sodium, disparition de l'artefact du ciel, cadran shaderpack) sans intervention humaine, puisque plusieurs points de cette nuit restent bloqués sur "confirmation visuelle en attente".
+
+**Piste identifiée, JAMAIS testée** : Minecraft a un mécanisme de screenshot natif (`net.minecraft.client.Screenshot`, touche F2) déclenchable soit par simulation de frappe clavier externe (PowerShell `SendKeys` visant la fenêtre LWJGL une fois celle-ci focus), soit par un mixin de test temporaire injectant un appel programmatique après un délai de ticks fixe — dans les deux cas, sans toucher au code de production Lanterne. Cette piste n'a pas de preuve qu'elle fonctionnerait, c'est une hypothèse plausible, pas un résultat.
+
+**Ce qui a été réellement tenté** : relance du client jetable déjà validé cette nuit (`C:\lanterne-client-dials-shaderpack\launch7.bat`) via `nohup cmd.exe //C launch7.bat &` en arrière-plan pour ensuite tenter le `SendKeys`. Résultat : **le lancement a échoué avant même de créer un process Java** — `'launch7.bat' n'est pas reconnu en tant que commande interne ou externe` — le même piège de `cd` relatif perdu dans un sous-shell `nohup &` déjà rencontré 2 fois par d'autres forks cette nuit sur ce même lanceur (cause connue, solution connue : chemin absolu direct dans l'appel `cmd.exe //C`, pas de `cd &&` avant).
+
+**Décision : ARRÊT sur consigne explicite du coordinateur** avant de corriger et retenter — le coordinateur a identifié un risque de reproduire le pattern d'enlisement de 2h déjà vécu deux fois cette nuit sur des tests client similaires. Aucun process Java parasite créé (le lancement a échoué avant tout démarrage JVM, `tasklist` confirmé propre). Aucun fichier de code modifié.
+
+**Recommandation pour la reprise** : la piste `SendKeys`/mixin de screenshot reste valable et probablement rapide à faire marcher avec le chemin absolu déjà connu pour `cmd.exe //C` — mais à tenter avec un budget de temps explicite et borné (ex: 10 minutes max), pas en boucle ouverte.
