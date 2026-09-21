@@ -89,7 +89,14 @@ final class UniformReblocker {
 
         String withoutOriginalDecls = rest.toString();
         int insertAt = insertionPoint(withoutOriginalDecls);
-        return withoutOriginalDecls.substring(0, insertAt) + block + withoutOriginalDecls.substring(insertAt);
+        // layout(binding=...) sur un uniform block n'est autorise par le compilateur (meme cible
+        // Vulkan) qu'a partir de GLSL 420, OU via cette extension sur un #version plus ancien (150
+        // ici, le style qu'Iris envoie reellement a OpenGL) — sans elle : "'binding' : not supported
+        // for this version or the enabled extensions", trouve en testant ce pass dans un vrai client
+        // (21/09/2026, voir RECHERCHE-VULKAN-SANS-SODIUM.md etape 6).
+        String extensionPragma = "#extension GL_ARB_shading_language_420pack : enable\n";
+        return withoutOriginalDecls.substring(0, insertAt) + extensionPragma + block
+                + withoutOriginalDecls.substring(insertAt);
     }
 
     private static int insertionPoint(String glsl) {
