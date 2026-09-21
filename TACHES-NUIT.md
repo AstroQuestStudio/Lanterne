@@ -1,3 +1,22 @@
+**CONTRÔLE PREGEN + AUDIT — huitième lot de 8 mixins Lanterne natifs**, aucun problème trouvé.
+- Pregen VPS : 19,2% (191 952/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- Mixins lus intégralement : `AureoleMixin` (balise repensée, Javadoc documente un bug historique déjà
+  trouvé en jeu et corrigé — piège des redirections de champ statique sans paramètre), `BlockEntityMixin`
+  (réveil du sommeil sur `setChanged`, signal exhaustif par construction), `LeurreConnexionMixin`
+  (point d'accroche unique où le signal AutoMiner apprend qui reçoit un chunk, preuve javap à l'appui),
+  `MiningMixin` (correction de la divergence tick-serveur/horloge-réelle pour le cassage de bloc — Javadoc
+  documente une régression passée d'une version antérieure du même correctif), `PathfindMixin` (cache du
+  dernier échec A*, un seul point d'accroche pour toutes les navigations), `ProjectileUtilMixin` (raccourci
+  trouvé par profileur après un premier essai infructueux sur la mauvaise méthode), `RemblaiVoisinsMixin`
+  (coupe la mise à jour de voisinage redstone quand aucun des 6 voisins ne peut réagir, événement NeoForge
+  préservé), `ServerLevelMixin` (court-circuite le tick d'entité avant l'event NeoForge coûteux, documente
+  un bug de rendement de ferme découvert et corrigé — poules pondant 8x moins).
+- 50 mixins Lanterne natifs vérifiés au total sur 112 (+ 9 mixins Vulkan déjà audités séparément).
+- Discipline d'ingénierie exceptionnelle constante : chaque optimisation documente sa preuve (javap,
+  profileur, incident réel) et ses limites explicites. Aucune modification de code nécessaire.
+
+---
+
 **CONTRÔLE PREGEN + AUDIT — septième lot de 6 mixins Lanterne natifs**, aucun problème trouvé.
 - Pregen VPS : 19,0% (190 202/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
 - Mixins lus intégralement : `DamageIndicatorMixin` (plafond de particules de dégâts, point d'accroche
