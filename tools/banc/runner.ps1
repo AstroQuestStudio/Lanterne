@@ -50,6 +50,8 @@ function Build-Run($job, [string]$run) {
   # monde fige : heure demandee (defaut 12500 = coucher de soleil), meteo claire, cycles coupes
   $java = "$script:JDK_RTX\bin\java.exe"
   & $java "$B\tools\Freeze.java" "$run\saves\Bench" $job.time 2>&1 | Out-Null
+  # preuve de restauration : empreinte du monde de depart (level.dat + donnees joueur + horloge figee) et de la copie pristine
+  $script:sceneHash = ((Get-ChildItem "$run\saves\Bench\level.dat", "$run\saves\Bench\players\data\*.dat", "$run\saves\Bench\data\minecraft\world_clocks.dat" -ErrorAction SilentlyContinue | Sort-Object FullName | ForEach-Object { (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.Substring(0, 8) }) -join '-')
   # mods
   Copy-Item "$B\payload\$($job.id)\*.jar" "$run\mods\"
   $so = 'sodium-neoforge-0.9.2+mc26.3.jar'; $dh = 'DistantHorizons-3.3.0-26.3-fabric-neoforge.jar'
@@ -83,17 +85,27 @@ function Build-Args($job, [string]$run) {
   $line = $line -replace '--width\s+\d+\s+--height\s+\d+', ''
   $w, $h = $job.res -split 'x'
   $line = $line.Trim() + " --width $w --height $h"
-  $jvm = @("-Xmx3G")
+  $jvm = @("-Xmx3G", "-Djava.awt.headless=true")
   if ($job.jvm_args) { $jvm += $job.jvm_args }
   if ($job.lanterne_bench) { $jvm += '-Dlanterne.bench=true'; $jvm += "-Dlanterne.bench.time=$($job.time)"; $jvm += "-Dlanterne.bench.exit=true" }
   ($jvm -join ' ') + ' ' + $line
 }
+
+$script:BadFile = "$B\badmods.json"
+function Get-BadMods { if (Test-Path $script:BadFile) { @(Get-Content $script:BadFile -Raw | ConvertFrom-Json) } else { @() } }
+function Add-BadMods([string]$key, [string]$why) { $x = @(Get-BadMods) + [pscustomobject]@{ key = $key; why = $why; date = (Get-Date -Format 's') }; ($x | ConvertTo-Json -Depth 3) | Set-Content $script:BadFile -Encoding UTF8 }
+$script:KnownIncompatible = @('ixeris')   # Ixeris 4.6.7 ne demarre pas en 26.3 (SDL3, GLFWErrorCallback absent)
+function Get-JobKey($job) { (@($job.extra_mods) + @($job.jar) | Sort-Object) -join '|' + '|' + $job.preset + '|' + $job.no_sodium + '|' + $job.dh }
 
 function Run-One($job, [int]$attempt) {
   $run = "$B\run\$($job.id)"
   $res = [ordered]@{ id = $job.id; name = $job.name; attempt = $attempt; mode = $job.mode; gpu_wanted = $job.gpu; jar = $job.jar; jar_sha256 = $job.jar_sha256
     preset = $job.preset; no_sodium = $job.no_sodium; shaders = $job.shaders; dh = $job.dh; res = $job.res; render_distance = $job.render_distance; time_frozen = $job.time
     inactivityFpsLimit = 'minimized'; sous_file = 'oui'; started = (Get-Date -Format 's'); status = 'running'; note = $job.note }
+  foreach ($k in $script:KnownIncompatible) { if (@($job.extra_mods) -match $k) { $res.status = 'REFUSE_MOD_INCOMPATIBLE'; $res.note = "mod incompatible connu : $k ; aucun client lance"; $res.ended = (Get-Date -Format 's'); return $res } }
+  $jk = Get-JobKey $job
+  $bad = Get-BadMods | Where-Object { $_.key -eq $jk } | Select-Object -First 1
+  if ($bad) { $res.status = 'SAUTE_DEJA_CRASHE'; $res.note = "meme combinaison deja cassee au demarrage ($($bad.date)) : $($bad.why) ; aucun client lance"; $res.ended = (Get-Date -Format 's'); return $res }
   Build-Run $job $run
   $javaw = Get-Javaw $job.gpu
   $res.javaw = $javaw
@@ -107,7 +119,20 @@ function Run-One($job, [int]$attempt) {
     $argl = Build-Args $job $run
     Set-Content "$run\launch-args.txt" "$javaw $argl"
     $t0 = Get-Date
-    $p = Start-Process -FilePath $javaw -ArgumentList $argl -WorkingDirectory $run -RedirectStandardOutput "$run\stdout.log" -RedirectStandardError "$run\stderr.log" -PassThru
+    # Lancement par un .bat (cmd, cache) : c'est la methode qui fonctionne pour ce classpath de ~11 000 caracteres
+    # (le format @argfile de Java le coupe sur les ';' : verifie, echec). Le PID du javaw est retrouve par son --gameDir.
+    $bat = "$run\launch.bat"
+    [IO.File]::WriteAllText($bat, "@echo off`r`n`"$javaw`" $argl`r`n", (New-Object Text.UTF8Encoding($false)))
+    $cmdp = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $bat -WorkingDirectory $run -RedirectStandardOutput "$run\stdout.log" -RedirectStandardError "$run\stderr.log" -WindowStyle Hidden -PassThru
+    $runKey = $run.Replace([string][char]92, '/')
+    $p = $null
+    for ($w = 0; $w -lt 40 -and -not $p; $w++) {
+      Start-Sleep 1
+      $jp = Get-CimInstance Win32_Process -Filter "Name='javaw.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*$runKey*" } | Select-Object -First 1
+      if ($jp) { $p = Get-Process -Id $jp.ProcessId -ErrorAction SilentlyContinue }
+      elseif ($cmdp.HasExited -and $w -gt 3) { break }
+    }
+    if (-not $p) { $p = $cmdp }
     $res.pid = $p.Id
     Set-State @{ job = $job.id; pid = $p.Id; phase = 'demarrage'; started = (Get-Date -Format 's') }
     $log = "$run\logs\latest.log"
@@ -117,10 +142,20 @@ function Run-One($job, [int]$attempt) {
       Start-Sleep 2
       if ($p.HasExited) { $died = $true; break }
       if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'logged in with entity id|type=world|BENCH START' -Quiet -ErrorAction SilentlyContinue)) { $entered = $true; break }
+      if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'Failed to start FML|Fatal Startup Error|Loading Minecraft.*failed|Exception in thread "main"' -Quiet -ErrorAction SilentlyContinue)) {
+        $res.echec_demarrage = 'FML a signale un echec de demarrage (boite d''erreur possible) : arret immediat'
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        if ($cmdp -and -not $cmdp.HasExited) { Stop-Process -Id $cmdp.Id -Force -ErrorAction SilentlyContinue }
+        $died = $true; break
+      }
     }
     $res.entered_world = $entered
     if ($entered) {
       Set-State @{ job = $job.id; pid = $p.Id; phase = 'en jeu'; started = $t0.ToString('s') }
+      # capture de controle : la scene de depart (meme lieu, meme heure) doit etre identique d'un job a l'autre
+      Start-Sleep 8; Focus-Window $p; Start-Sleep 1
+      $res.capture_controle = if (Save-Shot $p "$B\results\$($job.id).debut.png") { "$B\results\$($job.id).debut.png" } else { $null }
+      $res.scene_restauree = 'oui'; $res.scene_hash = $script:sceneHash
       $tw = Get-Date
       if ($job.jfr) { $jcmd = "$script:JDK_RTX\bin\jcmd.exe"; & $jcmd $p.Id JFR.start name=bench settings=profile "filename=$run\bench.jfr" 2>&1 | Out-Null }
       $shotDone = $false
@@ -157,7 +192,12 @@ function Run-One($job, [int]$attempt) {
       $res.crash_resume = (Get-Content $crash.FullName -TotalCount 30 | Select-String -Pattern 'Description:|Exception|Error|Caused by' | Select-Object -First 4 | ForEach-Object { $_.Line.Trim() }) }
     if ($log -and (Test-Path $log)) { $res.erreurs_log = @(Select-String -Path $log -Pattern '/(ERROR|FATAL)\]' -ErrorAction SilentlyContinue).Count
       $res.iris_lignes = @(Select-String -Path $log -Pattern '\[Iris\]|Iris/|Shader' -ErrorAction SilentlyContinue | Select-Object -First 8 | ForEach-Object { $_.Line.Trim() }) }
-    if ($died -and -not $entered) { $res.status = 'CRASH_AU_DEMARRAGE' }
+    if ($died -and -not $entered) {
+      $res.status = 'CRASH_AU_DEMARRAGE'
+      $res.log_30_lignes = @(Get-Content $log -ErrorAction SilentlyContinue | Where-Object { $_ -match 'ERROR|FATAL|Exception|Caused by|Failed|Erreur' } | Select-Object -First 30 | ForEach-Object { $_.Trim() })
+      if ($res.log_30_lignes.Count -eq 0) { $res.log_30_lignes = @(Get-Content "$run\stderr.log" -TotalCount 30 -ErrorAction SilentlyContinue) }
+      Add-BadMods (Get-JobKey $job) (($res.log_30_lignes | Select-Object -First 2) -join ' / ')
+    }
     elseif (-not $entered) { $res.status = 'JAMAIS_ENTRE_EN_JEU' }
     elseif ($crash -and $crash.LastWriteTime -gt $t0) { $res.status = 'CRASH_EN_JEU' }
     elseif (-not $res.gpu_ok) { $res.status = 'INVALIDE_GPU' }
@@ -184,6 +224,7 @@ function Finish-Job($job, $res) {
     "mods           : preset=$($job.preset) sans_sodium=$($job.no_sodium) dh=$($job.dh) extra=$($job.extra_mods -join ',')",
     "shaders        : $($job.shaders) ($($job.shaderpack)) ombre=$($job.shadow_distance) rd=$($job.render_distance) res=$($job.res) backend=$($job.backend)",
     "GPU demande    : $($job.gpu)   GPU log : $($res.gpu_log)   ok : $($res.gpu_ok)",
+    "scene          : restauree = $($res.scene_restauree) (copie neuve du monde pristine, empreinte $($res.scene_hash)) ; capture de controle : $($res.capture_controle)",
     "heure figee    : $($job.time) ticks   inactivityFpsLimit : minimized   sous file : oui   silence : $($res.silence) (autres clients : $($res.autres_clients), CPU avant : $($res.cpu_avant) %)",
     "FPS moyen      : $fps   ms/image : $ms   1 % low : $low",
     "fenetres 1 s   : min $($r.fps_min_window) / max $($r.fps_max_window)    duree observee : $($r.observed_s) s",
@@ -194,6 +235,7 @@ function Finish-Job($job, $res) {
     "JFR allocations: $alloc",
     "duree totale   : $($res.wall_s) s   note : $($job.note)"
   )
+  if ($res.log_30_lignes) { $txt += "echec demarrage (30 lignes du log) :"; $txt += ($res.log_30_lignes | ForEach-Object { "    $_" }) }
   if ($res.crash_resume) { $txt += "crash (resume)  : " + ($res.crash_resume -join ' || ') }
   $txt | Set-Content "$B\results\$id.txt" -Encoding UTF8
   # ligne du tableau Suivi de OBJECTIFS-FPS.md (le coordinateur commite)
@@ -226,7 +268,7 @@ try {
     $res = $null
     try {
       $res = Run-One $job 1
-      if ($res.status -eq 'INVALIDE_GPU') { Log "GPU invalide ($($res.gpu_log)) : nouvelle tentative"; Start-Sleep 5; $res = Run-One $job 2 }
+      if ($res.status -eq 'INVALIDE_GPU' -and $res.status -notin 'REFUSE_MOD_INCOMPATIBLE','SAUTE_DEJA_CRASHE','CRASH_AU_DEMARRAGE') { Log "GPU invalide ($($res.gpu_log)) : nouvelle tentative"; Start-Sleep 5; $res = Run-One $job 2 }
     } catch { $res = [ordered]@{ id = $job.id; status = 'ERREUR_RUNNER'; erreur = $_.Exception.Message; attempt = 1 }; Log "ERREUR $($_.Exception.Message)" }
     Finish-Job $job $res
     Release-LegacyLock

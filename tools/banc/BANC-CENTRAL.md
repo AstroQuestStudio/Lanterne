@@ -62,3 +62,29 @@ mesure `OK` (le coordinateur commite).
 - `-Backend vulkan` n'est qu'une option d'`options.txt` : sans DH-compat (Réveil repasse en OpenGL si DH est présent).
 - Mode `functional` : pas d'entrée clavier (aucune commande dans le jeu) ; on lit le log, le crash-report et une capture.
 - Le tableau « Suivi » reçoit les lignes `bench` `OK` ; les mesures faites à la main sans le banc doivent le dire.
+
+## Démarrer / arrêter le runner (commandes exactes)
+```
+# Démarrer (caché, un seul runner : mutex Global\LanterneBenchRunner) :
+powershell -NoProfile -Command "Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\bench\runner.ps1' -WindowStyle Hidden"
+# État :
+powershell -NoProfile -File C:\bench\status.ps1
+# Arrêt propre (après le job en cours) :
+New-Item C:\bench\STOP -ItemType File
+# Arrêt immédiat : tuer le powershell dont la ligne de commande contient bench\runner.ps1, puis le javaw dont la ligne contient C:/bench/run
+# Verrou : rm -rf /c/bench-lock (le runner le libère seul à la fin de chaque job)
+```
+La file archivée le 21/09 à 13h41 est dans `C:\bench\queue-archive\` ; pour la rejouer : remettre les `.json` dans `C:\bench\queue\`.
+
+## État au 21/09/2026 13h41 (arrêt demandé par le patron)
+**Ce qui marche (validé par jobs réels)**
+- Un job réel va de la file au résultat écrit : `test_bench_l106_sodium` → `OK`, RTX 3080 vérifiée dans le log, monde à heure figée (12500), gameDir neuf, capture, JFR (top des allocations du Render thread), résumé `.txt`/`.json`, ligne du tableau « Suivi ».
+- Le lancement passe par un `.bat` lancé en cache (`cmd`) : la ligne de commande Java de ~11 000 caractères ne passe NI par `@argfile` (coupé sur les `;`), NI par `CLASSPATH`.
+- Verrou : le runner pose `C:\bench\WANT` puis reprend le verrou manuel périmé (6 min sans client, ou 15 min).
+- Ajouts non encore rejoués en conditions réelles : détection d'échec au démarrage (`Failed to start FML`) avec arrêt immédiat du PID, `-Djava.awt.headless=true`, liste noire (`C:\bench\badmods.json`), refus des mods incompatibles connus (Ixeris 4.6.7), 30 lignes de log dans le résultat, empreinte de scène + capture de contrôle en début de job.
+
+**Ce qui reste à faire**
+1. **Position panoramique** : la scène de départ regarde un tronc de près (le monde Bench a gardé la position du joueur d'un ancien test). Imposer position/orientation, avec `-Dlanterne.bench=true` de la branche feat-bilan (`-LanterneBench`) ou en modifiant `players/data/*.dat` dans `Freeze.java`.
+2. **Restauration du monde** : chaque job repart déjà d'une copie neuve de `C:\bench\template\saves`, mais ce modèle vient d'un ancien test ; à régénérer une fois la position panoramique choisie, puis comparer les captures de début de job.
+3. **Boîte d'erreur native** (13h31, Ixeris) : correctif écrit (points 1-4 ci-dessus) mais NON vérifié en isolé ; test prévu avec un jar Ixeris renommé.
+4. Vérifier `-Djava.awt.headless=true` sur un job réel (la fenêtre du jeu doit rester normale).
