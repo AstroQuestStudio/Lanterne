@@ -12,6 +12,8 @@ import org.lwjgl.util.shaderc.Shaderc;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMaps;
 
+import net.irisshaders.iris.gl.blending.AlphaTest;
+import net.irisshaders.iris.gl.state.ShaderAttributeInputs;
 import net.irisshaders.iris.helpers.Tri;
 import net.irisshaders.iris.gl.texture.TextureType;
 import net.irisshaders.iris.pipeline.transform.PatchShaderType;
@@ -176,6 +178,40 @@ public final class ShadercProbe {
             return compileSpirv(fragmentPatched, Shaderc.shaderc_glsl_fragment_shader, "probe-composite-patched.glsl");
         } catch (Throwable problem) {
             Lanterne.LOG.warn("[SHADERC] Echec de patchComposite (contexte client, device GPU requis) : {}",
+                    problem.toString());
+            return false;
+        }
+    }
+
+    /**
+     * Quatrieme preuve isolee (21/09/2026, suite de {@link #testCompositeInClient}) : jusqu'ici
+     * seul {@code patchComposite} avait ete exerce. {@code patchVanilla} est le point d'entree le
+     * PLUS utilise reellement par Iris (shaders "gbuffers", vertex+fragment, sur la quasi-totalite
+     * du rendu de terrain/entites) — une preuve differente, pas une redite de la precedente. Memes
+     * limites que {@link #testCompositeInClient} (pas de {@code #include}, DOIT tourner dans un
+     * vrai contexte client).
+     */
+    public static boolean testVanillaInClient(String vertexSource, String fragmentSource) {
+        try {
+            Object2ObjectMap<Tri<String, TextureType, TextureStage>, String> textureMap = Object2ObjectMaps.emptyMap();
+            ShaderAttributeInputs inputs = new ShaderAttributeInputs(true, true, false, true, false);
+            Map<PatchShaderType, String> patched = TransformPatcher.patchVanilla(
+                    "probe-vanilla", vertexSource, null, null, null, fragmentSource,
+                    AlphaTest.ALWAYS, false, false, false, inputs, textureMap, Set.of());
+            String vertexPatched = patched.get(PatchShaderType.VERTEX);
+            String fragmentPatched = patched.get(PatchShaderType.FRAGMENT);
+            if (vertexPatched == null || fragmentPatched == null) {
+                Lanterne.LOG.warn("[SHADERC] TransformPatcher.patchVanilla n'a pas produit les deux etages (vertex={}, fragment={}).",
+                        vertexPatched != null, fragmentPatched != null);
+                return false;
+            }
+            Lanterne.LOG.info("[SHADERC] TransformPatcher.patchVanilla reussi ({} + {} caracteres patches), tentative shaderc sur les deux etages...",
+                    vertexPatched.length(), fragmentPatched.length());
+            boolean vertexOk = compileSpirv(vertexPatched, Shaderc.shaderc_glsl_vertex_shader, "probe-vanilla-vertex.glsl");
+            boolean fragmentOk = compileSpirv(fragmentPatched, Shaderc.shaderc_glsl_fragment_shader, "probe-vanilla-fragment.glsl");
+            return vertexOk && fragmentOk;
+        } catch (Throwable problem) {
+            Lanterne.LOG.warn("[SHADERC] Echec de patchVanilla (contexte client, device GPU requis) : {}",
                     problem.toString());
             return false;
         }

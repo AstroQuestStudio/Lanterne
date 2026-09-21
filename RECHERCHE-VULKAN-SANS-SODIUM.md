@@ -247,3 +247,51 @@ Commits : ajout de `testCompositeInClient`/`compileSpirv`/`ShadercProbeSelfCheck
 options auto-bind/auto-map, sur la branche `26.3`, jamais poussés au VPS ni à `test 1` (uniquement
 testés sur le lanceur client jetable isolé `C:\lanterne-client-vulkan-test\`, copie indépendante de
 `C:\lanterne-client-test\` pour ne pas interférer avec la vérification en cours dans ce dossier-là).
+
+## Vulkan — étape 5 : `patchVanilla` (gbuffers, le point d'entrée le PLUS utilisé), nouveau blocage précis (21/09/2026 ~02h18)
+
+Suite immédiate de l'étape 4 : `patchComposite` prouvé, mais c'est `patchVanilla` (shaders
+"gbuffers", vertex+fragment, sur la quasi-totalité du rendu terrain/entités) qui est réellement le
+chemin critique. Ajouté `ShadercProbe.testVanillaInClient(vertex, fragment)`, même patron, testé
+dans le même client jetable avec une paire vertex/fragment "gbuffers" minimale mais réaliste
+(`ftransform()`/`gl_Color`/`gl_MultiTexCoord0`, style legacy — exactement ce qu'un vrai shaderpack
+Optifine/Iris envoie, à charge de `CompatibilityTransformer` de moderniser).
+
+**Résultat** : `TransformPatcher.patchVanilla` a réussi (1732 + 1398 caractères patchés, vertex ET
+fragment) — la transformation AST elle-même fonctionne sur ce point d'entrée aussi. shaderc a
+rejeté les DEUX étages avec la même erreur :
+```
+error: 'non-opaque uniforms outside a block' : not allowed when using GLSL for Vulkan
+```
+**Cause, différente de l'étape 4** : le GLSL produit par `patchVanilla` déclare des uniforms
+"classiques" (matrices de transformation, etc.) en dehors d'un bloc `uniform Nom { ... };` — valide
+en GLSL "style OpenGL" (et pour la cible `shaderc_target_env_opengl`), mais explicitement interdit
+par la spécification SPIR-V pour Vulkan (`shaderc_target_env_vulkan`, la cible par défaut de
+`shaderc_compiler_initialize`) : Vulkan exige que tout uniform non-opaque (donc pas une texture/un
+sampler) vive dans un UBO (`uniform buffer object`), jamais en variable globale libre.
+
+**Ce n'est PAS résolu par `auto_bind_uniforms`/`auto_map_locations`** (qui assignent des indices,
+pas une structure de bloc) — contrairement au blocage de l'étape 4. Deux vraies pistes, aucune
+tentée cette passe (budget de fork) :
+1. Compiler avec `shaderc_compile_options_set_target_env(options, shaderc_target_env_opengl, shaderc_env_version_opengl_4_5)` au lieu de la cible Vulkan par défaut — produit du SPIR-V valide pour
+   `GL_ARB_gl_spirv` (uniforms libres autorisés), mais ce N'EST PAS le même SPIR-V qu'un vrai
+   pipeline Vulkan natif peut charger tel quel — a mesurer si c'est utile comme étape intermédiaire
+   ou si c'est un cul-de-sac pour l'objectif final (backend Vulkan natif, voir les logs
+   `[LANTERNE][VK-QUEUES]` déjà produits par ce même client — Vulkan est déjà détecté et
+   partiellement sondé côté Lanterne).
+2. Réécrire les uniforms générés par `patchVanilla` pour les regrouper dans un unique bloc UBO
+   avant shaderc — nécessiterait soit un nouveau pass `glsl-transformer` (à écrire, pas dans Iris
+   aujourd'hui — Iris n'a jamais eu besoin de ça, il compile pour OpenGL, jamais SPIR-V/Vulkan en
+   pratique malgré le nom du dossier `pipeline.transform`), soit une regex/AST-walk maison sur la
+   sortie déjà patchée.
+
+**Ce que cette étape confirme malgré tout** : la chaîne `TransformPatcher` (code Iris migré, jamais
+modifié) fonctionne bien pour DEUX points d'entrée différents (`patchComposite` ET `patchVanilla`)
+dans un vrai contexte client — le blocage n'est plus du tout "peut-on appeler ce code", mais
+strictement "le GLSL qu'Iris produit aujourd'hui cible OpenGL, pas Vulkan, et cet écart est
+structurel (uniforms hors bloc), pas un détail de compilation". C'est un résultat honnête à ne pas
+présenter comme "Vulkan presque prêt" — c'est plutôt la preuve précise de LA prochaine vraie
+tâche si ce chantier continue : un pass de re-blocage des uniforms, pas un simple réglage
+shaderc.
+
+`grep -ic fatal` → 0 sur ce run aussi. Rien déployé sur le VPS ni `test 1`.

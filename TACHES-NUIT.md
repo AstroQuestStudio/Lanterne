@@ -435,3 +435,16 @@ ce qu'un vrai pipeline attend (descriptor sets).
 **Prochaine étape concrète** : essayer `patchVanilla` (le point d'entrée le plus utilisé, shaders
 "gbuffers") avec un vrai shader vertex+fragment, toujours via ce même lanceur/patron. **Jamais
 déployé sur le VPS ni `test 1`** — testé uniquement sur le lanceur client jetable isolé.
+
+**Suite immédiate (même session, ~02h18)** : `patchVanilla` testé (`ShadercProbe.testVanillaInClient`).
+La transformation AST réussit aussi pour ce point d'entrée (1732+1398 caractères patchés), mais
+shaderc rejette les deux étages : `'non-opaque uniforms outside a block' : not allowed when using
+GLSL for Vulkan`. **Nouveau blocage précis, différent de celui du composite** : le GLSL produit par
+Iris (`patchVanilla`) déclare ses uniforms hors bloc UBO — valide en OpenGL, interdit par la
+spécification SPIR-V Vulkan. `auto_bind_uniforms`/`auto_map_locations` ne corrigent pas ceci (ça
+assigne des indices, pas une structure de bloc). Détail complet + deux pistes de reprise (cible
+`shaderc_target_env_opengl` en intermédiaire, ou un vrai pass de re-blocage des uniforms) dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md`, étape 5. Conclusion honnête : la chaîne Iris→shaderc marche
+pour appeler le code, mais le GLSL qu'Iris produit aujourd'hui cible structurellement OpenGL, pas
+Vulkan — la prochaine vraie tâche Vulkan est un pass de re-blocage des uniforms, pas un réglage
+shaderc. `grep -ic fatal` → 0. Rien déployé nulle part, testé uniquement sur le lanceur isolé.

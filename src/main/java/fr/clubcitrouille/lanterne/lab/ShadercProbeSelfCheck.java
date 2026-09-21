@@ -54,6 +54,35 @@ public final class ShadercProbeSelfCheck {
             }
             """;
 
+    /**
+     * Paire vertex+fragment autonome pour {@link ShadercProbe#testVanillaInClient} — un "gbuffers"
+     * minimal mais realiste (position, couleur de vertex, lumiere), le point d'entree le PLUS
+     * utilise reellement par Iris (voir sa Javadoc pour pourquoi tester ceci en plus du composite).
+     */
+    private static final String VANILLA_VERTEX_SOURCE = """
+            #version 150
+
+            in vec3 mc_Entity;
+            attribute vec4 mc_midTexCoord;
+
+            void main() {
+                gl_Position = ftransform();
+                gl_FrontColor = gl_Color;
+                gl_TexCoord[0] = gl_MultiTexCoord0;
+            }
+            """;
+
+    private static final String VANILLA_FRAGMENT_SOURCE = """
+            #version 150
+
+            uniform sampler2D texture;
+
+            void main() {
+                vec4 color = texture2D(texture, gl_TexCoord[0].st);
+                gl_FragData[0] = color * gl_Color;
+            }
+            """;
+
     private static boolean ran;
 
     private ShadercProbeSelfCheck() {}
@@ -71,8 +100,12 @@ public final class ShadercProbeSelfCheck {
         }
         ran = true;
         Lanterne.LOG.info("[SHADERC-TEST] contexte client prêt, lancement de la chaîne complète "
-                + "jcpp -> glsl-transformer -> shaderc...");
-        boolean ok = ShadercProbe.testCompositeInClient(COMPOSITE_SOURCE);
-        Lanterne.LOG.info("[SHADERC-TEST] RESULTAT: {}", ok ? "SUCCES" : "ECHEC");
+                + "jcpp -> glsl-transformer -> shaderc (composite)...");
+        boolean compositeOk = ShadercProbe.testCompositeInClient(COMPOSITE_SOURCE);
+        Lanterne.LOG.info("[SHADERC-TEST] RESULTAT COMPOSITE: {}", compositeOk ? "SUCCES" : "ECHEC");
+
+        Lanterne.LOG.info("[SHADERC-TEST] meme chaîne sur patchVanilla (gbuffers, vertex+fragment)...");
+        boolean vanillaOk = ShadercProbe.testVanillaInClient(VANILLA_VERTEX_SOURCE, VANILLA_FRAGMENT_SOURCE);
+        Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VANILLA: {}", vanillaOk ? "SUCCES" : "ECHEC");
     }
 }
