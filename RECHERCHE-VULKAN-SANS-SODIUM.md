@@ -605,3 +605,53 @@ gros fichiers réels.
 
 Aucune modification de code cette passe (reconfirmation empirique uniquement). Commits inchangés
 depuis l'étape 7.
+
+### ÉTAPE 9 — recensement exhaustif des champs de classe typés Sodium (21/09 ~05h35)
+
+Recherche systématique (pure documentation, aucune modification de code) sur tout le code Iris
+migré (`net.irisshaders.iris.*` + `fr.clubcitrouille.lanterne.client.sodium.Graft`) pour
+compléter le travail des forks précédents, qui n'avaient audité qu'un seul champ connu
+(`WorldRenderingSettings.chunkVertexFormat`).
+
+**Méthode** : 56 fichiers référencent `net.caffeinemc.mods.sodium.*` au total. 27 d'entre eux ne
+sont pas des mixins ciblant directement une classe Sodium (ces 21 mixins-là restent hors sujet ici
+— déjà documentés comme sans risque : la classe cible ne charge jamais si Sodium est absent, donc
+le mixin ne s'applique simplement pas). Sur ces 27 fichiers, pour chaque import
+`net.caffeinemc.mods.sodium.*`, recherche des déclarations de CHAMP de classe (pas paramètre de
+méthode, pas variable locale) utilisant ce type — d'abord par un motif strict sur les modificateurs
+(`private`/`public`/`protected`), puis par un motif large sur toute occurrence du nom de classe en
+position de type suivie d'un identifiant et d'un `;`/`=`, pour ne rien manquer (multi-déclaration,
+visibilité package-private, etc.).
+
+**Résultat : UN SEUL champ de classe trouvé dans tout le code migré dont le TYPE référence
+directement une classe Sodium :**
+
+- `net/irisshaders/iris/shaderpack/materialmap/WorldRenderingSettings.java:27` —
+  `private ChunkVertexType chunkVertexFormat;` (déjà documenté à l'étape précédente : couplage
+  réel sur 5 fichiers/sites d'usage, correctif proposé mais jugé trop risqué cette nuit sans test
+  humain en vol).
+
+Les autres occurrences trouvées par le motif large sont toutes des VARIABLES LOCALES à l'intérieur
+de méthodes (pas des champs) :
+- `ShadowRenderer.java:482` — `SodiumWorldRenderer sodiumWorldRenderer = …` (locale, méthode de rendu des ombres)
+- `ShadowRenderer.java:475` — `ChunkRenderMatrices playerMatrices = …` (locale, même méthode)
+- `IrisInternalUniforms.java:34` — `FogParameters fog = …` (locale, méthode de calcul de fog)
+
+Ces trois variables locales ne sont PAS un risque structurel au sens de la nuit (pas de
+`NoClassDefFoundError` au chargement de classe) : une variable locale n'est résolue par la JVM
+qu'au moment où le bytecode de la méthode s'exécute réellement, contrairement à un champ dont le
+TYPE fait partie du layout de la classe. Ces trois méthodes appellent déjà, avant ces lignes, des
+méthodes d'extension (`sodium$getWorldRenderer()`, `sodium$getMatrices()`,
+`sodium$getFogParameters()`) qui supposent Sodium présent de toute façon — elles font donc partie
+du même chemin déjà connu comme dépendant de Sodium, pas une découverte nouvelle.
+
+**Conclusion pour la reprise de jour** : le couplage structurel dur (au niveau du TYPE d'un champ,
+donc bloquant au chargement de classe même si Sodium absent) se limite à ce seul champ
+`chunkVertexFormat` déjà scopé (5 fichiers/sites d'usage réels : `ShaderAttributeInputs.java:36`,
+4 sites de `ShaderCreator.java`, plus `VanillaRenderingPipeline.java:34`). Il n'y a pas d'autre
+« bombe à retardement » de ce type cachée ailleurs dans le code migré — la vraie prochaine étape
+reste bien celle déjà documentée à l'étape précédente (RE-CONFIRMATION), pas une nouvelle
+recherche exploratoire.
+
+Aucun fichier de code modifié, rien compilé (recherche pure), rien commité côté code — seule cette
+documentation a été ajoutée.
