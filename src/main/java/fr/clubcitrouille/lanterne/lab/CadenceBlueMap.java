@@ -89,6 +89,26 @@ final class CadenceBlueMap {
         });
     }
 
+    /**
+     * Programme une mise à jour de TOUTES les cartes (rien de forcé : seules les régions modifiées
+     * sont refaites), puis démarre le rendu si personne n'est connecté. Appelé une fois la
+     * pré-génération terminée, pour que BlueMap ait tout le territoire généré.
+     */
+    static void renderEverything(boolean aucunJoueur) {
+        BlueMapAPI.getInstance().ifPresent(api -> {
+            int count = 0;
+            for (BlueMapMap map : api.getMaps()) {
+                api.getRenderManager().scheduleMapUpdateTask(map, false);
+                count++;
+            }
+            Lanterne.LOG.info("[CADENCE] BlueMap : mise à jour complète programmée pour {} carte(s).",
+                    count);
+            if (aucunJoueur) {
+                api.getRenderManager().start();
+            }
+        });
+    }
+
     static void updateAroundPlayers(List<ServerPlayer> players) {
         BlueMapAPI.getInstance().ifPresent(api -> {
             for (ServerPlayer player : players) {

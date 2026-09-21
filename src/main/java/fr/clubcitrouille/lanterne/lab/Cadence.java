@@ -85,10 +85,32 @@ public final class Cadence {
         fullRenderPaused = false;
     }
 
+    /** Ticks avant le rendu complet demandé par la fin d'une pré-génération ; -1 = rien à faire. */
+    private static int fullRenderCountdown = -1;
+
+    /**
+     * La pré-génération vient de finir tout son plan : BlueMap doit maintenant avoir TOUT le
+     * territoire. Recharge BlueMap (une dimension sans région au démarrage — l'End, le Nether —
+     * n'avait pas de carte et en obtient une maintenant), puis programme la mise à jour de toutes
+     * les cartes une fois le rechargement fini.
+     */
+    public static void onPregenFinished(net.minecraft.server.MinecraftServer server) {
+        if (!Compagnons.present(Compagnons.BLUEMAP)) {
+            return;
+        }
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "bluemap reload");
+        fullRenderCountdown = 20 * 30;
+        Lanterne.LOG.info("[CADENCE] pré-génération terminée : BlueMap rechargé, rendu complet dans 30 s.");
+    }
+
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         if (!Compagnons.present(Compagnons.BLUEMAP)) {
             return;
+        }
+        if (fullRenderCountdown > 0 && --fullRenderCountdown == 0) {
+            fullRenderCountdown = -1;
+            CadenceBlueMap.renderEverything(event.getServer().getPlayerList().getPlayers().isEmpty());
         }
         java.util.List<ServerPlayer> players = event.getServer().getPlayerList().getPlayers();
         if (players.isEmpty()) {

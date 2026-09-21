@@ -1155,6 +1155,9 @@ public final class Pregen {
                     humanDuration(idle), humanDuration(worked + idle)));
         }
         Job next = PLAN.poll();
+        if (next == null && level != null) {
+            Cadence.onPregenFinished(level.getServer());
+        }
         if (next != null && level != null) {
             ServerLevel nextLevel = levelOf(level.getServer(), next.dimension());
             if (nextLevel != null) {
