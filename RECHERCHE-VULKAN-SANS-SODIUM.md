@@ -579,3 +579,29 @@ isolé, ce sera un vrai nouveau signal à creuser (pas juste de la contention).
 
 Commits `8b256d4` (nouvelle méthode de test) et `3baf822` (fix JcppProcessor) sur `26.3`, jamais poussés. Rien
 déployé sur le VPS ni `test 1`.
+
+### ÉTAPE 8 — reconfirmation empirique sur gbuffers_terrain réel, deux nouveaux blocages précis (21/09 ~04h10)
+
+Reconfirmé sur machine désencombrée (le blocage précédent était bien de la contention, pas un bug :
+menu atteint en ~40s au lieu de 17 min bloqué). Résultat réel, log `logs/latest.log` du lanceur
+`C:\lanterne-client-vulkan-test-5\` :
+
+- Le fix JcppProcessor (étape 7, commit `3baf822`) résout bien le problème `#define` non préprocédé.
+- Sur le VRAI fichier `gbuffers_terrain` (10446 lignes après résolution des `#include`), deux
+  problèmes NOUVEAUX et distincts apparaissent, jamais vus sur les shaders de test synthétiques :
+  1. `UniformReblocker` laisse encore 3 uniforms non capturés (`'non-opaque uniforms outside a
+     block'` persiste après reblock, lignes 143+ du fichier patché) — couverture incomplète du
+     parseur sur un fichier de cette taille/complexité.
+  2. `OutOfMemoryError: Out of stack space` sur le fragment (99921 caractères) — récursion non
+     bornée quelque part dans la chaîne jcpp/UniformReblocker, jamais atteinte sur des shaders
+     courts.
+
+**Prochaine étape concrète pour qui reprend** : (a) auditer `UniformReblocker.java` pour trouver
+pourquoi certains uniforms échappent à sa détection sur un gros fichier (regex trop simple ?
+multi-déclaration `uniform vec3 a, b;` ? uniform dans un bloc conditionnel `#ifdef` déjà résolu par
+jcpp mais mal replacé ?) ; (b) convertir toute récursion dans `JcppProcessor`/`UniformReblocker` en
+itération, ou augmenter `-Xss` pour le thread concerné, pour éliminer le stack overflow sur les
+gros fichiers réels.
+
+Aucune modification de code cette passe (reconfirmation empirique uniquement). Commits inchangés
+depuis l'étape 7.
