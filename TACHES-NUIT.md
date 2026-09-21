@@ -1,3 +1,15 @@
+# VÉRIFICATION FINALE AUTOMINER — build propre confirmé (~07h23, Gradle débloqué)
+
+Reprise de la vérification finale d'AutoMiner (`ClubCitrouilleAutoMiner`) après résolution du
+blocage Gradle (voir section suivante). `git log`/`git status` confirmés propres (rien en attente,
+dernier commit `a33b207` "Quarry : etend le pont Rafale au minage general"). `./gradlew clean build
+-x test` → `BUILD SUCCESSFUL in 5s`, jar généré (`autominer-11.3.0.jar`, 771 Ko dans `build/libs/`).
+Aucun problème de code trouvé — le seul échec précédent venait bien du blocage Gradle machine
+(process zombie), pas d'un défaut du repo AutoMiner lui-même. Rien à corriger, rien commité
+(vérification pure).
+
+---
+
 # RÉSOLU — blocage Gradle (~07h05) : c'était un process zombie, pas un mystère d'environnement
 
 Cause racine enfin trouvée par le coordinateur, après ~1h d'investigation infructueuse (registre
