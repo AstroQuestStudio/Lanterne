@@ -26,6 +26,13 @@ import java.util.function.Predicate;
 public final class ShaderOptimizer {
     private ShaderOptimizer() {}
 
+    /**
+     * Interrupteur global : {@code false} tant que le gain et l'iso-rendu ne sont pas prouvés EN JEU et que
+     * l'avis écrit de Complementary Development n'est pas obtenu (voir SHADER-ANALYSE-COMPLEMENTARY.md).
+     * Rien dans le mod n'appelle cet optimiseur : il est compilé, jamais branché.
+     */
+    public static final boolean ENABLED = false;
+
     /** Niveau de risque d'une transformation. */
     public enum Level { SANS_PERTE, QUASI_SANS_PERTE, AVEC_PERTE }
 

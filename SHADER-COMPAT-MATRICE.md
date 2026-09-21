@@ -78,3 +78,7 @@ repose sur le repli à l'exécution (compilation réelle du pilote) : **non prou
 - **Un seul état neutre** (au sec, ciel dégagé). Les états jour/nuit, souterrain, phase de lune ne sont pas spécialisés ici.
 - **Aucune mesure GPU** dans ce fichier : voir §6 de `SHADER-ANALYSE-COMPLEMENTARY.md` (jobs A/B déposés dans le banc central).
 - **Bilan des packs testés en jeu** : aucun pour l'instant ; la matrice ne dit rien sur le rendu réel des variantes.
+
+## État (21/09/2026, chantier arrêté)
+Prouvé hors jeu : compilation (`glslang`) sans régression sur 6 packs validables. **Non mesuré en jeu** : FPS, iso-rendu, Bliss et Photon. L'optimiseur reste **désactivé par défaut** et non branché ;
+avis écrit de Complementary Development recommandé avant toute activation.
