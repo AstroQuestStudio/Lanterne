@@ -2104,3 +2104,30 @@ creusé le risque architectural précis (deux fichiers côté `ClubCitrouilleAut
   logguent ou dégradent proprement, jamais un `catch` générique qui avalerait sans trace utile.
 
 Aucun fichier de code modifié (audit négatif propre — conception délibérée confirmée, pas un bug).
+
+## Audit fichiers de langue (`assets/lanterne/lang/*.json`) — pure lecture de code
+
+Vérification : les ajouts de cette nuit (cadran Shaderpack dans `Dials.java`, `SpawnerSilk.java`,
+`GreffeJei.java`) ont-ils introduit une clé de traduction sans entrée correspondante dans
+`fr_fr.json`/`en_us.json` ?
+
+**Résultat : rien à corriger, le cas ne se présente pas.**
+
+- Les libellés des cadrans "Shaders (Iris)" et "Shaderpack" (`Dials.buildShaders()`,
+  `src/main/java/fr/clubcitrouille/lanterne/client/Dials.java:234-246`) sont des chaînes de
+  caractères LITTÉRALES passées directement à `Family`/`Dial.cycle`, pas des
+  `Component.translatable("lanterne....")` — donc aucune clé lang requise pour ce module. Les
+  seuls `translatable(...)` du fichier (`lanterne.guide.bouton`, `lanterne.guide.hors_jeu`) sont
+  antérieurs à cette nuit et déjà présents dans les deux fichiers lang.
+- `SpawnerSilk.java` : aucun texte affiché (retourne un `ItemStack` vanilla `Items.SPAWNER`, dont
+  le nom est déjà traduit par le jeu de base). `GreffeJei.java` : aucun `Component`/`translatable`
+  du tout.
+- Vérification symétrie des deux fichiers lang : `grep -c '"lanterne\.'` donne **33 clés dans
+  chacun** (`fr_fr.json` et `en_us.json`) — même compte des deux côtés, pas de clé manquante d'un
+  côté par rapport à l'autre.
+- Clés orphelines (définies mais jamais référencées dans le code) : non auditées exhaustivement
+  (nécessiterait de croiser les 33 clés une par une avec tout le code, hors budget de cette passe —
+  signal positif indirect : le compte symétrique fr/en suggère un fichier maintenu à jour, pas de
+  dérive massive).
+
+Aucun fichier modifié, aucune compilation nécessaire (pas de changement de code).
