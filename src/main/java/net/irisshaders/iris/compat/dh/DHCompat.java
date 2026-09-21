@@ -142,8 +142,25 @@ public class DHCompat {
 		}
 	}
 
+	/**
+	 * Repli garanti (Club Citrouille, voir {@code LodRendererEvents}) : sous shaders, Distant Horizons ne
+	 * dessine RIEN (son evenement de rendu est annule a chaque image). Iris doit alors le considerer
+	 * comme INACTIF : sinon (1) le shaderpack recoit la macro {@code DISTANT_HORIZONS} et lit des
+	 * textures de profondeur de DH qui ne sont jamais remplies, (2) {@code ShadowRenderer} construit la
+	 * carte d'ombre avec la PROJECTION de DH (plan lointain etendu) : taches d'ombre en forme de dome
+	 * dans le ciel, constatees en jeu (jar 110, capture du 21/09).
+	 */
+	private static final boolean SHADERS_WITHOUT_DH = !Boolean.getBoolean("lanterne.dhshaders");
+
 	public static boolean hasRenderingEnabled() {
 		if (!dhPresent) {
+			return false;
+		}
+
+		// « Shaders actives dans la configuration » et non isPackInUseQuick() : les macros du pack
+		// (StandardMacros) sont calculees AVANT que son pipeline existe, moment ou isPackInUseQuick()
+		// est encore faux.
+		if (SHADERS_WITHOUT_DH && Iris.getIrisConfig() != null && Iris.getIrisConfig().areShadersEnabled()) {
 			return false;
 		}
 
