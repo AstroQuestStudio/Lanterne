@@ -3486,3 +3486,35 @@ au serveur (pas de notification jouable — nom trompeur mais Javadoc claire). P
 
 Aucune interaction directe avec Bazaar/Till au-delà de la demande d'ouverture d'écran (`TradeAsk.open()`),
 hors périmètre de la logique de transaction déjà auditée. Aucune modification, aucun commit de code.
+
+---
+
+# AUDIT — Painting*/Waypoint* (systèmes jamais explorés, recensement final)
+
+Directive : auditer `content/painting/Painting*` (paquets réseau tableaux, distinct d'`Easel.java`/
+`Brush.java` déjà vus) et `content/waypoint/*` sous l'angle sécurité réseau, cohérence avec Easel/
+Groove, et perf.
+
+**Résultat : rien à corriger, les deux systèmes sont déjà rigoureusement conçus.**
+
+- `PaintingGift`/`PaintingShard` (transfert d'image tableau, client→serveur et serveur→client, en
+  tranches — évite de geler le fil réseau avec un envoi d'un bloc) : le gestionnaire serveur
+  `Easel::onGift` borne strictement chaque tranche (taille annoncée vs plafond `Studio.
+  paintingMaxSourceBytes()`, offset+longueur vs taille du tampon déjà alloué, jamais d'agrandissement
+  silencieux) et **recalcule l'empreinte à la réception complète** (`Mill.fingerprint`) avant d'accepter
+  l'image dans le catalogue partagé — empêche un client de faire passer un contenu arbitraire sous le
+  hash d'une image déjà connue de tous. Erreurs IO gérées proprement (message au joueur, pas de
+  crash). `onServerTick` a un coût nul quand aucun convoi n'est actif (vérifié).
+- `WaypointAsk` (un seul paquet, 4 verbes PLACE/DROP/SHARE/TINT) : le serveur lit `player.getUUID()`
+  depuis la connexion authentifiée, JAMAIS depuis le paquet — un client modifié ne peut pas toucher au
+  carnet d'un autre joueur (vérifié dans `Waypoints::onAsk`, chaque verbe passe `player.getUUID()`,
+  pas de champ "owner" lu du paquet). `Atlas.add` applique un quota par joueur (`Config.
+  WAYPOINT_QUOTA`) et refuse les doublons de nom — pas de spam possible (liste bornée, opérations
+  en mémoire triviales). `SHARE` a son propre plafond serveur (`WAYPOINT_SHARED_CAP`) distinct du
+  quota personnel.
+- Aucune redondance avec Easel/Groove : Painting gère le CONTENU (transfert d'image), Easel gère le
+  CATALOGUE/l'affichage (déjà vu), Groove est un système totalement séparé (disques). Waypoint est
+  indépendant de JourneyMap/Eclaireur (logique 100% Lanterne, un système de repères propre au mod,
+  pas un pont vers JourneyMap).
+
+Aucune modification de code, aucun commit de code — audit pur, résultat négatif honnête.
