@@ -28,7 +28,7 @@ public class DHCompat {
 
 	public DHCompat(IrisRenderingPipeline pipeline, boolean renderDHShadow) {
 		try {
-			if (dhPresent) {
+			if (dhPresent && !repliActif()) {
 				compatInternalInstance = Class.forName("net.irisshaders.iris.compat.dh.DHCompatInternal").getDeclaredConstructor(pipeline.getClass(), boolean.class).newInstance(pipeline, renderDHShadow);
 				lastIncompatible = (boolean) incompatible.invoke(compatInternalInstance);
 			}
@@ -152,6 +152,17 @@ public class DHCompat {
 	 */
 	private static final boolean SHADERS_WITHOUT_DH = !Boolean.getBoolean("lanterne.dhshaders");
 
+	/**
+	 * Vrai quand le repli garanti s'applique : shaders actives dans la configuration ET DH coupe sous
+	 * shaders. Dans ce cas Iris ne cree PAS le programme de DH (la compilation de dh_terrain.vsh exige
+	 * la macro DISTANT_HORIZONS ; sans elle : « undefined variable dhProjection » et TOUT le pipeline de
+	 * shaders est desactive, constate avec la 26.3.112) et ne definit pas la macro. On teste la
+	 * configuration et non isPackInUseQuick() : les macros sont calculees AVANT que le pipeline existe.
+	 */
+	public static boolean repliActif() {
+		return SHADERS_WITHOUT_DH && Iris.getIrisConfig() != null && Iris.getIrisConfig().areShadersEnabled();
+	}
+
 	public static boolean hasRenderingEnabled() {
 		if (!dhPresent) {
 			return false;
@@ -160,7 +171,7 @@ public class DHCompat {
 		// « Shaders actives dans la configuration » et non isPackInUseQuick() : les macros du pack
 		// (StandardMacros) sont calculees AVANT que son pipeline existe, moment ou isPackInUseQuick()
 		// est encore faux.
-		if (SHADERS_WITHOUT_DH && Iris.getIrisConfig() != null && Iris.getIrisConfig().areShadersEnabled()) {
+		if (repliActif()) {
 			return false;
 		}
 
