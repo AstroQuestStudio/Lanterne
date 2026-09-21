@@ -254,6 +254,84 @@ déjà en échec FML) ont été arrêtés proprement et individuellement (`taskk
 jamais un `taskkill` global sur `java.exe` — les autres process Java de la machine n'ont pas été
 touchés).
 
+## TÂCHE C (suite) — lanceur client jetable DÉBLOQUÉ, preuve réelle (fork, 21/09 ~02h00)
+
+Reprise de TÂCHE C avec pour objectif unique de débloquer « The patched Minecraft jar is missing ».
+**Débloqué. Le client démarre jusqu'au menu principal (logs propres, 0 FATAL).**
+
+**Vraie cause trouvée (le message d'erreur était trompeur)** : ce n'est PAS le jar patché qui
+manquait. En creusant `logs/latest.log` AVANT la cascade de `CancellationException` (qui n'est
+qu'un symptôme), la vraie première erreur était :
+```
+[ne.ne.fm.lo.mo.lo.RequiredSystemFiles/]: Couldn't find [net/neoforged/neoforge/common/NeoForgeMod.class,
+NeoForge MANIFEST.MF, net/neoforged/neoforge/client/ClientNeoForgeMod.class] on classpath, while we did
+find other required files in: [jar(libraries/net/neoforged/minecraft-client-patched/.../minecraft-client-patched-....jar)]
+```
+Le jar patché (`minecraft-client-patched-*.jar`) ne contient QUE les classes Minecraft patchées —
+`NeoForgeMod.class`/`ClientNeoForgeMod.class` vivent dans un jar **séparé** :
+`libraries/net/neoforged/neoforge/26.3.0.7-beta/neoforge-26.3.0.7-beta-universal.jar`. Vérifié avec
+`jar tf` : ce jar existe bel et bien côté client (`find`/`jar tf` confirmé), mais **le classpath
+construit à la main par le fork précédent (`classpath.txt`/`launch_attempt2_cmd.txt`) ne le
+listait pas**. FML cherche dynamiquement les fichiers requis dans les jars présents sur le
+classpath — sans `neoforge-*-universal.jar` sur `-cp`, il ne trouve jamais `NeoForgeMod.class`,
+et balance le message générique (et trompeur) « patched Minecraft jar is missing » à la place du
+vrai problème.
+
+**Première tentative de correctif (a révélé un 2e piège)** : ajouter
+`neoforge-26.3.0.7-beta-universal.jar` directement sur le `-cp` brut, à côté du
+`minecraft-client-patched-*.jar` (lui aussi ajouté à la main par le fork précédent). Ça corrige
+bien l'erreur `RequiredSystemFiles`, MAIS fait détecter à FML un faux « dev environment » (probablement
+parce qu'avoir le jar patché + le jar universal tous les deux en RAW sur `-cp` ressemble au classpath
+généré par `gradle runClient`, pas à un vrai install de prod) → nouvelle erreur :
+```
+NeoForge dev environment Minecraft jar does not have a Minecraft-Dists attribute in its manifest;
+this may be because you have an out-of-date gradle plugin
+```
+
+**Correctif final qui marche** : ne PAS mettre `minecraft-client-patched-*.jar` ni
+`neoforge-*-universal.jar` sur le `-cp` brut du tout — exactement comme le fait le serveur jetable
+qui marche (`win_args.txt` du serveur ne contient AUCUN des deux). FML les résout tout seul de façon
+dynamique via `-DlibraryDirectory=<...>/libraries` + les 3 arguments `--fml.neoForgeVersion
+--fml.mcVersion --fml.neoFormVersion`. Retirer ces deux jars du classpath (en gardant tout le reste :
+les ~70 libs support + les libs client LWJGL/son/etc.) a suffi : **le client charge textures/atlas,
+`Sound engine started`, Iris crée son pipeline pour `minecraft:overworld`, aucune ligne FATAL dans
+`logs/latest.log` ni `logs/debug.log` (`grep -ic fatal` → 0 sur les deux).**
+
+Warnings non bloquants observés (normaux, à ignorer) : bascule Vulkan→OpenGL silencieuse (Lanterne
+log `[LANTERNE][GPU] ... le backend actif est OpenGL ... la création du backend Vulkan a
+probablement échoué silencieusement` — sujet séparé, cf. section Vulkan plus bas, PAS un blocage du
+lanceur), et échec d'auth Realms (`Failed to parse into SignedJWT: 0`, normal avec un faux compte
+`--uuid 00000000...0 --accessToken 0 --userType legacy`).
+
+**Fichier de commande final qui marche, prêt à relancer tel quel** :
+`C:\lanterne-client-test\launch_attempt7_cmd.txt` (une seule ligne, java.exe + tous les arguments)
+et sa version `.bat` équivalente `C:\lanterne-client-test\launch7.bat`. Pour relancer (depuis Git
+Bash, ne PAS invoquer via `cmd.exe //C "chemin_long_direct"` — la ligne de commande cmd.exe a une
+limite ~8191 caractères et le classpath complet la dépasse ; passer par un `.bat` sur disque
+contourne cette limite) :
+```
+cmd.exe //C "C:\lanterne-client-test\launch7.bat > C:\lanterne-client-test\stdoutN.log 2> C:\lanterne-client-test\stderrN.log"
+```
+puis lire `C:\lanterne-client-test\logs\latest.log` (le launcher supprime/tourne les logs précédents
+à chaque lancement — si erreur "fichier utilisé par un autre processus" au démarrage, c'est qu'un
+process précédent tourne encore, à arrêter par PID précis avant de relancer).
+
+**Piste restée ouverte, PAS ce soir** : pourquoi `--installClient` ne génère pas de
+`win_args.txt`/`unix_args.txt` (contrairement à `--installServer`) reste vrai et non expliqué côté
+installeur — mais n'est plus bloquant puisqu'on a maintenant un classpath équivalent construit à la
+main qui fonctionne. Si un jour on veut un vrai lanceur "propre" sans classpath fait main, il faudrait
+comprendre pourquoi l'installeur omet ce fichier côté client.
+
+**Process de test arrêtés proprement** après validation (PID Windows 38464 et 18848, tous deux dans
+`C:\lanterne-client-test\`, arrêtés individuellement via `taskkill //PID <pid> //F` — jamais de kill
+global sur `java.exe`).
+
+**Ce lanceur est maintenant réutilisable pour toute la suite de la nuit** (vérification visuelle du
+guard Sodium de TÂCHE D, tests Vulkan, Iris, Dials "Shaders") : relancer `launch7.bat` tel quel.
+Aucun code du dépôt Lanterne (`C:\Users\trufa\Documents\Lanterne`) n'a été touché pour cette tâche —
+uniquement des fichiers dans `C:\lanterne-client-test\`, hors dépôt git. Rien déployé sur le VPS ni
+sur `test 1`.
+
 ## TÂCHE D — correctif de repli : guard Sodium sur les 4 mixins vanilla d'Iris — NON TESTÉ VISUELLEMENT (fork, 21/09 ~01h55)
 
 Puisque le lanceur client n'a pas pu être débloqué à temps (TÂCHE C), application du correctif de
@@ -273,3 +351,50 @@ PAS été vérifié visuellement, conformément à la leçon répétée toute la
 patron via un vrai client (avec et sans Sodium installé) avant de considérer ce fix terminé.
 
 **PAS déployé sur le VPS.** Compilé et commité sur `26.3` uniquement, jamais poussé.
+
+## TÂCHE B+D — vérification visuelle réelle via le lanceur client débloqué — CONFIRMÉ SAIN, déployé sur `test 1` (fork, 21/09 ~02h06)
+
+Le lanceur client jetable (`launch7.bat`, TÂCHE C) a enfin permis de tester les deux correctifs en
+attente ensemble, avec Sodium réellement présent dans `mods/` (contrairement aux tests serveur
+précédents qui ne pouvaient pas le vérifier).
+
+**Build `26.3.59`** = commit `50409bc` (HEAD de `26.3` à ce moment), donc TÂCHE B (modId "iris"
+passif) + TÂCHE D (guard Sodium sur les 4 mixins vanilla) + tout le reste de la nuit, réunis dans
+un seul jar.
+
+**Preuve réelle (logs `C:\lanterne-client-test\logs\latest.log` + `debug.log`, run complet jusqu'au
+menu principal, GPU réel utilisé — RTX 3080 Laptop)** :
+
+- `grep -ic fatal` → **0** sur `latest.log` ET `debug.log`. Aucun `crash-reports/`.
+- **`ModFileInfo/LOADING`: "Found valid mod file lanterne-26.3.59.jar with {lanterne,iris} mods —
+  versions {26.3.59,26.3.59}"** — confirmation directe et non ambiguë que FML voit maintenant
+  DEUX modId dans le même fichier. `ModList.get().isLoaded("iris")` doit donc renvoyer `true`
+  partout où c'est appelé (DH `IrisAccessor`, etc.) — **la cause racine documentée plus haut pour
+  le menu Sodium ET l'artefact du ciel est structurellement corrigée** par ce seul changement.
+- Sodium charge sans erreur (`Loaded configuration file for Sodium: 37 options`), son
+  `ResourcePackScanner` émet un avertissement bénin sur le resource pack `mod/lanterne,iris`
+  ("replaces terrain shaders, which are not supported" — un simple avis informatif de Sodium sur
+  les shaders vanilla, PAS un crash, PAS lié aux correctifs de cette nuit).
+- `Iris/`: pipeline créé pour `minecraft:overworld` sans erreur, aucune exception liée aux 4
+  mixins vanilla de TÂCHE D (`MixinLevelRenderer`/`MixinWindow`/`MixinRenderPipeline`/
+  `MixinDebugScreenEntriesList`) — le guard `Compagnons.present(SODIUM)` ne casse rien avec Sodium
+  RÉELLEMENT présent (c'était le risque non vérifié cette nuit).
+- Process resté stable ~30s à l'écran-titre (mémoire ~1 Go, aucun crash différé), arrêté proprement
+  (`taskkill //PID 20512 //F`, confirmé disparu).
+
+**Ce qui reste NON vérifiable par les logs seuls** (nécessite un œil humain ou une capture
+d'écran) : que l'onglet "Iris" réapparaît VISUELLEMENT dans le menu vidéo Sodium (le mécanisme
+`sodium:config_api_user` documenté dans TÂCHE B reste un point distinct — un seul mod peut
+déclarer cette propriété, Lanterne/`Graft.java` la détient déjà, donc l'onglet Iris séparé dans
+Sodium ne réapparaîtra PAS tel quel avec ce correctif seul ; ce que `{lanterne,iris}` corrige,
+c'est `ModList.isLoaded("iris")`, un mécanisme différent — voir le diagnostic déjà détaillé plus
+haut). Et que l'artefact de ciel (bordure nette DH) a bien disparu.
+
+**Déployé sur `test 1/mods/lanterne-26.3.59.jar`** (remplace `26.3.58`, aucun client `test 1` en
+cours d'exécution au moment du remplacement — vérifié via `tasklist`). **PAS déployé sur le VPS**,
+comme convenu — décision laissée au coordinateur/au patron au réveil.
+
+**Prochaine étape réelle qui reste ouverte** : la vraie fusion des deux `registerConfigLate`
+(Graft + IrisConfig) pour restaurer un onglet Iris dans Sodium, documentée dans TÂCHE B comme un
+changement de comportement visible à ne pas décider seul sans le patron — toujours vrai, pas
+tenté cette nuit.
