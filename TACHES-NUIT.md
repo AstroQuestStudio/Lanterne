@@ -2409,3 +2409,34 @@ attente d'un œil humain, celui-ci n'a aucune dépendance à une confirmation vi
 gardent leur contenu à la casse (comportement attendu, invisible en temps normal), soit ils le
 perdent encore (régression immédiatement visible). Déployer sur `test 1` d'abord suffit pour lever le
 doute avant VPS.
+
+## VÉRIFICATION ÉLARGIE — double-drop / conflit `onRemove` sur tous les blocs Lanterne (clôture)
+
+Suite à la vérification indépendante du correctif `b904a77`/`a80e8ad`, contrôle élargi à TOUT le mod :
+un bloc Lanterne pourrait-il hériter d'un comportement vanilla de drop automatique (`ChestBlock`,
+`HopperBlock`, etc.) qui entrerait en conflit avec les nouveaux hooks `BlockDropsEvent`
+(`ReseauDrops`/`BeamerDrops`/`SpawnerSilk`) ?
+
+**Recensement exhaustif des classes `Block` du mod** (`grep -rn "extends"` sur tout `content/`) :
+- `extends BaseEntityBlock` (aucun drop automatique hérité, cohérent avec le besoin des correctifs
+  de cette nuit) : `Burner`, `Aiguillage`, `CoffreDepot`, `CoffreReception`, `Guichet`, `Beamer`,
+  `Panel`, `Vigil`.
+- `extends HopperBlock` (vanilla, hérite bien `onRemove`→`Containers.dropContentsOnDestroy` pour
+  l'inventaire) : `Trieur` — confirmé sans aucun override d'`onRemove`/`playerWillDestroy` dans
+  `Trieur.java`/`TrieurBlockEntity.java` (`grep` vide), donc comportement vanilla intact, pas de
+  conflit possible avec un hook `BlockDropsEvent` puisqu'aucun n'existe sur ce bloc.
+- 4 blocs simples sans `BlockEntity` (`Anchor`, `Recycleur`, `GateBlock`, `Heart`) : aucun état
+  per-bloc stocké en NBT (vérifié : pas de champ `BlockEntity`/`SavedData` sur l'instance du bloc
+  lui-même — `GateBlock implements Portal` garde son état ailleurs, côté serveur, déjà audité cette
+  nuit sous un autre angle "Gates"). Hors périmètre de ce bug précis (rien à préserver à la casse).
+
+**Seul point avec `onRemove`/`playerWillDestroy` custom trouvé** : `Burner.playerWillDestroy` (déjà
+connu, `BurnerEntity.spill()`) — s'exécute AVANT le retrait du bloc, éjecte le disque séparément de
+l'`ItemStack` du bloc lui-même, aucun chevauchement avec `BlockDropsEvent` (mécanismes distincts et
+non concurrents : `playerWillDestroy` agit sur l'état encore en place, `BlockDropsEvent` agit sur la
+liste de drops déjà calculée).
+
+**Conclusion : aucun risque de double-drop trouvé, aucun conflit d'ordre d'exécution entre les 3
+nouveaux hooks de cette nuit et un `onRemove`/`playerWillDestroy` préexistant.** Clôture définitive
+de la série de bugs NBT/dupe/drop de cette nuit (4 passes cumulées, 3 bugs réels trouvés et corrigés,
+tout le reste du mod confirmé sain par lecture de code exhaustive).
