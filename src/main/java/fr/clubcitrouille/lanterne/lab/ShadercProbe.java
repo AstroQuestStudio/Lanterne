@@ -284,8 +284,19 @@ public final class ShadercProbe {
             String vertexFlat = String.join("\n", processor.getIncludedFile(vertexAbs));
             String fragmentFlat = String.join("\n", processor.getIncludedFile(fragmentAbs));
             Lanterne.LOG.info("[SHADERC] #include resolus pour de vrai (vertex {} lignes, fragment {} lignes), "
-                    + "tentative patchVanilla + reblock...", vertexFlat.lines().count(), fragmentFlat.lines().count());
-            return testVanillaReblockedInClient(vertexFlat, fragmentFlat);
+                    + "preprocessing jcpp (defines/ifdef) avant patchVanilla + reblock...",
+                    vertexFlat.lines().count(), fragmentFlat.lines().count());
+            // patchVanilla (comme le vrai pipeline Iris) attend un GLSL deja preprocesse — les
+            // directives #define/#ifdef du #include brut (elles viennent des lignes litterales des
+            // fichiers .vsh/.fsh, cf ShadercProbeSelfCheck) doivent d'abord passer par le meme
+            // preprocesseur C qu'utilise reellement Iris pour un shaderpack (deja migre, deja
+            // prouve sur le composite via testReal) - sinon patchVanilla rejette la source avec
+            // "Unparsed preprocessor directives... may not be present at this stage".
+            String vertexPreprocessed = JcppProcessor.glslPreprocessSource(vertexFlat,
+                    List.of(new net.irisshaders.iris.helpers.StringPair("VERTEX_SHADER", "")));
+            String fragmentPreprocessed = JcppProcessor.glslPreprocessSource(fragmentFlat,
+                    List.of(new net.irisshaders.iris.helpers.StringPair("FRAGMENT_SHADER", "")));
+            return testVanillaReblockedInClient(vertexPreprocessed, fragmentPreprocessed);
         } catch (Throwable problem) {
             Lanterne.LOG.warn("[SHADERC] Echec sur le vrai fichier de shaderpack ({} / {}) : {}",
                     vertexPath, fragmentPath, problem.toString());
