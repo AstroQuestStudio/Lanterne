@@ -295,3 +295,69 @@ tâche si ce chantier continue : un pass de re-blocage des uniforms, pas un simp
 shaderc.
 
 `grep -ic fatal` → 0 sur ce run aussi. Rien déployé sur le VPS ni `test 1`.
+
+## Vulkan — étape 6 : `UniformReblocker`, pass de re-blocage des uniforms — SUCCÈS PARTIEL réel, un étage sur deux compile (21/09/2026 ~02h28)
+
+Suite directe de l'étape 5 (piste 2 choisie : un vrai pass de re-blocage plutôt que
+`shaderc_target_env_opengl`, qui aurait produit un SPIR-V non chargeable tel quel par un vrai
+pipeline Vulkan — jugé être un cul-de-sac pour l'objectif final).
+
+**Ajouté** (aucun fichier `net.irisshaders`/`kroppeb`/`mixins.iris*` touché, uniquement du nouveau
+code dans `lab/`) : `UniformReblocker.reblock(glsl, blockName, binding)` — post-traitement texte
+(pas un pass `glsl-transformer`, Iris n'en a pas besoin pour OpenGL) qui retire chaque déclaration
+`uniform <Type> <nom>;` de niveau ligne dont le type n'est pas opaque (sampler/image/atomic_uint),
+et les regroupe dans un seul bloc `layout(binding=N, std140) uniform <nom> { ... };` inséré juste
+après `#version`. `ShadercProbe.testVanillaReblockedInClient` applique ce pass sur la sortie de
+`TransformPatcher.patchVanilla` (vertex ET fragment) avant shaderc, wired dans
+`ShadercProbeSelfCheck` derrière `LANTERNE_SHADERC_COMPOSITE_TEST=1`.
+
+**Premier essai, nouveau blocage précis et honnête** : le bloc UBO généré est bien accepté comme
+regroupement (l'erreur `'non-opaque uniforms outside a block'` disparaît), mais
+`layout(binding=N)` sur un bloc uniform exige GLSL 420+ ou une extension explicite sur un
+`#version` plus ancien (le `#version 150` "style OpenGL" qu'Iris produit réellement) :
+```
+'binding' : not supported for this version or the enabled extensions
+```
+**Corrigé** : `UniformReblocker` insère désormais `#extension GL_ARB_shading_language_420pack :
+enable` juste après `#version`, avant le bloc UBO. Commit `cfd737a`.
+
+**Deuxième essai, dans le même client jetable (`C:\lanterne-client-vulkan-test-2\`, copie isolée
+créée pour ce test précis afin de ne pas interférer avec d'autres forks en cours sur
+`C:\lanterne-client-test\`/`C:\lanterne-client-vulkan-test\`), résultat réel mixte** :
+
+```
+[SHADERC] UniformReblocker applique (vertex 1732 -> 1840 caracteres, fragment 1398 -> 1508 caracteres), tentative shaderc...
+[SHADERC] Compilation GLSL->SPIR-V echouee (statut=2, erreurs=6) : probe-vanilla-vertex-reblocked.glsl:60: error: 'ftransform' : no matching overloaded function found
+...
+[SHADERC] Compilation GLSL->SPIR-V reussie : 3532 octets SPIR-V produits.
+[SHADERC-TEST] RESULTAT VANILLA REBLOCKED: ECHEC
+```
+
+- **L'étage FRAGMENT re-bloqué compile réellement en SPIR-V valide (3532 octets)** — la toute
+  première preuve, dans un vrai contexte client, qu'un shader "gbuffers" issu de `patchVanilla`
+  produit du SPIR-V syntaxiquement valide une fois ses uniforms regroupés en UBO. Le pass
+  `UniformReblocker` répond donc réellement au blocage précis identifié à l'étape 5.
+- **L'étage VERTEX échoue toujours**, mais pour une raison **différente et non liée au re-blocage** :
+  la source de test fabriquée pour ce laboratoire (`ShadercProbeSelfCheck.VANILLA_VERTEX_SOURCE`)
+  utilise volontairement des builtins GLSL legacy (`ftransform()`, `gl_TexCoord[0]`,
+  `gl_FrontColor`) pour ressembler à un vrai shader Optifine/Iris d'ancien style — le log montre
+  que `CompatibilityTransformer` a bien patché la correspondance `in`/`out` entre étages
+  (`irs_texCoords`), mais PAS remplacé les appels `ftransform()`/`gl_TexCoord` eux-mêmes dans le
+  corps du shader, qui restent donc absents du profil "core" que shaderc applique par défaut à
+  `#version 150` sans suffixe `compatibility`. C'est un problème de builtins legacy non modernisés
+  par notre shader de test, PAS le blocage UBO — hors périmètre de cette tâche précise (re-blocage
+  des uniforms), à creuser séparément si ce chantier continue (soit fournir un shader de test sans
+  builtins legacy pour isoler proprement le résultat du re-blocage, soit comprendre pourquoi
+  `CompatibilityTransformer` ne les modernise pas ici).
+
+`grep -ic fatal` → 0 sur `logs/latest.log` ET `logs/debug.log`. Process de test arrêté proprement
+(`taskkill //PID 39672 //F`, un seul PID ciblé, confirmé disparu). Rien déployé sur le VPS ni
+`test 1` — testé uniquement sur `C:\lanterne-client-vulkan-test-2\`, isolé du reste.
+
+**Conclusion honnête** : le pass de re-blocage des uniforms fonctionne réellement pour au moins un
+étage de shader complet, prouvé en SPIR-V valide dans un vrai contexte GPU — ce n'est plus une
+piste théorique. **Prochaine étape concrète** : refaire ce même test avec une paire vertex/fragment
+"gbuffers" moderne (sans builtins legacy comme `ftransform`/`gl_TexCoord`) pour confirmer que
+l'étage vertex compile aussi une fois isolé de ce problème annexe ; puis, seulement après ça,
+tenter de charger le SPIR-V produit dans un vrai `VkShaderModule` (jamais fait à ce stade — seule
+la compilation GLSL→SPIR-V est prouvée, pas le chargement dans un pipeline Vulkan réel).

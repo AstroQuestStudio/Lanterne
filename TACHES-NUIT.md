@@ -448,3 +448,66 @@ assigne des indices, pas une structure de bloc). Détail complet + deux pistes d
 pour appeler le code, mais le GLSL qu'Iris produit aujourd'hui cible structurellement OpenGL, pas
 Vulkan — la prochaine vraie tâche Vulkan est un pass de re-blocage des uniforms, pas un réglage
 shaderc. `grep -ic fatal` → 0. Rien déployé nulle part, testé uniquement sur le lanceur isolé.
+
+## TÂCHE VULKAN (suite) — UniformReblocker : re-blocage des uniforms en UBO, SUCCÈS PARTIEL réel (fork, 21/09 ~02h30)
+
+Reprise du blocage précis de l'étape 5 (`patchVanilla` produit des uniforms hors bloc UBO,
+illégal SPIR-V Vulkan). Piste choisie : un vrai pass de re-blocage (`lab/UniformReblocker.java`,
+nouveau, aucun fichier Iris touché) plutôt que `shaderc_target_env_opengl` (jugé cul-de-sac pour
+l'objectif final Vulkan natif). Post-traite le GLSL déjà patché par `TransformPatcher.patchVanilla`
+pour regrouper les uniforms non-opaques dans un bloc `layout(binding=N, std140) uniform {...};`.
+
+**Premier essai** : nouveau blocage honnête, `layout(binding=)` exige GLSL 420+ ou une extension
+sur `#version 150` — corrigé en ajoutant `#extension GL_ARB_shading_language_420pack : enable`
+(commit `cfd737a`).
+
+**Deuxième essai, testé pour de vrai dans un client jetable isolé (`C:\lanterne-client-vulkan-test-2\`,
+copie dédiée pour ne pas interférer avec d'autres forks en cours)** : **l'étage FRAGMENT re-bloqué
+compile en SPIR-V valide (3532 octets)** — première preuve réelle que le re-blocage résout bien le
+blocage UBO pour un shader `patchVanilla` complet. L'étage VERTEX échoue encore, mais pour une
+raison SÉPARÉE et non liée au re-blocage : le shader de test fabriqué utilise des builtins GLSL
+legacy (`ftransform()`, `gl_TexCoord`) que `CompatibilityTransformer` ne modernise pas totalement
+dans ce cas précis — hors périmètre de cette tâche, détail complet dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md` étape 6.
+
+`grep -ic fatal` → 0. Rien déployé sur le VPS ni `test 1`. Commits `b01e08a`, `cfd737a` sur `26.3`,
+jamais poussés. Process de test arrêté proprement (PID ciblé individuellement, jamais de kill
+global `java.exe`).
+
+**Prochaine étape concrète** : reformuler `VANILLA_VERTEX_SOURCE`/`VANILLA_FRAGMENT_SOURCE` dans
+`ShadercProbeSelfCheck` sans builtins legacy, pour confirmer que l'étage vertex compile aussi une
+fois isolé de ce problème annexe ; puis tenter de charger le SPIR-V produit dans un vrai
+`VkShaderModule` (jamais fait — seule la compilation GLSL→SPIR-V est prouvée à ce stade).
+
+## VÉRIFICATION — reprise du pregen après redémarrage : PAS de bug, confirmé par relecture directe (fork, 21/09)
+
+Demande explicite du patron : vérifier que le pregen reprend bien après un simple redémarrage
+serveur (comme BlueMap, TÂCHE A), tout en restant piloté par la présence de joueurs. D'autres java.exe
+tournaient déjà (forks Sodium/Vulkan en cours sur le lanceur client jetable) — pas touché au serveur
+jetable partagé pour éviter toute collision ; vérification faite par lecture directe du code source
+(`lab/Pregen.java`, `lab/Cadence.java`, `core/Config.java`), pas juste re-citée depuis ce fichier.
+
+**Confirmé, ligne par ligne, aucun bug** :
+- `Cadence.onServerStarted` (`@SubscribeEvent` sur `ServerStartedEvent`, inconditionnel, sans garde
+  BlueMap) appelle `Pregen.resumeIfPending(overworld)` à CHAQUE démarrage serveur, crash ou normal.
+- `resumeIfPending` lit `config/lanterne/pregen-en-cours.txt` (écrit par `writeState()` à chaque
+  `begin()`, effacé par `clearState()` à la fin ou à un `halt()` explicite) ; s'il existe, relance
+  `begin(overworld, rayon)` — la reprise est gratuite par construction (`readExistingChunks` relit les
+  en-têtes `.mca` et saute tout ce qui existe déjà, voir Javadoc de classe).
+- Le pilotage par la présence de joueurs est déjà natif et INDÉPENDANT du redémarrage : `Pregen.tick()`
+  appelle `suspended(server)` à chaque tick, qui se met en pause dès qu'au moins un joueur est
+  connecté (si `PREGEN_PAUSE_ON_JOIN=true`, valeur par défaut) et reprend seul au départ du dernier —
+  sans perdre ce qui est déjà en vol, et sans compter le temps de pause dans le débit affiché.
+- Donc après un redémarrage à froid avec des joueurs déjà connectés (rare, mais possible), le pregen
+  reprend son état MAIS reste immédiatement suspendu par `suspended()` tant qu'il y a du monde —
+  exactement le comportement voulu pour BlueMap, déjà natif ici depuis le début, pas besoin du même
+  correctif que TÂCHE A (BlueMap n'avait, lui, aucune notion de pause par joueur avant cette nuit).
+
+**Conclusion honnête** : la javadoc de classe de `Cadence.java` (ligne 18-24) dit déjà elle-même
+« Pré-génération : déjà géré, rien à refaire » — vérifié vrai par cette relecture indépendante, pas
+supposé. Aucune modification de code nécessaire. Rien à compiler, rien à tester en vrai (pas de
+changement de comportement à vérifier). Chunky (mod externe retiré cette nuit, voir plus haut dans la
+session) n'apporte aucune idée de persistance que Lanterne n'ait déjà : lecture directe de l'en-tête
+`.mca` (pas de fichier d'état listant les chunks un par un, contrairement à Chunky qui journalise
+chaque région) est en fait plus robuste — aucun fichier d'état à corrompre pour la liste des chunks
+eux-mêmes, seul le rayon (un entier) est persisté.
