@@ -12,8 +12,30 @@ pregen 500`, réponse serveur confirmée : "Pré-génération lancée sur un ray
 existe déjà est sauté ; l'interrompre ne perd rien, la reprise est gratuite."), après avoir vérifié
 `0 joueur connecté`. Le mécanisme est piloté par la présence de joueurs (pause automatique dès
 qu'un joueur se connecte, confirmé sain par un audit dédié cette nuit) — donc sûr même si le patron
-se reconnecte avant la fin. À vérifier au réveil : progression réelle via `/lanterne pregen`
-(statut) ou les logs serveur.
+se reconnecte avant la fin.
+
+**Note d'horloge** : l'heure système réelle du VPS (`date` en UTC) est en fait ~04h27 au moment de
+cette relance, pas ~06h45 comme les échanges du coordinateur le laissaient penser — les timestamps
+"06h45" utilisés dans ce fichier sont donc décalés d'environ 2h20 par rapport à l'heure réelle VPS.
+Sans conséquence sur la validité des actions (0 joueur vérifié au moment de la relance), juste une
+correction pour ne pas dérouter la lecture des logs.
+
+**Progression vérifiée (lecture seule, ~04h27 UTC VPS)** : `lab/Pregen.java` relu en entier — conçu
+proprement (soumission asynchrone non bloquante, 8 chunks en vol, budget de balayage par tick,
+pause automatique si un joueur se connecte, reprise gratuite par lecture des en-têtes de région).
+Logs confirmés sains : progression réelle observée (`12374 / 1002001, 1.2 %, 331 généré(s), 12035
+sauté(s), 6.1 chunk(s)/s`), **aucun signe de ralentissement serveur** (`grep watchdog/running slow/
+OutOfMemory` → 0 résultat).
+
+**Estimation honnête du temps restant** : à ~6 chunks générés/seconde (rythme qui monte encore, la
+zone proche de l'origine est très largement déjà explorée donc surtout sautée — le taux de saut va
+chuter fortement en s'éloignant du centre), et avec seulement 184 fichiers région overworld déjà
+écrits sur les ~767 attendus pour ce rayon, la très grande majorité du disque de 1 002 001 chunks
+reste à générer. **À ce rythme, le pregen complet prendra de l'ordre de 1 à 2 jours, pas une nuit.**
+Ce n'est pas une régression ni un bug — c'est la réalité d'un mono-cœur sur un disque de 500 chunks
+de rayon. Le mécanisme est sûr et se met en pause automatiquement dès qu'un joueur se connecte (testé
+et confirmé cette nuit), donc il n'y a aucun risque à le laisser tourner en tâche de fond au long
+cours — mais le patron ne doit pas s'attendre à le trouver terminé à son réveil.
 
 **CORRECTIF IMPORTANT (~06h00, vérification SSH lecture seule)** : contrairement à ce que dit la
 section 1 ci-dessous ("VPS stable en `26.3.55`", "TÂCHE A/B pas déployées sur le VPS"), le VPS
