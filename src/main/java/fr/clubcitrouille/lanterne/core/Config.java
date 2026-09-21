@@ -1339,8 +1339,9 @@ public final class Config {
         MECHE = BUILDER.comment(
                 "Annoncer aux clients l'empreinte du jar de Lanterne que CE serveur fait tourner, et",
                 "leur proposer de le telecharger s'ils n'ont pas la meme.",
-                "Preuve de concept : seul Lanterne lui-meme est concerne pour l'instant.")
-                .define("proposer_maj", false);
+                "Publie aussi le dossier config/lanterne/mods-clients/ (ajouts, remplacements, et retraits
+                listes dans RETIRER.txt) : les clients qui ont consenti se synchronisent a la connexion.")
+                .define("synchronisation_clients", true);
 
         BUILDER.pop();
 
