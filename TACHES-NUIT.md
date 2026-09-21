@@ -33,6 +33,10 @@ d'attendre le réveil du patron.
 en production.** Rien d'autre déployé (pas de changement Vulkan/Sodium expérimental, uniquement la
 branche stable `26.3` telle quelle).
 
+`test 1` (client) synchronisé avec le même jar `26.3.60` (aucun process Java lié à cette instance
+détecté avant remplacement — sûr). Respecte la règle Mèche découverte plus tôt cette nuit : toujours
+déployer client + serveur ensemble pour éviter un mismatch de version qui casse la connexion.
+
 ---
 
 # VÉRIFICATION FINALE (build complet depuis zéro, fin de nuit)
