@@ -85,6 +85,8 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 
 public class ShadowRenderer {
+	/** Diagnostic seulement : coupe le culling d'ombre. Jamais actif par defaut. */
+	private static final boolean SHADOW_NO_CULL = Boolean.getBoolean("lanterne.shadownocull");
 	public static int RESOLUTION;
 	public static boolean ACTIVE = false;
 	public static List<BlockEntity> visibleBlockEntities;
@@ -304,6 +306,11 @@ public class ShadowRenderer {
 		// TODO: Cull entities / block entities with Advanced Frustum Culling even if voxelization is detected.
 		String distanceInfo;
 		String cullingInfo;
+		if (SHADOW_NO_CULL) {
+			// Diagnostic (-Dlanterne.shadownocull=true) : aucune elimination de sections pour la passe d'ombre, pour
+			// isoler le culling comme cause d'un scintillement de lumiere. Desactive par defaut.
+			return holder.setInfo(new NonCullingFrustum(), "diagnostic", "culling d'ombre coupe (-Dlanterne.shadownocull)");
+		}
 		if ((packCullingState == ShadowCullState.DEFAULT && packHasVoxelization) || packCullingState == ShadowCullState.DISTANCE) {
 			double distance = halfPlaneLength * renderMultiplier;
 
