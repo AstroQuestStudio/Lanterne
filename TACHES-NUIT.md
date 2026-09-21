@@ -1,3 +1,46 @@
+**AUDIT SÉCURITÉ — système Meche (protocole réseau/chiffrement de l'auto-update)**, jamais vérifié
+cette nuit malgré sa surface de sécurité potentiellement significative. Lu en entier : `Meche.java`,
+`MecheManifest.java`, `MecheChunk.java`, `MecheClient.java`, `MecheConsent.java`, `MecheRequest.java`,
+`MechePeerList.java`.
+
+**Conclusion : conception déjà rigoureuse, aucune vulnérabilité trouvée dans le code Lanterne
+lui-même.** Réponses précises aux 4 points demandés :
+
+1. **Ordre vérification/écriture** : SAFE. `verifyAndInstall()` (`MecheClient.java:252`) recalcule le
+   SHA-256 sur les octets REÇUS et le compare à celui annoncé par le manifeste `AVANT` tout `Files.write`
+   — le jar n'est jamais écrit sur disque si l'empreinte ne correspond pas. Le jar écrit n'est de plus
+   JAMAIS chargé/exécuté par Lanterne lui-même (Javadoc explicite : "il n'ouvre, ne charge, ni n'exécute
+   le jar reçu... c'est NeoForge, au prochain lancement, qui décidera quoi en faire") — le pire cas d'un
+   jar malveillant qui passerait quand même est un fichier inerte dans `mods/`, jamais un RCE immédiat.
+2. **Transport** : PAS de connexion HTTP séparée — c'est la clé du design. Les octets (`MecheChunk`)
+   voyagent en `CustomPacketPayload` sur la connexion de jeu Minecraft DÉJÀ établie avec le serveur
+   auquel le joueur a choisi de se connecter (confirmé dans le code : "il ne contacte jamais d'adresse
+   distante"). Donc la sécurité du transport = la sécurité du protocole Minecraft lui-même (chiffrement
+   de session pour un serveur online-mode Mojang) — Lanterne n'ajoute ni ne retire de protection à ce
+   niveau, il hérite de celle déjà en place pour TOUT le trafic de jeu.
+3. **Authenticité du manifeste** : POINT RÉSIDUEL RÉEL, mais inhérent à Minecraft, pas un défaut
+   Lanterne. Un attaquant qui contrôlerait déjà le serveur auquel le joueur se connecte (ou romprait le
+   protocole Minecraft lui-même) pourrait effectivement servir un faux manifeste + un faux jar avec un
+   hash cohérent entre eux — la vérification SHA-256 protège contre la CORRUPTION EN TRANSIT, pas contre
+   un serveur malveillant à la source. Mais un joueur qui se connecte déjà à un serveur malveillant a un
+   problème bien plus large qu'un jar mod (vol de session, etc.) — ce n'est pas un vecteur d'attaque
+   NOUVEAU que Meche introduirait, c'est le modèle de confiance déjà accepté en se connectant à un
+   serveur Minecraft. Le consentement explicite requis (`MecheConsent.autoUpdate()`, opt-in via
+   `lanterne-maj-client.toml`) est une protection supplémentaire réelle, pas cosmétique.
+4. **Hébergement** : le manifeste et les octets du jar viennent du VPS lui-même (le serveur de jeu
+   contrôlé par le patron), jamais d'un tiers/CDN externe — zéro risque de supply-chain via un service
+   tiers compromis, contrairement à un système de mise à jour qui pointerait vers une URL GitHub/S3
+   externe.
+
+**Autres protections vérifiées en passant** : plafond de taille anti-OOM (256 Mo,
+`MecheClient.CEILING`), regex stricte sur `modId`/`version` avant construction du nom de fichier
+(`SAFE = [A-Za-z0-9_.-]{1,48}`, empêche toute traversée de chemin), jamais d'écrasement du jar en
+cours d'exécution (nom de fichier différent garanti par le numéro de version).
+
+**Rien à corriger.** Aucun code modifié.
+
+---
+
 **Contrôle pregen (05h53 VPS) + recensement exhaustif des fichiers jamais audités cette nuit** : pregen à 16,8 % (167 998/1 002 001), 17,4 chunk/s, 0 FATAL sur 10 min.
 
 Inventaire réel (pas une estimation) : `src/main/java/fr/clubcitrouille/lanterne` contient **471 fichiers `.java`** au total (hors Iris migré, namespace séparé `net.irisshaders.*`, déjà largement audité par ailleurs). En comparant chaque nom de fichier contre `TACHES-NUIT.md`, **326 fichiers n'y sont JAMAIS mentionnés nommément** — la nuit, bien qu'exhaustive sur les axes transversaux (sécurité, perf, infra, données), n'a couvert qu'une fraction du volume brut de fichiers du mod. Répartition de ces 326 :
