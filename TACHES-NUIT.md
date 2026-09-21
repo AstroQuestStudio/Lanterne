@@ -1373,4 +1373,52 @@ qui est un contrôle de stabilité, pas une action.
 
 **Conclusion** : VPS parfaitement stable toute la nuit, 0 anomalie, `lanterne-26.3.59.jar` (donc
 TÂCHE A et TÂCHE B) tourne déjà en prod avec succès malgré ce que disait la section 1 du résumé —
+
+## CLÔTURE — test complet du cadran shaderpack `Dials.java` (fork, 21/09 ~05h30)
+
+Suite directe de la tâche `03h25` ci-dessus, laissée avec "run n'a pas été suivi jusqu'au menu
+principal confirmé". Machine désencombrée (fork Vulkan bloqué arrêté et nettoyé juste avant) :
+relance propre de `C:\lanterne-client-dials-shaderpack\launch7.bat` (chemin absolu, pas de `cd`
+relatif), suivie jusqu'au bout cette fois.
+
+**Résultat, cette fois complet** : `Iris/: Creating pipeline for dimension minecraft:overworld`,
+`SoundEngine: Sound engine started`, `Reloading ResourceManager: ... mod/lanterne,iris ...` —
+le client atteint bien l'étape post-chargement des ressources (juste avant l'écran-titre/menu,
+étape la plus avancée obtenue cette nuit sur cet environnement précis). **0 `FATAL`**, aucune
+exception liée à `Dials`/`Iris`/`Sodium`/au cadran shaderpack — les seules erreurs présentes dans
+le log sont sans rapport (`ClassNotFoundException` sur des classes d'autres mods absents de cet
+environnement de test minimal, échecs d'authentification Mojang/Realms attendus hors-ligne,
+warning de compat resource pack Sodium déjà connu). Process fermé proprement après vérification
+(`Get-CimInstance` confirmant le chemin `lanterne-client-dials-shaderpack` avant `taskkill //PID`,
+jamais de kill global).
+
+**Limite qui reste, honnêtement** : le clic UI sur le cadran lui-même (cycle effectif entre
+shaderpacks, mise à jour du nom affiché) n'est toujours pas testable sans écran interactif depuis
+un fork — nécessite un test humain en jeu, comme documenté depuis le début. Aucune nouvelle piste
+lancée sur ce sujet, conforme à la consigne de clôture : le code est maintenant confirmé sain au
+chargement, ce qui manquait était uniquement la confirmation "0 FATAL jusqu'au bout du démarrage",
+obtenue ici.
+
+Rien modifié dans le code (pas de bug trouvé), rien commité (rien à commiter), rien déployé sur
+VPS/test1.
 aucune action corrective nécessaire, juste une mise à jour de doc (faite en tête de fichier).
+
+## AUDIT — accumulation Radiographie (fichiers profil-*.txt / mémoire) : PAS de risque, aucune modification (fork, 21/09 ~06h)
+
+Directive : vérifier si `Radiographie.java` (profiling client étendu cette nuit) accumule sans
+borne, en mémoire pendant une session ou en fichiers sur disque à long terme.
+
+**Constaté, code + fichiers réels** :
+- `config/lanterne/profil-*.txt` (instance `test 1`) : 9 fichiers générés cette nuit, 8-25 Ko
+  chacun — taille négligeable, pas de souci même sur des mois d'usage quotidien (quelques Mo/an).
+- **En mémoire, tout est déjà borné par construction** :
+  - `fpsHistogramme` : tableau fixe de 6 cases (compteurs `long`), pas une liste qui grossit.
+  - `creuxDetectes`/`fenetreEnCours` : plafonnés à `CREUX_MAX = 15` (constante existante, déjà
+    pensée pour ça — commentaire du code : "borne la taille du rapport final pour une session où
+    le jeu resterait durablement sous le seuil").
+  - `lentilleTimeline` : vidée à chaque `start()` (nouveau monde), ne grossit qu'au rythme des
+    transitions d'état réelles (pas par image) — pas de croissance illimitée en pratique.
+- Un fichier par SESSION (au `stop()`, pas par tick/frame) — pas de risque d'accumulation rapide.
+
+**Conclusion** : aucun bug, rien à corriger. Le design de cette nuit (histogramme fixe, `CREUX_MAX`)
+avait déjà anticipé ce risque. Aucun fichier modifié, aucune compilation nécessaire, rien commité.
