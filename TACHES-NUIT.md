@@ -920,3 +920,169 @@ principal atteint, 0 FATAL". À confirmer par un vrai test humain en jeu (clic s
 vérifier que le shaderpack change bien visuellement et que le nom affiché suit).
 
 Rien déployé sur le VPS ni `test 1`. Commit `26565b8` sur `26.3`, jamais poussé.
+
+## AUDIT — réglages client par défaut (particules/distance/ombres) : aucun mécanisme, pas un bug (fork, 21/09)
+
+Directive : chercher si Lanterne applique/suggère des valeurs par défaut plus performantes pour les
+nouveaux joueurs (render/sim distance, particules, ombres d'entités), pour réduire la charge
+CPU/GPU côté client à chaque occasion réelle.
+
+**Constat, par lecture directe (pas de code modifié)** :
+
+- `client/Dials.java` expose déjà un cadran rapide en jeu pour `Options.particles()` (ALL/
+  DECREASED/MINIMAL), `Options.cloudStatus()`/`cloudRange()`, `Options.weatherRadius()`,
+  `Options.biomeBlendRadius()`, `Options.ambientOcclusion()` et `Options.entityShadows()` — tout
+  câblé sur le VRAI `options.txt` du jeu (`Options.save()`), bornes réelles confirmées par lecture
+  du constructeur d'`Options.class`. C'est déjà l'outil principal de réglage perf pour le joueur,
+  mais il ne fait QUE réagir à un clic — rien n'applique de valeur par défaut au premier lancement.
+- `client/Eclaireur.java` (patch `renderDelay` JourneyMap au premier lancement, cette nuit) est le
+  SEUL précédent de « Lanterne pose une valeur par défaut sans que le joueur clique » dans tout le
+  mod — et il ne touche que JourneyMap, jamais `Options.renderDistance()`/`simulationDistance()`
+  vanilla (`renderDistanceCaveMax`/`renderDistanceSurfaceMax`/`topoMax` dans sa Javadoc sont des
+  champs JourneyMap internes, pas les réglages vanilla, vérifié par lecture directe du fichier).
+- `Radiographie.parametresJoueur()` (cette nuit, commit `522359d`) ne fait qu'AFFICHER ces valeurs
+  dans un rapport, jamais les modifier.
+
+**Verdict** : aucun bug — il n'existe simplement aucun mécanisme d'auto-tuning des réglages vidéo
+vanilla au premier lancement. En ajouter un serait une VRAIE nouvelle fonctionnalité, pas une
+correction, et — comme la fusion `Graft`/`IrisConfig` documentée plus haut pour l'onglet Iris — un
+changement de comportement visible qui imposerait des choix au joueur (baisser sa distance de
+rendu, désactiver ses ombres) sans qu'il l'ait demandé : décision produit qui mérite l'avis du
+patron plutôt qu'être décidée seule cette nuit. Pas implémenté, pas de code touché, rien à compiler.
+
+**Piste pour une reprise de jour, si le patron valide l'idée** : réutiliser le pattern `Eclaireur`
+(pose une valeur une seule fois au tout premier lancement, jamais réécrite ensuite) pour proposer
+UN preset "performance" optionnel (pas imposé) via `Dials.java` — par exemple un cadran unique
+"Preset perf" qui applique en un clic un jeu de valeurs connu (particules DECREASED, ombres
+coupées, biome blend 2) plutôt que forcer un défaut silencieux au premier lancement.
+
+## TÂCHE VULKAN (suite) — vertex stage isolé des builtins legacy, test lancé, résultat NON récupéré (fork, 21/09 ~03h30)
+
+Reprise de la « prochaine étape » de la section « UniformReblocker : re-blocage des uniforms en
+UBO, SUCCÈS PARTIEL réel » (étage FRAGMENT déjà prouvé à 3532 octets SPIR-V ; étage VERTEX bloqué
+par des builtins GLSL legacy `ftransform()`/`gl_TexCoord`/`gl_FrontColor`, problème documenté comme
+SÉPARÉ du re-blocage UBO lui-même).
+
+**Modifié** (`lab/ShadercProbeSelfCheck.java`, commit `0456255`, aucun fichier `net.irisshaders`/
+`kroppeb` touché) : `VANILLA_VERTEX_SOURCE`/`VANILLA_FRAGMENT_SOURCE` réécrits sans aucun builtin
+legacy — `ftransform()` → `projectionMatrix * modelViewMatrix * vaPosition` (attributs/uniforms
+explicites), `gl_TexCoord[0]`/`gl_FrontColor`/`gl_Color` → varyings `texCoord`/`frontColor`
+explicites, `texture2D`/`gl_FragData[0]` → `texture()`/`out vec4 fragColor` modernes. Objectif :
+isoler le test du problème `CompatibilityTransformer` déjà documenté, pour confirmer ou infirmer
+que le re-blocage UBO marche aussi pour l'étage vertex une fois ce problème annexe retiré.
+
+**Compilation propre** (`./gradlew compileJava`, `BUILD SUCCESSFUL`).
+
+**Test lancé, résultat NON récupéré avant fin de budget de ce fork.** Copie isolée
+`C:\lanterne-client-vulkan-test-3\` créée (clonée depuis `-test-2`, `mods/lanterne-26.3.15.jar`
+rebuild local avec ce correctif, jamais déployé ailleurs), `launch7_v3.bat` généré avec les chemins
+réécrits pour ce dossier. Deux tentatives de lancement en arrière-plan : la première a échoué
+silencieusement (le `cd` d'un sous-shell bash lancé en arrière-plan ne s'est pas propagé à
+`cmd.exe //C` invoqué avec un chemin relatif — leçon déjà documentée plus haut dans ce fichier pour
+TÂCHE C, réoubliée ici, à corriger en utilisant systématiquement le chemin absolu du `.bat` comme
+argument de `cmd.exe //C`, jamais un chemin relatif après un `cd` dans un sous-shell séparé). La
+seconde tentative (chemin absolu correct) a été relancée mais son résultat n'a pas pu être observé
+dans le temps imparti à ce fork — **aucune preuve (SPIR-V produit ou erreur exacte) n'a été
+recueillie pour l'étage vertex isolé**, contrairement à l'objectif de la directive.
+
+**État honnête** : code sain et commité, hypothèse de test raisonnable (builtins modernes
+équivalents, pas de changement de sémantique), mais AUCUNE confirmation empirique obtenue cette
+passe-ci — ni succès ni nouvel échec précis à documenter. Ne pas présenter comme résolu.
+
+**Prochaine étape concrète pour qui reprend** : relancer strictement
+`cmd.exe //C "C:\lanterne-client-vulkan-test-3\launch7_v3.bat > C:\lanterne-client-vulkan-test-3\stdout.log 2> C:\lanterne-client-vulkan-test-3\stderr.log"`
+(chemin absolu partout, pas de `cd` préalable dans un sous-shell séparé), attendre la fin réelle du
+process (vérifiable via absence dans `tasklist`, le lanceur se ferme seul après le menu principal
+selon le pattern déjà observé toute la nuit), puis grep `SHADERC-TEST` dans
+`C:\lanterne-client-vulkan-test-3\logs\latest.log`. `LANTERNE_SHADERC_COMPOSITE_TEST=1` est déjà
+posé dans `launch7_v3.bat`, rien d'autre à changer avant de relancer.
+
+Process laissé à surveiller/nettoyer par la suite (vérifier `tasklist | grep -i java` avant tout
+kill, jamais de kill global). Rien déployé sur le VPS ni `test 1`. Commit `0456255` sur `26.3`,
+jamais poussé.
+
+## AUDIT — charge CPU SERVEUR (cible Xeon 6230R mono-cœur) : rien de solide trouvé, codebase déjà mesurée (fork, 21/09 ~03h40)
+
+Directive : auditer le code SERVEUR (exclu client-only) à la recherche de travail par tick non
+nécessaire ou d'allocations en boucle, avec en tête la contrainte mono-cœur GC-sensible du Xeon
+6230R de production (`memory/cible-serveur-un-coeur.md`). **Aucune modification de code — audit
+seul, verdict honnête négatif, cohérent avec les audits perf précédents de cette nuit.**
+
+Recensement des 12 `ServerTickEvent.Post`/`Pre` réels du dépôt (`Lanterne.java`, `Cadence.java`,
+`Cheptel.java`, `Easel.java`, `Groove.java`, `RadiographieServeur.java`, `Bazaar.java`,
+`Envol.java`, `PortalPreload.java`, `MecheNet.java`, `Rafale.java`, `Solid.java`/`Census.java` via
+`LevelTickEvent`). Deux fichiers lus en détail en profondeur, tous deux déjà exemplaires :
+
+- **`core/PortalPreload.java`** : scan borné (`SCAN_RADIUS=3`, `SCAN_INTERVAL=10` ticks, un seul
+  joueur scanné par tick via un compteur, retour dès le premier portail trouvé), doublé d'un cache
+  `lastPreloaded` par joueur pour éviter tout recalcul redondant. La Javadoc documente un vrai banc
+  (`lab/Traversee`) qui a mesuré et REJETÉ un rayon de ticket plus large (5 au lieu de 3) après
+  l'avoir cru bénéfique — exactement le genre de faux-bon-réglage qu'un audit de lecture seule
+  aurait pu recommander à tort.
+- **`core/Census.java`** : `refresh()` est déjà throttlé par `REFRESH_PERIOD` (ne retravaille pas
+  à chaque tick), le travail est explicitement "proportionnel au nombre de chunks occupés par des
+  joueurs, et non au nombre d'entités" (Javadoc de méthode), et `announce()` ne journalise que sur
+  changement d'état (corrige un vrai bug de spam de logs déjà signalé par un hébergeur, mentionné
+  dans le code lui-même) — pas de piste d'optimisation supplémentaire trouvée.
+
+**Constat global** : contrairement à un audit habituel où on trouve facilement du travail non
+gardé, cette base de code a déjà une discipline de mesure systématique (bancs `lab/*`, Javadoc
+citant des chiffres réels avant/après pour chaque paramètre de throttle) — cohérent avec l'audit
+perf client déjà fait cette nuit (« AUDIT — recherche de nouveaux gains de perf client », même
+verdict négatif). Ne pas confondre "rien trouvé" avec "pas cherché" : les deux fichiers les plus
+probables (scan spatial répété, recensement par joueur) ont été lus intégralement, pas juste
+grep-és.
+
+**AutoMiner (bot, `C:\Users\trufa\Documents\ClubCitrouilleAutoMiner`) non audité** : repo séparé,
+et surtout — c'est un mod **client-only** (confirmé par la description du projet en mémoire), donc
+hors du périmètre "charge CPU serveur" de cette directive précise ; sa boucle de pathfinding ne
+pèse jamais sur le Xeon mono-cœur de production. Pas creusé pour cette raison, pas par manque de
+temps.
+
+Aucun fichier modifié, aucune compilation nécessaire, aucun process de test lancé (lecture de code
+seule).
+
+## TÂCHE VULKAN — étage VERTEX confirmé : SUCCÈS réel du re-blocage UBO (fork, 21/09 ~03h35)
+
+Reprise stricte de la section précédente (« vertex stage isolé des builtins legacy, test lancé,
+résultat NON récupéré ») — UNIQUEMENT le test manquant, aucune nouvelle investigation, aucun
+nouveau code.
+
+**Correctif de la leçon documentée appliqué** : `cmd.exe //C` invoqué avec le chemin ABSOLU du
+`.bat` en un seul argument (pas de `cd` séparé), lancé via Bash `run_in_background` (auto-basculé
+en tâche de fond par le harness après 300s), puis surveillé via `Monitor` (attente de la ligne
+`SHADERC-TEST` dans le log ou fin du process).
+
+**Résultat empirique obtenu, log réel** (`C:\lanterne-client-vulkan-test-3\stdout.log`, 03:34:50) :
+```
+[SHADERC-TEST] RESULTAT VANILLA: ECHEC
+[SHADERC-TEST] patchVanilla + re-blocage des uniforms en UBO (reponse au blocage 'non-opaque
+uniforms outside a block')...
+[SHADERC] UniformReblocker applique (vertex 1972 -> 2074 caracteres, fragment 1371 -> 1481
+caracteres), tentative shaderc...
+[SHADERC] Compilation GLSL->SPIR-V reussie : 5576 octets SPIR-V produits.
+[SHADERC] Compilation GLSL->SPIR-V reussie : 3428 octets SPIR-V produits.
+[SHADERC-TEST] RESULTAT VANILLA REBLOCKED: SUCCES
+```
+**Confirmé sans ambiguïté** : sans re-blocage, `patchVanilla` échoue toujours sur `'non-opaque
+uniforms outside a block'` (attendu, déjà documenté). AVEC re-blocage (`UniformReblocker`), les
+DEUX étages compilent en SPIR-V valide — **5576 octets pour le vertex** (nouveau, jamais obtenu
+avant cette passe) **et 3428 octets pour le fragment** (cohérent avec le succès fragment déjà
+prouvé plus tôt, tailles légèrement différentes car shader de test modernisé sans builtins legacy,
+pas le même fichier source que le test précédent).
+
+**Conclusion pour cette nuit** : le re-blocage UBO (`UniformReblocker.java`) est désormais confirmé
+fonctionner pour LES DEUX étages de `patchVanilla` (le point d'entrée le plus utilisé du pipeline
+Iris), une fois le shader source débarrassé des builtins GLSL legacy. C'est la preuve la plus
+complète obtenue cette nuit sur la faisabilité Vulkan — reste vrai que ceci est un prototype isolé
+(`ShadercProbeSelfCheck.java`/`UniformReblocker.java`), JAMAIS branché au pipeline de rendu réel, et
+que les shaders RÉELS d'un shaderpack (pas le shader vanilla minimal de test) peuvent contenir
+d'autres builtins legacy non couverts par ce test — la modernisation systématique de shaders
+arbitraires (pas juste le cas de test) reste la prochaine étape non commencée.
+
+Aucun fichier modifié cette passe (uniquement exécution du test déjà préparé par le fork
+précédent). Process client `C:\lanterne-client-vulkan-test-3\` laissé actif à ce stade (dépassait le
+menu principal, `sodium-workaround-cleanup` observé dans les logs) — pas de kill (`tasklist | grep
+-i java` vérifié avant toute action, jamais de kill global, laissé à surveiller/nettoyer par la
+suite). Rien déployé sur le VPS ni `test 1`. Commit du fork précédent `0456255` reste la seule
+modification de code liée à cette tâche.
