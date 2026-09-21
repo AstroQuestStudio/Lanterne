@@ -2078,3 +2078,29 @@ joueur humain ?
   vente, ce serait une vraie nouvelle fonctionnalité à construire, pas un bug latent à corriger.
 
 Aucun fichier de code modifié (audit négatif propre, hors périmètre confirmé).
+
+## Audit réflexion AutoMiner → TrieurBlockEntity (couplage fragile cross-mod) — pure lecture de code
+
+Suite au fork précédent (AutoMiner ↔ Bazaar) qui a repéré une réflexion vers `TrieurBlockEntity` :
+creusé le risque architectural précis (deux fichiers côté `ClubCitrouilleAutoMiner`).
+
+**Résultat : conception déjà saine des deux côtés, rien à corriger.**
+
+- `RafaleBridge.java` (résout `core.network.RafaleRequest` par réflexion pour le pont de rafale) :
+  le silence en cas d'échec (`catch (Throwable) { constructor = null; }`) est un CHOIX DE DESIGN
+  explicitement documenté en Javadoc de classe — soft-dependency assumée (AutoMiner doit rester
+  chargeable sans Lanterne), avec repli automatique vers `build()`/`clear()` case par case, jamais
+  aucune conséquence silencieuse dangereuse. Pas un bug.
+- `GrandTrieurSelfCheck.java` (`configureTrieur`, accède à `TrieurBlockEntity#filtre()`/
+  `#setWhitelist(boolean)` par réflexion) : c'est un banc de TEST gated par
+  `AUTOMINER_GRANDTRIEUR_TEST=1` (jamais actif en usage normal), et l'échec de réflexion est DÉJÀ
+  loggé clairement (`AutoMinerMod.LOGGER.error(...)`) et compté (`filterFailures`) dans le rapport
+  final — aucun échec silencieux possible.
+- Aucune API publique plus propre n'existe côté Lanterne pour ces deux besoins précis (le paquet
+  réseau `RafaleRequest` et les méthodes `TrieurBlockEntity` sont déjà les points d'entrée réels,
+  la réflexion est le mécanisme délibéré pour éviter une dépendance de compilation dure, pas un
+  contournement d'une API manquante).
+- Aucun risque de casse silencieuse en cas de futur refactor Lanterne : les deux points de réflexion
+  logguent ou dégradent proprement, jamais un `catch` générique qui avalerait sans trace utile.
+
+Aucun fichier de code modifié (audit négatif propre — conception délibérée confirmée, pas un bug).
