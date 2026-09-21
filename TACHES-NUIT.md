@@ -1,3 +1,30 @@
+# VÉRIFICATION FINALE (build complet depuis zéro, fin de nuit)
+
+**Verdict : dépôt sain, prêt pour la suite.**
+
+- `git status` : working tree propre, rien en attente de commit.
+- **78 commits** sur `26.3` depuis la création de `TACHES-NUIT.md` cette nuit (`5dfe9bf..HEAD`).
+- `./gradlew clean build -x test` (build complet depuis zéro, pas de cache réutilisé pour la
+  compilation Java) → **BUILD SUCCESSFUL** (5s, cache NeoForm/décompilation réutilisé légitimement,
+  compilation Java elle-même fraîche).
+- Jar généré (`build/libs/lanterne-26.3.15.jar`, 5.97 Mo) inspecté (`unzip -l`) : présence confirmée
+  des 5 fichiers `mixins.iris*.json` (dont `mixins.iris.vertexformat.json`, ajouté cette nuit avec
+  l'abstraction `VertexFormatSource`), des assets Iris (`assets/iris/textures/gui/widgets.png`), et
+  des 4 loot tables critiques ajoutées ce soir pour corriger le bug de perte de contenu des coffres
+  (`aiguillage.json`, `coffre_depot.json`, `coffre_reception.json`, `guichet.json`).
+- Note mineure sans conséquence : `mod_version` dans `gradle.properties` du dépôt source est resté
+  à `26.3.15` (jamais bumpé ici — le bump se fait dans le worktree de build séparé
+  `C:\lanterne-jar` à chaque déploiement VPS/test1, dernière version déployée `26.3.59`). Normal,
+  pas un oubli.
+
+**Bilan de la nuit en une phrase** : migration Iris complète et stable en jeu (shaders confirmés
+80-124 FPS), 3 vrais bugs de permission serveur corrigés, 3 vrais bugs de perte de données NBT
+corrigés (dont un critique sur les coffres du réseau), recherche Vulkan avancée réellement (UBO
+re-blocking prouvé), pregen relancé, dizaines d'audits de sécurité/robustesse tous documentés avec
+preuve — voir le résumé détaillé juste en dessous, puis le détail section par section plus bas.
+
+---
+
 # RÉSUMÉ POUR LE RÉVEIL DU PATRON (généré ~04h10, dernière mise à jour de cette section)
 
 Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche `26.3`). Rapport de
