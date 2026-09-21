@@ -1614,3 +1614,34 @@ fichier modifié, rien compilé, rien commité pour cette tâche précise.
   du jeu. Script toujours cohérent avec l'état actuel du code.
 
 Aucun fichier de code modifié, aucune compilation nécessaire (pure lecture). Commit doc uniquement.
+
+## Audit cohérence `Compagnons.present(...)` — protection contre NoClassDefFoundError (pure lecture)
+
+Suite au crash Cadence/BlueMap de cette nuit (une classe qui référençait `BlueMapAPI` dans une
+méthode jamais appelée suffisait à planter tout Lanterne au chargement de classe), audit de
+cohérence : tous les sites `Compagnons.present(X)` du code sont-ils protégés de la même façon ?
+
+**7 sites recensés, tous sains, aucune correction nécessaire :**
+
+- `LanterneCommand.java:191,411` (HORIZONS) — le bloc protégé n'envoie qu'un message texte, aucune
+  référence à une classe Distant Horizons.
+- `Rival.java:80-81,150` (IRIS/OCULUS/VITRAIL) — la seule vraie résolution réflexive
+  (`Class.forName("net.irisshaders.iris.api.v0.IrisApi")`, méthode privée `resolve()`) est déjà
+  wrappée `catch (Throwable)`, avec repli explicite documenté en Javadoc de classe.
+- `Eclaireur.java:121` (JOURNEYMAP) — n'écrit qu'un fichier via `java.nio.file`, aucune classe
+  JourneyMap référencée ; seul `IOException` est possible, jamais `NoClassDefFoundError`.
+- `Radiographie.java:571` (boucle SODIUM/HORIZONS/IRIS) — n'utilise que les constantes `String` de
+  `Compagnons`, jamais un nom de classe tiers.
+- `Cadence.java:48,68,82,90` (BLUEMAP) — déjà corrigé cette nuit : chaque site délègue à
+  `CadenceBlueMap` (isolée dans son propre fichier), `Cadence.java` lui-même ne mentionne aucun
+  type BlueMap dans sa signature — exactement le pattern qui a corrigé le crash initial.
+- `IrisMixinPlugin.java:89` (SODIUM) — compare une chaîne de nom de mixin, ne référence aucune
+  classe Sodium réelle.
+- `Compagnons.present()` lui-même (`report/Compagnons.java:96`) — pur `ModList.get().isLoaded(modId)`
+  wrappé `catch (Throwable)`, jamais de `Class.forName` sur une classe tierce (choix documenté
+  explicitement en Javadoc de classe : « un nom de classe est un détail d'implémentation... et le
+  chercher charge la classe »).
+
+Le pattern défensif établi cette nuit (isolation dans une classe dédiée + réflexion toujours en
+`catch(Throwable)`) est donc déjà appliqué partout où c'est pertinent — pas de "bombe à retardement"
+supplémentaire trouvée. Aucun fichier de code modifié, aucune compilation nécessaire (pure lecture).
