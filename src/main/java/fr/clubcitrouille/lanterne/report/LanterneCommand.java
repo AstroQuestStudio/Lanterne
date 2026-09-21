@@ -461,13 +461,21 @@ public final class LanterneCommand {
                                     "Pré-génération interrompue.").withStyle(ChatFormatting.GOLD), true);
                             return 1;
                         }))
-                .then(Commands.literal("on").executes(context -> {
+                // Coupe TOUTES les optimisations du serveur, pour tout le monde — un effet global
+                // au même titre que « clear on/off » ou « marée on/off » juste au-dessus, et qui
+                // doit donc être gardé de la même façon (Guide.java ne l'annonce d'ailleurs que
+                // dans son bloc « admin » : cette garde manquait à l'exécution, pas à l'intention).
+                .then(Commands.literal("on")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
                     Settings.setEnabled(true);
                     context.getSource().sendSuccess(() -> Component.literal("Lanterne allumée.")
                             .withStyle(ChatFormatting.GREEN), true);
                     return 1;
                 }))
-                .then(Commands.literal("off").executes(context -> {
+                .then(Commands.literal("off")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(context -> {
                     Settings.setEnabled(false);
                     context.getSource().sendSuccess(() -> Component.literal(
                                     "Lanterne éteinte — plus aucune dégradation. Le rapport continue.")
