@@ -602,3 +602,142 @@ Sodium soit présent ou pas) est sur la branche `26.3`, jamais poussé.
 **Prochaine étape réelle qui reste ouverte** : auditer `getVertexFormat()`/`setVertexFormat()`, choisir
 et appliquer le correctif de `WorldRenderingSettings`, puis relancer ce même test pour voir si un 3e
 crash apparaît (probable sur `vertices/sodium/terrain/`, même nature de couplage par type de champ).
+
+## AUDIT — appelants de `chunkVertexFormat`, verdict : correctif trop risqué pour cette nuit (fork, 21/09 ~02h50)
+
+Reprise de la « prochaine étape » ci-dessus (audit demandé par le patron pour le crash #2 de la tâche
+précédente). **Aucun code modifié — audit seul, verdict honnête que le correctif n'est pas sûr à
+improviser cette nuit.** Détail complet dans `RECHERCHE-VULKAN-SANS-SODIUM.md`, nouvelle section en fin
+de fichier. Résumé :
+
+- Le champ n'est PAS juste « stocké/transmis » : `ShaderAttributeInputs.java:36` et 4 sites de
+  `ShaderCreator.java` (lignes 72/254/292/327) font un appel chaîné `.getVertexFormat().getVertexFormat()`
+  pour construire le VRAI format GL utilisé par chaque programme shader — usage d'encodage réel, sur le
+  chemin chaud du rendu shader confirmé stable cette nuit (Complementary Reimagined, Sodium présent).
+- Aggravation trouvée : `VanillaRenderingPipeline.java:34` (le pipeline de REPLI, pas le pipeline
+  shader) appelle lui aussi `ChunkMeshFormats.COMPACT` sans aucune garde — donc même un garde limité au
+  seul constructeur de `WorldRenderingSettings` ne suffirait pas, il faudrait aussi garder ce site.
+- 5 fichiers au total à toucher pour un correctif propre (interface neutre côté Lanterne avec 2
+  implémentations, Sodium présent vs absent), dont 2 sur le chemin chaud de construction des shaders
+  réellement utilisés en jeu — risque de régression directe sur le rendu shader déjà validé par le
+  patron s'il est mal fait ou mal testé en fin de nuit sans pouvoir retester en jeu ensuite.
+
+**Décision** : ne pas toucher au code. Piste de reprise précise documentée dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md` pour une reprise de jour avec plus de marge de test (en jeu, Sodium
+présent + shaderpack actif, ET Sodium absent, pas juste au menu principal). Rien à compiler, rien
+déployé, aucun process de test lancé pour cette tâche (audit de lecture seule).
+
+## TÂCHE — onglet « Iris » dans Sodium RESTAURÉ, corrigé, testé, preuve réelle (fork, 21/09 ~03h05)
+
+Reprise de la piste documentée dans TÂCHE B (« fusion des deux `registerConfigLate` jamais faite, à
+valider avec le patron ») et dans VÉRIFICATION artefact ciel (« cet onglet ne réapparaîtra PAS tant
+que la fusion n'est pas faite »). **Ces deux notes étaient trop pessimistes** — pas besoin de fusion
+ni de décision visible à trancher : l'API Sodium le permet nativement, sans toucher à la page
+Lanterne existante.
+
+**Découverte clé (javap sur le vrai `ConfigBuilderImpl.class` de `sodium-fabric-0.9.2+mc26.3.jar`,
+extrait dans `sodium-fabric-...-mc26.3.jar`, PAS `sodium-neoforge` qui ne contient pas ce code — le
+module neoforge n'est qu'un mince habillage)** : `ConfigBuilder` expose DEUX méthodes distinctes,
+pas juste `registerOwnModOptions()` :
+- `registerOwnModOptions()` → en bytecode, appelle juste `registerModOptions(defaultConfigId)`
+  où `defaultConfigId` est le modId qui a déclaré `sodium:config_api_user` (donc "lanterne" ici).
+- `registerModOptions(String modId)` → résout `ModMetadata` (nom, version) pour CE modId via
+  `modInfoFunction` (backé par `ModList`/FML), crée un `ModOptionsBuilderImpl` **indépendant** et
+  l'ajoute à `pendingModConfigBuilders` (une simple `List`, pas une `Map` — pas de fusion ni
+  d'écrasement possible par modId, vérifié en bytecode sur `ConfigBuilderImpl.build()`).
+
+Donc : appeler `builder.registerModOptions("iris")` depuis Graft — maintenant possible car TÂCHE B a
+donné à "iris" un vrai modId virtuel dans `neoforge.mods.toml` — crée un DEUXIÈME onglet totalement
+indépendant du premier, sans aucun risque pour la page « Lanterne » déjà en place et déjà utilisée
+par les joueurs. Le crainte documentée cette nuit (« le second `.setName("Iris")` écraserait le nom
+posé par Graft ») était infondée : chaque appel produit un objet à part, il n'y a rien à écraser.
+
+**Correctif appliqué** (aucun fichier `mixins.iris*`/`net.irisshaders.iris.mixin` touché) :
+- `net/irisshaders/iris/compat/sodium/config/IrisConfig.java` : `registerConfigLate(ConfigBuilder)`
+  extrait dans une méthode `public static void populate(ConfigBuilder, ModOptionsBuilder)` réutilisable
+  (le contenu — pages, overlays — est identique, juste découplé de la création du `ModOptionsBuilder`).
+  Les deux méthodes privées `createSettingsPage`/`createColorSpaceOption`/`createShadowDistanceOption`
+  passées en `static` (nécessaire pour être appelées depuis la nouvelle méthode statique).
+- `fr/clubcitrouille/lanterne/client/sodium/Graft.java` : `registerConfigLate` appelle en plus
+  `registerIrisTab(builder)` (nouvelle méthode privée) qui fait
+  `IrisConfig.populate(builder, builder.registerModOptions("iris"))`, enveloppé en
+  `catch (Throwable)` avec un simple `LOG.warn(...)` — si jamais le modId "iris" n'est pas résolu
+  (mod list incohérente dans un futur build), le joueur perd seulement l'onglet Iris, jamais tout
+  l'écran Sodium.
+
+**Preuve réelle, testée dans un vrai client jetable (`C:\lanterne-client-sodium-iris-tab\`, copie
+isolée, `mods/` = `lanterne-26.3.15.jar` (rebuild local, pas de bump de version pour ce test isolé,
+jamais déployé) + `sodium-neoforge-0.9.2+mc26.3.jar`)**, run complet jusqu'au menu principal :
+- `grep -ic fatal` → **0** sur `latest.log` ET `debug.log`.
+- Aucune ligne `[LANTERNE][SODIUM] Onglet Iris indisponible...` dans les logs — le `catch (Throwable)`
+  ne s'est jamais déclenché, donc `builder.registerModOptions("iris")` a réussi silencieusement.
+- `Reloading ResourceManager: ... mod/lanterne,iris ...` confirmé (FML voit toujours les 2 modId,
+  cohérent avec TÂCHE B).
+- Trouvaille annexe rassurante : `mixins.iris.compat.sodium.json` mixe bien une classe
+  `MixinSodiumOptions` dans `SodiumConfigBuilder`, mais son corps est VIDE (juste des imports
+  inutilisés) — un no-op qui ne peut pas entrer en conflit avec ce correctif.
+- **Ce qui reste NON vérifiable sans écran interactif** : que l'onglet visuel « Iris » apparaît
+  réellement dans la colonne de gauche du menu vidéo Sodium à côté de « Lanterne » — la preuve
+  ci-dessus est mécanique (aucune exception, le bon objet est bien enregistré auprès de Sodium),
+  mais pas une capture d'écran. Fortement probable vu la preuve bytecode complète, pas 100% comme
+  pour l'artefact du ciel (qui n'a, lui, pas eu de code à écrire — juste une conséquence de TÂCHE B).
+
+Process de test arrêté proprement (PID 32140 confirmé via `Get-CimInstance ... CommandLine` avant kill
+individuel, jamais de kill global `java.exe`). Compilation vérifiée propre à chaque étape
+(`./gradlew compileJava`). **Rien déployé sur le VPS ni `test 1`** — laissé au patron/coordinateur au
+réveil, comme les autres correctifs de cette nuit touchant l'UI. Commit sur `26.3`, jamais poussé.
+
+**Prochaine étape réelle qui reste ouverte** : confirmation visuelle humaine (capture d'écran ou le
+patron en jeu) que l'onglet apparaît bien et fonctionne (clic → ouvre le sélecteur de shaderpack).
+
+## BUG HALO/REDRAW CHUNKS — cause réelle trouvée par preuve directe (rapport Radiographie), PAS `Guet` (fork, 21/09 ~03h)
+
+Reprise du bug signalé le 20/09/26 (« halo » sur certains chunks à l'exploration + chute FPS
+250→150-180, voir mémoire `bug-halo-redraw-chunks.md`). La piste initiale pointait `Guet.java` — **écartée
+avec certitude, par lecture complète du fichier** : `Guet.pulse()` ne fait QUE lire
+`LevelRenderer.visibleSections()` (API publique du moteur), aucun mixin, aucune écriture, désactivé par
+défaut (`ClientConfig.GUET`). Par construction, ce module ne peut rien produire visuellement — la
+mémoire notait déjà une mise à jour du 20/09 allant dans ce sens (pointant plutôt vers
+`SectionRenderDispatcher`/`GpuBufferPool.tryRecycleBuffers`), confirmée ici.
+
+**Cause réelle confirmée par preuve directe**, trouvée dans un vrai rapport déjà généré par le patron
+et jamais dépouillé jusqu'ici : `test 1/config/lanterne/profil-2026-09-21_01-23-51.txt` (rendu OpenGL,
+Sodium+DH, vue 12/12 chunks, avant le fix modId iris de cette nuit). Un creux de FPS réel à t+6s (8.3
+FPS) a sa pile n°1 (7/64 échantillons) qui remonte, sans ambiguïté, à :
+
+```
+BufferArena.tryUpload → BufferArena.tryUploads → BufferArena.upload
+→ RegionAllocatorHandle.upload → RenderRegionManager.uploadResults
+→ RenderSectionManager.processChunkBuildResults → processChunkBuilds
+→ SodiumWorldRenderer.setupTerrain → LevelExtractor.extract (par image, fil de rendu)
+```
+qui descend jusqu'à `MojangStagingBuffer.enqueueCopy` → `glNamedBufferSubData` (upload GPU synchrone).
+
+**Diagnostic** : c'est `net.caffeinemc.mods.sodium.client.gpu.arena.BufferArena` (le pool de mémoire
+GPU de Sodium pour les maillages de chunk compilés) qui, quand PLUSIEURS sections finissent de compiler
+la même image (typiquement après un déplacement rapide/vol qui charge beaucoup de nouveaux chunks d'un
+coup), uploade tout en une seule fois, de façon SYNCHRONE sur le fil de rendu, dans
+`SodiumWorldRenderer.setupTerrain` — d'où la sensation visuelle de « halo »/redraw en masse (beaucoup de
+sections de chunk apparaissent/changent d'un coup) ET la chute de FPS simultanée (le fil de rendu
+attend la fin de l'upload GPU avant de continuer).
+
+**Ce n'est PAS un bug introduit par Lanterne ni par la migration Iris** : `BufferArena`/
+`RenderRegionManager` sont du code Sodium pur, jamais touché ni migré cette nuit — c'est un comportement
+architectural inhérent à Sodium (pas de lissage/étalement des uploads sur plusieurs images, contrairement
+au build des maillages qui lui est bien multi-threadé). Confirmé absent de toute piste Iris/Lanterne :
+aucune classe `net.irisshaders`/`fr.clubcitrouille` dans cette pile.
+
+**PAS corrigé cette nuit** — un correctif (étaler les uploads `BufferArena` sur plusieurs images au lieu
+de tout faire en une fois, via un mixin sur `RenderRegionManager.uploadResults`/`BufferArena.upload`)
+est risqué à improviser sans pouvoir retester en jeu avec une vraie charge (vol rapide, beaucoup de
+chunks à charger d'un coup) — exactement le genre de correctif qui a besoin d'un test client HUMAIN en
+conditions réelles, pas juste un menu principal atteint via le lanceur jetable. Piste de reprise précise
+pour une future passe : mixin `@Inject` ou `@Redirect` sur `BufferArena.tryUploads`/
+`RenderRegionManager.uploadResults` pour plafonner le nombre d'octets/sections uploadés par image
+(budget de temps, comme `Radiographie` le fait déjà pour d'autres compteurs), le reste reporté à l'image
+suivante — nécessite de vérifier que Sodium n'a pas déjà un tel budget ailleurs (pas trouvé dans cette
+passe, à vérifier plus profondément) et que retarder un upload ne casse pas l'affichage (un chunk
+"prêt" mais pas encore uploadé doit rester invisible, pas afficher un maillage vide/corrompu).
+
+Aucun fichier modifié, aucune compilation nécessaire (diagnostic seul, par lecture d'un rapport déjà
+généré + lecture de code). Mémoire `bug-halo-redraw-chunks.md` mise à jour avec cette conclusion.

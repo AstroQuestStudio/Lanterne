@@ -37,10 +37,26 @@ public class IrisConfig implements ConfigEntryPoint {
 	public static final Identifier COLOR = Identifier.fromNamespaceAndPath("iris", "textures/gui/config-icon.png");
     @Override
     public void registerConfigLate(ConfigBuilder builder) {
+        populate(builder, builder.registerOwnModOptions());
+    }
+
+    /**
+     * Remplit une page Iris sur un {@link ModOptionsBuilder} déjà créé par l'appelant.
+     *
+     * <p>Extrait de {@link #registerConfigLate} pour que {@code Graft} (le seul déclarant
+     * {@code sodium:config_api_user} depuis la fusion d'Iris dans Lanterne, un mod ne peut en
+     * déclarer qu'un) puisse ouvrir un ONGLET SÉPARÉ « Iris » via
+     * {@code builder.registerModOptions("iris")} (le modId virtuel posé par la déclaration
+     * passive {@code [[mods]] modId = "iris"} de {@code neoforge.mods.toml}), en plus de son
+     * propre onglet « Lanterne ». Chaque appel à {@code registerModOptions}/{@code
+     * registerOwnModOptions} crée un {@code ModOptionsBuilderImpl} indépendant (vérifié en
+     * bytecode sur {@code ConfigBuilderImpl.build()} : simple liste, aucune fusion ni écrasement
+     * par modId) — donc aucun risque pour la page Lanterne déjà en place.
+     */
+    public static void populate(ConfigBuilder builder, ModOptionsBuilder modOptions) {
         boolean vk = IrisMixinPlugin.usingVulkan;
 
-        var modOptions = builder.registerOwnModOptions()
-                .setName("Iris")
+        modOptions.setName("Iris")
                 .setIcon(MONO)
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0xFFf556e2))
                 .setVersion(Iris.getVersionSimple())
@@ -124,7 +140,7 @@ public class IrisConfig implements ConfigEntryPoint {
         }
     }
 
-    private PageBuilder createSettingsPage(ConfigBuilder builder) {
+    private static PageBuilder createSettingsPage(ConfigBuilder builder) {
         return builder.createOptionPage()
                 .setName(Component.literal("Settings"))
                 .addOptionGroup(
@@ -145,7 +161,7 @@ public class IrisConfig implements ConfigEntryPoint {
                 );
     }
 
-    private OptionBuilder createColorSpaceOption(ConfigBuilder builder) {
+    private static OptionBuilder createColorSpaceOption(ConfigBuilder builder) {
         return builder.createEnumOption(
                         Identifier.fromNamespaceAndPath("iris", "color_space"),
                         ColorSpace.class)
@@ -160,7 +176,7 @@ public class IrisConfig implements ConfigEntryPoint {
                 .setElementNameProvider(ColorSpace::getName);
     }
 
-    private OptionBuilder createShadowDistanceOption(ConfigBuilder builder) {
+    private static OptionBuilder createShadowDistanceOption(ConfigBuilder builder) {
         return builder.createIntegerOption(
                         Identifier.fromNamespaceAndPath("iris", "shadow_distance"))
                 .setDefaultValue(32)

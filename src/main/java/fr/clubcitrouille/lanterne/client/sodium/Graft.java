@@ -105,6 +105,38 @@ public final class Graft implements ConfigEntryPoint {
                 .addPage(builder.createExternalPage()
                         .setName(Dials.DOOR)
                         .setScreenConsumer(Graft::open));
+
+        registerIrisTab(builder);
+    }
+
+    /**
+     * Rouvre l'onglet « Iris » séparé dans le menu Sodium, perdu à la fusion d'Iris dans Lanterne.
+     *
+     * <p>Avant la fusion, Iris déclarait lui-même {@code sodium:config_api_user} et Sodium
+     * l'appelait indépendamment de Lanterne — deux onglets. Un mod ne peut déclarer cette
+     * propriété qu'une fois ; c'est Lanterne/{@code Graft} qui la détient désormais. La solution
+     * n'est PAS de fusionner le contenu des deux dans un seul onglet « Lanterne » (changement de
+     * comportement visible), mais d'utiliser {@code ConfigBuilder.registerModOptions(String)} —
+     * distinct de {@code registerOwnModOptions()} — pour ouvrir un DEUXIÈME onglet indépendant
+     * sous le modId virtuel {@code "iris"} posé par la déclaration passive {@code [[mods]]} de
+     * {@code neoforge.mods.toml} (voir sa Javadoc). Vérifié en bytecode
+     * ({@code ConfigBuilderImpl.build()}) : chaque appel crée un objet indépendant ajouté à une
+     * simple liste, sans fusion ni écrasement par modId — zéro risque pour l'onglet Lanterne
+     * ci-dessus.
+     *
+     * <p>Enveloppé en {@code Throwable} : si jamais le modId "iris" n'est pas résolu par Sodium
+     * (mod list incohérente, forge d'un futur build qui aurait perdu la déclaration), l'onglet
+     * Lanterne reste intact et le joueur perd seulement l'onglet Iris, jamais tout l'écran.
+     */
+    private static void registerIrisTab(ConfigBuilder builder) {
+        try {
+            net.irisshaders.iris.compat.sodium.config.IrisConfig.populate(
+                    builder, builder.registerModOptions("iris"));
+        } catch (Throwable t) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.warn(
+                    "[LANTERNE][SODIUM] Onglet Iris indisponible dans le menu Sodium (modId \"iris\" non resolu) : {}",
+                    t.toString());
+        }
     }
 
     /**
