@@ -1,3 +1,20 @@
+# VÉRIFICATION — Mèche est immunisé contre le saut de version bizarre de cette nuit (59→60→100)
+
+Directive : vérifier si Mèche (auto-update client/serveur) compare les versions numériquement/
+lexicographiquement, ce qui aurait pu mal réagir au saut `26.3.59`→`26.3.60`→`26.3.100` de cette
+nuit (piège classique : `"26.3.100" < "26.3.60"` en comparaison de chaînes).
+
+**Résultat : non-problème par conception, confirmé par preuve directe dans le code.**
+`core/network/MecheManifest.java` a une Javadoc explicite qui documente ce choix de conception :
+« Pourquoi l'empreinte décide, pas le numéro de version » — la décision de mise à jour dans
+`MecheClient.java:124` compare `Arrays.equals(local.sha256(), manifest.sha256())`, jamais les
+numéros de version. Le champ `version` (`String`) ne sert qu'à l'affichage humain. Aucune
+comparaison numérique ou lexicographique de version n'existe nulle part dans le mécanisme
+d'auto-update — donc aucun risque, quel que soit l'ordre ou l'écart des numéros de version choisis.
+Aucun code modifié (rien à corriger).
+
+---
+
 # CLARIFICATION — double déploiement en parallèle (~04h47, résolu)
 
 Un fork dédié ("Déployer les correctifs critiques") ET le coordinateur lui-même ont, sans le savoir,
