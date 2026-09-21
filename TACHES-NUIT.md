@@ -2356,3 +2356,56 @@ réels trouvés et corrigés (`SpawnerSilk`, `Beamer`, Aiguillage/Guichet/Coffre
 le reste confirmé sain (`Burner` via éjection séparée, `Panel`/`Wall` sans état à préserver par
 construction, `Trieur` sans override donc comportement vanilla `HopperBlockEntity` standard déjà
 correct, `Vigil` sans état utilisateur — juste un garde de chunk interne).
+
+## VÉRIFICATION INDÉPENDANTE du correctif `b904a77`/`a80e8ad` — CONFIRMÉ SAIN, priorité de déploiement
+
+Vérification rigoureuse demandée par le coordinateur vu la gravité du bug (perte totale du contenu
+des coffres réseau à la casse). Pas une nouvelle investigation — relecture ligne par ligne +
+compilation propre + démarrage réel.
+
+**1. Relecture de `core/ReseauDrops.java`** : logique saine, structurellement identique à
+`BeamerDrops.java`/`SpawnerSilk.java` déjà validés cette nuit (`TagValueOutput` →
+`blockEntity.saveCustomOnly(output)` → `removeComponentsFromTag` → `BlockItem.setBlockEntityData` →
+`drop.applyComponents`). Garde bien `drops.isEmpty()` et `drop.getItem() instanceof BlockItem` avant
+d'agir — pas de NPE si le drop est vide ou n'est pas le bloc lui-même. `CoffreReceptionBlockEntity`
+écrit son `filtre` (`Map<Item,Integer>`) dans `saveAdditional` (qui appelle `super.saveAdditional`
+puis ajoute la clé `"filtre"`) — `saveCustomOnly` de la classe de base appelle ce `saveAdditional`
+polymorphiquement (méthode virtuelle standard Java, aucune raison qu'elle saute l'override), donc le
+filtre est bien inclus dans la copie NBT. Pas de risque de duplication inverse : `CoffreDepot`/
+`CoffreReception` étendent `BaseEntityBlock` (PAS `ChestBlock` vanilla), donc ils n'héritent PAS du
+mécanisme `ChestBlock.onRemove` → `Containers.dropContentsOnDestroy` qui scatterait déjà le contenu
+séparément — vérifié par `grep` explicite (`onRemove`/`playerWillDestroy`/`Containers.` absent de
+tout le package `content/reseau`), donc pas de double-drop possible.
+
+**2. Loot tables** : les 4 fichiers (`aiguillage.json`, `guichet.json`, `coffre_depot.json`,
+`coffre_reception.json`) sont syntaxiquement identiques au pattern déjà en place et fonctionnel de
+`trieur.json` (`minecraft:block` → 1 pool → 1 entrée `minecraft:item` → `survives_explosion`). Les
+noms d'item (`lanterne:aiguillage`, `lanterne:guichet`, `lanterne:coffre_depot`,
+`lanterne:coffre_reception`) vérifiés exacts contre `Reseaux.java` (`ITEMS.registerSimpleBlockItem`).
+
+**3. Build depuis zéro** (`gradlew clean build -x test`) : `BUILD SUCCESSFUL`. `unzip -l` sur le jar
+généré confirme les 4 loot tables présentes au bon chemin (`data/lanterne/loot_table/blocks/*.json`)
+ET les 3 classes de correctif compilées (`ReseauDrops.class`, `BeamerDrops.class`,
+`SpawnerSilk.class`).
+
+**4. Démarrage réel sur le serveur jetable** (`C:\lanterne-server-test`, jar remplacé par le build
+frais) : **`Done (0.406s)!`**, aucune erreur/warning liée aux loot tables, au datapack, ou aux 3
+classes de correctif dans les logs (grep exhaustif — seuls warnings bénins déjà connus : epoll
+Linux-only sur Windows, offline-mode, avertissements JNA/Unsafe standard). Serveur arrêté proprement
+après vérification (PID confirmé via `Get-CimInstance` avant `taskkill`, aucun autre process touché).
+
+**Point annexe découvert en cours de route (utile pour la suite)** : `unix_args.txt` sur
+`C:\lanterne-server-test` utilise `:` comme séparateur de classpath — invalide sous Windows (Java
+attend `;`), cause un `ClassNotFoundException: net.neoforged.fml.startup.Server` silencieux et
+trompeur. **Toujours utiliser `win_args.txt` pour lancer ce serveur jetable depuis Windows**, jamais
+`unix_args.txt` (malgré son usage dans ce même fichier plus haut cette nuit — à corriger si repris).
+
+**Conclusion : ce correctif (commits `de0110a`, `b904a77`, `a80e8ad`) est confirmé sain à un niveau
+de confiance élevé (lecture + compilation + démarrage réel, pas seulement lecture de bytecode comme
+les 2 précédents). Recommandation forte : PRIORITÉ DE DÉPLOIEMENT dès le réveil du patron** — c'est
+le bug le plus grave trouvé cette nuit (perte de données réelle de joueurs), et contrairement aux
+autres correctifs UI (onglet Sodium, cadran shaderpack) laissés volontairement non déployés en
+attente d'un œil humain, celui-ci n'a aucune dépendance à une confirmation visuelle : soit les coffres
+gardent leur contenu à la casse (comportement attendu, invisible en temps normal), soit ils le
+perdent encore (régression immédiatement visible). Déployer sur `test 1` d'abord suffit pour lever le
+doute avant VPS.
