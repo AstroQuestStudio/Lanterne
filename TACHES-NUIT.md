@@ -107,6 +107,29 @@ client max, sinon documenter et arrêter").
   improviser en fin de nuit sans pouvoir retester en jeu après coup. Piste précise documentée dans
   `RECHERCHE-VULKAN-SANS-SODIUM.md`.
 
+## Audit démarrage serveur (~06h15, pure lecture de code, aucune modification)
+
+Piste explorée : le démarrage serveur (Xeon mono-cœur, monde réel 1.58GB) fait-il du travail
+synchrone évitable qui retarderait la disponibilité du serveur ?
+
+**Résultat : rien à corriger, conception déjà saine.**
+
+- Seul `ServerStartedEvent` (jamais `ServerStartingEvent`/`ServerAboutToStartEvent`) est utilisé
+  côté Lanterne pour tout travail applicatif (`Lanterne.onServerStarted` : bannière/diagnostics,
+  `Cadence.onServerStarted` : reprise pregen). Cet évènement se déclenche APRÈS que le serveur ait
+  déjà ouvert son port et affiché `Done` — donc rien ici ne retarde la disponibilité aux joueurs.
+- `Pregen.resumeIfPending` → `begin()` : vérifié en détail, ne fait qu'initialiser des compteurs
+  (`O(1)`, pas de scan disque ni de génération synchrone) ; la génération réelle des 500 chunks de
+  rayon est étalée sur les ticks suivants via un curseur incrémental (déjà connu du système,
+  documenté dans sa Javadoc — "la reprise est gratuite, ce qui existe déjà est sauté").
+- `CadenceBlueMap.startOnReady` s'enregistre en callback dès le constructeur du mod (pas besoin
+  d'attendre `ServerStartedEvent`), et le vrai rendu BlueMap est géré par le plugin BlueMap
+  lui-même de façon asynchrone (hors du contrôle direct de Lanterne).
+
+Pas de gain trouvé sur cet axe — le design existant évite déjà le piège classique (travail lourd
+dans `ServerStartingEvent`, avant l'ouverture du port). Aucun fichier modifié, rien compilé, rien
+commité.
+
 ## 5. Aucun risque pris
 
 Aucun déploiement VPS n'a eu lieu cette nuit en dehors de ce qui est explicitement listé en
@@ -1447,3 +1470,31 @@ retrait complet de Sodium (calcul du format, pas juste son transport). Détail d
 
 Compile clean (`./gradlew compileJava` + `./gradlew build -x test`), rien déployé VPS/test1,
 process de test fermé proprement (PID vérifié via `Get-CimInstance` avant `taskkill`).
+
+## Audit paquets réseau custom (~06h30, pure lecture de code, aucune modification)
+
+Piste explorée : un paquet Lanterne (33 classes `CustomPacketPayload` trouvées dans
+`core/network/`, `content/*/`) est-il envoyé à chaque tick sans besoin, transporte-t-il des
+données inutilement volumineuses, ou broadcast-t-il à tous les joueurs alors qu'un envoi ciblé
+suffirait ?
+
+**Résultat : rien à corriger, conception déjà saine.**
+
+- Aucun `PacketDistributor.sendToAllPlayers` ni équivalent broadcast trouvé dans tout le mod —
+  tous les envois serveur→client sont `sendToPlayer` (ciblé) ou en réponse directe à une requête
+  d'un joueur précis. Aucun broadcast global inutile.
+- Les 2 seuls envois réellement rattachés à un `ClientTickEvent.Post` avec un `sendToServer` à
+  l'intérieur (`SouvenirClient.onClientTick`, `Bell.onClientTick`) sont tous les deux gardés par
+  une condition qui empêche l'envoi la plupart des ticks : `SouvenirClient` n'envoie que si la
+  dimension a changé depuis la dernière annonce (`dimension.equals(lastAnnouncedDimension)`) ;
+  `Bell` n'envoie que si une touche a été pressée ce tick (`OPEN.consumeClick()`). Aucun des deux
+  n'envoie à chaque tick sans condition.
+- `Wheel.pump()` (transfert de fichier audio par morceaux, `Post.Gift`) est bien rattaché à un
+  `ClientTickEvent.Post` sans garde de dimension/clic, mais est déjà borné par construction :
+  sort immédiatement si rien n'est en cours de transfert (`giving == null`), et plafonne le
+  nombre de morceaux envoyés par tick via `Studio.shardsPerTick()` (config existante) — c'est un
+  débit volontairement contrôlé, pas une fuite.
+- `Sight.java` (déjà throttlé cette nuit, commit `c1d7a1f`) envoie `RegardAsk` seulement sur
+  changement de cible ou toutes les 10 ticks — cohérent avec le reste de l'audit.
+
+Aucun fichier modifié, rien compilé, rien commité.
