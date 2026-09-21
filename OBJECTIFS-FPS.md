@@ -82,3 +82,11 @@ Preuve de pollution (agent W2) : le client d'un autre agent en priorité BelowNo
 2. Un client qui reste ouvert après usage est un incident : le fermer immédiatement (PID lancé seulement).
 3. Gradle/compilation restent autorisés sans verrou (CPU seulement, priorité BelowNormal, workers ≤ 2) ; aucune mesure de FPS n'est lancée pendant qu'une compilation est en cours.
 4. Dès que le **banc central** (C:\bench, file d'attente) est validé par le coordinateur, plus aucun agent ne lance de client lui-même : il dépose un job et lit le résultat.
+
+## RÈGLE D'ISO-QUALITÉ (patron, 21/09 14h) — hiérarchie des leviers d'optimisation
+Danger : DLSS/FSR/échelle de résolution peuvent effacer des détails fins (herbe, feuillage, textes, arêtes). Donc, ordre STRICT des leviers :
+1. **SANS PERTE (par défaut, toujours actifs)** : élimination d'allocations (JourneyMap 44 %…), contournement NVIDIA, cache/culling des ombres à résultat identique, optimiseur de shaders à ISO-RENDU prouvé, JVM/GC, culling GPU, batching, mise à jour paresseuse. Aucun changement visible.
+2. **PERTE QUASI NULLE (actifs après preuve)** : réductions dont l'écart d'image est sous seuil (PSNR/SSIM documenté) sur des scènes de référence riches en détails fins (jungle/feuillage, herbe, texte, arêtes au soleil bas).
+3. **PERTE VISIBLE = OPTIONNELLE, JAMAIS PAR DÉFAUT sur GPU capable** : échelle de résolution, upscaling (FSR/DLSS-like), baisse de distance/ombres/options du pack. Réservés aux profils « petite config/iGPU », proposés et expliqués à l'utilisateur, désactivables en un clic, jamais activés en silence sur une RTX.
+4. Toute optimisation de niveau 2 ou 3 est livrée avec : captures avant/après sur les scènes de référence, métrique PSNR/SSIM, mention explicite « perte visible : oui/non ».
+5. Le régulateur adaptatif essaie les niveaux dans cet ordre (1 → 2 → 3) et n'atteint le niveau 3 qu'en dernier recours.
