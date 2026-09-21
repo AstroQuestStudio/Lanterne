@@ -1,5 +1,19 @@
-**CONTRÔLE PREGEN + AUDIT — sixième lot de 6 mixins Lanterne natifs (47 sur 112 cumulés)**, aucun
-problème trouvé.
+**CONTRÔLE PREGEN + AUDIT — septième lot de 6 mixins Lanterne natifs**, aucun problème trouvé.
+- Pregen VPS : 19,0% (190 202/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- Mixins lus intégralement : `DamageIndicatorMixin` (plafond de particules de dégâts, point d'accroche
+  unique vérifié javap), `GateBehaviorMixin` (retrait des flux Java dans les 3 chemins de
+  `GateBehavior`, sémantique RUN_ONE/TRY_ALL et double-parcours `tickOrStop` préservées à l'identique),
+  `LightCheckBlockMixin` (retire une des deux fermetures allouées par `checkBlock`, liaison
+  `MethodHandle`/réflexion documentée en détail avec échec bruyant au chargement — piste "même paquet"
+  explicitement testée et écartée, `TaskType` étant réellement `private` au sens JEP 181, pas
+  package-private), `SoundLimitMixin` (limiteur de rafale sonore, catégories exemptées correctes),
+  `SleepBedMixin` (évite de charger le chunk du lit pour un villageois trop loin, retour AIR au lieu
+  d'annuler la méthode, court-circuit `&&` correctement exploité), `MouseTweaksMixin` (port complet de
+  MouseTweaks BSD-3-Clause, 520 lignes, jamais `return true`/annulation sauf molette — cohérent avec la
+  Javadoc qui documente un bug précédent déjà corrigé).
+- Aucun bug trouvé. Discipline d'ingénierie exceptionnelle constante (javap systématique, pistes
+  alternatives explicitement testées et documentées comme écartées plutôt que juste choisies).
+- Build vérifié sain après lecture, aucune modification de code.
 
 - Pregen VPS (lecture seule) : 18,8 % (188 456/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
 - `AquiferMixin` : boîte `MutableDouble` réutilisée par instance (pas partagée entre threads, preuve
