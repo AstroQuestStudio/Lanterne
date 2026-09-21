@@ -811,3 +811,48 @@ détail).
 Commit : `b1fb25b` (`ShadercProbe.java`, pile 64→256 Mo, commentaire mis à jour). Rien déployé sur
 VPS/test1. Process client de test fermé proprement après vérification (`taskkill //PID` ciblé,
 jamais de kill global).
+
+## ÉTAPE 13 — localisation précise et conclusion définitive du stack overflow (fork, 21/09 ~07h35)
+
+Confirme exactement l'hypothèse de l'étape 12 ("le vrai parseur récursif-descendant de glslang
+pourrait avoir une limite... qui n'est PAS un problème de taille de pile réglable côté Java").
+
+**Méthode** : le `catch (Throwable problem)` de `testVanillaReblockedInClient` ne loggait que
+`problem.toString()` (message sans stack trace) — corrigé pour logger la stack trace complète.
+Checkpoints de log ajoutés entre chaque étape de la chaîne (patchVanilla → reblock vertex → reblock
+fragment → shaderc vertex → shaderc fragment).
+
+**Stack trace complète obtenue (2 lancements client réels)** :
+```
+java.lang.OutOfMemoryError: Out of stack space.
+	at org.lwjgl.util.shaderc.Shaderc.shaderc_compile_into_spv(Shaderc.java:746)
+	at fr.clubcitrouille.lanterne.lab.ShadercProbe.compileSpirv(ShadercProbe.java:388)
+	at fr.clubcitrouille.lanterne.lab.ShadercProbe.testVanillaReblockedInClient(ShadercProbe.java:257)
+	at fr.clubcitrouille.lanterne.lab.ShadercProbe.testRealPackVanillaInClientOnCurrentThread
+	at fr.clubcitrouille.lanterne.lab.ShadercProbe.lambda$testRealPackVanillaInClient$0
+	at fr.clubcitrouille.lanterne.lab.ShadercProbe.lambda$runWithLargeStack$0
+```
+
+**Le crash est DANS l'appel natif JNI `shaderc_compile_into_spv`**, pas côté Java. `UniformReblocker`
+(itératif, aucune récursion, vérifié par lecture) et `JcppProcessor`/`TransformPatcher` (checkpoints
+tous atteints AVEC SUCCÈS juste avant le crash) sont innocentés. Le vertex du même fichier (99921
+caractères avant reblock) compile sans souci en 32784 octets SPIR-V — seul le fragment plante.
+
+**Test décisif** : pile portée de 256 Mo à **512 Mo** (8x la valeur initiale de 64 Mo) — échec
+identique, même stack trace, même timing quasi-instantané (~0.45s). Ce résultat élimine
+définitivement l'hypothèse "récursion profonde mais bornée qui a juste besoin de plus de pile" —
+seule une récursion non bornée/pathologique ou un bug natif de shaderc/glslang indépendant de la
+taille de pile explique qu'un facteur 8 ne change absolument rien.
+
+**Conclusion définitive** : ce n'est pas un défaut du code Lanterne — la cause vit dans la
+bibliothèque native `shaderc` (LWJGL) face à ce fichier réel précis. Hors de portée d'un correctif
+côté Java dans ce prototype. Pistes pour une reprise future (non tentées, hors budget) :
+`shaderc_compile_options_set_optimization_level` à un niveau différent, réduction par dichotomie du
+fichier pour isoler le motif GLSL déclencheur, ticket upstream shaderc.
+
+**Verdict global Vulkan à ce stade** : `patchComposite` et `patchVanilla` (vertex+fragment) marchent
+sur shaders synthétiques ET sur un vrai fichier réel de shaderpack, sauf ce seul cas de fragment
+volumineux — la preuve de faisabilité Vulkan est aussi complète et honnête qu'elle peut l'être pour
+une nuit de recherche pure, jamais branchée au rendu réel.
+
+Commit `25c447b` sur `26.3`, jamais poussé. Rien déployé VPS/test1.

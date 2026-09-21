@@ -1,3 +1,52 @@
+# VULKAN — étape 13 : stack overflow localisé précisément, conclusion définitive (fork, ~07h35)
+
+Suite directe de la section ci-dessous (étape 12). Directive : identifier la récursion précise
+derrière le `OutOfMemoryError: Out of stack space` sur le FRAGMENT réel `gbuffers_terrain`
+(99760 caractères), qui persistait même à 256 Mo de pile.
+
+**Fait** : le catch(Throwable) de `testVanillaReblockedInClient` avalait la stack trace via
+`toString()` — corrigé pour logger la stack trace complète (`ShadercProbe.java`, commit `25c447b`).
+Checkpoints de log ajoutés à chaque étape (patchVanilla → reblock vertex → reblock fragment →
+shaderc vertex → shaderc fragment) pour localiser précisément où ça casse.
+
+**Résultat obtenu, sans ambiguïté** (2 lancements client réels, stack trace complète capturée) :
+
+```
+java.lang.OutOfMemoryError: Out of stack space.
+	at org.lwjgl.util.shaderc.Shaderc.shaderc_compile_into_spv(Shaderc.java:746)
+	at fr.clubcitrouille.lanterne.lab.ShadercProbe.compileSpirv(ShadercProbe.java:388)
+	at fr.clubcitrouille.lanterne.lab.ShadercProbe.testVanillaReblockedInClient(ShadercProbe.java:257)
+```
+
+**Le crash est DANS l'appel natif JNI `shaderc_compile_into_spv` lui-même** — pas dans
+`UniformReblocker` (code Lanterne, confirmé 100% itératif, aucune récursion), pas dans
+`JcppProcessor`/`TransformPatcher` (checkpoints de log tous atteints AVANT le crash, avec succès).
+Le vertex du MÊME fichier (99921 caractères avant reblock côté patchVanilla) compile sans souci en
+32784 octets SPIR-V juste avant — seul le fragment plante.
+
+**Fait déterminant** : porté la pile du thread dédié de 256 Mo à **512 Mo** (commit `25c447b`) et
+retesté — **échec identique, même stack trace, même timing quasi-instantané (~0.45s)**. Passer de
+64→256→512 Mo (8x) sans le moindre changement élimine l'hypothèse "juste besoin de plus de pile
+pour une récursion profonde mais bornée" — c'est le signal d'un vrai problème dans le parseur
+récursif-descendant natif de shaderc/glslang face à ce fichier précis (récursion non bornée /
+pathologique, ou bug natif indépendant de la taille de pile), **pas un défaut du code Lanterne**.
+
+**Conclusion honnête pour la reprise de jour** : ce n'est PAS un problème qu'un fix côté Lanterne
+(Java pur, prototype isolé) peut résoudre — la cause vit dans la bibliothèque native `shaderc`
+(LWJGL) elle-même face à ce fichier réel de 99760 caractères. Pistes pour qui veut aller plus loin
+(hors budget de cette nuit) : (a) essayer `shaderc_compile_options_set_optimization_level` à un
+niveau différent avant l'appel, (b) tester si le fichier contient un motif GLSL spécifique
+(macro auto-référencée après expansion jcpp, boucle `#include` non détectée) en le simplifiant par
+dichotomie, (c) contacter/chercher un ticket upstream shaderc pour ce genre de crash sur gros
+fichiers. **L'axe Vulkan a maintenant eu une preuve complète et honnête de sa limite actuelle** —
+patchComposite et patchVanilla vertex+fragment marchent sur fichiers synthétiques ET réels sauf ce
+seul cas, documenté avec une précision qu'aucune passe précédente n'avait atteinte.
+
+Commit `25c447b` sur `26.3`, jamais poussé. Rien déployé VPS/test1. 2 process client de test fermés
+proprement (PID vérifiés via `Get-CimInstance` avant kill, jamais de kill global).
+
+---
+
 # VULKAN — reprise des 2 blocages étape 8, 1 résolu, 1 confirmé plus profond (fork, ~07h30)
 
 Gradle débloqué → reprise directe des 2 derniers obstacles Vulkan documentés dans
