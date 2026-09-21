@@ -2055,3 +2055,26 @@ Piste : Lanterne ajoute-t-il de la génération de monde custom (`Feature`/`Biom
   feature de génération Lanterne, puisqu'il n'en existe aucune.
 
 Aucun fichier de code modifié (rien à corriger — audit négatif propre, hors périmètre confirmé).
+
+## Audit AutoMiner ↔ Bazaar/Till (interaction économique) — pure lecture de code, hors périmètre
+
+Question : le bot `ClubCitrouilleAutoMiner` (client-only) peut-il déclencher des transactions
+`Bazaar`/`Till` automatiquement, à une fréquence/volume qui contournerait un design pensé pour un
+joueur humain ?
+
+**Résultat : hors périmètre, confirmé par lecture directe (pas supposé).**
+
+- Recherche exhaustive dans `ClubCitrouilleAutoMiner/src/main/java` : zéro occurrence de `Bazaar`,
+  `Till` ou `GuichetMenu` (les vraies classes économiques de Lanterne). Aucune commande/GUI de
+  boutique n'est référencée nulle part dans le bot.
+- Les seules interactions AutoMiner ↔ Lanterne trouvées concernent le réseau de tri/stockage
+  physique, pas l'économie : `GrandTrieurSelfCheck.java` construit et configure par réflexion des
+  `content.trieur.TrieurBlockEntity` (le "Trieur" hopper custom de Lanterne, filtre d'objets) pour
+  bâtir une structure de tri automatisée — c'est du BTP/organisation d'inventaire, aucun achat/vente
+  d'objets contre de la monnaie n'est impliqué. `ChestIndex.java`/`FastResupply.java` lisent/gèrent
+  des coffres physiques pour le ravitaillement du bot, sans passer par `Bazaar`/`Till`.
+- Conclusion : aucun déséquilibre économique possible via AutoMiner, puisqu'aucun chemin de code ne
+  relie le bot au système `Bazaar`/`Till`. Si le patron souhaite un jour une automatisation d'achat/
+  vente, ce serait une vraie nouvelle fonctionnalité à construire, pas un bug latent à corriger.
+
+Aucun fichier de code modifié (audit négatif propre, hors périmètre confirmé).
