@@ -3850,3 +3850,10 @@ Livré/déployé : VPS = 26.3.106 (NON redémarré depuis ; consigne patron : ne
 **Perf** : cache du découpage des textes traduisibles (JourneyMap 44-50 % des allocations du fil de rendu) : commit 49f58ed. 114 avec shaders+DH : 88,3 FPS ; 115 (114 + rc-full) : 102,4 FPS (DH) / 71,75 (sans DH) : variabilité ±20 %, aucune régression prouvée. Radiographie iGPU (scalebench, profil 15:03:21) : 63,8 % du temps en glClientWaitSync = attente du GPU (shaders trop lourds pour l'iGPU en 1080p), le CPU n'est pas le goulot.
 **Versions** : 26.3.114 = 26.3 corrigée (C:\lanterne-jar\build\libs) ; 26.3.115 = 114 + rc-full (branche release-113, worktree C:\lanterne-wt-113). Candidat à publier : 115 si la mise à jour testée par le patron marche, sinon 114. RIEN n'est déployé sur le VPS (encore 26.3.106, à remplacer : les amis ont le rendu explosé).
 **À faire à l'ordre du patron** : (1) recueillir son résultat de mise à jour (Mèche) ; (2) déployer sur le VPS (sauvegarde de l'ancien jar, redémarrage, vérif 0 FATAL) + jar dans test 1 ; (3) reconstruire le pack client/serveur avec le jar final ; (4) README du dépôt GitHub à mettre à jour (demandé par le patron) ; (5) reprendre les chantiers (culling shaders, Vulkan, Sodium-free) demain.
+
+## Reprise 21/09/2026 (après capture VPS de l'utilisateur)
+- Capture VPS (106) : rendu éclaté + NPE DH = défaut 106, corrigé dans 108+/114. Bruit chat = liste de pairs de la Mèche.
+- b6bc620 : MecheClient.acceptPeerList ne parle plus dans la discussion (journal seul ; -Dlanterne.meche.liste=true pour le rétablir).
+- Jar 26.3.116 construit dans C:\lanterne-jar (26.3 = fix DH + cache traduction + silence chat), NON lancé en jeu, NON déployé.
+- VPS : 0 joueur, toujours en 106. Déploiement en attente du « go » de l'utilisateur (sauvegarde -> jar -> restart -> vérif Done/FATAL/pregen).
+- ORDRES ACTUELS : pas d'agents, pas de tests client/serveur en arrière-plan pendant qu'il joue ; test client 116 seulement sur son feu vert.
