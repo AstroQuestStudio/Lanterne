@@ -1,3 +1,26 @@
+# VÉRIFICATION — attribution Iris (LGPL-3.0), point de conformité important trouvé
+
+`IRIS-ATTRIBUTION.md` relu et complété : ajout d'une liste des modifications substantielles faites
+cette nuit sur le code Iris migré (garde Sodium défensive, `VertexFormatSource`, précision que le
+prototype Vulkan `UniformReblocker` n'existe PAS dans Iris upstream — c'est un ajout propre à
+Lanterne, pas une modif d'Iris).
+
+**Point réel non résolu, IMPORTANT avant toute distribution publique** : le texte intégral de la
+licence LGPL-3.0 d'Iris n'existe NULLE PART dans le dépôt (recherche exhaustive négative). Le
+document d'attribution cite pourtant cette présence comme condition de conformité. Non corrigé
+cette nuit — ajouter le texte légal officiel depuis https://www.gnu.org/licenses/lgpl-3.0.txt dans
+un fichier `LICENSE-IRIS` demande un accès réseau/une vérification mot-à-mot qu'un fork ne peut pas
+garantir en le retapant de mémoire. **Recommandation claire pour la reprise de jour** : télécharger
+ce texte et l'ajouter avant toute publication/distribution du mod hors du cercle privé actuel — le
+risque légal reste faible tant que Lanterne circule uniquement en interne (Club Citrouille), mais
+grandirait avec toute diffusion plus large.
+
+La compatibilité GPL-3.0 (licence de Lanterne) ↔ LGPL-3.0 (licence d'Iris) est confirmée correcte :
+une licence GPL peut absorber du code LGPL sans conflit, jamais l'inverse — déjà bien documenté
+dans le fichier, pas d'erreur trouvée sur ce point.
+
+---
+
 # ÉTAT FINAL À 05h37 UTC (~07h37 heure locale) — dernier état des lieux consolidé de la nuit
 
 - **105 commits** sur `26.3` depuis la création de ce fichier (`5dfe9bf`), **426 commits au total** sur
