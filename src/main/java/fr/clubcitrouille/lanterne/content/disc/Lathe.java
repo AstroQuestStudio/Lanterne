@@ -300,6 +300,7 @@ public final class Lathe extends Screen {
                 this.note.isEmpty() ? FAINT : (this.noteIsBad ? BAD : GOOD), false);
 
         super.extractRenderState(graphics, mouseX, mouseY, partial);
+        this.fit.tooltips(graphics, mouseX, mouseY, partial);
         this.fit.close(graphics);
     }
 

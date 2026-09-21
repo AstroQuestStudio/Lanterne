@@ -408,6 +408,7 @@ public final class Frame extends Screen {
 
         // Les widgets en dernier : ils doivent se poser SUR le panneau, pas dessous.
         super.extractRenderState(graphics, mouseX, mouseY, partial);
+        this.fit.tooltips(graphics, mouseX, mouseY, partial);
         this.fit.close(graphics);
     }
 
