@@ -58,17 +58,36 @@ public final class ShadercProbeSelfCheck {
      * Paire vertex+fragment autonome pour {@link ShadercProbe#testVanillaInClient} — un "gbuffers"
      * minimal mais realiste (position, couleur de vertex, lumiere), le point d'entree le PLUS
      * utilise reellement par Iris (voir sa Javadoc pour pourquoi tester ceci en plus du composite).
+     *
+     * <p>Version SANS builtins GLSL legacy ({@code ftransform()}, {@code gl_TexCoord},
+     * {@code gl_FrontColor}, {@code gl_Color}, {@code texture2D}, {@code gl_FragData}) — remplaces
+     * par leurs equivalents modernes explicites (matrice/attributs/varyings/fonctions nommes),
+     * pour isoler le test du re-blocage UBO (voir {@code RECHERCHE-VULKAN-SANS-SODIUM.md}, etape 6)
+     * du probleme separe et deja documente : {@code CompatibilityTransformer} ne modernise pas ces
+     * builtins dans le cas testes ici. La premiere version (avec builtins legacy) avait deja prouve
+     * que le re-blocage marchait sur l'etage FRAGMENT (3532 octets SPIR-V) ; seul l'etage VERTEX
+     * restait a confirmer une fois ce probleme annexe retire.
      */
     private static final String VANILLA_VERTEX_SOURCE = """
             #version 150
 
             in vec3 mc_Entity;
-            attribute vec4 mc_midTexCoord;
+            in vec4 mc_midTexCoord;
+
+            uniform mat4 modelViewMatrix;
+            uniform mat4 projectionMatrix;
+
+            in vec4 vaPosition;
+            in vec4 vaColor;
+            in vec2 vaUV0;
+
+            out vec4 frontColor;
+            out vec2 texCoord;
 
             void main() {
-                gl_Position = ftransform();
-                gl_FrontColor = gl_Color;
-                gl_TexCoord[0] = gl_MultiTexCoord0;
+                gl_Position = projectionMatrix * modelViewMatrix * vaPosition;
+                frontColor = vaColor;
+                texCoord = vaUV0;
             }
             """;
 
@@ -77,9 +96,14 @@ public final class ShadercProbeSelfCheck {
 
             uniform sampler2D texture;
 
+            in vec4 frontColor;
+            in vec2 texCoord;
+
+            layout(location = 0) out vec4 fragColor;
+
             void main() {
-                vec4 color = texture2D(texture, gl_TexCoord[0].st);
-                gl_FragData[0] = color * gl_Color;
+                vec4 color = texture(texture, texCoord);
+                fragColor = color * frontColor;
             }
             """;
 
