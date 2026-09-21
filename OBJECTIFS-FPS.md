@@ -37,3 +37,15 @@ N0 contournement NVIDIA (soumission threadée du pilote) → N8/N9 cache de list
 ## Suivi (à remplir par les agents, une ligne par mesure)
 | Date/heure | Version | Configuration | FPS moy | 1 % low | ms | Remarque |
 |---|---|---|---|---|---|---|
+
+## Protocole de mesure EXCLUSIVE (ajout 21/09 11h40) — obligatoire
+Plusieurs agents lancent des clients sur la MÊME machine : un FPS mesuré pendant qu'un autre client tourne est faux (CPU/GPU partagés).
+1. Une mesure de FPS ne se fait que quand elle détient le verrou : `mkdir C:\bench-lock` (atomique ; s'il existe déjà, attendre 30 s et réessayer ; le verrou contient un fichier `owner.txt` avec le nom de l'agent et l'heure). Libérer avec `rm -r C:\bench-lock` dès la mesure finie ; un verrou de plus de 15 min est périmé.
+2. Pendant une mesure, les AUTRES agents ne lancent pas de client (ou le lancent en priorité basse : `start /low` / PowerShell PriorityClass=BelowNormal) et ne compilent pas avec Gradle sans nécessité.
+3. Tout client de test fonctionnel (crash, capture) qui n'est pas une mesure se lance en priorité BelowNormal.
+4. Le tableau « Suivi » indique si la mesure a été faite sous verrou (oui/non) ; une ligne « non » n'est pas une preuve.
+
+## Petites configs et GPU intégré (ajout 21/09 11h40)
+Cible O5 : le jeu doit aussi tourner nettement mieux sur PC sans GPU dédié. Banc iGPU : le Ryzen 7 de cette machine (AMD Radeon Graphics) — forcer via `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` (valeur = chemin du java.exe, données `GpuPreference=1;` = économie d'énergie/iGPU) ; vérifier dans le log « Backend actif : OpenGL sur AMD Radeon… ».
+- O5a : mesure de base iGPU (sans shaders, distance 8 et 12), puis gain après régulateur adaptatif.
+- O5b : régulateur adaptatif de qualité (distance de rendu, distance d'ombre, particules, entités, LOD) qui tient une cible de FPS choisie (défaut 60), avec profil « petite config » choisi automatiquement au premier lancement.
