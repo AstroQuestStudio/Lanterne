@@ -59,13 +59,16 @@ public final class MecheNet {
                 (payload, context) -> context.enqueueWork(() ->
                         fr.clubcitrouille.lanterne.client.MecheClient.acceptPeerList(payload)));
         registrar.playToServer(MecheRequest.TYPE, MecheRequest.STREAM_CODEC, MecheNet::onRequest);
-        registrar.playToClient(MecheCatalogue.TYPE, MecheCatalogue.STREAM_CODEC,
+        // OPTIONNELS : un client d avant ces paquets doit pouvoir se connecter (et se mettre a jour),
+        // sinon le serveur le refuse avec « channel missing on the client side ».
+        var optional = registrar.optional();
+        optional.playToClient(MecheCatalogue.TYPE, MecheCatalogue.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         fr.clubcitrouille.lanterne.client.MecheClient.acceptCatalogue(payload)));
-        registrar.playToClient(MecheFichierTranche.TYPE, MecheFichierTranche.STREAM_CODEC,
+        optional.playToClient(MecheFichierTranche.TYPE, MecheFichierTranche.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         fr.clubcitrouille.lanterne.client.MecheClient.acceptFileChunk(payload)));
-        registrar.playToServer(MecheFichierDemande.TYPE, MecheFichierDemande.STREAM_CODEC,
+        optional.playToServer(MecheFichierDemande.TYPE, MecheFichierDemande.STREAM_CODEC,
                 (request, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer player) {
                         Meche.onFileRequest(player, request.name());
