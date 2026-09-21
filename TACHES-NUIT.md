@@ -1498,3 +1498,28 @@ suffirait ?
   changement de cible ou toutes les 10 ticks — cohérent avec le reste de l'audit.
 
 Aucun fichier modifié, rien compilé, rien commité.
+
+## Audit infrastructure de tests unitaires — AUCUNE infrastructure existante, rien ajouté (fork, 21/09 ~06h50)
+
+Directive : ajouter des tests JUnit de non-régression pour les correctifs les plus critiques de la
+nuit (`IrisForgeHelpers.getVersion()`, `Radiographie.fpsHistogramme`, etc.), si une infrastructure
+existe déjà.
+
+**Constat** : `build.gradle` ne déclare AUCUNE dépendance de test (pas de `testImplementation`, pas
+de `junit`, pas de bloc `test { useJUnitPlatform() }`). `src/test/java/` n'existe pas dans le dépôt.
+Le projet n'a jamais eu de tests unitaires — ce n'est pas un oubli de cette nuit, c'est l'état de
+base du dépôt.
+
+**Décision : ne rien ajouter.** Créer une infrastructure de test complète (dépendance JUnit,
+plugin Gradle, structure `src/test/`, configuration de la tâche `test`) dans un projet NeoForge/
+ForgeGradle en fin de nuit, sans pouvoir itérer sur plusieurs cycles si la config casse le build
+(le toolchain ForgeGradle a ses propres particularités de classpath/sourceSets qui peuvent entrer
+en conflit avec une config JUnit naïve), est un risque disproportionné par rapport au bénéfice —
+d'autant que le dépôt entier a déjà servi de plateforme à des dizaines de forks cette nuit, un
+`build.gradle` cassé aurait un rayon d'impact large.
+
+**Recommandation pour la reprise (à froid, avec plus de marge pour itérer)** : ajouter
+`testImplementation 'org.junit.jupiter:junit-jupiter:5.x'` + `test { useJUnitPlatform() }` dans
+`build.gradle`, puis un premier test trivial (`RadiographieHistogrammeTest` sur la logique pure de
+bucket FPS, aucune dépendance Minecraft) pour valider que le toolchain accepte les tests avant d'en
+écrire davantage. Aucun fichier modifié, rien compilé, rien commité pour cette tâche précise.
