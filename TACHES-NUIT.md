@@ -25,58 +25,66 @@ preuve — voir le résumé détaillé juste en dessous, puis le détail section
 
 ---
 
-# RÉSUMÉ POUR LE RÉVEIL DU PATRON (généré ~04h10, dernière mise à jour de cette section)
+# RÉSUMÉ POUR LE RÉVEIL DU PATRON (réécrit en fin de nuit, version finale et complète)
 
-Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche `26.3`). Rapport de
-travail honnête, pas promotionnel — chaque point dit s'il est confirmé, partiel, ou juste une piste.
-Le détail complet, section par section, suit plus bas dans ce même fichier (rien supprimé).
+Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche `26.3`), **78 commits**
+au total. Rapport de travail honnête, pas promotionnel — chaque point dit s'il est confirmé, partiel,
+ou juste une piste. Le détail complet, section par section (y compris les versions précédentes de ce
+résumé, conservées telles quelles pour la traçabilité), suit plus bas dans ce même fichier.
 
-**PREGEN RELANCÉ (~06h45)** : un fork a confirmé que le pregen overworld 500 chunks demandé
-explicitement par le patron cette nuit n'avait en réalité jamais tourné contre la session serveur
-actuelle (reset au redémarrage `00:08:08`). Puisque c'était une demande directe explicite avec
-attente claire ("pour 8h"), le coordinateur l'a relancé lui-même via RCON à 06h45 (`/lanterne
-pregen 500`, réponse serveur confirmée : "Pré-génération lancée sur un rayon de 500 chunks. Ce qui
-existe déjà est sauté ; l'interrompre ne perd rien, la reprise est gratuite."), après avoir vérifié
-`0 joueur connecté`. Le mécanisme est piloté par la présence de joueurs (pause automatique dès
-qu'un joueur se connecte, confirmé sain par un audit dédié cette nuit) — donc sûr même si le patron
-se reconnecte avant la fin.
+## 🔴 BUGS CRITIQUES trouvés et corrigés cette nuit — PRIORITÉ DE DÉPLOIEMENT
 
-**Note d'horloge** : l'heure système réelle du VPS (`date` en UTC) est en fait ~04h27 au moment de
-cette relance, pas ~06h45 comme les échanges du coordinateur le laissaient penser — les timestamps
-"06h45" utilisés dans ce fichier sont donc décalés d'environ 2h20 par rapport à l'heure réelle VPS.
-Sans conséquence sur la validité des actions (0 joueur vérifié au moment de la relance), juste une
-correction pour ne pas dérouter la lecture des logs.
+Compilés et vérifiés (build propre confirmé), **volontairement PAS déployés sur VPS/test1 cette
+nuit** (le coordinateur a préféré ne pas toucher la prod sans supervision humaine malgré la gravité).
+**C'est la première chose à faire au réveil.**
 
-**Progression vérifiée (lecture seule, ~04h27 UTC VPS)** : `lab/Pregen.java` relu en entier — conçu
-proprement (soumission asynchrone non bloquante, 8 chunks en vol, budget de balayage par tick,
-pause automatique si un joueur se connecte, reprise gratuite par lecture des en-têtes de région).
-Logs confirmés sains : progression réelle observée (`12374 / 1002001, 1.2 %, 331 généré(s), 12035
-sauté(s), 6.1 chunk(s)/s`), **aucun signe de ralentissement serveur** (`grep watchdog/running slow/
-OutOfMemory` → 0 résultat).
+- **3 bugs de permission serveur manquante** : `/lanterne on`/`off` (coupe toutes les optimisations
+  serveur, effet global), `/lanterne bench`, `/projection domaine ajouter/retirer` — n'importe quel
+  joueur pouvait les exécuter alors qu'elles étaient documentées admin-only. Corrigés (commits
+  `152b00e`, `08eab7a`).
+- **3 bugs de perte de données NBT au cassage d'un bloc** — un joueur qui cassait un de ces blocs
+  perdait son contenu configuré au lieu de le récupérer :
+  - Spawner + Silk Touch → redonnait un spawner **vierge** au lieu du spawner configuré (mob/œuf
+    perdu). Corrigé (`3c33035`).
+  - Projecteur (Beamer) → perdait la vidéo/image configurée et le propriétaire. Corrigé (`de0110a`).
+  - **LE PLUS GRAVE : Guichet, CoffreDepot, CoffreReception, Aiguillage n'avaient AUCUNE table de
+    butin** — les casser (même à l'outil correct) ne droppait **rien du tout**, pas même le bloc.
+    Pour les deux coffres du réseau (27 cases chacun, contenu réel déposé par joueurs et par le bot
+    minier), c'est une **perte totale et silencieuse du contenu stocké** — le bug le plus sérieux de
+    la nuit. Corrigé : 4 loot tables ajoutées + `core/ReseauDrops.java` (préserve le contenu et le
+    filtre de réapprovisionnement). Commit `b904a77`.
+  - Vérification indépendante menée (relecture ligne à ligne + build clean depuis zéro + démarrage
+    réel sur serveur jetable, `Done (0.406s)!`, zéro erreur) : correctif confirmé sain avec un niveau
+    de confiance élevé, pas juste une lecture de code.
+- Balayage de sécurité complémentaire (validation d'entrée, race conditions Bazaar, duplication
+  d'objets sur tous les blocs custom, cohérence UI/permission) mené jusqu'au bout cette nuit —
+  **rien d'autre trouvé**, tout confirmé sain.
 
-**Estimation honnête du temps restant** : à ~6 chunks générés/seconde (rythme qui monte encore, la
-zone proche de l'origine est très largement déjà explorée donc surtout sautée — le taux de saut va
-chuter fortement en s'éloignant du centre), et avec seulement 184 fichiers région overworld déjà
-écrits sur les ~767 attendus pour ce rayon, la très grande majorité du disque de 1 002 001 chunks
-reste à générer. **À ce rythme, le pregen complet prendra de l'ordre de 1 à 2 jours, pas une nuit.**
-Ce n'est pas une régression ni un bug — c'est la réalité d'un mono-cœur sur un disque de 500 chunks
-de rayon. Le mécanisme est sûr et se met en pause automatiquement dès qu'un joueur se connecte (testé
-et confirmé cette nuit), donc il n'y a aucun risque à le laisser tourner en tâche de fond au long
-cours — mais le patron ne doit pas s'attendre à le trouver terminé à son réveil.
+## Pregen 500 chunks — relancé par le coordinateur, en cours
 
-**CORRECTIF IMPORTANT (~06h00, vérification SSH lecture seule)** : contrairement à ce que dit la
-section 1 ci-dessous ("VPS stable en `26.3.55`", "TÂCHE A/B pas déployées sur le VPS"), le VPS
-tourne EN RÉALITÉ `lanterne-26.3.59.jar` depuis un redémarrage à `00:08:08` cette nuit (source
-exacte du redémarrage non retracée — probablement Mèche, auto-update déclenché après une mise à
-jour de `test 1`). **C'est une bonne nouvelle, pas une régression** : démarrage propre, aucune
-exception/erreur/OOM/lag dans les logs, TÂCHE A confirmée active en prod par son propre message de
-log (`[CADENCE] BlueMap prêt, 0 joueur connecté — rendu complet démarré automatiquement`), TÂCHE B
-(modId iris virtuel) présente dans le jar qui tourne. 0 joueur connecté depuis le boot (cohérent
-avec "0 joueurs avant 8h"), serveur en pause normale (`Server empty for 60 seconds, pausing`).
-Process stable depuis 3h05 au moment du contrôle (`03:14 UTC`), `Done` confirmé, RCON actif. Voir
-la section "VÉRIFICATION VPS ~06h00" tout en bas de ce fichier pour le détail complet et les preuves
-de log. **Aucune action corrective nécessaire** — juste une correction de doc : la section 1/2
-ci-dessous est partiellement dépassée sur ce point précis (TÂCHE A/B sont bel et bien en prod).
+Le pregen overworld demandé explicitement cette nuit n'avait en réalité jamais tourné (reset au
+redémarrage serveur de `00:08:08`). Puisque c'était une demande directe avec attente claire ("pour
+8h"), le coordinateur l'a relancé lui-même via RCON après avoir vérifié `0 joueur connecté`
+(`/lanterne pregen 500`, confirmé accepté par le serveur). Le mécanisme se met en pause
+automatiquement dès qu'un joueur se connecte (vérifié sain) — aucun risque à le laisser tourner.
+**Progression réelle confirmée** (~1,2 % après les premières minutes, ~6 chunks/s, aucun signe de
+ralentissement serveur) mais **estimation honnête : 1 à 2 jours pour finir, pas une nuit** — normal
+sur un mono-cœur pour un disque de 500 chunks de rayon, pas une régression.
+
+*(Note d'horloge sans conséquence : l'heure système réelle du VPS était décalée d'environ 2h20 par
+rapport aux timestamps utilisés dans les échanges du coordinateur cette nuit — sans impact sur la
+validité des actions, juste pour ne pas dérouter la lecture des logs horodatés ci-dessous.)*
+
+## Vulkan (recherche pure, RIEN branché au rendu réel)
+
+Progrès réels et vérifiés : la chaîne complète (jcpp → glsl-transformer → `UniformReblocker`,
+prototype maison de re-blocage UBO → shaderc) produit du SPIR-V valide pour les deux étages
+(vertex+fragment) sur un shader synthétique modernisé, **et** sur un vrai fichier de shaderpack
+(`gbuffers_terrain`, Complementary Reimagined) une fois le préprocesseur jcpp intercalé. Deux
+obstacles précis restent sur le fichier réel (couverture incomplète du parseur d'uniforms sur les
+gros fichiers, `StackOverflowError` sur la récursion à cette taille) — documentés en détail dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md`. Rien de tout cela n'est branché au pipeline de rendu qui tourne
+en jeu — c'est un prototype de faisabilité, pas une fonctionnalité livrée, aucun risque pour la prod.
 
 ## 1. Déployé et confirmé stable (VPS + test1)
 
