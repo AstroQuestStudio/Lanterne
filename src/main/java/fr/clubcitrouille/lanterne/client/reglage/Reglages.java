@@ -102,6 +102,8 @@ public final class Reglages {
         private final int[] niveaux;
         private final String unite;
         private final String zero;
+        /** Surcharge par propriété JVM {@code -Dlanterne.reglage.<id>=<valeur>} : pour les bancs et les tests. */
+        private final Integer surcharge;
 
         private Reglage(String id, Famille famille, String nom, Perte perte, String quoi, String gain,
                 ModConfigSpec.IntValue entier, ModConfigSpec.BooleanValue booleen, int[] niveaux,
@@ -117,6 +119,7 @@ public final class Reglages {
             this.niveaux = niveaux;
             this.unite = unite;
             this.zero = zero;
+            this.surcharge = Integer.getInteger("lanterne.reglage." + id);
         }
 
         public String id() {
@@ -148,6 +151,9 @@ public final class Reglages {
         }
 
         public int valeur() {
+            if (this.surcharge != null) {
+                return this.surcharge;
+            }
             if (!chargee()) {
                 return defaut();
             }

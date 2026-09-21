@@ -6,6 +6,7 @@ Où les régler :
 - **Écran Lanterne** (Options > Vidéo) : familles « Particules & météo », « Entités & blocs », « Performances », « Préréglages ». Clic gauche = cran suivant, clic droit = précédent.
 - **Commande** : `/lanterne reglage` (liste), `/lanterne reglage <nom>` (détail), `/lanterne reglage <nom> <valeur>`, `/lanterne reglage preset <nom>`, `/lanterne reglage restaurer`, `/lanterne reglage exporter`, `/lanterne reglage importer <texte>`.
 - **Fichier** : `config/lanterne-client.toml`, section `[rendu.reglages]`.
+- **Propriété JVM** (bancs et tests, prioritaire sur le fichier) : `-Dlanterne.reglage.<id>=<valeur>`, par exemple `-Dlanterne.reglage.ciel_etoiles=0`.
 
 Règle d'iso-qualité (voir `OBJECTIFS-FPS.md`) : « perte visible » dit ce que le joueur peut remarquer. Les défauts sont les niveaux « aucune ».
 
