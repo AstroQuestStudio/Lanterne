@@ -909,3 +909,6 @@ accélération de celui-ci.
 
 Aucune modification de code (mission de compréhension pure, infrastructure déjà en prod). Compilation
 vérifiée saine (`BUILD SUCCESSFUL`).
+
+## Étape 12 — client sans Sodium démarre (21/09, 26.3.107)
+Solution retenue : Iris inerte sans Sodium (garde précoce par classe + coupe de tous les mixins Iris), pas migration des ~35 classes couplées. Preuves et limites : voir TACHES-NUIT.md, section « Sodium : le client démarre SANS Sodium ». Conséquence : retirer Sodium via la Mèche fait perdre les shaders (Iris) mais pas le jeu.
