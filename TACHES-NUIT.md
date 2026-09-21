@@ -2238,3 +2238,41 @@ changerait le sens de l'anecdote racontée plutôt que de réparer un bug — vo
 quel.
 
 Ce fichier + `TACHES-NUIT.md` : aucun fichier de code modifié, aucune compilation nécessaire.
+
+## Audit NBT/sauvegarde des BlockEntity custom (~07h00) — BUG TROUVÉ ET CORRIGÉ
+
+Directive : auditer la sauvegarde/chargement NBT des bloc-entités custom (`TrieurBlockEntity`,
+`GuichetBlockEntity`, coffres réseau) et vérifier `SpawnerSilk.java` (ajouté cette nuit,
+`cddbf77`) sous l'angle rétrocompatibilité/perte de données. Pure lecture de code, aucun client
+jetable.
+
+**Bloc-entités auditées, toutes saines** :
+- `TrieurBlockEntity`, `CoffreReceptionBlockEntity`, `BeamerEntity`, `PanelEntity`, `BurnerEntity`
+  implémentent bien `saveAdditional`/`loadAdditional` (signature `ValueOutput`/`ValueInput`
+  correcte pour 26.3).
+- `GuichetBlockEntity` : `dernierHash` est un cache transitoire recalculé à chaque appel, aucune
+  perte réelle possible.
+- `CoffreDepotBlockEntity` : sous-classe de `ChestBlockEntity`, hérite de la sérialisation
+  vanilla ; son appartenance au réseau est ré-annoncée à `onLoad()`, jamais lue du NBT.
+- `AiguillageBlockEntity` : `annonces` est volontairement non persisté — recalculé à chaque
+  `onLoad()` (documenté explicitement dans sa propre Javadoc), donc jamais de désynchronisation
+  réelle avec un NBT figé.
+
+**Bug réel trouvé et corrigé — `SpawnerSilk.java`** : le drop de Silk Touch construisait
+systématiquement `new ItemStack(Items.SPAWNER)` VIERGE, sans jamais copier le NBT du
+bloc-entité — tout spawner configuré (mob choisi via œuf d'invocation, commande, ou présent dans
+une structure/le monde importé cette nuit) perdait sa configuration au minage, rendant un
+spawner "blanc" plutôt qu'une copie du spawner miné. Vérifié précisément (pas deviné) via le
+decompilé vanilla réel (`neoformruntime/intermediate_results/decompile_*_output.jar`,
+`net/minecraft/server/network/ServerGamePacketListenerImpl.java#addBlockDataToItem`, le chemin
+utilisé par le pick-block créatif pour ce même besoin) : `BlockDropsEvent#getBlockEntity()`
+(confirmé présent dans la vraie classe de l'event via javap sur le jar NeoForge réel) expose
+encore le bloc-entité intact à ce point de l'événement — assez tôt pour copier son NBT.
+
+Corrigé en répliquant exactement le pattern vanilla : `TagValueOutput.createWithContext` +
+`blockEntity.saveCustomOnly(output)` + `removeComponentsFromTag` + `BlockItem.setBlockEntityData`
++ `applyComponents`. Compilé sain (`BUILD SUCCESSFUL`), commit `3c33035`
+(`src/main/java/fr/clubcitrouille/lanterne/core/SpawnerSilk.java`), branche `26.3`, jamais
+poussé. Pas de test client jetable (logique pure NBT, pas de dépendance rendu — un test réel en
+jeu par le patron reste la confirmation ultime, mais le mécanisme est le même que celui déjà
+utilisé par vanilla pour un besoin identique, donc à haute confiance).
