@@ -16,6 +16,14 @@ ce qui n'est pas encore mesuré en jeu est marqué **« à mesurer »**.
 - **Conditions pour l'activer** : (1) gain mesuré en jeu sous le protocole de `OBJECTIFS-FPS.md` ; (2) iso-rendu prouvé par différence d'image
   (seuil documenté) ; (3) **avis écrit de Complementary Development** (voir §0).
 
+> **⚠ TOUT RÉSULTAT OBTENU SUR LE JAR 26.3.106 EST INVALIDE.** Le 106 rend de façon EXPLOSÉE avec des shaders (garde Sodium fondée sur `ModList`,
+> corrigée par `bff38e7` dans 26.3.110). Vérifié : la capture `C:\bench\results\20260921-134328-shopt_A1_orig.debut.png` (job sur le 106) montre une
+> géométrie déformée et des couleurs aberrantes. Les jobs `shopt_A1_orig`, `B1_neutre`, `A2_orig`, `B2_neutre` des 12:43 et 13:43 ont tourné sur ce jar : leurs FPS
+> (de 98,9 à 149,9, non repris ici) et toute comparaison d'iso-rendu **n'ont aucune valeur**. Le §6 est donc à refaire avec le **jar 26.3.110** ;
+> `submit-ab.ps1` l'utilise maintenant par défaut et demande une capture (`-Screenshot`). **Avant de retenir un chiffre : lire la capture pour vérifier que
+> le rendu est correct**, puis comparer orig/neutre par `tools/shaderopt/Cmp.java` (écart maximal ≤ 1/255 sur ≥ 99,9 % des pixels). Non relancé à 14 h : le runner du banc est
+> occupé par les jobs d'autres agents (`C:\bench\status.ps1`) et la règle est de ne lancer que s'il est libre.
+
 ## 0. Licence : ce qu'on a le droit de faire (à lire avant tout)
 
 Complementary Reimagined r5.9.3 est sous la **Complementary License Agreement 1.7** (fichier `License.txt` du pack).
