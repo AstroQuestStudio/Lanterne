@@ -1883,3 +1883,52 @@ révéler).
 
 **Conclusion : rien à corriger.** Le point le plus critique économiquement (Bazaar) est structurellement
 protégé, pas juste testé. Aucun fichier de code modifié.
+
+## Audit dernier volet sécurité — duplication d'objets (pure lecture de code, aucune modification)
+
+Dernier angle de cette série sécurité, le plus classique et dommageable dans les mods Minecraft :
+un chemin de code qui laisse un objet apparaître ou disparaître sans que le total réseau ne
+corresponde à ce qui a vraiment changé de main.
+
+**`core.Reseau.withdraw`/`drain`/`deposit` (le cœur du réseau de coffres/Guichet) : déjà documenté
+et construit pour être non-duplicable, pas juste testé.** La Javadoc de `withdraw` (déjà présente
+avant cette nuit, relue et vérifiée ligne à ligne) explique l'invariant : `deposit` s'exécute
+TOUJOURS avant `source.removeItem`, sur le nombre RÉELLEMENT accepté par la destination — jamais la
+quantité demandée. Entre les deux appels, aucun retour anticipé, aucune attente, aucun appel réseau :
+deux instructions Java consécutives sur le même fil serveur. `source == destination` est écarté
+explicitement (protège l'auto-réapprovisionnement d'un `CoffreReception`). Vérifié en lisant
+`Reseau.java:118-217` en entier : aucun chemin ne retire avant d'avoir confirmé le dépôt.
+
+**`content.reseau.Reseaux.onDemande` (le paquet client→serveur qui déclenche un retrait au Guichet) :
+rien n'est cru sur parole**, exactement comme documenté dans son propre commentaire de classe — le
+Guichet visé est celui que `player.containerMenu` rapporte réellement ouvert (pas un ID envoyé par
+le client), la portée est revérifiée serveur (`distanceToSqr` + chunk chargé), et la quantité est
+clampée (`Math.clamp(payload.quantite(), 1, DEMANDE_MAX)`) avant tout retrait. `GuichetMenu` ne
+déclare AUCUN slot (0 case, même pas l'inventaire joueur) — `quickMoveStack` renvoie toujours
+`ItemStack.EMPTY` : aucune surface de dupe possible sur ce menu par construction, pas par prudence.
+
+**`CoffreDepotBlockEntity`/`CoffreReceptionBlockEntity` : sous-classes directes de
+`ChestBlockEntity` vanilla** (voir leur propre Javadoc de classe, déjà présente) — aucune
+réimplémentation de la logique d'inventaire, donc aucun nouveau chemin de dupe introduit ; elles
+héritent exactement de la robustesse vanilla déjà éprouvée sur des millions de serveurs.
+
+**`content.trieur.TrieurMenu` (le seul menu Lanterne avec des slots manipulables) : suit le pattern
+vanilla `HopperMenu` à l'identique** (reconstruction client vs serveur documentée en Javadoc de
+classe, déjà vérifiée par javap dans une passe précédente) — `quickMoveStack` fait exactement ce que
+fait vanilla (copie puis tente le déplacement, ne vide la case source qu'après confirmation).
+`FiltreSlot.set` ramène systématiquement tout dépôt à 1 exemplaire, quel que soit le chemin
+d'insertion (clic simple, échange, clic-glissement) — pas de fenêtre où plus d'un exemplaire
+transiterait par cette case.
+
+**`SpawnerSilk.onBlockDrops` (silk touch spawner, ajouté cette nuit, `cddbf77`) : pas de risque de
+double-déclenchement.** `BlockDropsEvent` se déclenche une seule fois par cassure de bloc côté
+NeoForge ; le handler REMPLACE la liste de chutes (`drops.clear()` puis un seul `add`), il ne
+l'additionne jamais — même si l'event était re-publié par erreur par un autre mod, chaque appel
+repartirait d'une liste vidée, pas d'un ajout cumulatif.
+
+**Conclusion : aucun exploit de duplication trouvé.** L'architecture réseau documente et applique
+déjà elle-même l'invariant anti-dupe dans son propre code (pas juste dans ce rapport). Échantillon
+non exhaustif par manque de temps : `Groove`/`Easel.onGift` (déjà vus sous l'angle race condition,
+pas ré-audités ici sous l'angle dupe précise) et `Studio`/`Wheel` (transfert de fichiers audio, pas
+un vecteur d'objets) laissés de côté — aucun signal les rendant suspects. Aucun fichier de code
+modifié.
