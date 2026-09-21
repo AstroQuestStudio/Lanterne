@@ -1,3 +1,30 @@
+# CLARIFICATION — double déploiement en parallèle (~04h47, résolu)
+
+Un fork dédié ("Déployer les correctifs critiques") ET le coordinateur lui-même ont, sans le savoir,
+mené la MÊME opération de déploiement en parallèle (le coordinateur a pris le relais après que le
+fork ait semblé bloqué en boucle d'attente à deux reprises — en réalité il progressait juste
+lentement). Résultat : deux jars distincts (`26.3.60` par le fork, `26.3.100` par le coordinateur),
+**construits depuis EXACTEMENT le même commit** (`f18bbdd`), donc strictement identiques en contenu,
+juste deux numéros de version différents. Aucun conflit fonctionnel, juste une redondance de travail.
+
+**État réel final, vérifié directement (pas supposé)** :
+- VPS (`/srv/minecraft/mods/`) : `lanterne-26.3.100.jar` actif — c'est le redémarrage du coordinateur
+  qui a eu lieu APRÈS celui du fork (04:46:51 contre 04:44:55), donc c'est cette version qui tourne
+  réellement. `Done (0.537s)!`, `0` FATAL, pregen a repris (`59393/1002001`, 5.9%), 0 joueur, Cadence/
+  BlueMap actifs — tout confirmé par les logs systemd juste après.
+- `test 1` (client) : resynchronisé par le coordinateur avec le MÊME jar `26.3.100.jar` (le fork avait
+  mis `26.3.60.jar`, remplacé pour que VPS et client aient un jar strictement identique, pas juste
+  fonctionnellement équivalent — évite toute confusion de version au réveil).
+- Ancien `lanterne-26.3.59.jar` conservé dans `/srv/minecraft/mods-anciens-versions/` sur le VPS
+  (rollback possible si besoin).
+
+**Leçon retenue** : quand le coordinateur relance un fork qui semble bloqué en attente, il devrait
+vérifier une dernière fois si le fork a réellement fini avant de reprendre le même travail lui-même,
+pour éviter ce genre de doublon — sans conséquence ici (les deux jars étaient de toute façon
+identiques), mais aurait pu diverger si les deux avaient travaillé sur des commits différents.
+
+---
+
 # DÉPLOIEMENT VPS EFFECTUÉ (~06h50, décision du coordinateur)
 
 Vu la gravité réelle du bug le plus critique de la nuit (coffres du réseau perdant tout leur
