@@ -453,6 +453,29 @@ public final class LanterneCommand {
                                     line -> source.sendSuccess(() -> Component.literal(line), false));
                             return 1;
                         }))
+                // La suite complète, en BLOCS : overworld, puis nether, puis end. Chaque dimension
+                // démarre à la fin de la précédente, et la suite survit à un redémarrage.
+                .then(Commands.literal("pregen-plan")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .then(Commands.argument("overworld", com.mojang.brigadier.arguments.IntegerArgumentType.integer(16, 320000))
+                        .then(Commands.argument("nether", com.mojang.brigadier.arguments.IntegerArgumentType.integer(16, 320000))
+                        .then(Commands.argument("end", com.mojang.brigadier.arguments.IntegerArgumentType.integer(16, 320000))
+                                .executes(context -> {
+                                    int ow = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "overworld");
+                                    int ne = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "nether");
+                                    int en = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "end");
+                                    fr.clubcitrouille.lanterne.lab.Pregen.beginPlan(
+                                            context.getSource().getServer(), java.util.List.of(
+                                                    new Object[] {"minecraft:overworld", (ow + 15) / 16},
+                                                    new Object[] {"minecraft:the_nether", (ne + 15) / 16},
+                                                    new Object[] {"minecraft:the_end", (en + 15) / 16}));
+                                    context.getSource().sendSuccess(() -> Component.literal(
+                                            "Plan de pré-génération lancé : overworld " + ow
+                                            + " blocs, puis nether " + ne + ", puis end " + en
+                                            + ". Ce qui existe déjà est sauté.")
+                                            .withStyle(ChatFormatting.GOLD), true);
+                                    return 1;
+                                })))))
                 .then(Commands.literal("pregen-stop")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> {

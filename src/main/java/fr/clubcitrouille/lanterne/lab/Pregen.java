@@ -315,11 +315,23 @@ public final class Pregen {
                 .resolve("pregen-en-cours.txt");
     }
 
+    /** Un travail de la suite : une dimension et un rayon en chunks. */
+    private record Job(String dimension, int radius) {}
+
+    /** Les travaux qui suivront celui en cours (dimension par dimension), dans l'ordre. */
+    private static final java.util.ArrayDeque<Job> PLAN = new java.util.ArrayDeque<>();
+
+    private static String currentDimension = "minecraft:overworld";
+
     private static void writeState(int radius) {
         try {
             Path path = stateFile();
             Files.createDirectories(path.getParent());
-            Files.writeString(path, String.valueOf(radius));
+            StringBuilder text = new StringBuilder(currentDimension).append(' ').append(radius);
+            for (Job job : PLAN) {
+                text.append('\n').append(job.dimension()).append(' ').append(job.radius());
+            }
+            Files.writeString(path, text.toString());
         } catch (IOException ignored) {
             // Pas grave : au pire, pas de reprise automatique apres un crash, mais rien de casse.
         }
@@ -343,10 +355,33 @@ public final class Pregen {
             return;
         }
         try {
-            int radius = Integer.parseInt(Files.readString(path).trim());
-            Lanterne.LOG.info("[PRÉGÉN] reprise automatique apres redemarrage : rayon {} chunks "
-                    + "(la reprise est gratuite, ce qui existe deja est saute).", radius);
-            begin(overworld, radius);
+            java.util.List<Job> jobs = new java.util.ArrayList<>();
+            for (String line : Files.readAllLines(path)) {
+                String[] parts = line.trim().split("\\s+");
+                if (parts.length == 1 && !parts[0].isEmpty()) {
+                    jobs.add(new Job("minecraft:overworld", Integer.parseInt(parts[0])));
+                } else if (parts.length == 2) {
+                    jobs.add(new Job(parts[0], Integer.parseInt(parts[1])));
+                }
+            }
+            if (jobs.isEmpty()) {
+                clearState();
+                return;
+            }
+            Job first = jobs.remove(0);
+            ServerLevel firstLevel = levelOf(overworld.getServer(), first.dimension());
+            if (firstLevel == null) {
+                Lanterne.LOG.warn("[PRÉGÉN] dimension inconnue « {} », reprise abandonnee.",
+                        first.dimension());
+                clearState();
+                return;
+            }
+            Lanterne.LOG.info("[PRÉGÉN] reprise automatique apres redemarrage : {} rayon {} chunks, "
+                    + "puis {} autre(s) dimension(s) (la reprise est gratuite, ce qui existe deja est "
+                    + "saute).", first.dimension(), first.radius(), jobs.size());
+            PLAN.clear();
+            PLAN.addAll(jobs);
+            start(firstLevel, first.radius());
         } catch (IOException | NumberFormatException corrupted) {
             Lanterne.LOG.warn("[PRÉGÉN] fichier de reprise illisible, ignore : {}", corrupted.toString());
             clearState();
@@ -399,6 +434,46 @@ public final class Pregen {
      * @param radius rayon en chunks
      */
     public static void begin(ServerLevel target, int radius) {
+        PLAN.clear();
+        start(target, radius);
+    }
+
+    /**
+     * Lance une suite : chaque travail attend la fin du précédent, et la suite entière survit à un
+     * redémarrage (voir {@link #stateFile()}).
+     *
+     * @param jobs dimension puis rayon en chunks, dans l'ordre ; le premier démarre tout de suite
+     */
+    public static void beginPlan(MinecraftServer server, java.util.List<Object[]> jobs) {
+        PLAN.clear();
+        ServerLevel first = null;
+        int firstRadius = 0;
+        for (Object[] job : jobs) {
+            String dimension = (String) job[0];
+            int radius = (Integer) job[1];
+            if (first == null) {
+                first = levelOf(server, dimension);
+                firstRadius = radius;
+            } else {
+                PLAN.add(new Job(dimension, radius));
+            }
+        }
+        if (first != null) {
+            start(first, firstRadius);
+        }
+    }
+
+    private static ServerLevel levelOf(MinecraftServer server, String dimension) {
+        for (ServerLevel candidate : server.getAllLevels()) {
+            if (candidate.dimension().identifier().toString().equals(dimension)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static void start(ServerLevel target, int radius) {
+        currentDimension = target.dimension().identifier().toString();
         // Une exécution qui en recouvre une autre invaliderait les compteurs de la première ; le
         // numéro d'exécution avancé ici fait taire tous ses rappels encore en route.
         epoch++;
@@ -1056,7 +1131,9 @@ public final class Pregen {
         running = false;
         hideBar();
         releaseKnownChunks();
-        clearState();
+        if (PLAN.isEmpty()) {
+            clearState();
+        }
         Lanterne.LOG.info(String.format(Locale.ROOT,
                 "[PRÉGÉN] terminé — %d chunk(s) générés et %d sautés en %s de travail, soit "
                 + "%.1f par seconde. Ces chunks seront désormais servis depuis le disque, ce qui "
@@ -1077,6 +1154,19 @@ public final class Pregen {
                     + "Le débit ci-dessus est celui du travail réel, pas celui de l'attente.",
                     humanDuration(idle), humanDuration(worked + idle)));
         }
+        Job next = PLAN.poll();
+        if (next != null && level != null) {
+            ServerLevel nextLevel = levelOf(level.getServer(), next.dimension());
+            if (nextLevel != null) {
+                Lanterne.LOG.info("[PRÉGÉN] suite du plan : {} sur un rayon de {} chunks.",
+                        next.dimension(), next.radius());
+                start(nextLevel, next.radius());
+            } else {
+                Lanterne.LOG.warn("[PRÉGÉN] dimension inconnue « {} », plan interrompu.",
+                        next.dimension());
+                clearState();
+            }
+        }
     }
 
     /** Arrête proprement, en laissant aboutir ce qui est en vol. */
@@ -1090,6 +1180,7 @@ public final class Pregen {
             }
             running = false;
             hideBar();
+            PLAN.clear();
             clearState();
             Lanterne.LOG.info("[PRÉGÉN] interrompu — {} chunk(s) générés, {} sautés, {} encore en "
                     + "vol qui aboutiront et seront écrits. La reprise est gratuite : relancer "
