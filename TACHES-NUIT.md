@@ -4,6 +4,20 @@ Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche 
 travail honnête, pas promotionnel — chaque point dit s'il est confirmé, partiel, ou juste une piste.
 Le détail complet, section par section, suit plus bas dans ce même fichier (rien supprimé).
 
+**CORRECTIF IMPORTANT (~06h00, vérification SSH lecture seule)** : contrairement à ce que dit la
+section 1 ci-dessous ("VPS stable en `26.3.55`", "TÂCHE A/B pas déployées sur le VPS"), le VPS
+tourne EN RÉALITÉ `lanterne-26.3.59.jar` depuis un redémarrage à `00:08:08` cette nuit (source
+exacte du redémarrage non retracée — probablement Mèche, auto-update déclenché après une mise à
+jour de `test 1`). **C'est une bonne nouvelle, pas une régression** : démarrage propre, aucune
+exception/erreur/OOM/lag dans les logs, TÂCHE A confirmée active en prod par son propre message de
+log (`[CADENCE] BlueMap prêt, 0 joueur connecté — rendu complet démarré automatiquement`), TÂCHE B
+(modId iris virtuel) présente dans le jar qui tourne. 0 joueur connecté depuis le boot (cohérent
+avec "0 joueurs avant 8h"), serveur en pause normale (`Server empty for 60 seconds, pausing`).
+Process stable depuis 3h05 au moment du contrôle (`03:14 UTC`), `Done` confirmé, RCON actif. Voir
+la section "VÉRIFICATION VPS ~06h00" tout en bas de ce fichier pour le détail complet et les preuves
+de log. **Aucune action corrective nécessaire** — juste une correction de doc : la section 1/2
+ci-dessous est partiellement dépassée sur ce point précis (TÂCHE A/B sont bel et bien en prod).
+
 ## 1. Déployé et confirmé stable (VPS + test1)
 
 - **Migration complète du code source d'Iris dans Lanterne** (fusion LGPL-3.0, voir
@@ -1305,3 +1319,58 @@ concret, sur un cas réel plutôt qu'un jouet.
 Aucune modification de code cette passe (directive = reconfirmation empirique uniquement, pas
 nouvelle investigation). Process `C:\lanterne-client-vulkan-test-5\` laissé actif (pas de kill).
 Rien déployé VPS/test1.
+
+## VÉRIFICATION VPS ~06h00 (lecture seule, aucune action corrective)
+
+Contrôle demandé par le coordinateur pour confirmer que le VPS est resté stable pendant la nuit
+(monde officiel réel, aucune intervention directe autorisée). Accès SSH clé
+`C:/Users/trufa/.ssh/lanterne_vps`, `sudo -n` disponible en lecture pour les fichiers `minecraft:minecraft`.
+
+**Process serveur** : PID `321304`, `java @user_jvm_args.txt @libraries/.../unix_args.txt nogui`,
+actif depuis `21Sep2026 00:08:08`, uptime `3h05` au moment du contrôle (`03:14 UTC`). Un seul
+process, pas de doublon/zombie.
+
+**Version réellement chargée — DIFFÉRENTE de ce que disait la section 1 du résumé matinal** :
+```
+Mod List:
+    BlueMap 5.27 (bluemap)
+    Jade 26.3.1+neoforge (jade)
+    Lanterne 26.3.59 (lanterne)
+    Minecraft 26.3 (minecraft)
+    NeoForge 26.3.0.7-beta (neoforge)
+```
+`lanterne-26.3.59.jar` tourne, pas `26.3.55`. Warning bénin de Mèche : `lanterne (version 26.3.57 ->
+26.3.59)` (juste l'auto-update qui a constaté un saut de version, pas une erreur).
+
+**Preuve que TÂCHE A (Cadence, commit `9da44c7`) est bien active en prod**, log exact :
+```
+[21Sep2026 00:08:27.056] [BlueMap-Plugin-Loading/INFO] [fr.clubcitrouille.lanterne.Lanterne/]:
+[CADENCE] BlueMap prêt, 0 joueur connecté — rendu complet démarré automatiquement (plus besoin
+d'attendre une connexion/déconnexion).
+```
+Exactement le comportement corrigé cette nuit. TÂCHE B (modId `iris` virtuel) est aussi présente
+dans ce jar (confirmée par un fork précédent sur `test 1`, même version `26.3.59`).
+
+**Anomalies dans les logs depuis le boot** : AUCUNE. `grep -iE 'exception|error|oom|running.{0,3}slow|crash|out of memory|warn'`
+ne remonte que 5 lignes, toutes bénignes et déjà connues :
+- 3x `Reference map 'iris.refmap.json' ... could not be read` (attendu hors dev-env, sans effet)
+- 1x le warning de version Mèche ci-dessus
+- 1x `Missing metadata in pack file/bukkit.zip` (préexistant, sans rapport avec cette nuit)
+
+Pas de watchdog "running slow", pas de GC pause anormale visible, pas de crash-report généré.
+`Server empty for 60 seconds, pausing` à `00:09:24` — comportement normal d'un serveur à 0 joueur,
+c'est la dernière ligne du log (le serveur réduit son activité de log en pause, pas un arrêt).
+
+**BlueMap** : chargé sans erreur, 3 cartes (`world`, `world_the_nether`, `world_the_end`), WebServer
+démarré sur le port `8100`, rendu déclenché automatiquement par Cadence dès le boot (voir ci-dessus).
+
+**Pregen** : aucun fichier `pregen-en-cours.txt` trouvé à la racine `/srv/minecraft` — cohérent avec
+"aucun pregen en cours" (le patron n'a pas encore lancé le pregen 500 chunks demandé cette nuit,
+ce n'était pas dans le périmètre des forks de cette nuit). Vérification RCON `pregen-status`/`list`
+non aboutie (script Python one-shot mal formé côté parsing de la réponse d'auth RCON, erreur
+`struct.error` sur le paquet de réponse) — pas de deuxième tentative, hors périmètre de ce contrôle
+qui est un contrôle de stabilité, pas une action.
+
+**Conclusion** : VPS parfaitement stable toute la nuit, 0 anomalie, `lanterne-26.3.59.jar` (donc
+TÂCHE A et TÂCHE B) tourne déjà en prod avec succès malgré ce que disait la section 1 du résumé —
+aucune action corrective nécessaire, juste une mise à jour de doc (faite en tête de fichier).
