@@ -245,16 +245,26 @@ public final class ShadercProbe {
                         vertexPatched != null, fragmentPatched != null);
                 return false;
             }
+            Lanterne.LOG.info("[SHADERC] patchVanilla reussi (vertex {} caracteres, fragment {} caracteres), reblock vertex...",
+                    vertexPatched.length(), fragmentPatched.length());
             String vertexReblocked = UniformReblocker.reblock(vertexPatched, "LanterneVertexUBO", 0);
+            Lanterne.LOG.info("[SHADERC] reblock vertex reussi ({} caracteres), reblock fragment...", vertexReblocked.length());
             String fragmentReblocked = UniformReblocker.reblock(fragmentPatched, "LanterneFragmentUBO", 0);
-            Lanterne.LOG.info("[SHADERC] UniformReblocker applique (vertex {} -> {} caracteres, fragment {} -> {} caracteres), tentative shaderc...",
+            Lanterne.LOG.info("[SHADERC] UniformReblocker applique (vertex {} -> {} caracteres, fragment {} -> {} caracteres), shaderc vertex...",
                     vertexPatched.length(), vertexReblocked.length(), fragmentPatched.length(), fragmentReblocked.length());
             boolean vertexOk = compileSpirv(vertexReblocked, Shaderc.shaderc_glsl_vertex_shader, "probe-vanilla-vertex-reblocked.glsl");
+            Lanterne.LOG.info("[SHADERC] shaderc vertex termine (ok={}), shaderc fragment...", vertexOk);
             boolean fragmentOk = compileSpirv(fragmentReblocked, Shaderc.shaderc_glsl_fragment_shader, "probe-vanilla-fragment-reblocked.glsl");
+            Lanterne.LOG.info("[SHADERC] shaderc fragment termine (ok={}).", fragmentOk);
             return vertexOk && fragmentOk;
         } catch (Throwable problem) {
+            // Etape 12 (21/09, reprise apres deblocage Gradle) : ce catch(Throwable) avalait
+            // silencieusement la stack trace via toString() -- impossible de savoir OU exactement
+            // l'OutOfMemoryError/StackOverflowError se produisait dans la chaine patchVanilla ->
+            // reblock -> shaderc. Log complet desormais pour localiser precisement, sans changer le
+            // comportement (toujours capture et renvoie false, jamais propage).
             Lanterne.LOG.warn("[SHADERC] Echec de patchVanilla+reblock (contexte client, device GPU requis) : {}",
-                    problem.toString());
+                    problem.toString(), problem);
             return false;
         }
     }
@@ -332,13 +342,20 @@ public final class ShadercProbe {
         // OutOfMemoryError: Out of stack space confirme le 21/09/2026 dans un vrai contexte client
         // (RECHERCHE-VULKAN-SANS-SODIUM.md etape 8), meme apres le fix "3 uniforms non captures".
         // Porte a 256 Mo pour ce meme test -- toujours un prototype isole, jamais branche au rendu.
+        // Etape 12 (21/09, reprise apres deblocage Gradle) : preuve obtenue que 256 Mo etait deja
+        // insuffisant, et que l'OutOfMemoryError se produit precisement dans l'appel natif JNI
+        // Shaderc.shaderc_compile_into_spv (pas dans UniformReblocker/JcppProcessor, tous les deux
+        // Java purs et confirmes non fautifs par le log de checkpoint ajoute cette passe). Teste ici
+        // 512 Mo pour determiner si c'est encore une question de profondeur (shaderc/glslang interne,
+        // parseur recursif-descendant natif) ou une vraie recursion non bornee independante de la
+        // taille de pile (auquel cas ce chiffre ne changera rien non plus).
         Thread worker = new Thread(null, () -> {
             try {
                 resultHolder[0] = task.call();
             } catch (Throwable problem) {
                 errorHolder[0] = problem;
             }
-        }, "lanterne-shaderc-probe-large-stack", 256L * 1024 * 1024);
+        }, "lanterne-shaderc-probe-large-stack", 512L * 1024 * 1024);
         worker.start();
         try {
             worker.join();
