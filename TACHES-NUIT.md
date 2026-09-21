@@ -2312,3 +2312,47 @@ que copie NBT) mais tout aussi valide, rien à changer.
 **Trieur/Guichet/CoffreDepot/CoffreReception/Aiguillage** : pas d'override `playerWillDestroy`/
 `getDrops` trouvé, cohérent avec le constat du fork précédent ("état recalculé au `onLoad()`") — leur
 configuration réseau n'est pas un état utilisateur à préserver à la casse, rien à corriger.
+
+## CORRECTION du constat ci-dessus — 3e bug réel trouvé et corrigé (clôture de la série NBT/dupe)
+
+Le fork précédent a vérifié l'ABSENCE d'override `getDrops`/`playerWillDestroy` en Java, mais pas
+l'EXISTENCE réelle des fichiers `loot_table/blocks/*.json` correspondants — angle différent, et
+c'est celui-là qui cachait le vrai bug, plus grave que ce qui était cherché.
+
+**Bug confirmé par vérification directe du jar construit** (`unzip -l lanterne-26.3.59.jar`, pas
+une supposition) : AUCUNE table de butin n'existait pour `aiguillage`, `guichet`, `coffre_depot`,
+`coffre_reception` (seul `trieur.json` existait, cf section précédente). Conséquence vanilla
+standard (résolution silencieuse vers `LootTable.EMPTY` si le JSON est absent, aucune erreur/crash) :
+**casser ces 4 blocs, même à l'outil correct, ne rendait STRICTEMENT RIEN — pas même le bloc
+lui-même.** Pour `CoffreDepot`/`CoffreReception` (vrais `ChestBlockEntity`, 27 cases, décrits dans
+leur propre Javadoc comme « un coffre ordinaire à l'usage » où le bot minier externe ET les joueurs
+déposent de vrais objets), c'est une perte de données bien plus grave que celle de `SpawnerSilk`
+cette nuit : tout le contenu stocké disparaissait silencieusement à la casse, en plus du bloc lui-
+même. `CoffreReceptionBlockEntity` a de surcroît un `filtre` (`Map<Item,Integer>`, configuré au clic
+droit) qui était perdu de la même façon.
+
+**Corrigé** :
+- 4 loot tables self-drop ajoutées (`aiguillage.json`, `guichet.json`, `coffre_depot.json`,
+  `coffre_reception.json`, même pattern que `trieur.json` déjà en place) — corrige d'abord le "rien
+  ne tombe du tout" pour les 4 blocs.
+- `core/ReseauDrops.java` (nouveau, même mécanisme exact que `BeamerDrops.java`/`SpawnerSilk.java` :
+  `TagValueOutput`/`saveCustomOnly`/`removeComponentsFromTag`/`BlockItem.setBlockEntityData` sur
+  `BlockDropsEvent`) pour `CoffreDepot`/`CoffreReception` uniquement — préserve le contenu du coffre
+  ET le filtre de `CoffreReception` sur l'item qui tombe. `Aiguillage`/`Guichet` n'ont besoin QUE du
+  loot table (confirmé par lecture directe : aucun état utilisateur à préserver, juste un cache
+  transitoire recalculé au `onLoad()`, cohérent avec le constat initial sur ce point précis).
+
+Compilé sain (`BUILD SUCCESSFUL`). Commit `b904a77` (5 fichiers : `ReseauDrops.java` + 4 loot
+tables), branche `26.3`, jamais poussé. Pas de test client jetable (logique NBT/loot table pure,
+même niveau de confiance que `SpawnerSilk`/`BeamerDrops` déjà validés cette nuit par lecture de
+bytecode — confirmation en jeu reste la vérification ultime, comme pour ces deux-là).
+
+**Clôture de la série NBT/dupe (3 passes cumulées)** : `BlockEntity` custom Lanterne recensées
+exhaustivement (`extends BlockEntity` direct : `BurnerEntity`, `VigilBlockEntity`, `PanelEntity`,
+`BeamerEntity`, `AiguillageBlockEntity`, `GuichetBlockEntity` ; `extends HopperBlockEntity` :
+`TrieurBlockEntity` ; `extends ChestBlockEntity` : `CoffreDepotBlockEntity`,
+`CoffreReceptionBlockEntity`). Toutes vérifiées sous l'angle perte de données à la casse. 3 bugs
+réels trouvés et corrigés (`SpawnerSilk`, `Beamer`, Aiguillage/Guichet/CoffreDepot/CoffreReception),
+le reste confirmé sain (`Burner` via éjection séparée, `Panel`/`Wall` sans état à préserver par
+construction, `Trieur` sans override donc comportement vanilla `HopperBlockEntity` standard déjà
+correct, `Vigil` sans état utilisateur — juste un garde de chunk interne).
