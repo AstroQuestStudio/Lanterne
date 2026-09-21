@@ -1994,3 +1994,37 @@ corrigés (`/lanterne on/off`, `/lanterne bench`, `/projection domaine`, commits
 validation d'entrée/anti-spam/anti-dupe tous audités et confirmés sains sur l'ensemble du mod
 (Bazaar, Easel, Screens, Groove, Studio, Wheel, SpawnerSilk). Aucun fichier de code modifié dans ce
 dernier passage.
+
+## Audit robustesse face aux versions de mods tiers incompatibles (~06h30, pure lecture de code)
+
+Piste : si Sodium/BlueMap/JourneyMap/JEI/Jade sont mis à jour vers une version incompatible avec ce
+que Lanterne attend, qu'est-ce qui se passe ?
+
+**Point réel trouvé, documenté (pas corrigé — décision produit, voir ci-dessous)** :
+`neoforge.mods.toml` ne déclare de contrainte de version que pour Sodium (`versionRange = "[0.9,)"`,
+lignes 94-99) — BORNE UNIQUEMENT VERS LE BAS, aucune borne haute. Étant donné le couplage structurel
+réel trouvé cette nuit (`WorldRenderingSettings.chunkVertexFormat` typé par l'interface Sodium
+`ChunkVertexType`, plusieurs mixins ciblant des classes internes Sodium précises), si un joueur met à
+jour Sodium tout seul vers une future version majeure qui renomme/change ces classes, NeoForge
+laisserait le mod se charger sans avertissement (la contrainte de version est satisfaite), et le
+crash arriverait ensuite avec un message `NoClassDefFoundError`/`ClassNotFoundException` confus au
+lieu du message clair "version incompatible" que NeoForge affiche pour un vrai conflit de
+dépendance. Version réellement utilisée et testée cette nuit : `sodium-neoforge-0.9.2+mc26.3.jar`
+(vérifié dans `test 1/mods/`).
+
+**Volontairement PAS corrigé** : ajouter une borne haute (ex: `[0.9,0.10)`) est une vraie décision
+produit, pas un bug à corriger à l'aveugle — une borne trop stricte bloquerait une future version
+0.9.x légitimement compatible, et je n'ai aucun moyen de savoir cette nuit si Sodium suit SemVer
+strictement pour ses versions mineures. BlueMap/JourneyMap/JEI/Jade n'ont eux-mêmes AUCUNE entrée
+`[[dependencies]]` du tout (détection uniquement via `Compagnons.present()` au runtime, pas de
+contrainte NeoForge) — cohérent avec eux (ils sont toujours utilisés à distance, jamais avec un
+couplage structurel comme Sodium), donc pas un problème du même ordre.
+
+**Corrigé en revanche (sûr, sans risque)** : les `catch(Throwable)` de `client/Dials.java` (famille
+"Shaders", ajoutée cette nuit) étaient totalement silencieux — aucune trace en cas d'échec réel,
+impossible à diagnostiquer si un joueur signale "le cadran ne marche pas". Ajouté un
+`Lanterne.LOG.debug(...)` avec le message de l'exception dans les 3 méthodes qui ne sont PAS appelées
+à chaque frame (`refreshShaderPackNames`, `cycleIrisShaderPack`, `toggleIrisShaders` — actions/setup,
+pas les label/colour suppliers appelés en boucle de rendu, pour éviter tout risque de spam de logs).
+Compilé sain (`BUILD SUCCESSFUL`). Commit code : `[voir git log, fait par le coordinateur directement
+après ce fork]`.

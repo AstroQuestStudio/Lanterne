@@ -267,6 +267,9 @@ public final class Dials extends Screen {
             }
         } catch (Throwable listeIndisponible) {
             shaderPackNames = List.of();
+            fr.clubcitrouille.lanterne.Lanterne.LOG.debug(
+                    "Cadran Shaders : liste des shaderpacks indisponible ({})",
+                    listeIndisponible.toString());
         }
     }
 
@@ -307,6 +310,8 @@ public final class Dials extends Screen {
         } catch (Throwable echecBascule) {
             // Meme discipline que toggleIrisShaders : jamais faire planter l'ecran de reglages
             // pour un seul cadran.
+            fr.clubcitrouille.lanterne.Lanterne.LOG.debug(
+                    "Cadran Shaders : bascule de shaderpack echouee ({})", echecBascule.toString());
         }
     }
 
@@ -337,6 +342,8 @@ public final class Dials extends Screen {
             // Iris.toggleShaders degrade deja proprement (voir le catch(Throwable) de
             // Iris.createPipeline, corrige cette nuit) — un echec ici reste silencieux plutot que
             // de faire planter tout l'ecran de reglages pour un seul cadran.
+            fr.clubcitrouille.lanterne.Lanterne.LOG.debug(
+                    "Cadran Shaders : bascule on/off echouee ({})", echecBascule.toString());
         }
     }
 
