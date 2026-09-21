@@ -1,3 +1,34 @@
+# AUDIT — Bulk.java / Increvable.java / Recycleur.java (fork, piste laissée par l'audit précédent)
+
+Directive : auditer ces 3 fichiers jamais couverts cette nuit, chercher de vrais bugs/gains de perf.
+
+**Résultat : rien à corriger, code déjà remarquablement soigné (Javadoc extensive expliquant chaque
+décision, cas limites explicitement traités).**
+
+- `core/Bulk.java` + `mixin/HopperBulkMixin.java` : transfert par lots d'entonnoirs (16 objets par
+  recherche au lieu d'1), débit vanilla préservé au bit près par construction (`cooldownFor` paie
+  exactement le nombre de "tours vanilla" remplacés). Champs statiques `ejected`/`sucked` non-atomiques
+  intentionnellement (lus/écrits sur le même thread serveur dans le même tick, documenté), `TRANSFERS`/
+  `ITEMS` en `AtomicLong` pour la lecture cross-thread depuis Radiographie — pattern déjà vu cette nuit
+  sur `Grele.TRIMMED_CALLS`/`Reflet.SKIPPED`. Garde-fou vanilla (`isOnCustomCooldown`) correctement
+  exploité pour éviter une duplication de débit. Rien à corriger.
+- `core/Increvable.java` : pont explicite AutoMiner (canal réseau volontairement déclaré, pas une
+  détection cachée — design déjà validé par le patron selon la Javadoc). Portée délibérément étroite
+  (seule la durabilité perdue au bris de bloc, vérifiée par javap sur le jar réel). Rien à corriger.
+- `content/Recycleur.java` : rend une fraction proportionnelle des matériaux d'un objet usé,
+  mathématiquement incapable de rendre plus que ce qui a été dépensé (`Math.floor`, fraction ≤ 1).
+  **Point mineur noté, PAS corrigé** : `recetteDe()` scanne TOUTES les recettes du serveur
+  (`RecipeManager.getRecipes()`, potentiellement des milliers avec les mods/JEI) à CHAQUE clic sur
+  le bloc — pas un chemin chaud (déclenché par interaction joueur, pas par tick), donc pas un vrai
+  problème de perf, juste une piste de cache trivial (`Map<Item, ShapedRecipe>` construite une fois)
+  si jamais ce bloc devient très utilisé. Non implémenté volontairement : gain marginal, risque de
+  complexifier un code déjà propre et déjà couvert par `RecycleurSelfCheck.java`.
+
+Aucun fichier de code modifié, aucun commit de code. Build vérifié sain (`BUILD SUCCESSFUL`, rien à
+recompiler).
+
+---
+
 # AUDIT — recherche de nouvelle piste d'optimisation (particules/entités/son/worldgen), négatif honnête (fork)
 
 Directive : trouver un angle vraiment inexploré cette nuit pour un gain perf ou fonctionnalité, sur
