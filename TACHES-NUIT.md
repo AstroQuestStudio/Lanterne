@@ -1,3 +1,24 @@
+# AUDIT — recherche de nouvelle piste d'optimisation (particules/entités/son/worldgen), négatif honnête (fork)
+
+Directive : trouver un angle vraiment inexploré cette nuit pour un gain perf ou fonctionnalité, sur
+tout le mod. Audité en profondeur 6 modules distincts, choisis pour couvrir des domaines jamais vus
+cette nuit : `core/Grele.java` (plafond de particules de dégâts, déjà câblé dans `Radiographie` et
+`Settings`), `core/EntityThrottle.java` (espacement du tick des entités via l'event NeoForge
+`fireEntityTickPre`, liste d'exclusion pour tout ce qui dépend d'une trajectoire précise),
+`content/disc/BurnerEntity.java` (tick de gravure, déjà throttlé à 1 émission son+particule/seconde),
+`core/Cadastre.java` (collision de structures de génération, VoxelShape optimisée), `core/Digue.java`
+(garde contre le chargement de chunk synchrone), `core/Burin.java` (marge de casse réseau).
+
+**Résultat : rien trouvé, résultat négatif honnête.** Chacun de ces modules est déjà une solution
+délibérée et documentée en détail (Javadoc expliquant precisément le défaut vanilla corrigé et le
+choix d'implémentation), pas du code laissé par défaut. Ce n'est pas une recherche superficielle qui
+n'a rien vu — c'est un mod déjà très soigneusement optimisé sur les axes testés cette fois. Aucune
+modification, aucun commit de code. Piste pour une reprise de jour si le patron veut creuser encore :
+les modules non regardés cette nuit spécifiquement restent `Bulk.java`, `Increvable.java`,
+`Recycleur.java` (jamais mentionnés dans TACHES-NUIT.md avant cette section).
+
+---
+
 # VULKAN — étape 13 : stack overflow localisé précisément, conclusion définitive (fork, ~07h35)
 
 Suite directe de la section ci-dessous (étape 12). Directive : identifier la récursion précise
