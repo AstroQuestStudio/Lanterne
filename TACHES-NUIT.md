@@ -2812,3 +2812,27 @@ future erreur humaine, un bug non détecté, ou une panne disque.
 
 Aucun fichier modifié, aucune commande d'écriture exécutée sur le VPS. Aucun commit de code — seule
 cette note ajoutée dans `TACHES-NUIT.md`.
+
+## Audit résilience systemd du service minecraft (fork, lecture seule SSH)
+
+Directive : vérifier si le service redémarre automatiquement en cas de crash, et si des crashs
+inattendus (non liés aux déploiements volontaires du coordinateur) ont eu lieu cette nuit.
+
+**Résultat : configuration déjà robuste, confirmée par un vrai incident survenu cette nuit.**
+
+- `/etc/systemd/system/minecraft.service` : `Restart=on-failure`, `RestartSec=10`.
+  `StartLimitBurst=5` (valeur par défaut systemd, aucune valeur custom trouvée pour
+  `StartLimitIntervalSec` — reste au défaut de 10s).
+- **Preuve concrète que ça fonctionne** : entre 22:02 et 22:08 cette nuit, le service a crashé et
+  redémarré automatiquement à répétition (`Mod loading has failed` / `FatalStartupException` —
+  c'est exactement le crash-loop du bug #1 de la migration Iris, déjà documenté et corrigé
+  ailleurs dans ce fichier : `@Mod("iris")` annotation retirée). `Restart=on-failure` a bien
+  relancé le service à chaque échec, sans jamais atteindre la limite `start-limit-hit` (aucune
+  occurrence trouvée dans les logs) — la boucle s'est arrêtée seule une fois le correctif déployé.
+- Les deux seuls autres redémarrages de cette nuit (04:44:38 et 04:46:35) sont bien les deux
+  déploiements volontaires (fork + coordinateur, doublon déjà documenté et réconcilié) — les deux
+  se terminent par `Deactivated successfully` (arrêt propre), pas un crash.
+
+**Conclusion** : rien à corriger, aucune recommandation nécessaire — la résilience systemd a déjà
+fait ses preuves en conditions réelles cette nuit même. Aucune modification de code ni de config,
+opération 100% lecture seule sur le VPS.
