@@ -399,12 +399,15 @@ public class ShadowRenderer {
 
 		profiler.popPush("shadows");
 		ACTIVE = true;
+		ShadowFlags.active = true;
 		RESOLUTION = resolution;
 
 		renderDistance = (int) ((halfPlaneLength * renderDistanceMultiplier) / 16);
+		ShadowFlags.renderDistance = renderDistance;
 
 		if (renderDistanceMultiplier < 0) {
 			renderDistance = IrisVideoSettings.shadowDistance;
+			ShadowFlags.renderDistance = renderDistance;
 		}
 
 
@@ -659,6 +662,7 @@ public class ShadowRenderer {
 
 		visibleBlockEntities = null;
 		ACTIVE = false;
+		ShadowFlags.active = false;
 
 		levelRenderState.cameraRenderState.viewRotationMatrix = cameraViewRotation;
 		levelRenderState.cameraRenderState.projectionMatrix = cameraProjection;

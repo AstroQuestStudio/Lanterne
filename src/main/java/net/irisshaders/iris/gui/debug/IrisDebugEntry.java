@@ -22,13 +22,13 @@ public class IrisDebugEntry implements DebugScreenEntry {
 			debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Color space: " + IrisVideoSettings.colorSpace.name());
 			boolean sodiumChunks = net.irisshaders.iris.mixin.IrisMixinPlugin.sodiumPresent();
 			if (sodiumChunks) {
-				ShadowRenderer.ACTIVE = true;
+				net.irisshaders.iris.shadows.ShadowFlags.active = true;
 			}
 			if (level != null && sodiumChunks) {
 				debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Shadows: " + java.util.Objects.requireNonNullElse(net.irisshaders.iris.compat.sodium.bridge.IrisRenderBridge.shadowChunksDebugString(), "n/a"));
 			}
 			if (sodiumChunks) {
-				ShadowRenderer.ACTIVE = false;
+				net.irisshaders.iris.shadows.ShadowFlags.active = false;
 			}
 		} else {
 			debugScreenDisplayer.addToGroup(Identifier.fromNamespaceAndPath("iris", "name"), "[" + Iris.MODNAME + "] Shaders are disabled");
