@@ -117,6 +117,18 @@ ci-dessous est partiellement dépassée sur ce point précis (TÂCHE A/B sont be
   `ModConfigSpec` NeoForge : rejet silencieux, retour au défaut, juste un warning dans le journal).
   Une section entière oubliée en recopiant se comporte pareil (valeurs par défaut du code). Aucun
   risque de crash au démarrage lié à une erreur de saisie humaine dans ce fichier.
+  **CONFIRMATION DIRECTE (~07h00, lecture seule sur le VPS réel, pas une déduction)** : le fichier
+  `config/lanterne-common.toml` RÉELLEMENT présent sur le VPS (généré au premier démarrage après la
+  fusion cette nuit) a bien la structure imbriquée prédite ci-dessus — vérifié via `grep -n '^\['` :
+  sections racine `[socle]`, `[ajouts]`, `[pregeneration]`, `[treve_bluemap]`, `[etalon]`,
+  `[boutique]`, `[carte3d]`, `[atelier]`, et À L'INTÉRIEUR de `[boutique]` se trouvent bien
+  `[boutique.economie]` puis `[boutique.boutique]` (contenu lu directement : `active`, `symbole`,
+  `solde_depart`, `virements`, `classement_taille` sous `.economie` ; `rachat`, `lot_max`,
+  `marge_min_pourcent` sous `.boutique`) — exactement la structure documentée ci-dessus, pas
+  l'ancienne à plat. Le patron peut donc suivre ce guide de section en confiance demain matin.
+  NeoForge génère bien le fichier avec commentaires/structure complets par défaut (comportement
+  standard `ModConfigSpec`, confirmé sur ce fichier précis) — pas besoin de créer les sections à la
+  main, juste de coller les bonnes valeurs sous les bons en-têtes déjà présents.
 - **Confirmation visuelle en jeu** : onglet Iris dans Sodium, disparition de l'artefact du ciel,
   fonctionnement réel du cadran shaderpack dans Dials — tout ça est prouvé "mécaniquement sain"
   (bytecode/logs) mais jamais vu par un œil humain.
