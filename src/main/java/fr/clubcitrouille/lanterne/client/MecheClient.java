@@ -204,6 +204,12 @@ public final class MecheClient {
             return;
         }
         Lanterne.LOG.info("[MÈCHE] mods absents : {} — versions differentes : {}", missing, different);
+        // Information de diagnostic seulement : dans la discussion elle n'apportait que du bruit chez les
+        // joueurs (BlueMap, par exemple, ne tourne que sur le serveur). Le journal la garde ; le message
+        // n'apparait que sur demande : -Dlanterne.meche.liste=true.
+        if (!Boolean.getBoolean("lanterne.meche.liste")) {
+            return;
+        }
         Minecraft.getInstance().execute(() -> {
             if (!missing.isEmpty()) {
                 tell(Component.literal("Mods du serveur absents chez toi (" + missing.size() + ") : "
