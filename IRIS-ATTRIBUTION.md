@@ -44,15 +44,11 @@ fil du temps. La LGPL-3.0 l'autorise, à condition que :
   Lanterne est distribué sous GPL-3.0-only — une licence GPL peut absorber du
   code LGPL, jamais l'inverse.
 
-**Point de conformité non résolu, à corriger avant toute distribution publique** : le texte
-intégral de la licence LGPL-3.0 d'Iris n'est actuellement PRÉSENT NULLE PART dans ce dépôt
-(vérifié par recherche exhaustive du texte "Lesser General Public" dans `src/`, les `.md` à la
-racine, et `LICENSE` — seul le texte GPL-3.0 de Lanterne y figure). La condition citée ci-dessus
-("le fichier LICENSE d'Iris reste accessible") n'est donc PAS remplie à ce jour. Correctif simple
-recommandé pour la reprise de jour : ajouter une copie du texte officiel de la LGPL-3.0
-(https://www.gnu.org/licenses/lgpl-3.0.txt) dans un fichier dédié (ex: `LICENSE-IRIS`), référencé
-depuis ce document — non fait cette nuit pour éviter de retranscrire un texte légal de mémoire sans
-pouvoir le vérifier mot pour mot.
+**Point de conformité résolu** : le texte intégral et officiel de la LGPL-3.0 est désormais présent
+dans ce dépôt, fichier [`LICENSE-IRIS`](./LICENSE-IRIS) — récupéré directement depuis la source
+canonique (`https://www.gnu.org/licenses/lgpl-3.0.txt`, réponse HTTP 200, 165 lignes, copié verbatim
+sans retranscription manuelle pour garantir l'exactitude mot pour mot). La condition ci-dessus ("le
+fichier LICENSE d'Iris reste accessible et référencé") est maintenant remplie.
 
 **Lanterne n'est affilié à IrisShaders d'aucune façon officielle.** Ce portage
 n'est pas endossé par eux ; il utilise leur travail, sous leur licence, avec
