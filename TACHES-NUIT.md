@@ -1,3 +1,24 @@
+# VULKAN — reprise des 2 blocages étape 8, 1 résolu, 1 confirmé plus profond (fork, ~07h30)
+
+Gradle débloqué → reprise directe des 2 derniers obstacles Vulkan documentés dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md` étape 8 (uniforms non capturés + stack overflow sur
+`gbuffers_terrain` réel). Détail complet dans ce fichier, étape 12. Résumé :
+
+- **Uniforms non capturés : RÉSOLU et confirmé empiriquement** (le fix `fe5afec` était déjà en
+  place mais jamais testé, à cause du blocage Gradle — testé maintenant sur le vrai fichier,
+  l'erreur `'non-opaque uniforms outside a block'` a disparu).
+- **Stack overflow : toujours présent**, même en portant la pile dédiée de 64 à 256 Mo (aucune
+  amélioration) — signal fort d'une récursion non bornée plutôt qu'un simple manque de pile.
+  Localisé précisément : l'échec est dans l'appel natif shaderc/glslang pour le FRAGMENT
+  (99760 caractères), le VERTEX (même fichier, reblocké) compile désormais avec succès en SPIR-V
+  (32784 octets) — nouvelle preuve jamais obtenue avant.
+- Piste de reprise concrète documentée (tester avec des tailles de fichier intermédiaires pour
+  isoler le seuil exact, plutôt que d'augmenter la pile à l'aveugle).
+
+Commits `b1fb25b`, `255345e` sur `26.3`, jamais poussés. Rien déployé VPS/test1.
+
+---
+
 # VÉRIFICATION FINALE AUTOMINER — build propre confirmé (~07h23, Gradle débloqué)
 
 Reprise de la vérification finale d'AutoMiner (`ClubCitrouilleAutoMiner`) après résolution du
