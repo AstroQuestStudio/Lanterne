@@ -3347,3 +3347,26 @@ Lecture pure des 4 fichiers `data/lanterne/recipe/{aiguillage,guichet,coffre_dep
   (`type`, `category`, `pattern`, `key`, `result.id`/`result.count`), rien de manquant.
 
 Aucune modification nécessaire. Pure lecture, pas de compilation (problème Gradle toujours actif).
+
+---
+
+# AUDIT — Wheel.java (perf/erreurs audio, cohérence avec Burner.java)
+
+Fichier bien conçu, aucun problème trouvé :
+- `pump()` tourne sur `ClientTickEvent.Post` chaque tick mais retourne immédiatement (`if (giving ==
+  null) return;`) — coût nul hors transfert actif, pattern déjà vu ailleurs cette nuit.
+- Gestion d'erreur soignée : fichier audio corrompu/illisible → `IOException`/`RuntimeException`
+  catchés avec message clair au joueur (`"Fichier audio illisible."`), jamais de crash. Empreinte
+  recalculée après réception (`absorb`) pour détecter une corruption réseau, borné en taille
+  (`Studio.discMaxBytes()`), offsets validés avant écriture dans le buffer.
+- Cohérence de format confirmée : `Post.Vinyl(slot, hash, title, seconds)` (réseau) et
+  `Slots.Cut(hash, title, seconds, author)` (état côté client) partagent les mêmes champs clés
+  (`hash`/`title`/`seconds`), pas de désynchronisation de schéma. `Burner.java` ne partage aucun
+  identifiant de type avec `Wheel.java` (chemins de données séparés : gravure NBT côté bloc vs
+  transfert réseau côté client) — pas de couplage à vérifier entre les deux.
+- Threading documenté et correct : le fil `LATHE` (fond, démon, priorité basse) ne touche jamais les
+  structures partagées (`OFFERS`/`ASKED`) directement, toujours via `Minecraft.getInstance().execute`.
+
+Aucune modification, aucun commit de code. Note : `Gradle` fonctionne à nouveau normalement depuis
+~07h05 (cause : process zombie tué, voir plus haut) — la mention "problème Gradle toujours actif" au
+paragraphe juste au-dessus de celui-ci est obsolète (écrite avant la résolution).
