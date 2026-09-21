@@ -655,3 +655,56 @@ recherche exploratoire.
 
 Aucun fichier de code modifié, rien compilé (recherche pure), rien commité côté code — seule cette
 documentation a été ajoutée.
+
+## ÉTAPE 10 — implémentation de l'abstraction `VertexFormatSource` sur `chunkVertexFormat` (fork, 21/09 ~05h30)
+
+Suite directe de l'étape 9 (périmètre confirmé clos à ce seul champ). Implémenté avec succès la
+partie du refactor qui était sûre :
+
+**Fait** :
+- Nouvelle interface neutre `net.irisshaders.iris.compat.vertexformat.VertexFormatSource`
+  (une seule méthode `getVertexFormat()`, retourne `com.mojang.renderpearl.api.vertex.VertexFormat`
+  — vérifié via javap sur le vrai jar Sodium que c'est exactement le type de retour réel de
+  `ChunkVertexType.getVertexFormat()`, pas une approximation).
+- Adaptateur `SodiumVertexFormatSource implements VertexFormatSource` qui wrappe le vrai
+  `ChunkVertexType` Sodium (même motif d'isolation que `SodiumVertexSerializers`).
+- `WorldRenderingSettings.java` : le champ `chunkVertexFormat` est maintenant typé
+  `VertexFormatSource` (plus aucun import Sodium dans ce fichier — c'était la classe la plus
+  dangereuse du lot car `INSTANCE` est un champ statique initialisé très tôt). Valeur par défaut du
+  constructeur passée de `ChunkMeshFormats.COMPACT` à `null` (toujours écrasée avant tout rendu réel
+  par `IrisRenderingPipeline` ou `VanillaRenderingPipeline`).
+- Les 2 seuls appelants de `setVertexFormat` (`IrisRenderingPipeline.java:232`,
+  `VanillaRenderingPipeline.java:34`) enveloppent maintenant leur valeur Sodium dans
+  `new SodiumVertexFormatSource(...)`.
+- Les 2 mixins Sodium (`MixinChunkMeshFormats`, `MixinRenderSectionManager`) qui retournaient
+  directement `ChunkVertexType` déballent maintenant l'adaptateur (`instanceof
+  SodiumVertexFormatSource` puis `.sodiumDelegate()`) — safe car ces mixins ne s'appliquent de
+  toute façon que si la classe Sodium ciblée est chargée.
+- Les 7 sites de lecture qui font `.getVertexFormat().getVertexFormat()` (`ShaderAttributeInputs`,
+  4x `ShaderCreator`, 2x `MixinRenderPipeline`) n'ont eu AUCUN changement à faire : le type de
+  retour final est identique.
+
+**PAS fait, volontairement** : `VanillaRenderingPipeline.java:34` référence toujours
+`ChunkMeshFormats.COMPACT` directement (juste enveloppé, pas remplacé) — aucun format vanilla pur
+équivalent n'a été identifié avec certitude, donc ce site précis reste un hard-requirement Sodium
+non résolu, conformément à la consigne de ne jamais fabriquer un format approximatif qui
+corromprait silencieusement le mesh. Ce n'est PAS une régression : c'était déjà le cas avant ce
+refactor, juste maintenant isolé dans une seule classe (`SodiumVertexFormatSource`) au lieu d'être
+étalé dans le type même de `WorldRenderingSettings`.
+
+**Test réel effectué** : `./gradlew compileJava` puis `./gradlew build -x test` propres. Jar copié
+dans un client jetable isolé AVEC Sodium présent (`C:\lanterne-client-dials-shaderpack\`, réutilisé
+après nettoyage par un fork précédent). Lancé jusqu'à confirmation complète : `Sound engine
+started`, **`Iris/: Creating pipeline for dimension minecraft:overworld`** — exactement le même
+jalon que les tests précédents de cette nuit sur ce même environnement. **0 FATAL**, aucune
+exception liée à `WorldRenderingSettings`/`ChunkVertexType`/`VertexFormatSource`/
+`SodiumVertexFormatSource` dans les logs (seules erreurs présentes : auth Mojang/Realms hors-ligne,
+avertissement Sodium-NvidiaWorkarounds déjà connu et sans rapport). Process fermé proprement après
+vérification du `gameDir` via `Get-CimInstance` (PID 27964), jamais de kill global.
+
+**Bilan** : le champ `chunkVertexFormat` n'est plus un couplage structurel dur au niveau de
+`WorldRenderingSettings` lui-même — mais Sodium reste un hard-requirement réel au niveau du
+CALCUL du format (`FormatAnalyzer.createFormat`, `ChunkMeshFormats.COMPACT`), qui n'a jamais été
+dans le périmètre de ce refactor précis. Le retrait complet de Sodium nécessiterait de résoudre CE
+point (trouver ou construire un format vanilla pur), qui reste documenté comme la vraie prochaine
+étape, non entamée cette nuit faute de certitude suffisante.

@@ -2,8 +2,7 @@ package net.irisshaders.iris.shaderpack.materialmap;
 
 import it.unimi.dsi.fastutil.objects.Object2IntFunction;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
-import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
-import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
+import net.irisshaders.iris.compat.vertexformat.VertexFormatSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -24,7 +23,7 @@ public class WorldRenderingSettings {
 	private boolean useSeparateAo;
 	private boolean separateEntityDraws;
 	private boolean voxelizeLightBlocks;
-	private ChunkVertexType chunkVertexFormat;
+	private VertexFormatSource chunkVertexFormat;
 	private boolean breaksAnisotropy = false;
 
 	public WorldRenderingSettings() {
@@ -34,7 +33,10 @@ public class WorldRenderingSettings {
 		ambientOcclusionLevel = 1.0F;
 		disableDirectionalShading = false;
 		useSeparateAo = false;
-		chunkVertexFormat = ChunkMeshFormats.COMPACT;
+		// Club Citrouille : plus de valeur par defaut Sodium en dur ici (evite de charger Sodium
+		// juste par le chargement de cette classe) - toujours ecrase par IrisRenderingPipeline ou
+		// VanillaRenderingPipeline avant tout rendu reel, voir leurs constructeurs.
+		chunkVertexFormat = null;
 		separateEntityDraws = false;
 		voxelizeLightBlocks = false;
 		hasVillagerConversionId = false;
@@ -135,11 +137,11 @@ public class WorldRenderingSettings {
 		this.useSeparateAo = useSeparateAo;
 	}
 
-	public ChunkVertexType getVertexFormat() {
+	public VertexFormatSource getVertexFormat() {
 		return chunkVertexFormat;
 	}
 
-	public void setVertexFormat(ChunkVertexType chunkVertexFormat) {
+	public void setVertexFormat(VertexFormatSource chunkVertexFormat) {
 		if (chunkVertexFormat == this.chunkVertexFormat) {
 			return;
 		}

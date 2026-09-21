@@ -31,7 +31,8 @@ public class VanillaRenderingPipeline implements WorldRenderingPipeline {
 		WorldRenderingSettings.INSTANCE.setUseSeparateAo(false);
 		WorldRenderingSettings.INSTANCE.setSeparateEntityDraws(false);
 		WorldRenderingSettings.INSTANCE.setAmbientOcclusionLevel(1.0f);
-		WorldRenderingSettings.INSTANCE.setVertexFormat(ChunkMeshFormats.COMPACT);
+		WorldRenderingSettings.INSTANCE.setVertexFormat(
+				new net.irisshaders.iris.compat.vertexformat.SodiumVertexFormatSource(ChunkMeshFormats.COMPACT));
 		WorldRenderingSettings.INSTANCE.setVoxelizeLightBlocks(false);
 		WorldRenderingSettings.INSTANCE.setBreaksAnisotropy(false);
 		WorldRenderingSettings.INSTANCE.setBlockTypeIds(Object2ObjectMaps.emptyMap());

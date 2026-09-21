@@ -230,7 +230,8 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 		this.resolver = new ProgramFallbackResolver(programSet);
 		this.pack = programSet.getPack();
         WorldRenderingSettings.INSTANCE.setVertexFormat(
-                FormatAnalyzer.createFormat(true, true, true, true)); // TODO 26.2... or never.
+                new net.irisshaders.iris.compat.vertexformat.SodiumVertexFormatSource(
+                        FormatAnalyzer.createFormat(true, true, true, true))); // TODO 26.2... or never.
 
 		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
 		GpuTexture depthTexture  = main.getDepthTexture();
