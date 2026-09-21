@@ -1,3 +1,13 @@
+# RÉSOLU — texte officiel LGPL-3.0 ajouté (`LICENSE-IRIS`)
+
+Suite à la section ci-dessous, le coordinateur a récupéré le texte officiel exact de la LGPL-3.0
+directement depuis `https://www.gnu.org/licenses/lgpl-3.0.txt` via `curl` (HTTP 200, 165 lignes,
+copié verbatim — aucune retranscription manuelle), créé `LICENSE-IRIS` à la racine du dépôt, et mis
+à jour `IRIS-ATTRIBUTION.md` pour confirmer que le point de conformité est désormais résolu. Commit
+`4429569` sur `26.3`, jamais poussé.
+
+---
+
 # VÉRIFICATION — attribution Iris (LGPL-3.0), point de conformité important trouvé
 
 `IRIS-ATTRIBUTION.md` relu et complété : ajout d'une liste des modifications substantielles faites
