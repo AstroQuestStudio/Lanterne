@@ -2576,3 +2576,11 @@ est *calculé*). Il s'occupe de ce qui ne devrait pas être *fait*.
 *Un mod qu'on ne peut pas réfuter n'est pas un mod rapide, c'est une affirmation.*
 
 </div>
+
+---
+
+## 🙏 Remerciements
+
+- **Sodium** (CaffeineMC / JellySquid) : ses techniques de rendu du terrain, documentées publiquement, ont été étudiées pour comprendre ce qui fait de bonnes performances ; Lanterne écrit son propre moteur, sans reprendre son code. Merci à l'équipe pour ce travail qui a montré la voie aux joueurs.
+- **Iris** (IrisShaders) : intégré nativement dans Lanterne sous LGPL-3.0, voir `IRIS-ATTRIBUTION.md` et `LICENSE-IRIS`.
+- **Distant Horizons**, **JourneyMap**, **JEI**, **Jade** et les autres mods du modpack : voir la section « Le modpack ».
