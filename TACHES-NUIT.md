@@ -2553,3 +2553,29 @@ brute pendant une construction) est explicitement documenté dans la Javadoc de 
 
 Aucun fichier modifié, rien à compiler. Cette investigation portait sur le repo
 `ClubCitrouilleAutoMiner` (séparé de Lanterne) ; seule cette note de synthèse est ajoutée ici.
+
+## Suivi — audit du chemin GATHERING (BuildSupply) — pure lecture de code
+
+Directive : creuser précisément pourquoi `GATHERING` est documenté comme « le recoin le moins
+éprouvé » de `BuildSupply`, chercher une vraie fragilité (boucle sans sortie, transition d'état
+ambiguë, TODO non résolu).
+
+**Résultat : conception déjà solide, rien à corriger.** `BuildSupply.request()` fait remonter
+`GATHERING` uniquement quand `GoalPlanner.currentNeedsHarvesting()` est vrai — l'étape courante du
+planificateur est un `Step.Harvest`, résolue par le repérage de terrain (`GoalTarget.want(item)`),
+pas par `BuildSupply` lui-même. `BuildSite.fetch()` traite `GATHERING` proprement : il rend
+simplement la main (`return false`) pour laisser le profil général tourner, sans boucle ni
+`catch` générique — la case en attente sera retentée au tick suivant.
+
+Le vrai filet de sécurité contre un blocage indéfini n'est **pas** dans `BuildSupply` mais dans
+`GoalPlanner` (déjà audité indirectement) : un `PATIENCE = 6000` (5 min) sans progrès déclare
+l'objectif hors de portée (`GoalPlanner.java:91,406-409`), et `abandonStuck()` coupe bien plus tôt
+dès que le détecteur de boucle du contrôleur crie — mécanisme ajouté après un incident RÉEL et
+documenté (`GoalPlanner.java:294-307` : « stone_pickaxe — récolter oak_log » répété 5000+ fois le
+20/09/2026, corrigé). Le commentaire « le recoin le moins éprouvé » est donc de la prudence
+honnête du développeur sur un chemin peu testé EN JEU, pas la trace d'un bug identifié — les deux
+garde-fous existants (patience + détecteur de boucle) couvrent déjà le pire scénario (matière
+introuvable) sans blocage permanent.
+
+Aucun fichier modifié, aucune compilation nécessaire. Repo `ClubCitrouilleAutoMiner` (séparé de
+Lanterne) ; seule cette note est ajoutée dans Lanterne.
