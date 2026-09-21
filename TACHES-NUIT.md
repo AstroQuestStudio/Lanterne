@@ -2277,6 +2277,16 @@ poussé. Pas de test client jetable (logique pure NBT, pas de dépendance rendu 
 jeu par le patron reste la confirmation ultime, mais le mécanisme est le même que celui déjà
 utilisé par vanilla pour un besoin identique, donc à haute confiance).
 
+**Vérification élargie (même passe)** : recherche de tout autre `BlockDropsEvent`/`BreakEvent`
+custom qui aurait le même défaut. `BeamerDrops.java` (projecteur) fait DÉJÀ exactement la même
+copie NBT — sa Javadoc cite même `SpawnerSilk` en référence explicite ("même défaut, même
+remède"), preuve que le bug était déjà identifié conceptuellement pour ce bloc-là avant cette
+nuit, seul `SpawnerSilk` avait été oublié. Aucun autre site `BlockDropsEvent` dans le mod. Les
+`setRemoved()` réseau (Trieur/Guichet/coffres, tous vus plus haut) ne font qu'un
+enregistrement/désenregistrement du réseau `Reseau`, jamais une interception du chemin vanilla de
+largage de conteneur (`Containers.dropContentsOnDestroy`, géré par `ChestBlock`/`AbstractContainerMenu`
+en amont) — rien à corriger de plus.
+
 ## Extension audit dupe NBT — Beamer (projecteur) corrigé, Panel écarté à raison
 
 Suite au bug `SpawnerSilk.java` (spawner vierge au Silk Touch), recherche du même pattern ailleurs.
