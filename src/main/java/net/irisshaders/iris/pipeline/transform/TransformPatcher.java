@@ -303,6 +303,18 @@ public class TransformPatcher {
 		return result;
 	}
 
+	/**
+	 * Lanterne (Vulkan) : outils autonomes (sans client) peuvent forcer la valeur via -Dlanterne.zzerotoone=true|false ;
+	 * sinon comportement d origine (lecture du peripherique GPU actif).
+	 */
+	private static boolean zeroToOne() {
+		String forced = System.getProperty("lanterne.zzerotoone");
+		if (forced != null) {
+			return Boolean.parseBoolean(forced);
+		}
+		return RenderSystem.getDevice().getDeviceInfo().isZZeroToOne();
+	}
+
 	public static String patchDepth(String input, ShaderType type) {
 		if (input == null) {
 			return null;
@@ -314,7 +326,7 @@ public class TransformPatcher {
 		}
 
 		PatchShaderType patchType = PatchShaderType.fromGlShaderType(type)[0];
-		boolean zZeroToOne = RenderSystem.getDevice().getDeviceInfo().isZZeroToOne();
+		boolean zZeroToOne = zeroToOne();
 		SingleASTTransformer<Parameters> depthTransformer = new SingleASTTransformer<>();
 		depthTransformer.setRootSupplier(RootSupplier.PREFIX_UNORDERED_ED_EXACT);
 		depthTransformer.setTokenFilter(parseTokenFilter);
@@ -378,7 +390,7 @@ public class TransformPatcher {
 	}
 
 	private static class CacheKey {
-		final boolean zZeroToOne = RenderSystem.getDevice().getDeviceInfo().isZZeroToOne();
+		final boolean zZeroToOne = zeroToOne();
 		final boolean shadow;
 		final Parameters parameters;
 		final String vertex;

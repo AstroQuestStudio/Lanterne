@@ -912,3 +912,6 @@ vérifiée saine (`BUILD SUCCESSFUL`).
 
 ## Étape 12 — client sans Sodium démarre (21/09, 26.3.107)
 Solution retenue : Iris inerte sans Sodium (garde précoce par classe + coupe de tous les mixins Iris), pas migration des ~35 classes couplées. Preuves et limites : voir TACHES-NUIT.md, section « Sodium : le client démarre SANS Sodium ». Conséquence : retirer Sodium via la Mèche fait perdre les shaders (Iris) mais pas le jeu.
+
+## ÉTAPE 16 — outils autonomes pour attaquer le blocage shaderc (feat-vk, 21/09/2026, session interrompue sur ordre du patron)
+Ajouté : `lab/ShadercChainTool`, `lab/ShadercCompileTool`, propriété `-Dlanterne.zzerotoone` dans `TransformPatcher`. Build OK (jar 26.3.250). **Aucun résultat shaderc nouveau** : la chaîne autonome n'a pas encore pu s'exécuter (classpath Minecraft incomplet : `Component`, puis `com.mojang.brigadier.Message`). Le blocage de l'étape 13 reste donc entier et non contourné. Détails et suite dans `VULKAN-ETAT-ET-PLAN.md`.

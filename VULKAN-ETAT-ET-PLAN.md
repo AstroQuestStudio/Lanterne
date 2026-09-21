@@ -41,3 +41,20 @@ DH possède un moteur `BLAZE_3D` (backend Mojang, donc Vulkan), mais son code fo
 ## À savoir
 - Le client peut aussi retomber sur OpenGL/iGPU AMD sans erreur si `startedCleanly:false`. Le message `[LANTERNE][GPU]` l'indique.
 - Le jeu 26.3 journalise `loader_create_instance_chain: Failed to find 'vkGetInstanceProcAddr' in layer …Overwolf…ow-graphics-vulkan.dll` : une couche Vulkan d'Overwolf est cassée sur cette machine. Elle n'empêche pas le démarrage, mais peut perturber d'autres PC avec Overwolf.
+
+## Chantier « Vulkan + shaders » — arrêt sur ordre du patron (21/09, branche feat-vk)
+**Résultat honnête : le blocage shaderc n'est PAS levé. Aucun test shaderc n'a abouti dans cette session.**
+- V0 (Lanterne seul en Vulkan sur RTX, repli OpenGL avec DH) : état inchangé, **non revérifié en jeu** ici (aucun client lancé ; le repli `5e3ea47` reste non testé en jeu).
+- V1 (compiler gbuffers_terrain de Complementary en SPIR-V) : **non atteint.** Ce qui existe : outils AUTONOMES compilés (jar `26.3.250`, build OK) :
+  - `lab/ShadercChainTool` : rejoue `#include → jcpp → patchVanilla → UniformReblocker` sur un vrai pack et écrit les GLSL intermédiaires (`vert/frag_{flat,pre,patched,reblocked}.glsl`) ;
+  - `lab/ShadercCompileTool` : compile UN fichier GLSL avec shaderc dans le processus courant (option d'optimisation 0/1/2, sortie `.spv`) ; codes de sortie 0 succès / 1 échec / 3 exception / autre = crash natif ;
+  - `TransformPatcher` : propriété `-Dlanterne.zzerotoone=true|false` pour ne plus lire le périphérique GPU (modification minimale de `net/irisshaders`, à signaler à l'intégrateur).
+- Essais de `ShadercChainTool` (3 tentatives, aucun n'a atteint shaderc) : 1) chemins `/world0/...` transformés par Git Bash (`MSYS_NO_PATHCONV=1` requis) ; 2) `NoClassDefFoundError net.minecraft.network.chat.Component` (IncludeGraph dépend de Minecraft) ; 3) avec le jar `minecraft-client-patched-26.3.0.7-beta` : `ClassNotFoundException com.mojang.brigadier.Message`. **Il faut ajouter au classpath les bibliothèques Minecraft (brigadier, datafixerupper, etc. de `Install\libraries`)** — c'est la prochaine action concrète, pas encore faite.
+- Sans résultat d'exécution : je n'ai AUCUNE nouvelle mesure de taille/temps/message natif de shaderc. Les seuls faits restent ceux de l'étape 13 (crash natif `Out of stack space` dans `shaderc_compile_into_spv` sur le fragment ≈ 99 760 caractères, identique avec pile 256 Mo et 512 Mo).
+- V2, V3 : non commencés. Pistes (a)(b)(c)(d) de la directive : **non testées**.
+
+### Suite recommandée (dans l'ordre)
+1. Compléter le classpath de `ShadercChainTool` (toutes les bibliothèques de `Install\libraries` + le jar client patché), produire `frag_reblocked.glsl` (script : `C:\vkbench-tools\`, libs-cp.txt) ;
+2. `ShadercCompileTool` dans un **processus séparé** avec `-Xss512m` puis sans ; niveaux d'optimisation 0/1/2 ; noter code de sortie et message ;
+3. Dichotomie du fragment (réduire par blocs) pour isoler le motif GLSL qui déclenche le crash natif ; si c'est reproductible : ticket upstream shaderc/glslang ;
+4. En parallèle : exécutable `glslc`/`glslangValidator` officiel (releases KhronosGroup, licences Apache-2.0/BSD) lancé en sous-processus si la piste 3 échoue ; puis `spirv-val`.
