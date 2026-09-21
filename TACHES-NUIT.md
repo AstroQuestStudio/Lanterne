@@ -3798,3 +3798,11 @@ Groove, et perf.
   pas un pont vers JourneyMap).
 
 Aucune modification de code, aucun commit de code — audit pur, résultat négatif honnête.
+
+## 21/09 matin — Mèche v2 (catalogue) + plan de pregen (26.3.106, déployé VPS + test 1)
+- **Mèche v2 testée de bout en bout** (serveur+client jetables) : Lanterne 59→104→105 auto, Jade installé, Sodium retiré (verrouillé → supprimé à la fermeture par un .cmd qui se supprime seul).
+- Serveur : dossier `config/lanterne/mods-clients/` (jars publiés) + `RETIRER.txt` (motifs). VPS : seulement `RETIRER.txt` = `iris-neoforge-*` (doublon Iris intégré). Sodium PAS retiré (non validé).
+- **3 défauts trouvés par le test** (tous corrigés) : paquets obligatoires → client ancien refusé ; `proposer_maj=false` par défaut serveur (auto-update jamais actif en prod) → nouvelle clé `synchronisation_clients=true` ; script de nettoyage en ligne de commande mort-né → fichier .cmd. Clé client `synchro_auto=true` (l'ancienne `auto_maj` des configs existantes est ignorée).
+- Relecture adversariale (commit af63ebf) : 6 bugs corrigés (file figée, retrait avant téléchargement, doublons de version via modId, .part orphelins, course déconnexion, cache RAM).
+- **Pregen** : `/lanterne pregen-plan <overworld> <nether> <end>` en blocs. Lancé sur le VPS : 5000 / 1500 / 2000 (313/94/125 chunks), survit aux redémarrages (`config/lanterne/pregen-en-cours.txt`). À la fin : `bluemap reload` + mise à jour de toutes les cartes (Cadence.onPregenFinished).
+- Audit modpack `citrouille.zip` : `AUDIT-MODPACK-CITROUILLE.md` (jar Iris doublon, Lanterne 26.3.38 périmé). Un client très ancien (≤59, auto_maj=false) doit être mis à jour à la main une fois.
