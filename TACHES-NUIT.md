@@ -1,3 +1,42 @@
+# RÉSOLU — blocage Gradle (~07h05) : c'était un process zombie, pas un mystère d'environnement
+
+Cause racine enfin trouvée par le coordinateur, après ~1h d'investigation infructueuse (registre
+purgé, home Gradle neuf, `--no-daemon`, tout documenté plus bas comme "cause non identifiée") :
+`tasklist`/`Get-CimInstance Win32_Process` a révélé un process `java.exe` (PID `30516`) démarré à
+`23:04:13` — TOUT DÉBUT de la nuit — qui était en réalité le wrapper `gradlew` lui-même
+(`-Dorg.gradle.appname=gradlew ... gradle-wrapper.jar`), resté bloqué/zombie pendant **8 heures**
+sans jamais se terminer. Ce process fantôme tenait probablement un verrou ou un état incohérent qui
+faisait échouer TOUTE nouvelle tentative de connexion au daemon Gradle, quel que soit le
+`GRADLE_USER_HOME` utilisé (ce qui expliquait pourquoi même un home neuf échouait pareil — le vrai
+problème n'était pas dans l'état partagé du daemon, mais dans ce process client zombie parasitant
+le port/protocole).
+
+**Correctif** : `taskkill //PID 30516 //F`. Résultat immédiat : `./gradlew compileJava` →
+`BUILD SUCCESSFUL in 44s`. Plus aucun problème depuis.
+
+**Leçon pour la suite** : si un futur blocage Gradle similaire survient, vérifier D'ABORD
+`Get-CimInstance Win32_Process -Filter "ProcessId=<pid>" | Select CommandLine` sur TOUS les
+`java.exe` listés par `tasklist`, pas seulement les plus gros en mémoire — un petit process oublié
+(113 Mo ici) peut bloquer bien plus que les gros daemons actifs.
+
+---
+
+# AUDIT — cohérence stylistique des noms de fichiers ajoutés cette nuit (lecture pure, sans compilation)
+
+Vérifié : `SodiumVertexSerializers.java`, `VertexFormatSource.java`, `SodiumVertexFormatSource.java`
+vivent en réalité dans `net.irisshaders.iris.*` (le code Iris migré, PAS le namespace propre de
+Lanterne) — normal qu'ils gardent un style technique de compat, aucun décalage à corriger.
+
+Seuls 4 fichiers ajoutés cette nuit sont vraiment dans `fr.clubcitrouille.lanterne.*` (le namespace où
+le style évocateur du patron compte) : `ReseauDrops.java`/`BeamerDrops.java`/`CadenceBlueMap.java`
+(`core`/`lab`) et `SpawnerSilk.java` (`core`). Comparés au reste du dossier (`AnchorCompass.java`,
+`CielAquiferAccessor.java`, `ChunkStreamOpener.java`, `BlockEntityVeilMixin.java` — des compositions
+`Mot+Mot` descriptives existent déjà, pas que des mots uniques) : ces 4 noms suivent le même schéma
+(`Beamer`+`Drops`, `Reseau`+`Drops`, `Cadence`+`BlueMap`, `Spawner`+`Silk`) et ne détonent pas. Aucun
+renommage proposé — cohérence déjà bonne, pas de correction à apporter demain matin sur ce point.
+
+---
+
 # AUDIT — Guide.java vs LanterneCommand.java, un vrai bug de doc trouvé et corrigé (~07h05)
 
 PURE LECTURE (aucune compilation, blocage Gradle en cours — voir section ci-dessous). Comparaison
