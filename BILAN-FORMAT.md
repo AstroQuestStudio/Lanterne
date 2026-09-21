@@ -123,27 +123,32 @@ si vsync/plafond/attente du limiteur faussent la mesure, ou si aucune image n'a 
 (cachée, un seul fichier à lire) : JVM avec `-Dlanterne.bench=true -Dlanterne.bench.exit=true`, monde solo
 `--quickPlaySingleplayer <nom>`, puis lire `logs/lanterne-bench-result.txt`.
 
-## État de vérification (mis à jour à l'arrêt du chantier, 21/09)
-| Élément | Compilé | Observé en jeu |
-|---|---|---|
-| Lignes `boot`, `world`, `perf`, `event`, `summary` | oui (jar 26.3.220) | **NON** |
-| Bridage (`limiter_*`, `valid`, `invalid_causes`, `inactivity_fps_limit`) et `BilanLimiterMixin` | oui | **NON** |
-| Allocations (`alloc_mb_s`, `alloc_mb_frame`, alerte > 2 Mo) | oui | **NON** |
-| Mode banc `-Dlanterne.bench` et **« BENCH RESULT »** | oui | **NON — jamais observé** |
-| `tools/bilan.ps1` | jamais exécuté sur un vrai journal | **NON** |
+## État de vérification (21/09, test réel sous verrou : banc `C:\bilanbench`, jar 26.3.220, RTX 3080, Sodium, sans shaders)
+| Élément | Observé en jeu |
+|---|---|
+| Lignes `boot`, `world`, `perf`, `event`, `summary` (`world-leave`) | **OUI** : 15 lignes produites, toutes lisibles |
+| Mode banc `-Dlanterne.bench` : scène figée (heure 12500, météo claire, position et rotation appliquées), chauffe 20 s, mesure 30 s, **« BENCH RESULT »**, fermeture du jeu avec `-Dlanterne.bench.exit=true` | **OUI** : 176,3 FPS, 1 % low 49,2, 5,67 ms/image, GPU 1,79 ms, `valid=true`, fichier `lanterne-bench-result.txt` écrit |
+| Mesure GPU (requêtes `GL_TIME_ELAPSED`) | **OUI** : `gpu_ms_mean` renseigné, `gpu_samples` = nombre d'images |
+| Allocations (`alloc_mb_s`, `alloc_mb_frame`) | **OUI** : 41,6 Mo/s, 0,24 Mo/image en scène figée (sous le seuil de 2 Mo : pas d'alerte) |
+| Détection de gels (`event=spike`) | **OUI** : 5171 ms au chargement du monde (`screen=LevelLoadingScreen`) |
+| `tools/bilan.ps1` sur un vrai journal | **OUI** : machine, options, tableau, gels, session |
+| Bridage : cas « invalide » (`valid=false` avec avertissement) et attente non nulle de `BilanLimiterMixin` | **NON** : seul le cas valide a été observé (`limiter_wait_ms=0.00`, plafond de 260 FPS non atteint à 176 FPS) ; le chemin qui détecte un bridage n'a pas été déclenché |
+| Alerte d'allocation > 2 Mo par image, évènements `shaderpack` et `dimension`, résumé `shutdown` | **NON** |
+| Sous shaders actifs, avec Distant Horizons, sous Vulkan (`gpu_time=off-vulkan`), sans Sodium | **NON** |
 
-**Pourquoi rien n'a été observé** : chaque lancement de client exige le verrou `C:\bench-lock`, tenu
-en permanence par d'autres bancs ; le client de ce chantier n'a jamais démarré. Les noms d'API du mode
-banc ont été vérifiés par `javap` sur `minecraft-client-patched-26.3.0.7-beta.jar`, et une erreur réelle
-(`Entity.setInvulnerable` n'existe pas, remplacé par `setPermanentlyInvulnerable`) a été corrigée à la
-compilation. Rien d'autre n'est prouvé : le comportement réel (scène figée, `BENCH RESULT` écrit, jeu
-qui se ferme avec `-Dlanterne.bench.exit=true`, exactitude du mixin du limiteur, coût des requêtes GPU)
-reste à confirmer au premier lancement.
+### Limites constatées
+- **`sections_visible` vaut 0 avec Sodium** : ces clés lisent la liste des sections du rendu vanilla, que Sodium
+  remplace. Sur ce banc elles ne signifient rien (`mesh_queue` et `mesh_free_buffers` non plus). À interpréter
+  seulement sans Sodium.
+- **Le premier intervalle `perf` et le `summary` incluent le chargement du monde** : 87 FPS et 1 % low à 3,1 dans
+  la première ligne, contre 174,6 dans la suivante, à scène stable. Seules les lignes `perf` suivantes et le
+  résultat `bench` (qui exclut la chauffe) sont représentatifs.
+- **176 FPS n'est pas le 168,8 FPS mesuré par l'agent perf** : scène, monde et réglages diffèrent. Ne comparer que des
+  mesures du même mode banc.
 
-**Pour vérifier** (banc prêt) : `C:\bilanbench\launch.bat` (javaw caché, monde `Bench`, propriétés banc
-20 s de chauffe + 30 s de mesure) ; ou `C:\bilanbench\run-bench.ps1` qui prend le verrou, lance, lit
+**Pour rejouer** : `C:\bilanbench\run-bench.ps1` prend le verrou `C:\bench-lock`, lance le client caché, lit
 `logs\lanterne-bench-result.txt`, ferme ce seul client et libère le verrou. Puis
 `tools\bilan.ps1 C:\bilanbench\logs\latest.log`.
 
-**Non commencé** : le profileur intégré (échantillonnage des piles, attribution par mod, JFR
-programmatique, commande `/lanterne profil`).
+**Non commencé** : le profileur intégré (échantillonnage des piles, attribution par mod, JFR programmatique,
+commande `/lanterne profil`).

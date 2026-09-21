@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Résume le bilan [BILAN] d'un journal de client Lanterne, sans ouvrir le jeu.
 
@@ -23,6 +23,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 if (-not (Test-Path -LiteralPath $Log)) { throw "Journal introuvable : $Log" }
 
 $pair = [regex]'(\w+)=("(?:[^"\\]|\\.)*"|\S+)'
