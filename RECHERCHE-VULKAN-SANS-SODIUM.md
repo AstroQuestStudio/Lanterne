@@ -759,3 +759,55 @@ shaderpack actif). Aucune des deux n'est un travail de reprise rapide — c'est 
 pas une case à cocher. Documenté ici pour éviter qu'un futur fork retente une substitution naïve.
 
 Aucun fichier de code modifié (recherche pure). Jars temporaires extraits et nettoyés après lecture.
+
+## ÉTAPE 12 — reprise des 2 blocages de l'étape 8, un résolu, un confirmé plus profond (fork, 21/09 ~07h15-07h30)
+
+Reprise directe des 2 obstacles laissés ouverts à l'étape 8, une fois le blocage Gradle machine
+résolu (voir `TACHES-NUIT.md`, section "RÉSOLU — blocage Gradle"). Un correctif (commit `fe5afec`,
+fait PENDANT la fenêtre où Gradle était bloqué, donc jamais testé empiriquement) était déjà en
+place dans le code — cette passe l'a testé pour de vrai sur le lanceur client jetable existant
+(`C:\lanterne-client-vulkan-test-5\`, script `launch7_v5.bat` réutilisé tel quel, chemin absolu).
+
+**1. Uniforms non capturés (3 déclarations avec valeur par défaut) : RÉSOLU, confirmé empiriquement.**
+`UNIFORM_DECL` accepte désormais un groupe optionnel `(= valeur)` pour capturer les déclarations type
+`uniform bool heavyFog = false;` (extension Iris/OptiFine). Test réel sur le vrai
+`gbuffers_terrain` : l'erreur `'non-opaque uniforms outside a block'` a totalement disparu de ce
+fichier — le pipeline va directement jusqu'à l'appel shaderc sans réapparition de cette erreur
+précise.
+
+**2. Stack overflow sur le fragment réel (99760 caractères reblockés) : PAS résolu, plus profond
+que prévu.** Le fix précédent (thread dédié à pile 64 Mo) était déjà en place mais insuffisant :
+`OutOfMemoryError: Out of stack space` persiste À L'IDENTIQUE. Cette passe a testé en portant la
+pile à **256 Mo** (commit ci-dessous) — **toujours le même échec, au même endroit**. C'est un
+signal important : multiplier la pile par 4 sans amélioration suggère une récursion réellement
+**non bornée** (boucle/cycle), pas juste "profonde mais finie" — sinon 256 Mo aurait dû suffire là
+où 64 ne suffisait pas.
+
+**Localisation précise obtenue** (log réel, `lanterne-shaderc-probe-large-stack` thread) :
+l'échec survient APRÈS que `UniformReblocker` ait fini son travail sur les deux étages
+(vertex 15256→15093, fragment 99921→99760 caractères, aucune exception à cette étape) et APRÈS que
+le VERTEX ait compilé en SPIR-V avec succès (32784 octets — nouvelle preuve, jamais obtenue avant :
+le vertex seul, une fois reblocké, compile intégralement sur ce vrai fichier). L'OOM frappe
+spécifiquement le second appel `compileSpirv` (le FRAGMENT, 99760 caractères) — donc dans le code
+natif de shaderc/glslang lui-même (JNI, hors contrôle direct du prototype Java), pas dans
+`JcppProcessor`/`UniformReblocker` (déjà exécutés sans erreur juste avant).
+
+**Hypothèse pour la reprise, non vérifiée faute de temps dans cette passe** : le vrai parseur
+recursif-descendant de glslang (sous shaderc) pourrait avoir une limite de profondeur d'expression
+imbriquée qui n'est PAS un problème de taille de pile réglable côté Java — auquel cas augmenter
+encore la pile ne changera jamais rien, et la vraie piste serait de simplifier/aplatir
+l'expression GLSL générée par `UniformReblocker`/`TransformPatcher` avant de la passer à shaderc
+(ex: un bloc UBO avec énormément de membres pourrait générer une structure imbriquée problématique
+côté parseur natif — à creuser avec un fichier de test intermédiaire de taille croissante pour
+identifier le seuil exact de déclenchement, plutôt qu'un aller-retour direct sur le fichier réel de
+99760 caractères).
+
+**Ce qui N'A PAS été tenté** (pour respecter un budget de temps strict et ne pas reproduire
+l'enlisement de 2h déjà vécu cette nuit sur ce même sujet) : profiling natif (`jstack`/core dump au
+moment du crash), test avec des tailles de shader intermédiaires pour isoler le seuil exact,
+inspection du bytecode SPIR-V produit pour la vertex stage (32784 octets, jamais examiné en
+détail).
+
+Commit : `1a2c3b4` — voir `git log` pour le hash réel (`ShadercProbe.java`, pile 64→256 Mo,
+commentaire mis à jour). Rien déployé sur VPS/test1. Process client de test fermé proprement après
+vérification (`taskkill //PID` ciblé, jamais de kill global).

@@ -328,13 +328,17 @@ public final class ShadercProbe {
     private static boolean runWithLargeStack(java.util.concurrent.Callable<Boolean> task) {
         boolean[] resultHolder = {false};
         Throwable[] errorHolder = {null};
+        // 64 Mo insuffisant sur le vrai fragment gbuffers_terrain (99760 caracteres reblockes) :
+        // OutOfMemoryError: Out of stack space confirme le 21/09/2026 dans un vrai contexte client
+        // (RECHERCHE-VULKAN-SANS-SODIUM.md etape 8), meme apres le fix "3 uniforms non captures".
+        // Porte a 256 Mo pour ce meme test -- toujours un prototype isole, jamais branche au rendu.
         Thread worker = new Thread(null, () -> {
             try {
                 resultHolder[0] = task.call();
             } catch (Throwable problem) {
                 errorHolder[0] = problem;
             }
-        }, "lanterne-shaderc-probe-large-stack", 64L * 1024 * 1024);
+        }, "lanterne-shaderc-probe-large-stack", 256L * 1024 * 1024);
         worker.start();
         try {
             worker.join();
