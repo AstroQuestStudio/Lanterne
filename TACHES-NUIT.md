@@ -2207,3 +2207,34 @@ comme admin-only, plutôt qu'un bouton visible qui échouerait désormais silenc
 
 Clôture de la série sécurité/permissions de cette nuit — aucun fichier de code modifié, seul ce
 commit de documentation.
+
+## Audit cohérence des recettes JEI (pure lecture de code, aucune modification)
+
+Directive : vérifier que `data/lanterne/recipe/*.json` (17 fichiers, dont les 4 ajoutés cette nuit
+— `aiguillage`, `guichet`, `coffre_depot`, `coffre_reception`) correspond exactement à ce que JEI
+affiche via `GreffeJei`/`RecettesEmbarquees`, sans recette orpheline ni affichage trompeur.
+
+**Résultat : rien à corriger — le mécanisme est structurellement immunisé contre ce genre
+d'incohérence, pas juste "actuellement cohérent par chance".**
+
+`RecettesEmbarquees.lire()` ne contient AUCUNE liste de noms de recettes codée en dur. Elle visite
+dynamiquement le dossier `data/lanterne/recipe/` dans le jar (`JarContents.visitContent`), lit
+CHAQUE fichier `.json` qui s'y trouve, et le décode avec `Recipe#CODEC` — le même codec que celui
+utilisé par le serveur pour charger les vraies recettes. Conséquences :
+
+- **Aucune recette orpheline possible** : un fichier présent dans le dossier est automatiquement
+  lu et affiché, il n'y a pas de liste séparée à tenir à jour à la main. Les 4 recettes ajoutées
+  cette nuit sont donc déjà couvertes sans aucun code supplémentaire nécessaire dans `GreffeJei`.
+- **Aucun affichage trompeur possible** : JEI ne voit jamais une version différente de la recette
+  — c'est le même fichier JSON, décodé par le même codec que le serveur utiliserait pour
+  l'accepter ou la refuser, donc ce que JEI montre est exactement ce que le serveur accepterait.
+
+Seul point cosmétique noté, PAS corrigé (narration historique, pas une invariante vivante) : la
+Javadoc de `RecettesEmbarquees.java`/`GreffeJei.java` mentionne encore "les onze recettes" à
+plusieurs endroits — ce chiffre racontait un incident précis d'audit avant l'ajout des 4 recettes
+de cette nuit (11 → 17 aujourd'hui), c'est un récit du passé dans le commentaire, pas une
+affirmation sur l'état actuel du code (le mécanisme ne dépend d'aucun compte figé). Le corriger
+changerait le sens de l'anecdote racontée plutôt que de réparer un bug — volontairement laissé tel
+quel.
+
+Ce fichier + `TACHES-NUIT.md` : aucun fichier de code modifié, aucune compilation nécessaire.
