@@ -217,6 +217,43 @@ public final class ShadercProbe {
         }
     }
 
+    /**
+     * Cinquieme preuve isolee (21/09/2026, reponse a l'etape 5 de {@code RECHERCHE-VULKAN-SANS-SODIUM.md}) :
+     * {@link #testVanillaInClient} echoue car {@code patchVanilla} declare ses uniforms non-opaques
+     * hors bloc UBO — legal OpenGL, illegal SPIR-V/Vulkan. Ici, le meme GLSL patche par
+     * {@code TransformPatcher.patchVanilla} (code Iris inchange) est post-traite par
+     * {@link UniformReblocker#reblock} (nouveau, notre code, pas Iris) AVANT shaderc — un uniform
+     * "classique" en variable globale devient un membre d'un unique bloc
+     * {@code layout(binding=N, std140) uniform ... { ... };}, ce qui est autorise par SPIR-V.
+     */
+    public static boolean testVanillaReblockedInClient(String vertexSource, String fragmentSource) {
+        try {
+            Object2ObjectMap<Tri<String, TextureType, TextureStage>, String> textureMap = Object2ObjectMaps.emptyMap();
+            ShaderAttributeInputs inputs = new ShaderAttributeInputs(true, true, false, true, false);
+            Map<PatchShaderType, String> patched = TransformPatcher.patchVanilla(
+                    "probe-vanilla-reblocked", vertexSource, null, null, null, fragmentSource,
+                    AlphaTest.ALWAYS, false, false, false, inputs, textureMap, Set.of());
+            String vertexPatched = patched.get(PatchShaderType.VERTEX);
+            String fragmentPatched = patched.get(PatchShaderType.FRAGMENT);
+            if (vertexPatched == null || fragmentPatched == null) {
+                Lanterne.LOG.warn("[SHADERC] TransformPatcher.patchVanilla (reblock) n'a pas produit les deux etages (vertex={}, fragment={}).",
+                        vertexPatched != null, fragmentPatched != null);
+                return false;
+            }
+            String vertexReblocked = UniformReblocker.reblock(vertexPatched, "LanterneVertexUBO", 0);
+            String fragmentReblocked = UniformReblocker.reblock(fragmentPatched, "LanterneFragmentUBO", 0);
+            Lanterne.LOG.info("[SHADERC] UniformReblocker applique (vertex {} -> {} caracteres, fragment {} -> {} caracteres), tentative shaderc...",
+                    vertexPatched.length(), vertexReblocked.length(), fragmentPatched.length(), fragmentReblocked.length());
+            boolean vertexOk = compileSpirv(vertexReblocked, Shaderc.shaderc_glsl_vertex_shader, "probe-vanilla-vertex-reblocked.glsl");
+            boolean fragmentOk = compileSpirv(fragmentReblocked, Shaderc.shaderc_glsl_fragment_shader, "probe-vanilla-fragment-reblocked.glsl");
+            return vertexOk && fragmentOk;
+        } catch (Throwable problem) {
+            Lanterne.LOG.warn("[SHADERC] Echec de patchVanilla+reblock (contexte client, device GPU requis) : {}",
+                    problem.toString());
+            return false;
+        }
+    }
+
     private static boolean compileSpirv(String glslSource, int shaderKind, String fileNameForErrors) {
         long compiler = 0L;
         long options = 0L;

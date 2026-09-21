@@ -107,5 +107,10 @@ public final class ShadercProbeSelfCheck {
         Lanterne.LOG.info("[SHADERC-TEST] meme chaîne sur patchVanilla (gbuffers, vertex+fragment)...");
         boolean vanillaOk = ShadercProbe.testVanillaInClient(VANILLA_VERTEX_SOURCE, VANILLA_FRAGMENT_SOURCE);
         Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VANILLA: {}", vanillaOk ? "SUCCES" : "ECHEC");
+
+        Lanterne.LOG.info("[SHADERC-TEST] patchVanilla + re-blocage des uniforms en UBO (reponse au "
+                + "blocage 'non-opaque uniforms outside a block')...");
+        boolean vanillaReblockedOk = ShadercProbe.testVanillaReblockedInClient(VANILLA_VERTEX_SOURCE, VANILLA_FRAGMENT_SOURCE);
+        Lanterne.LOG.info("[SHADERC-TEST] RESULTAT VANILLA REBLOCKED: {}", vanillaReblockedOk ? "SUCCES" : "ECHEC");
     }
 }
