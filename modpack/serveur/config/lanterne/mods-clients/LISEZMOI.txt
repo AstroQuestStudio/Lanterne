@@ -1,0 +1,20 @@
+PUBLIER DES MODS CLIENTS AVEC LA MECHE
+======================================
+Ce dossier (config/lanterne/mods-clients/) est lu par Lanterne. A chaque connexion, chaque
+joueur dont le reglage synchro_auto est a true (defaut) synchronise son dossier mods/ :
+
+  AJOUTER      depose le .jar ici (nom : lettres, chiffres, _ . + ( ) - ; extension .jar).
+  REMPLACER    depose la nouvelle version ; l'ancienne version du MEME mod (meme modId) est
+               retiree chez le joueur. Retire aussi l'ancien jar d'ici.
+  RETIRER      ajoute un motif dans RETIRER.txt (ex: sodium-neoforge-*).
+  LANTERNE     ne va PAS ici : le serveur annonce le jar de Lanterne qu'il fait tourner
+               (dossier mods/), les clients se mettent a niveau tout seuls.
+
+Regles utiles
+  - Les fichiers sont verifies par SHA-256 chez le client ; le serveur relit ce dossier a chaque
+    connexion (aucun redemarrage necessaire pour publier).
+  - Le joueur doit fermer/relancer son jeu pour appliquer ; les jars verrouilles sont supprimes
+    apres la fermeture.
+  - Un mod serveur (mods/ du serveur) ne se publie pas ici : seulement les mods CLIENT.
+  - Reglage serveur : config/lanterne-common.toml, cle synchronisation_clients (true par defaut).
+  - Ne mets rien que tu ne veuilles voir installe chez TOUS les joueurs.

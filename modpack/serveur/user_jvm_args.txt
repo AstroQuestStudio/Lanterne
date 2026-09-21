@@ -1,0 +1,10 @@
+# Reglages JVM du serveur Club Citrouille (lus par start.bat / start.sh).
+# Adapte -Xmx a la RAM libre de la machine (4G minimum conseille, 6-8G confortable).
+# Reference : le VPS officiel (4 coeurs / 24 Go) tourne en ZGC generationnel, -Xmx16G.
+-Xms2G
+-Xmx6G
+-XX:+UseZGC
+-XX:+ZUncommit
+-XX:ZUncommitDelay=300
+-XX:+PerfDisableSharedMem
+-XX:+DisableExplicitGC

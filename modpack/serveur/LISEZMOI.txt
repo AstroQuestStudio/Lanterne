@@ -1,0 +1,19 @@
+CLUB CITROUILLE - pack serveur (NeoForge 26.3.0.7-beta, Java 25)
+================================================================
+1. Installe Java 25 (https://adoptium.net).
+2. Lance start.bat (Windows) ou ./start.sh (Linux/macOS/Git Bash). Au premier lancement :
+   NeoForge est telecharge et installe, puis on te demande d'accepter le CLUF Minecraft
+   (ACCEPT_EULA=true pour le faire sans question).
+3. Adapte user_jvm_args.txt (-Xmx) et server.properties (white-list=true : ajoute les
+   joueurs avec  /whitelist add Pseudo  dans la console).
+4. Redemarrage automatique si le serveur plante (5 essais max), arret propre avec  stop .
+
+Mods fournis (mods/) : Lanterne 26.3.106, BlueMap 5.27, Jade 26.3.1.
+
+Pre-generation du monde (optionnel, recommande), console ou en jeu (op) :
+   /lanterne pregen-plan 5000 1500 2000
+ = overworld 5000 blocs, puis Nether 1500, puis End 2000 (rayons en blocs). Elle se met en
+ pause quand un joueur est connecte, survit aux redemarrages, et BlueMap rend tout a la fin.
+
+Mises a jour des joueurs : voir config/lanterne/mods-clients/LISEZMOI.txt.
+Le pack client correspondant est citrouille.zip (a importer dans CurseForge).

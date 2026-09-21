@@ -1,0 +1,6 @@
+# Mods a RETIRER chez les clients a leur connexion (un motif par ligne, * et ? autorises).
+# Les lignes commencant par # sont ignorees. Ne fais JAMAIS de motif trop large (ex: *) :
+# tout jar non publie serait supprime chez les joueurs (sauf lanterne*).
+#
+# Iris est integre a Lanterne : un jar Iris separe fait doublon et empeche de demarrer.
+iris-neoforge-*
