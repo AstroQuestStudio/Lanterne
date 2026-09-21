@@ -1,3 +1,16 @@
+**AUDIT — Portail*/Foule.java (derniers grands systèmes jamais explorés)**, résultat honnête, rien à
+corriger :
+- `Foule.java` (629 lignes) : grille spatiale 2×2×2 accélérant les recherches de voisinage en foule
+  dense (remplace le parcours O(n) vanilla). Indexation cohérente `place()`/`parcourt()`, garde-fous
+  multiples, repli vanilla systématique au moindre doute. Javadoc exceptionnelle, documente même les
+  optimisations volontairement NON faites (scan de plan X) faute de banc de mesure adapté.
+- `Portail*` : système INERTE — journalise juste la détection d'Immersive Portals (aucune version
+  compatible avec le moteur 26.3), aucun mixin/renderer branché, aucun risque.
+- Non couvert faute de budget (risque jugé faible, rendu client pur) : `PortailPrototype.java`/
+  `PortailsConfig.java`/`Portals.java`/`PortailRenderMixin.java` (535 lignes cumulées).
+
+---
+
 **AUDIT — système Souvenir (mémoire client des chunks entre sessions)**, jamais audité en profondeur
 malgré sa mention en passant cette nuit. Lu en entier `core/Souvenir.java`, `client/SouvenirVault.java`,
 `core/network/SouvenirNet.java`, `SouvenirManifest.java`, `SouvenirSendMixin.java`.
