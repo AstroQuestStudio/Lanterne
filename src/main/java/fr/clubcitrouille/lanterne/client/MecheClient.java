@@ -684,12 +684,20 @@ public final class MecheClient {
             return false; // ailleurs, deleteIfExists() sur un fichier deja ouvert reussit deja seul
         }
         String target = oldPath.toAbsolutePath().toString();
-        String script = "for /l %i in (1,1,200) do ("
-                + "del /f /q \"" + target + "\" 2>nul & "
-                + "if not exist \"" + target + "\" exit /b & "
-                + "ping -n 4 127.0.0.1 >nul)";
+        // Un fichier .cmd plutôt qu'une ligne passée à « cmd /c » : les guillemets d'une ligne de
+        // commande y sont mal transmis (le processus s'arrêtait aussitôt, vérifié), alors qu'un
+        // fichier est lu tel quel. Il se supprime lui-même à la fin.
+        String script = "@echo off\r\nset n=0\r\n:loop\r\n"
+                + "del /f /q \"" + target + "\" 2>nul\r\n"
+                + "if not exist \"" + target + "\" goto done\r\n"
+                + "set /a n+=1\r\nif %n% GEQ 200 goto done\r\n"
+                + "ping -n 4 127.0.0.1 >nul\r\ngoto loop\r\n"
+                + ":done\r\n(goto) 2>nul & del \"%~f0\"\r\n";
         try {
-            new ProcessBuilder("cmd", "/c", script)
+            Path cleaner = Files.createTempFile("lanterne-meche-", ".cmd");
+            Files.writeString(cleaner, script, java.nio.charset.Charset.forName(
+                    System.getProperty("native.encoding", "windows-1252")));
+            new ProcessBuilder("cmd", "/c", cleaner.toString())
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
