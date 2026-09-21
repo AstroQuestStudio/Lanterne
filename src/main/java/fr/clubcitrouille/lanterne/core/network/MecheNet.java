@@ -59,6 +59,18 @@ public final class MecheNet {
                 (payload, context) -> context.enqueueWork(() ->
                         fr.clubcitrouille.lanterne.client.MecheClient.acceptPeerList(payload)));
         registrar.playToServer(MecheRequest.TYPE, MecheRequest.STREAM_CODEC, MecheNet::onRequest);
+        registrar.playToClient(MecheCatalogue.TYPE, MecheCatalogue.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        fr.clubcitrouille.lanterne.client.MecheClient.acceptCatalogue(payload)));
+        registrar.playToClient(MecheFichierTranche.TYPE, MecheFichierTranche.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        fr.clubcitrouille.lanterne.client.MecheClient.acceptFileChunk(payload)));
+        registrar.playToServer(MecheFichierDemande.TYPE, MecheFichierDemande.STREAM_CODEC,
+                (request, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        Meche.onFileRequest(player, request.name());
+                    }
+                }));
     }
 
     private static void onRequest(MecheRequest request, IPayloadContext context) {
@@ -84,6 +96,14 @@ public final class MecheNet {
             } catch (RuntimeException clientWithoutChannel) {
                 // Voir la Javadoc de classe : un client sur une version antérieure à ce mécanisme ne
                 // reçoit rien — il continue exactement comme si ce module n'existait pas.
+            }
+        }
+        var catalogue = Meche.catalogue();
+        if (!catalogue.files().isEmpty() || !catalogue.retired().isEmpty()) {
+            try {
+                player.connection.send(catalogue);
+            } catch (RuntimeException clientWithoutChannel) {
+                // Client d'avant le catalogue : il ne reçoit rien, comme pour le manifeste.
             }
         }
         String peers = Meche.peerListEncoded();

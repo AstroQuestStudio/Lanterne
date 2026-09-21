@@ -42,10 +42,10 @@ public final class MecheConsent {
                 "Autoriser ce client a telecharger et installer les mises a jour de Lanterne",
                 "annoncees par le serveur auquel il se connecte ?",
                 "",
-                "A FAUX (par defaut) : rien n'est telecharge. Si le serveur fait tourner une autre",
+                "A FAUX : rien n'est telecharge. Si le serveur fait tourner une autre",
                 "version, ce client se contente de le DIRE dans la discussion.",
                 "",
-                "A VRAI : quand l'empreinte annoncee par le serveur differe de celle du jar installe",
+                "A VRAI (par defaut) : quand l'empreinte annoncee par le serveur differe de celle du jar installe",
                 "ici, ce client le telecharge, verifie son empreinte, puis l'ecrit dans mods/ SOUS UN",
                 "NOM DIFFERENT du jar en cours - jamais de remplacement a chaud. Il tente ensuite de",
                 "supprimer l'ancien jar ; si l'OS refuse (le jar tournant est verrouille sur Windows",
@@ -54,7 +54,7 @@ public final class MecheConsent {
                 "",
                 "Le fichier recu ne vient JAMAIS d'ailleurs que du serveur auquel ce client est deja",
                 "connecte : aucune adresse distante n'est jamais contactee par ce mecanisme.")
-                .define("auto_maj", false);
+                .define("auto_maj", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

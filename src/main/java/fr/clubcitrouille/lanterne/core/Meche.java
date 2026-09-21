@@ -14,7 +14,9 @@ import net.neoforged.fml.ModList;
 import net.neoforged.neoforgespi.language.IModFileInfo;
 
 import fr.clubcitrouille.lanterne.Lanterne;
+import fr.clubcitrouille.lanterne.core.network.MecheCatalogue;
 import fr.clubcitrouille.lanterne.core.network.MecheChunk;
+import fr.clubcitrouille.lanterne.core.network.MecheFichierTranche;
 import fr.clubcitrouille.lanterne.core.network.MecheManifest;
 
 /**
@@ -273,6 +275,9 @@ public final class Meche {
      * TICK est ce qui compte, pas le débit moyen.
      */
     public static void pump(MinecraftServer server) {
+        if (!FILE_CONVOYS.isEmpty()) {
+            pumpFiles(server);
+        }
         if (CONVOYS.isEmpty()) {
             return;
         }
@@ -298,11 +303,140 @@ public final class Meche {
         }
     }
 
+    // --- Le catalogue des mods clients publiés par ce serveur ---------------
+
+    /** Dossier des jars clients que ce serveur publie, à côté des réglages de Lanterne. */
+    public static Path publishedDir() {
+        return net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("lanterne")
+                .resolve("mods-clients");
+    }
+
+    private record Published(Path path, byte[] sha256, int size, long stamp) {}
+
+    private static final Map<String, Published> PUBLISHED = new ConcurrentHashMap<>();
+
+    /** Un transfert de fichier du catalogue : le nom, les octets, où on en est. */
+    private static final class FileCarrier {
+        private String name;
+        private byte[] data;
+        private int offset;
+    }
+
+    private static final Map<UUID, FileCarrier> FILE_CONVOYS = new ConcurrentHashMap<>();
+
+    /**
+     * Relit le dossier publié. Le hachage n'est refait que pour un fichier dont la date ou la taille a
+     * changé : une connexion ne coûte donc qu'un parcours de dossier.
+     */
+    public static synchronized MecheCatalogue catalogue() {
+        java.util.List<MecheCatalogue.Entry> entries = new java.util.ArrayList<>();
+        java.util.List<String> retired = new java.util.ArrayList<>();
+        Path dir = publishedDir();
+        try {
+            if (!Files.isDirectory(dir)) {
+                Files.createDirectories(dir);
+            }
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            java.util.List<Path> files;
+            try (var stream = Files.list(dir)) {
+                files = stream.sorted().toList();
+            }
+            for (Path file : files) {
+                String name = file.getFileName().toString();
+                if (!name.endsWith(".jar") || name.length() > MecheCatalogue.NAME_LIMIT
+                        || !Files.isRegularFile(file) || entries.size() >= MecheCatalogue.MAX_FILES) {
+                    continue;
+                }
+                long size = Files.size(file);
+                long stamp = Files.getLastModifiedTime(file).toMillis();
+                Published known = PUBLISHED.get(name);
+                if (known == null || known.stamp() != stamp || known.size() != size) {
+                    if (size <= 0 || size > Integer.MAX_VALUE) {
+                        continue;
+                    }
+                    known = new Published(file, sha256(file), (int) size, stamp);
+                    PUBLISHED.put(name, known);
+                    BYTES_CACHE.remove("file:" + name);
+                }
+                seen.add(name);
+                entries.add(new MecheCatalogue.Entry(name, known.sha256(), known.size()));
+            }
+            PUBLISHED.keySet().retainAll(seen);
+            Path list = dir.resolve("RETIRER.txt");
+            if (Files.isRegularFile(list)) {
+                for (String line : Files.readAllLines(list)) {
+                    String pattern = line.strip();
+                    if (!pattern.isEmpty() && !pattern.startsWith("#")
+                            && pattern.length() <= MecheCatalogue.NAME_LIMIT
+                            && retired.size() < MecheCatalogue.MAX_FILES) {
+                        retired.add(pattern);
+                    }
+                }
+            }
+        } catch (Exception unreadable) {
+            Lanterne.LOG.warn("[MÈCHE] catalogue des mods clients illisible : {}",
+                    unreadable.toString());
+        }
+        return new MecheCatalogue(entries, retired);
+    }
+
+    /** Un client demande un fichier du catalogue — uniquement par un nom que {@link #catalogue()} a listé. */
+    public static void onFileRequest(ServerPlayer player, String name) {
+        if (!Settings.meche() || FILE_CONVOYS.containsKey(player.getUUID())) {
+            return;
+        }
+        Published published = PUBLISHED.get(name);
+        if (published == null) {
+            return;
+        }
+        byte[] data = BYTES_CACHE.get("file:" + name);
+        try {
+            if (data == null) {
+                data = Files.readAllBytes(published.path());
+                BYTES_CACHE.put("file:" + name, data);
+            }
+        } catch (Exception unreadable) {
+            Lanterne.LOG.warn("[MÈCHE] lecture de « {} » impossible : {}", name, unreadable.toString());
+            return;
+        }
+        FileCarrier carrier = new FileCarrier();
+        carrier.name = name;
+        carrier.data = data;
+        FILE_CONVOYS.put(player.getUUID(), carrier);
+        Lanterne.LOG.info("[MÈCHE] {} demande le fichier « {} » ({} octets).",
+                player.getGameProfile().name(), name, data.length);
+    }
+
+    private static void pumpFiles(MinecraftServer server) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            FileCarrier carrier = FILE_CONVOYS.get(player.getUUID());
+            if (carrier == null) {
+                continue;
+            }
+            for (int sent = 0; sent < SHARDS_PER_TICK; sent++) {
+                int length = Math.min(SHARD_BYTES, carrier.data.length - carrier.offset);
+                byte[] slice = new byte[length];
+                System.arraycopy(carrier.data, carrier.offset, slice, 0, length);
+                player.connection.send(new MecheFichierTranche(
+                        carrier.name, carrier.offset, carrier.data.length, slice));
+                carrier.offset += length;
+                if (carrier.offset >= carrier.data.length) {
+                    FILE_CONVOYS.remove(player.getUUID());
+                    Lanterne.LOG.info("[MÈCHE] envoi du fichier « {} » terminé pour {}.",
+                            carrier.name, player.getGameProfile().name());
+                    break;
+                }
+            }
+        }
+    }
+
     public static void forget(UUID playerId) {
         CONVOYS.remove(playerId);
+        FILE_CONVOYS.remove(playerId);
     }
 
     public static void clearAll() {
         CONVOYS.clear();
+        FILE_CONVOYS.clear();
     }
 }

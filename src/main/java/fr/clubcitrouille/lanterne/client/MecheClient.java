@@ -100,6 +100,10 @@ public final class MecheClient {
     /** Reconnexion à un autre monde ou un autre serveur : plus rien de l'ancien ne doit traîner. */
     public static void reset() {
         active = null;
+        fileActive = null;
+        synchronized (FILE_QUEUE) {
+            FILE_QUEUE.clear();
+        }
         TOLD.clear();
     }
 
@@ -214,6 +218,246 @@ public final class MecheClient {
                         .withStyle(ChatFormatting.YELLOW));
             }
         });
+    }
+
+    // --- Le catalogue : tous les mods clients publiés par le serveur ---------
+
+    /** Un nom de fichier acceptable dans mods/ : jamais de séparateur de chemin. */
+    private static final Pattern SAFE_JAR = Pattern.compile("[A-Za-z0-9_.+()\\-]{1,124}\\.jar");
+
+    /** Les fichiers encore à télécharger, dans l'ordre, et celui qui arrive. */
+    private static final java.util.ArrayDeque<fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry>
+            FILE_QUEUE = new java.util.ArrayDeque<>();
+    private static FileDownload fileActive;
+    private static int filesInstalled;
+    private static int filesRemoved;
+
+    private static final class FileDownload {
+        private final fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry entry;
+        private final byte[] buffer;
+        private int received;
+
+        private FileDownload(fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry entry) {
+            this.entry = entry;
+            this.buffer = new byte[entry.size()];
+        }
+    }
+
+    /** Ce que Mèche a posé lui-même dans mods/ : seuls ces fichiers-là seront retirés par oubli. */
+    private static Path registry() {
+        return FMLPaths.CONFIGDIR.get().resolve("lanterne-meche-registre.txt");
+    }
+
+    private static Set<String> readRegistry() {
+        Set<String> names = new HashSet<>();
+        try {
+            if (Files.isRegularFile(registry())) {
+                for (String line : Files.readAllLines(registry())) {
+                    if (SAFE_JAR.matcher(line.strip()).matches()) {
+                        names.add(line.strip());
+                    }
+                }
+            }
+        } catch (Exception unreadable) {
+            Lanterne.LOG.warn("[MÈCHE] registre illisible : {}", unreadable.toString());
+        }
+        return names;
+    }
+
+    private static void writeRegistry(Set<String> names) {
+        try {
+            Files.write(registry(), new java.util.TreeSet<>(names));
+        } catch (Exception unwritable) {
+            Lanterne.LOG.warn("[MÈCHE] registre non écrit : {}", unwritable.toString());
+        }
+    }
+
+    private static Pattern glob(String pattern) {
+        StringBuilder regex = new StringBuilder();
+        for (char c : pattern.toCharArray()) {
+            switch (c) {
+                case '*' -> regex.append(".*");
+                case '?' -> regex.append('.');
+                default -> regex.append(Pattern.quote(String.valueOf(c)));
+            }
+        }
+        return Pattern.compile(regex.toString(), Pattern.CASE_INSENSITIVE);
+    }
+
+    /**
+     * Le serveur publie ses mods clients. Compare au dossier {@code mods/}, puis — si le joueur a
+     * consenti — retire ce que le serveur ne veut plus et télécharge ce qui manque ou a changé.
+     * Voir {@code Meche.catalogue()} côté serveur pour la forme du dossier publié.
+     */
+    public static void acceptCatalogue(fr.clubcitrouille.lanterne.core.network.MecheCatalogue catalogue) {
+        boolean consent = MecheConsent.autoUpdate();
+        WORKSHOP.submit(() -> planCatalogue(catalogue, consent));
+    }
+
+    private static void planCatalogue(
+            fr.clubcitrouille.lanterne.core.network.MecheCatalogue catalogue, boolean consent) {
+        try {
+            Path mods = FMLPaths.MODSDIR.get();
+            Set<String> published = new HashSet<>();
+            java.util.List<fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry> toGet =
+                    new java.util.ArrayList<>();
+            for (var entry : catalogue.files()) {
+                if (!SAFE_JAR.matcher(entry.name()).matches()
+                        || entry.sha256().length != MecheManifest.HASH_LENGTH
+                        || entry.size() <= 0 || entry.size() > CEILING) {
+                    Lanterne.LOG.warn("[MÈCHE] entrée de catalogue rejetée : {}", entry.name());
+                    continue;
+                }
+                published.add(entry.name());
+                Path local = mods.resolve(entry.name());
+                if (!Files.isRegularFile(local) || !Arrays.equals(Meche.sha256(local), entry.sha256())) {
+                    toGet.add(entry);
+                }
+            }
+
+            java.util.List<Pattern> retired = new java.util.ArrayList<>();
+            for (String pattern : catalogue.retired()) {
+                retired.add(glob(pattern));
+            }
+            Set<String> registry = readRegistry();
+            Meche.JarInfo self = Meche.describeOwnJar(Lanterne.ID);
+            String selfName = self == null ? "" : self.path().getFileName().toString();
+            java.util.List<Path> toRemove = new java.util.ArrayList<>();
+            try (var stream = Files.list(mods)) {
+                for (Path file : (Iterable<Path>) stream::iterator) {
+                    String name = file.getFileName().toString();
+                    if (!name.endsWith(".jar") || published.contains(name) || name.equals(selfName)
+                            || name.toLowerCase(java.util.Locale.ROOT).startsWith("lanterne")) {
+                        continue;
+                    }
+                    boolean retiredByServer = retired.stream().anyMatch(p -> p.matcher(name).matches());
+                    if (retiredByServer || registry.contains(name)) {
+                        toRemove.add(file);
+                    }
+                }
+            }
+
+            if (toGet.isEmpty() && toRemove.isEmpty()) {
+                Lanterne.LOG.info("[MÈCHE] catalogue du serveur : {} fichier(s), rien à changer.",
+                        published.size());
+                return;
+            }
+            Lanterne.LOG.info("[MÈCHE] catalogue : à télécharger {} ; à retirer {}.",
+                    toGet.stream().map(fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry::name)
+                            .toList(),
+                    toRemove.stream().map(p -> p.getFileName().toString()).toList());
+            if (!consent) {
+                Minecraft.getInstance().execute(() -> tell(Component.literal("Ce serveur publie "
+                        + toGet.size() + " mod(s) à installer et " + toRemove.size() + " à retirer. "
+                        + "Active « auto_maj » dans lanterne-maj-client.toml pour la synchronisation "
+                        + "automatique.").withStyle(ChatFormatting.YELLOW)));
+                return;
+            }
+
+            filesInstalled = 0;
+            filesRemoved = 0;
+            for (Path file : toRemove) {
+                if (tryRemove(file) || scheduleDeferredRemoval(file)) {
+                    filesRemoved++;
+                }
+                registry.remove(file.getFileName().toString());
+            }
+            writeRegistry(registry);
+            synchronized (FILE_QUEUE) {
+                FILE_QUEUE.clear();
+                FILE_QUEUE.addAll(toGet);
+            }
+            Minecraft.getInstance().execute(MecheClient::requestNextFile);
+            if (toGet.isEmpty()) {
+                finishCatalogue();
+            }
+        } catch (Exception failed) {
+            Lanterne.LOG.warn("[MÈCHE] synchronisation du catalogue échouée : {}", failed.toString());
+        }
+    }
+
+    /** Demande le prochain fichier de la file, ou conclut s'il n'y en a plus. Fil du jeu. */
+    private static void requestNextFile() {
+        fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry next;
+        synchronized (FILE_QUEUE) {
+            next = FILE_QUEUE.poll();
+        }
+        if (next == null) {
+            return;
+        }
+        fileActive = new FileDownload(next);
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(
+                new fr.clubcitrouille.lanterne.core.network.MecheFichierDemande(next.name()));
+        Lanterne.LOG.info("[MÈCHE] fichier « {} » demandé ({} octets).", next.name(), next.size());
+    }
+
+    /** Une tranche d'un fichier du catalogue vient d'arriver. */
+    public static void acceptFileChunk(fr.clubcitrouille.lanterne.core.network.MecheFichierTranche chunk) {
+        FileDownload download = fileActive;
+        if (download == null || !chunk.name().equals(download.entry.name())) {
+            return;
+        }
+        if (chunk.size() != download.buffer.length || chunk.offset() < 0 || chunk.data().length == 0
+                || chunk.offset() + chunk.data().length > download.buffer.length) {
+            Lanterne.LOG.warn("[MÈCHE] tranche incohérente pour « {} », synchronisation abandonnée.",
+                    download.entry.name());
+            fileActive = null;
+            return;
+        }
+        System.arraycopy(chunk.data(), 0, download.buffer, chunk.offset(), chunk.data().length);
+        download.received += chunk.data().length;
+        if (download.received < download.buffer.length) {
+            return;
+        }
+        fileActive = null;
+        WORKSHOP.submit(() -> installFile(download));
+    }
+
+    private static void installFile(FileDownload download) {
+        var entry = download.entry;
+        if (!Arrays.equals(Meche.sha256(download.buffer), entry.sha256())) {
+            Lanterne.LOG.warn("[MÈCHE] « {} » reçu abîmé : empreinte différente.", entry.name());
+            Minecraft.getInstance().execute(() -> tell(Component.literal("« " + entry.name()
+                    + " » corrompu en transit. Reconnecte-toi pour réessayer.")
+                    .withStyle(ChatFormatting.RED)));
+            return;
+        }
+        try {
+            Path mods = FMLPaths.MODSDIR.get();
+            Path part = mods.resolve(entry.name() + ".part");
+            Files.write(part, download.buffer);
+            Files.move(part, mods.resolve(entry.name()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Set<String> registry = readRegistry();
+            registry.add(entry.name());
+            writeRegistry(registry);
+            filesInstalled++;
+            Lanterne.LOG.info("[MÈCHE] « {} » installé et vérifié.", entry.name());
+        } catch (Exception writeFailed) {
+            Lanterne.LOG.warn("[MÈCHE] écriture de « {} » impossible : {}", entry.name(),
+                    writeFailed.toString());
+            Minecraft.getInstance().execute(() -> tell(Component.literal("Écriture de « "
+                    + entry.name() + " » impossible : " + writeFailed.getMessage())
+                    .withStyle(ChatFormatting.RED)));
+            return;
+        }
+        boolean more;
+        synchronized (FILE_QUEUE) {
+            more = !FILE_QUEUE.isEmpty();
+        }
+        if (more) {
+            Minecraft.getInstance().execute(MecheClient::requestNextFile);
+        } else {
+            finishCatalogue();
+        }
+    }
+
+    private static void finishCatalogue() {
+        int installed = filesInstalled;
+        int removed = filesRemoved;
+        Minecraft.getInstance().execute(() -> tell(Component.literal("Synchronisation avec le serveur : "
+                + installed + " mod(s) installé(s), " + removed + " retiré(s). Ferme le jeu et "
+                + "relance-le pour appliquer (les fichiers verrouillés se suppriment tout seuls à la "
+                + "fermeture).").withStyle(ChatFormatting.GREEN)));
     }
 
     /** Une tranche du jar demandé vient d'arriver. */
