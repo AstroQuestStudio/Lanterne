@@ -5,14 +5,14 @@ Rédigé le 21/09/2026. Outils et code : `tools/shaderopt/` (analyse hors jeu) e
 Chaque chiffre ci-dessous vient d'une exécution réelle de ces outils sur les packs téléchargés pour test local ;
 ce qui n'est pas encore mesuré en jeu est marqué **« à mesurer »**.
 
-## État au 21/09/2026 (décision du patron : arrêt du chantier à ce point)
+## État au 21/09/2026 (chantier mis en pause, reprise demain)
 
 - **L'optimiseur reste DÉSACTIVÉ PAR DÉFAUT et n'est branché à aucun chemin de rendu.** Les classes de `client/shaderopt/` sont compilées
   (jar 26.3.260) mais rien ne les appelle : aucun joueur n'en subit l'effet.
 - **Prouvé hors jeu** (`glslang`, 8 packs) : la spécialisation d'état neutre compile aussi bien que l'original (0 régression sur les 6 packs validables),
   réduit le source de 22 à 50 %, et 15 tests automatiques passent (`FolderSelfTest`).
-- **Non mesuré en jeu** : le gain en FPS, l'iso-rendu par différence d'image, le comportement sur Bliss et Photon (non validables hors jeu). Les jobs A/B du premier essai ont planté (runner défaillant)
-  (le runner du banc plantait, voir §6).
+- **Non mesuré en jeu** : le gain en FPS, l'iso-rendu par différence d'image, le comportement sur Bliss et Photon (non validables hors jeu). Les jobs A/B du premier essai ont planté (runner défaillant, voir §6) ;
+  ils ont été redéposés à 13:43 et attendent que le coordinateur relance le runner (arrêté depuis 13:41).
 - **Conditions pour l'activer** : (1) gain mesuré en jeu sous le protocole de `OBJECTIFS-FPS.md` ; (2) iso-rendu prouvé par différence d'image
   (seuil documenté) ; (3) **avis écrit de Complementary Development** (voir §0).
 
