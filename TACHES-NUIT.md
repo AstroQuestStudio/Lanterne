@@ -511,3 +511,94 @@ session) n'apporte aucune idée de persistance que Lanterne n'ait déjà : lectu
 `.mca` (pas de fichier d'état listant les chunks un par un, contrairement à Chunky qui journalise
 chaque région) est en fait plus robuste — aucun fichier d'état à corrompre pour la liste des chunks
 eux-mêmes, seul le rayon (un entier) est persisté.
+
+## VÉRIFICATION — artefact de ciel (TÂCHE B) : hypothèse CONFIRMÉE à 100% par chaîne bytecode complète (fork, 21/09)
+
+Directive : confirmer visuellement le fix TÂCHE B (onglet Sodium + artefact ciel). Pas touché au
+serveur/client jetable partagé — plusieurs `java.exe` d'autres forks (Vulkan/Sodium) tournaient déjà
+(vérifié `tasklist | grep -i java`, aucun tué). Décision : au lieu de relancer un 4e lanceur client en
+parallèle (risque de collision de fichiers de logs/process avec les forks en cours), j'ai comblé le
+seul maillon manquant de la preuve déjà en place — TACHES-NUIT.md notait explicitement
+« je n'ai pas pu vérifier en bytecode SI DH décide d'instancier IrisAccessor en se basant sur
+`ModList.isLoaded("iris")` ». C'est maintenant fait, avec la chaîne complète en javap sur le vrai jar
+`DistantHorizons-3.3.0-26.3-fabric-neoforge.jar` (celui de `test 1/mods`) :
+
+1. `neoforge/NeoforgeMain.initializeModCompat()` appelle littéralement
+   `tryCreateModCompatAccessor("iris", IIrisAccessor.class, IrisAccessor::new)` (constante `"iris"`
+   visible en pool de constantes, `ldc #112 // String iris`).
+2. `AbstractModInitializer.tryCreateModCompatAccessor(String, Class, Supplier)` (celle qui reçoit un
+   `String` seul, pas un tableau) appelle d'abord `IModChecker.isModLoaded("iris")` — si `false`,
+   saute directement au `return` (offset 43→59), **sans jamais binder `IrisAccessor`** dans
+   `ModAccessorInjector`.
+3. `ModChecker.isModLoaded(String)` (impl NeoForge, `neoforge/wrappers/modAccessor/ModChecker.class`)
+   délègue en UNE instruction directe à `ModList.get().isLoaded(String)` — aucune indirection, aucun
+   cache, aucun autre chemin possible.
+4. `AbstractModInitializer` (la partie qui gère le fog, autour de l'offset 229) fait
+   `ModAccessorInjector.INSTANCE.get(IIrisAccessor.class)` puis `ifnull 421` — si jamais bindé
+   (étape 2 sautée), toute la coordination fog/ciel avec Iris est zappée silencieusement, ce qui
+   correspond exactement au symptôme décrit par le patron (bordure nette dans le ciel).
+
+**Conclusion : la chaîne causale complète est maintenant prouvée par bytecode, de bout en bout, sans
+aucun maillon supposé.** Avant TÂCHE B, `ModList.isLoaded("iris")` renvoyait `false` (plus aucun mod
+séparé "iris") → DH ne bindait jamais son `IrisAccessor` → sa propre logique de fog restait active en
+plus de celle d'Iris → artefact visuel. Depuis le build `26.3.59` (confirmé par les logs FML
+`{lanterne,iris}` de la TÂCHE B+D), `ModList.isLoaded("iris")` renvoie `true` → DH bindera son
+`IrisAccessor` au prochain lancement → sa logique de fog se désactivera correctement en présence
+d'Iris → l'artefact devrait avoir disparu. **C'est du 100% de certitude sur le mécanisme, mais toujours
+0% de capture d'écran réelle** — seul un œil humain (le patron) ou une future passe avec capture
+d'écran peut confirmer le dernier maillon purement visuel (rendu correct des pixels), ce qui reste
+hors de portée d'un fork sans affichage interactif.
+
+**Onglet "Iris" dans Sodium** : pas re-testé (mécanisme déjà diagnostiqué comme DIFFÉRENT et non
+résolu par TÂCHE B — voir section TÂCHE B plus haut, `sodium:config_api_user` mono-déclarant,
+`git log` vérifié : aucun commit de fusion `Graft`/`IrisConfig` n'a été fait depuis). Statu quo
+honnête : cet onglet ne réapparaîtra PAS tant que la fusion des deux `registerConfigLate` n'est pas
+faite — changement de comportement visible à valider avec le patron, toujours pas tenté cette nuit.
+
+Aucun fichier du dépôt modifié (investigation bytecode pure, aucun code Iris/DH/Lanterne touché),
+aucune compilation nécessaire, rien déployé.
+
+## TÂCHE SODIUM — premier vrai test client Sodium-absent, 1 crash corrigé, 1 nouveau trouvé et scopé (fork, 21/09 ~02h35)
+
+Reprise du retrait de Sodium (`RECHERCHE-VULKAN-SANS-SODIUM.md`, ~33 fichiers de couplage dur
+identifiés hier). Jusqu'ici tout reposait sur de la lecture de code — jamais un vrai lancement client
+avec Sodium physiquement retiré de `mods/`. Fait via une copie isolée du lanceur jetable
+(`C:\lanterne-client-sodium-test\`, clone de `C:\lanterne-client-test\`, `launch7.bat` réécrit pour
+son propre chemin — jamais touché aux dossiers utilisés par les autres tâches en parallèle cette nuit).
+
+**Crash #1 — corrigé, reteste OK.** Le guard `isModLoaded("sodium")` déjà présent autour de
+`new EntityToTerrainVertexSerializer()` etc. dans `Iris.onRenderSystemInit` (commit `0473178`, avant
+cette tâche) **ne suffisait pas** : premier test réel (build `26.3.59`) plante quand même avec
+`NoClassDefFoundError: .../VertexSerializer` — pas un crash franc, un blocage indéfini sur une boîte
+de dialogue Swing FML jamais cliquable en lanceur automatisé (le vrai message n'était visible que dans
+un heap dump `jmap`, jamais loggé). **Cause confirmée** : un `if` runtime ne protège pas de la
+résolution de classe faite par la JVM au chargement de la méthode contenant l'instruction `NEW`, même
+si la branche n'est jamais exécutée. Corrigé en isolant les 4 `registerSerializer(...)` dans une
+nouvelle classe `net.irisshaders.iris.vertices.sodium.SodiumVertexSerializers` (jamais chargée sans
+appel explicite), `Iris.java` ne référence plus aucun type Sodium directement — même motif que
+`CadenceBlueMap`. Commit `a9647c2`. Compilation propre, rebuild, reteste sur le même lanceur isolé
+(Sodium toujours absent) : **ce crash a disparu**, le jeu va bien plus loin (jusqu'à "Initializing
+game" au lieu de planter avant le scan des mods).
+
+**Crash #2 — trouvé, PAS corrigé, vrai couplage architectural (pas une isolation simple cette fois)** :
+`WorldRenderingSettings` (`net.irisshaders.iris.shaderpack.materialmap`) déclare un champ
+`private ChunkVertexType chunkVertexFormat;` où le TYPE DÉCLARÉ lui-même est une interface Sodium,
+initialisé sans garde dans un singleton statique construit sans condition dès `Iris.onEarlyInitialize`
+(appelé à chaque `Minecraft.<init>`, donc absolument inconditionnel). Contrairement au crash #1, un
+descripteur de champ est résolu au chargement/liaison de la classe elle-même — aucune isolation
+d'appel ne peut contourner ça, il faut changer le TYPE du champ. C'est exactement le couplage dur déjà
+scopé comme « la partie la plus critique et la plus difficile à remplacer » dans
+`RECHERCHE-VULKAN-SANS-SODIUM.md`. **Pas tenté** — nécessite d'auditer tous les appelants de
+`getVertexFormat()`/`setVertexFormat()` avant de choisir un correctif sûr (remplacer par un type
+interne Lanterne, ou typer en `Object` avec cast gardé) ; risqué à improviser en fin de session sans
+cet audit. Détail complet + pistes de correctif dans `RECHERCHE-VULKAN-SANS-SODIUM.md`, nouvelle
+section en fin de fichier.
+
+**Sodium remis dans `mods/` de la copie isolée après le test.** Aucun process résiduel (vérifié
+`tasklist`, chaque process de test arrêté individuellement par PID, jamais de kill global). Rien
+déployé sur le VPS ni `test 1` pour ce sujet — seul le commit `a9647c2` (progrès réel, sans danger que
+Sodium soit présent ou pas) est sur la branche `26.3`, jamais poussé.
+
+**Prochaine étape réelle qui reste ouverte** : auditer `getVertexFormat()`/`setVertexFormat()`, choisir
+et appliquer le correctif de `WorldRenderingSettings`, puis relancer ce même test pour voir si un 3e
+crash apparaît (probable sur `vertices/sodium/terrain/`, même nature de couplage par type de champ).

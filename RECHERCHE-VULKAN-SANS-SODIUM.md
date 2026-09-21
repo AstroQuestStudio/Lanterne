@@ -361,3 +361,89 @@ piste théorique. **Prochaine étape concrète** : refaire ce même test avec un
 l'étage vertex compile aussi une fois isolé de ce problème annexe ; puis, seulement après ça,
 tenter de charger le SPIR-V produit dans un vrai `VkShaderModule` (jamais fait à ce stade — seule
 la compilation GLSL→SPIR-V est prouvée, pas le chargement dans un pipeline Vulkan réel).
+
+## Sodium retiré : premier VRAI test client (pas juste lecture de code), deux crashs réels trouvés, un corrigé (21/09/2026 ~02h30)
+
+Jusqu'ici tout ce document reposait sur de la lecture de code/bytecode (javap, grep) — jamais un vrai
+lancement client avec Sodium physiquement absent de `mods/`. Fait maintenant via une copie isolée du
+lanceur jetable (`C:\lanterne-client-sodium-test\`, clone de `C:\lanterne-client-test\` avec
+`launch7.bat` réécrit pour pointer sur ce nouveau dossier — jamais touché `C:\lanterne-client-test\`
+ni les copies Vulkan occupées par d'autres tâches en parallèle cette nuit).
+
+**Crash #1 (trouvé, corrigé, reteste OK) — le guard `isModLoaded` existant ne suffisait pas.**
+`Iris.onRenderSystemInit` avait déjà un `if (IrisPlatformHelpers.getInstance().isModLoaded("sodium"))`
+autour de `new EntityToTerrainVertexSerializer()` etc. (commit `0473178`, avant cette tâche) — un
+premier lancement réel (build `26.3.59`, celui déployé sur `test 1`) a quand même planté :
+```
+A technical error occurred during mod loading:
+java.lang.NoClassDefFoundError: net/caffeinemc/mods/sodium/api/vertex/serializer/VertexSerializer
+```
+(trouvé via un thread dump `jstack` + un heap dump `jmap` du process — il ne plantait pas franchement,
+il restait bloqué indéfiniment sur une boîte de dialogue Swing FML jamais cliquable dans un lanceur
+automatisé ; `-Djava.awt.headless=true` n'a rien changé au blocage ; le message d'erreur exact n'était
+visible QUE dans le heap dump, jamais loggé sur stdout/stderr).
+
+**Cause réelle, confirmée par le heap dump, pas supposée** : un `if` runtime ne protège pas contre la
+résolution de classe faite par la JVM au chargement/vérification de la méthode qui contient
+l'instruction `NEW XxxVertexSerializer` — cette résolution peut arriver même si la branche n'est
+jamais exécutée à l'exécution. La seule protection fiable est l'isolation complète dans une classe
+séparée, jamais chargée du tout tant que l'appelant ne l'appelle pas explicitement (même motif que
+`CadenceBlueMap` pour `BlueMapAPI`, crash fix #2 de la nuit précédente).
+
+**Corrigé** : nouvelle classe `net.irisshaders.iris.vertices.sodium.SodiumVertexSerializers`
+(`registerAll()`), les 4 `registerSerializer(...)` déplacés hors de `Iris.java`, qui ne référence plus
+aucun type Sodium directement. Commit `a9647c2`. Compilation propre revérifiée. Rebuild + retest sur
+le même lanceur isolé (Sodium toujours absent) : **ce crash précis a disparu**, le jeu progresse
+beaucoup plus loin (336 lignes de log contre 91 avant, jusqu'à "Initializing game").
+
+**Crash #2 (trouvé, PAS corrigé — vrai couplage architectural, pas une isolation simple)** :
+```
+Description: Initializing game
+java.lang.NoClassDefFoundError: net/caffeinemc/mods/sodium/client/render/chunk/vertex/format/ChunkMeshFormats
+	at net.irisshaders.iris.shaderpack.materialmap.WorldRenderingSettings.<init>(WorldRenderingSettings.java:37)
+	at net.irisshaders.iris.shaderpack.materialmap.WorldRenderingSettings.<clinit>(WorldRenderingSettings.java:14)
+	at net.irisshaders.iris.pipeline.VanillaRenderingPipeline.<init>(VanillaRenderingPipeline.java:30)
+	at net.irisshaders.iris.pipeline.PipelineManager.<init>(PipelineManager.java:20)
+	at net.irisshaders.iris.Iris.getPipelineManager(Iris.java:690)
+	at net.irisshaders.iris.gui.option.IrisVideoSettings.getOverriddenShadowDistance(IrisVideoSettings.java:62)
+	at net.irisshaders.iris.gui.option.IrisVideoSettings.<clinit>(IrisVideoSettings.java:51)
+	at net.irisshaders.iris.config.IrisConfig.load(IrisConfig.java:178)
+	at net.irisshaders.iris.config.IrisConfig.initialize(IrisConfig.java:72)
+	at net.irisshaders.iris.Iris.onEarlyInitialize(Iris.java:846)
+	at net.minecraft.client.Minecraft.<init>(Minecraft.java:433)
+```
+**Cause, différente et plus profonde que le crash #1** : `WorldRenderingSettings` déclare un champ
+`private ChunkVertexType chunkVertexFormat;` — le TYPE DÉCLARÉ du champ lui-même est une interface
+Sodium (`net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType`), initialisé
+sans garde dans le constructeur (`chunkVertexFormat = ChunkMeshFormats.COMPACT;`, ligne 37) et exposé
+via `getVertexFormat()`/`setVertexFormat(ChunkVertexType)`. Contrairement au crash #1 (une instruction
+`NEW` dans un corps de méthode, contournable en isolant l'appel dans une classe séparée), un
+DESCRIPTEUR DE CHAMP fait partie du layout de la classe et est résolu au chargement/liaison de CETTE
+classe elle-même — aucune astuce d'isolation d'appel ne peut éviter ça tant que `WorldRenderingSettings`
+garde ce champ typé Sodium. Et `WorldRenderingSettings.INSTANCE` est un singleton statique construit
+sans condition dès qu'Iris s'initialise (`Iris.onEarlyInitialize`, appelé inconditionnellement au
+`Minecraft.<init>`), donc aucun garde runtime en amont ne peut retarder ce chargement.
+
+**C'est exactement le couplage dur déjà scopé plus haut dans ce document** (`vertices/sodium/` +
+`vertices/sodium/terrain/`, « la partie la plus critique et la plus difficile à remplacer ») —
+`WorldRenderingSettings` en est un exemple concret et non trivial : pour corriger proprement, il
+faudrait soit (a) remplacer le champ par un type interne à Lanterne (pas Sodium) avec conversion vers/
+depuis `ChunkVertexType` uniquement quand Sodium est présent, soit (b) rendre `chunkVertexFormat` de
+type `Object`/générique et faire les casts uniquement dans le code déjà gardé par
+`Compagnons.present(SODIUM)`. Les deux demandent d'auditer TOUS les appelants de
+`getVertexFormat()`/`setVertexFormat()` (pas fait cette passe, budget de fork insuffisant) pour
+vérifier qu'aucun ne suppose un `ChunkVertexType` non-null en dehors d'un contexte Sodium déjà garanti
+présent. **PAS tenté** — correctif risqué à improviser en fin de session sans pouvoir auditer tous les
+appelants ; documenté plutôt que forcé, comme demandé par la directive de cette tâche.
+
+**Sodium remis dans `mods/` de la copie isolée après ce test** (le retrait était pour le test
+uniquement). **Rien déployé sur le VPS ni `test 1` pour ce sujet précis** (Sodium reste présent
+partout ailleurs) — seul le commit `a9647c2` (fix du crash #1, réel progrès, sans danger que Sodium
+soit présent ou pas) est sur la branche `26.3`, jamais poussé.
+
+**Prochaine étape concrète pour qui reprend ça** : auditer les appelants de
+`WorldRenderingSettings.getVertexFormat()`/`setVertexFormat()`
+(`grep -rn "getVertexFormat\|setVertexFormat"`) pour dimensionner le vrai correctif (a) ou (b)
+ci-dessus, PUIS reprendre ce même test (lanceur isolé, Sodium absent) pour voir si un 3e crash
+apparaît plus loin dans la chaîne — probable vu que `vertices/sodium/terrain/` (`XHFPModelVertexType`
+etc.) a la même nature de couplage par TYPE DE CHAMP, pas seulement par appel de méthode.
