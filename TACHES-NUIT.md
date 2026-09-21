@@ -1,3 +1,24 @@
+# ÉTAT FINAL À 05h37 UTC (~07h37 heure locale) — dernier état des lieux consolidé de la nuit
+
+- **105 commits** sur `26.3` depuis la création de ce fichier (`5dfe9bf`), **426 commits au total** sur
+  la branche.
+- `git status` propre, rien en attente.
+- Build complet depuis zéro (`clean build -x test`) → **BUILD SUCCESSFUL**, tout compile, y compris
+  les tout derniers correctifs Vulkan de ce cycle.
+- VPS : service `minecraft` `active`, **0 FATAL** sur les 15 dernières minutes, pregen à **14.5 %**
+  (144802/1002001, 17 chunks/s stable) — aucune anomalie.
+- Points d'action restants pour le patron, en un coup d'œil (déjà détaillés plus haut dans le résumé
+  matinal réécrit vers 06h50) : (1) re-saisir les vraies valeurs boutique/serveur dans
+  `lanterne-common.toml` (structure confirmée régénérée correctement) ; (2) décider d'un système de
+  backup automatique du monde (aucun actuellement) et d'un monitoring d'alerte (piste RCON+Discord
+  proposée, non implémentée) ; (3) confirmation visuelle optionnelle (onglet Iris/ciel/cadran
+  shaderpack, déjà bien étayés par preuve indirecte).
+- Vulkan : progrès réel cette nuit (vertex ET uniforms désormais résolus sur un vrai fichier de
+  shaderpack), seul reste un bug natif shaderc/glslang identifié avec certitude (pas un défaut
+  Lanterne) — recherche pure, rien branché au rendu.
+
+---
+
 # AUDIT — Bulk.java / Increvable.java / Recycleur.java (fork, piste laissée par l'audit précédent)
 
 Directive : auditer ces 3 fichiers jamais couverts cette nuit, chercher de vrais bugs/gains de perf.
