@@ -56,3 +56,9 @@ Le verrou enchaîné bloquait tous les agents. Nouvelle règle, équitable :
 2. **Compilation Gradle et tests fonctionnels (crash, capture, lecture de log) sont AUTORISÉS à tout moment**, en priorité BelowNormal (Gradle : `-Dorg.gradle.workers.max=2`, lancé caché) ; ils ne comptent pas comme mesures.
 3. Une mesure exige toujours : verrou détenu + GPU = celui voulu (RTX pour les bancs classiques, cité dans le tableau) + « sous verrou : oui ». Une mesure faite pendant qu'un autre agent compile est répétée si l'écart avec sa jumelle dépasse 10 %.
 4. Fenêtre de mesure > 5 min ou lot de mesures : à annoncer au coordinateur d'abord.
+
+## RÈGLE DE MESURE n°0 (découverte agent perf, 21/09 12h50) — inactivité = FPS faux
+Minecraft 26.3 : option `inactivityFpsLimit` (options.txt, défaut `"afk"`) : après ~60 s sans clavier/souris le jeu se bride à ~30 FPS. Un banc sans entrée mesure donc 20-40 FPS. Preuve : Radiographie de Lanterne 26.3.100 (banc propre, RTX) : 35 % du temps du fil de rendu dans FramerateLimiter.limitDisplayFPS ; ms/image moyen 3,59 (~280 FPS quand non bridé).
+- OBLIGATOIRE dans l'options.txt de tout client de MESURE : `inactivityFpsLimit:"minimized"` (ou envoyer des entrées régulières).
+- Toute mesure faite sans cette option et durant > 60 s sans entrée est INVALIDE et à refaire ; les chiffres antérieurs (168,8 / 53,6 / 145,2 / 151,3 / 45,4…) sont suspects.
+- Le tableau « Suivi » indique la valeur d'`inactivityFpsLimit` de chaque mesure.
