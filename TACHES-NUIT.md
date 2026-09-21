@@ -67,6 +67,18 @@ sur la récursion pour les fichiers de taille réelle (~100K caractères). Tout 
 `lab/ShadercProbe*.java`/`UniformReblocker.java`, jamais connecté au pipeline de rendu qui tourne
 réellement en jeu — c'est un prototype de faisabilité, pas une fonctionnalité livrée.
 
+**Note de clôture (~05h30)** : le fork qui travaillait sur ces 2 derniers blocages (uniforms non
+capturés + stack overflow) s'est enlisé ~2h à relancer des clients de test jetables
+(`-test-5`, `-test-6`) sans jamais conclure — arrêté de force par le coordinateur, process orphelin
+`PID 16636` (`-test-5`) fermé proprement après vérification de son `gameDir`. Aucune régression :
+le dépôt était propre, seule une note de doc en attente a été commitée (`bb23226`), rien d'autre
+perdu. **Recommandation pour la reprise** : l'axe Vulkan a déjà reçu énormément de temps cette
+nuit (8+ passes) pour un résultat qui reste un prototype non branché au rendu réel — la suite
+(couverture du parseur `UniformReblocker` sur gros fichiers, conversion récursion→itération) est un
+vrai travail de dev normal, PAS un test client répété. Éviter de redispatcher un fork dessus en
+boucle sans borne de temps explicite ; si repris, fixer un budget clair (ex: "1 tentative de test
+client max, sinon documenter et arrêter").
+
 ## 4. Bugs documentés mais non corrigés cette nuit (avec raison)
 
 - **Halo/chute FPS à l'exploration** : cause réelle trouvée avec preuve directe (upload GPU
