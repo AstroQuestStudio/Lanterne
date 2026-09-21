@@ -11,6 +11,15 @@ MAX_CRASH=5
 if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then PATH="$JAVA_HOME/bin:$PATH"; fi
 command -v java >/dev/null 2>&1 || { echo "[ERREUR] Java introuvable : installe Java 25 (https://adoptium.net)." >&2; exit 1; }
 
+JV=$(java -version 2>&1 | awk -F'"' '/version/ {print $2; exit}')
+JMAJ=${JV%%.*}
+case "$JMAJ" in ''|*[!0-9]*) JMAJ=0 ;; esac
+if [ "$JMAJ" -lt 25 ]; then
+  echo "[ERREUR] Java ${JV:-inconnu} detecte : NeoForge 26.3 demande Java 25 ou plus recent." >&2
+  echo "         Installe Java 25 (https://adoptium.net) ou definis JAVA_HOME vers un JDK 25." >&2
+  exit 1
+fi
+
 if [ ! -f "$ARGS" ]; then
   echo "[INSTALL] NeoForge $NEOFORGE absent : installation..."
   INST="neoforge-$NEOFORGE-installer.jar"

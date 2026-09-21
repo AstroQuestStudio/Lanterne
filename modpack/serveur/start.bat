@@ -14,6 +14,16 @@ if errorlevel 1 (
   exit /b 1
 )
 
+set "JV="
+for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do if not defined JV set "JV=%%~v"
+for /f "delims=. tokens=1" %%m in ("!JV!") do set "JMAJ=%%m"
+if not defined JMAJ set "JMAJ=0"
+if !JMAJ! LSS 25 (
+  echo [ERREUR] Java !JV! detecte : NeoForge 26.3 demande Java 25 ou plus recent.
+  echo          Installe Java 25 ^(https://adoptium.net^) ou definis JAVA_HOME vers un JDK 25.
+  exit /b 1
+)
+
 if not exist "%ARGS%" (
   echo [INSTALL] NeoForge %NEOFORGE% absent : installation...
   if not exist "neoforge-%NEOFORGE%-installer.jar" (
@@ -47,5 +57,5 @@ set /a CRASHES+=1
 echo [ATTENTION] Le serveur s'est arrete avec le code %CODE% ^(incident %CRASHES%/%MAX_CRASH%^).
 if %CRASHES% GEQ %MAX_CRASH% ( echo [ERREUR] Trop d'incidents, abandon. Voir logs\latest.log et crash-reports\ & exit /b %CODE% )
 echo Redemarrage dans 10 secondes... ^(Ctrl+C pour annuler^)
-timeout /t 10 /nobreak >nul
+ping -n 11 127.0.0.1 >nul
 goto run
