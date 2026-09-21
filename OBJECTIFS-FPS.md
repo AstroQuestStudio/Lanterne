@@ -95,3 +95,13 @@ Danger : DLSS/FSR/échelle de résolution peuvent effacer des détails fins (her
 Le tableau « Suivi » alimenté automatiquement a été retiré : un ajout automatique ré-encodait le fichier à chaque écriture (18 Mo pour 105 lignes). Les mesures VALIDES sont consignées dans **PERF-SHADERS-AUDIT.md** et dans les résultats du banc central (C:\bench\results\*.txt / .json, avec GPU, scène restaurée, non bridé).
 Mesures valides connues (RTX 3080, banc central, scène restaurée, heure 12500, non bridé, autres clients = 0) : jar 108 + Sodium + pack complet, DH coupé : **sans shaders 338,7 FPS** (94 % du temps > 120), **avec Complementary 100,2 FPS** (capture lue : rendu correct). Toutes les mesures antérieures sont « scène dérivante » ou bridées AFK : non comparables.
 Règle pour tout script d'ajout automatique : ouvrir le fichier en UTF-8 SANS BOM, ne réécrire que la ligne ajoutée (append), jamais relire/ré-encoder tout le fichier.
+## Suivi O6 (agent iGPU, 21/09) — détails et validité dans ETAT-FINAL-O6.md
+GPU = AMD Radeon(TM) Graphics (iGPU Ryzen 7 5800H) vérifié dans le log ; 1080p, distance 12, Complementary, `inactivityFpsLimit:"minimized"` ; toutes sous verrou.
+| Essai | Jar / levier | FPS moy | Rendu (capture lue) | Validité |
+|---|---|---|---|---|
+| A | 106 base | 9,8 | CASSÉ | scène différente : non comparable |
+| B | 240 profil+lentille | 16,5 | capture invalide | invalide |
+| C | 240 profil seul | 23,5 | capture invalide | invalide |
+| D | 240 lentille seule | 13,2 | correct | valide (scène Bamboo) |
+| A2 | 106 base, scène figée | 8,3 | CASSÉ | valide |
+Seule paire comparable : A2 (106 cassé, 8,3) contre D (240+lentille, correct, 13,2). Cause non isolée (jar ou lentille) ; tests G/H/E2/F2 non faits.
