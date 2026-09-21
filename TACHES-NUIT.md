@@ -1,3 +1,17 @@
+**CONTRÔLE PREGEN + AUDIT — quatrième lot de 8 mixins Lanterne natifs**, aucun problème trouvé.
+
+- Pregen VPS (lecture seule) : 18,5 % (185 669/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
+- Mixins lus intégralement (nouveaux, différents des 29 déjà vérifiés) : `ServerEntityMixin`,
+  `LevelMixin`, `FurnaceMixin`, `NetworkRegistryMixin`, `StaticChestShapeMixin` (+ vérifié
+  l'attribution GPL-3.0-or-later dans `NOTICE.md`, correcte pour Faster Block Entities/kvxd),
+  `LeafCullMixin`, `LooseItemMixin`, `ChunkStepMixin`. Tous corrects : cas limites gérés (pile vide
+  dans `LooseItemMixin`, égalité stricte dans `FurnaceMixin` avec un bug historique déjà corrigé et
+  documenté — timer plafonné à `cookingTotalTime - 1` pour laisser le jeu franchir la ligne
+  lui-même), réglages désactivables partout (`Settings.xxx()`), portée d'injection précise.
+- Aucun code modifié, aucune compilation nécessaire (lecture pure).
+
+---
+
 **CONTRÔLE PREGEN + AUDIT — troisième lot de 13 mixins Lanterne natifs**, aucun problème trouvé.
 
 - Pregen VPS (lecture seule) : 18,4 % (184 610/1 002 001 chunks), 17,5 chunk/s, 0 FATAL sur 10 min.
