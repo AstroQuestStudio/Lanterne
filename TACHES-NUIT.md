@@ -3374,3 +3374,21 @@ Fichier bien conçu, aucun problème trouvé :
 Aucune modification, aucun commit de code. Note : `Gradle` fonctionne à nouveau normalement depuis
 ~07h05 (cause : process zombie tué, voir plus haut) — la mention "problème Gradle toujours actif" au
 paragraphe juste au-dessus de celui-ci est obsolète (écrite avant la résolution).
+
+---
+
+# AUDIT — Bell.java (touche boutique, pas une cloche de notification)
+
+Fichier sain, rien à corriger. `Bell` est la touche `K` qui envoie une DEMANDE d'ouverture de boutique
+au serveur (pas de notification jouable — nom trompeur mais Javadoc claire). Points vérifiés :
+- `onClientTick` retourne immédiatement si pas de joueur/écran déjà ouvert — coût nul hors appui.
+- `while (OPEN.consumeClick())` draine les appuis en attente pour éviter le spam réseau sur touche
+  maintenue (même pattern documenté que `client.waypoint.Opener`).
+- Contrainte d'ordre d'enregistrement documentée dans le Javadoc (`Bell.register` doit suivre
+  `Compass.register`, même catégorie de touche) — vérifiée RESPECTÉE dans `Lanterne.java:187/190`
+  (`Compass.register` bien avant `Bell.register`), pas un risque théorique non tenu.
+- Design "prix affichés = prix au moment de l'ouverture" (aller-retour serveur avant affichage)
+  cohérent avec la rigueur anti-dupe déjà vue sur `Till`/`Bazaar` cette nuit.
+
+Aucune interaction directe avec Bazaar/Till au-delà de la demande d'ouverture d'écran (`TradeAsk.open()`),
+hors périmètre de la logique de transaction déjà auditée. Aucune modification, aucun commit de code.
