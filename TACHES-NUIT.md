@@ -1,3 +1,49 @@
+**AUDIT ÉCHANTILLON — 112 mixins Lanterne natifs recensés, 6 vérifiés en profondeur, zéro bug** :
+`find` confirme 112 mixins natifs (hors mixins Iris déjà audités). Échantillon de 6 lu ligne par
+ligne : `VulkanDeviceMixin` (Empreinte/cache pipeline Vulkan, constructeur vérifié par javap),
+`ServerLoginPacketListenerImplMixin`+`ConnectionMixin` (bascule chiffrement vanilla→Krypton, guard
+d'idempotence présent), `RemoveBlockMixin` (évite un chargement de chunk forcé pour une bête, même
+garde que `GameEventChunkMixin`), `HopperMixin` (**désactivé volontairement** — tentative de sommeil
+pendant la recharge, réfutée par une épreuve de débit réelle : 47→22 objets/mesure, gardé comme
+trace de la réfutation avec un jeton reconnu par `tools/verifie_mixins.py`), `NaturalSpawnerMixin`
+(réutilise un `BlockPos` mutable, éliminant 2,29 Go d'allocation identifiés au profileur — 41% du
+total du poste dominant après optimisation des créatures). Discipline d'ingénierie exceptionnelle
+partout : chaque mixin documente sa preuve (javap, profileur, épreuve de débit), pas de supposition.
+
+**DÉCOUVERTE IMPORTANTE POUR LA SUITE VULKAN** : 7 mixins `Vulkan*Mixin` + `RenderPipelinesMixin` +
+`DynamicGpuDataMixin` (1189 lignes cumulées, jamais mentionnés cette nuit) touchent le VRAI moteur
+de rendu Vulkan natif de "Minecraft 26.3" (`com.mojang.renderpearl.backend.vulkan.*`) — distinct et
+sans rapport avec le prototype `ShadercProbe`/`UniformReblocker` travaillé cette nuit (qui vise les
+SHADERS Iris, pas le moteur natif). `VulkanDeviceMixin` implémente déjà une persistance de
+`VkPipelineCache` (`Empreinte.onDeviceReady`/`onDeviceClosing`) branchée sur le vrai cycle de vie du
+device Vulkan. Ces fichiers n'ont PAS été audités en détail (hors `VulkanDeviceMixin`) faute de
+budget dans cette passe — piste à explorer en priorité pour la reprise de jour sur l'axe Vulkan,
+potentiellement plus proche de la production que le prototype de shaders.
+
+Liste complète des 112 mixins non explorés en détail (au-delà des 6 + Iris déjà couverts) :
+`AquiferMixin`, `AureoleMixin`, `BeeHiveMixin`, `BeeHomingMixin`, `BehaviorMemoryMixin`,
+`BlockEntityMixin`, `BlockEntityVeilMixin`, `BrainMixin`, `BurinMixin`, `ChunkMapMixin`,
+`ChunkSenderMixin`, `ChunkStepMixin`, `ClimatMixin`, `CompressionMixin`, `DamageIndicatorMixin`,
+`ElastiqueMixin`, `EmballageBiomeMixin`, `EmballageChunkMixin`, `EmballageEnvoiMixin`,
+`EntityCullMixin`, `EntityGetterMixin`, `ExperienceOrbMixin`, `FluidRendererMixin`, `FurnaceMixin`,
+`GameEventChunkMixin`, `GateBehaviorMixin`, `HopperBulkMixin`, `IOWorkerPendingStoreMixin`,
+`IncrevableMixin`, `InsideEffectsMixin`, `ItemMergeMixin`, `JigsawPlacerMixin`, `LeafCullMixin`,
+`LeafDecayMixin`, `LeurreConnexionMixin`, `LeurreEmballageMixin`, `LeurreInvalidationMixin`,
+`LevelMixin`, `LightCheckBlockMixin`, `LivingEntityMixin`, `LivingTargetMixin`, `LooseItemMixin`,
+`LoterieMixin`, `LoterieSectionMixin`, `ManneMixin`, `MapChunkMixin`, `MemoryBoxMixin`,
+`MemoryPulseMixin`, `MiningMixin`, `MobMixin`, `MouseTweaksMixin`, `NetworkRegistryMixin`,
+`PaceMixin`, `PackIndexMixin`, `ParticleVeilMixin`, `PathfindMixin`, `PlayerSensorMixin`,
+`PoiStreamMixin`, `PregenActivityMixin`, `ProfilerMixin`, `ProjectileUtilMixin`,
+`RaccourciCraftingMixin`, `RedstoneEvaluatorMixin`, `RegionFileVersionMixin`, `RemblaiBlockMixin`,
+`RemblaiFormeMixin`, `RemblaiNavigationMixin`, `RemblaiVoisinsMixin`, `SansVolKickMixin` (déjà vu),
+`SectionCompilerMixin`, `ServerEntityMixin`, `ServerExplosionMixin`, `ServerLevelMixin`,
+`ServerNameResolverMixin`, `ShufflingListMixin`, `SleepBedMixin`, `SoundDecodeMixin`,
+`SoundLimitMixin`, `SouvenirReceiveMixin`, `SouvenirSendMixin` (Souvenir déjà audité), `SpawnGuardMixin`,
+`StateCacheDedupMixin`, `StaticChestRendererMixin`, `StaticChestShapeMixin`, `StrollMixin`,
+`ThreadCountMixin`, `UpscaleGameRendererMixin`, `VideoOptionsMixin`.
+
+---
+
 **CONTRÔLE PÉRIODIQUE (~06h) + AUDIT COMPLET Portail\* (les 4 fichiers, ligne par ligne)** :
 - Pregen : 17,6% (176 151/1 002 001), 17,5 chunk/s, 0 FATAL sur les 10 dernières minutes.
 - `Portail.java`/`PortailsConfig.java` déjà audités sains par un fork précédent (système inerte,
