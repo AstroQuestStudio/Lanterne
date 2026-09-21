@@ -101,6 +101,16 @@ public class LodRendererEvents {
 					return;
 				}
 
+				// Image de transition (shaders actives sans que le drapeau « transparence differee » ait
+				// encore ete pris en compte par DH) : DH lance alors une passe combinee que le pipeline
+				// Iris ne sait pas gerer. On saute CETTE image et on regle le drapeau pour la suivante.
+				if (Iris.isPackInUseQuick() && getInstance().shouldOverride
+						&& event.value.renderPass == EDhApiRenderPass.OPAQUE_AND_TRANSPARENT) {
+					DHCompatInternal.setDeferTransparent(true);
+					event.cancelEvent();
+					return;
+				}
+
 				DhApi.Delayed.renderProxy.setDeferTransparentRendering(Iris.isPackInUseQuick() && getInstance().shouldOverride);
 				DhApi.Delayed.configs.graphics().fog().drawMode().setValue(getInstance().shouldOverride ? EDhApiFogDrawMode.FOG_DISABLED : EDhApiFogDrawMode.FOG_ENABLED);
 			}

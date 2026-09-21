@@ -1,0 +1,17 @@
+{
+  "required": false,
+  "minVersion": "0.8.5",
+  "package": "fr.clubcitrouille.lanterne.perf.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "fr.clubcitrouille.lanterne.perf.PerfMixinPlugin",
+  "injectors": {
+    "defaultRequire": 0
+  },
+  "client": [
+    "MixinScissorState",
+    "MixinRenderTypeFeatureRenderer_Group",
+    "MixinTextFeatureRenderer_GlyphRenderer",
+    "MixinRenderTypes",
+    "RenderTypeFeatureRendererInvoker"
+  ]
+}

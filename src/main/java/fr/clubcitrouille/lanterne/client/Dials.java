@@ -22,6 +22,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ParticleStatus;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import fr.clubcitrouille.lanterne.client.reglage.Reglages;
 import fr.clubcitrouille.lanterne.client.screen.Palette;
 import fr.clubcitrouille.lanterne.client.upscale.Nuancier;
 import fr.clubcitrouille.lanterne.client.upscale.Pivot;
@@ -185,6 +186,7 @@ public final class Dials extends Screen {
             return;
         }
 
+        buildVideo();
         buildVeil();
         buildScenery();
         buildImage();
@@ -194,6 +196,220 @@ public final class Dials extends Screen {
         buildWorld();
         buildMachine();
         buildExtras();
+        buildReglages();
+    }
+
+    // --- Les réglages de performance : particules, météo, entités, préréglages. -------------------
+
+    /**
+     * Les trois familles de réglages de performance : {@link Reglages.Famille} donne les deux
+     * premières (chaque réglage y est un cadran généré depuis sa fiche), et la troisième porte les
+     * préréglages, la remise à zéro et l'export/import par le presse-papiers.
+     */
+    private void buildReglages() {
+        for (Reglages.Famille famille : Reglages.Famille.values()) {
+            Family family = new Family(famille.titre(), false, famille.sousTitre());
+            for (Reglages.Reglage reglage : Reglages.deLaFamille(famille)) {
+                family.add(Dial.cycle(reglage.nom(), reglage::texte,
+                        () -> reglage.estDefaut() ? DIM : AMBER, reglage::cran,
+                        reglage.quoi(),
+                        "Perte visible : " + reglage.perte().texte() + ". Gain : " + reglage.gain() + ".",
+                        "Effet immédiat. Commande : /lanterne reglage " + reglage.id() + " <valeur>."));
+            }
+            if (famille == Reglages.Famille.PERFORMANCES) {
+                family.add(Dial.cycle("Inactivité (AFK)", Dials::afkLabel,
+                        () -> vanillaOptions().inactivityFpsLimit().get()
+                                == net.minecraft.client.InactivityFpsLimit.AFK ? DIM : AMBER,
+                        Dials::toggleAfk,
+                        "Ce que fait le jeu quand tu n'as touché ni clavier ni souris depuis une minute.",
+                        "Vanilla bride à 30 FPS après 1 minute (10 après 10 minutes), ce qui fausse toute"
+                                + " mesure de FPS sans entrée. « Fenêtre réduite » ne bride que la fenêtre réduite.",
+                        "Option vanilla « inactivityFpsLimit » ; effet immédiat."));
+            }
+            this.families.add(family);
+        }
+        Family presets = new Family("Préréglages", false, "qualité max, équilibré, FPS max, petite config");
+        presets.add(presetDial("Qualité max", "qualite_max",
+                "Rien n'est retiré : particules illimitées, tout est dessiné.",
+                "Aucune perte visible ; c'est la référence."));
+        presets.add(presetDial("Équilibré", "equilibre",
+                "Seulement des réductions imperceptibles : particules coupées au-delà de 128 blocs.",
+                "Perte visible : aucune. C'est la valeur d'origine."));
+        presets.add(presetDial("FPS max", "fps_max",
+                "Moins de particules, de plaques de nom et de blocs animés lointains, textures animées "
+                        + "une image sur deux.",
+                "Perte visible : faible à moyenne."));
+        presets.add(presetDial("Petite config", "petite_config",
+                "Réductions plus fortes pour un ordinateur sans carte graphique dédiée.",
+                "Perte visible : moyenne. Le régulateur adaptatif peut les compléter."));
+        presets.add(Dial.cycle("Tout restaurer", () -> "cliquer", () -> AMBER,
+                direction -> Reglages.restaurer(),
+                "Remet chaque réglage de performance à sa valeur d'origine.",
+                "Gratuit.", "Effet immédiat."));
+        presets.add(Dial.cycle("Exporter", () -> "presse-papiers", () -> AMBER, direction -> {
+            Minecraft.getInstance().keyboardHandler.setClipboard(Reglages.exporter());
+        }, "Copie tes réglages dans le presse-papiers, pour les partager ou les sauvegarder.",
+                "Gratuit.", "Coller ensuite dans un message ou un fichier."));
+        presets.add(Dial.cycle("Importer", () -> "presse-papiers", () -> AMBER, direction -> {
+            Reglages.importer(Minecraft.getInstance().keyboardHandler.getClipboard());
+        }, "Applique les réglages copiés par « Exporter » (le texte commence par lanterne-reglages;).",
+                "Gratuit.", "Un texte illisible est ignoré."));
+        this.families.add(presets);
+    }
+
+    private static String afkLabel() {
+        return vanillaOptions().inactivityFpsLimit().get() == net.minecraft.client.InactivityFpsLimit.AFK
+                ? "bridé après 1 min" : "fenêtre réduite seulement";
+    }
+
+    private static void toggleAfk(int ignored) {
+        var option = vanillaOptions().inactivityFpsLimit();
+        option.set(option.get() == net.minecraft.client.InactivityFpsLimit.AFK
+                ? net.minecraft.client.InactivityFpsLimit.MINIMIZED
+                : net.minecraft.client.InactivityFpsLimit.AFK);
+        vanillaOptions().save();
+    }
+
+    private static Dial presetDial(String nom, String id, String quoi, String cout) {
+        return Dial.cycle(nom, () -> "appliquer", () -> AMBER,
+                direction -> Reglages.appliquerPrereglage(id), quoi, cout,
+                "Effet immédiat. Commande : /lanterne reglage preset " + id + ".");
+    }
+
+    // --- La vidéo : les réglages de base que l'écran de Sodium portait, rendus par Lanterne. -----
+
+    private static final int[] FPS_STEPS = {10, 15, 20, 30, 40, 60, 75, 90, 120, 144, 165, 200, 240, 260};
+
+    private void buildVideo() {
+        Family video = new Family("La vidéo", false, "distance, luminosité, images par seconde");
+        video.add(Dial.cycle("Distance de rendu", () -> vanillaOptions().renderDistance().get() + " chunks",
+                () -> AMBER, step -> cycleInt(vanillaOptions().renderDistance(), step, 2, 32),
+                "Nombre de chunks dessinés autour de toi.",
+                "C'est le réglage qui pèse le plus sur les images par seconde : le coût croît avec le"
+                        + " carré de la distance.",
+                "Effet immédiat. Avec un shaderpack, chaque chunk est aussi redessiné dans les ombres."));
+        video.add(Dial.cycle("Distance de simulation",
+                () -> vanillaOptions().simulationDistance().get() + " chunks", () -> AMBER,
+                step -> cycleInt(vanillaOptions().simulationDistance(), step, 5, 32),
+                "Distance jusqu'où le monde vit : cultures, créatures, machines.",
+                "Pèse sur le tick (le serveur intégré en solo), pas sur le dessin.",
+                "Effet immédiat en solo ; sur un serveur, c'est lui qui décide."));
+        video.add(Dial.cycle("Luminosité", Dials::gammaLabel, () -> AMBER, Dials::cycleGamma,
+                "Éclaircit les zones sombres. 0 % sombre, 100 % éclatant.",
+                "Gratuit.", "Effet immédiat. Certains shaderpacks règlent leur propre exposition."));
+        video.add(Dial.cycle("Images par seconde max", Dials::fpsLabel, () -> AMBER, Dials::cycleFps,
+                "Plafond d'images par seconde. « Illimité » retire le plafond.",
+                "Un plafond bas économise le GPU et la batterie, et rend la charge plus régulière.",
+                "Effet immédiat."));
+        video.add(Dial.cycle("VSync", () -> vanillaOptions().enableVsync().get() ? "actif" : "coupé",
+                () -> vanillaOptions().enableVsync().get() ? ON : FAINT, Dials::toggleVsync,
+                "Synchronise l'affichage sur l'écran : plus de déchirement, mais un plafond de FPS.",
+                "Peut ajouter une latence d'un ou deux images.", "Effet immédiat."));
+        video.add(Dial.cycle("Plein écran", () -> vanillaOptions().fullscreen().get() ? "actif" : "coupé",
+                () -> vanillaOptions().fullscreen().get() ? ON : FAINT, Dials::toggleFullscreen,
+                "Bascule la fenêtre en plein écran (touche F11 aussi).",
+                "Gratuit.", "Effet immédiat."));
+        video.add(Dial.cycle("Échelle d'interface", Dials::guiScaleLabel, () -> AMBER, Dials::cycleGuiScale,
+                "Taille des menus et de la barre d'objets. Auto choisit la plus grande qui tienne.",
+                "Gratuit.", "Effet immédiat ; cet écran se recale."));
+        video.add(Dial.cycle("Distance des entités", Dials::entityScalingLabel, () -> AMBER,
+                Dials::cycleEntityScaling,
+                "Jusqu'où les créatures et objets sont dessinés, en proportion de la valeur de base.",
+                "Chaque entité a un coût de dessin et de mise à jour.", "Effet immédiat."));
+        video.add(Dial.cycle("Moteur graphique", Dials::backendLabel, () -> ON, null,
+                "Le moteur qui dessine réellement, et sur quelle carte.",
+                "Lecture seule : le moteur se change dans « L'image » (cadran Vulkan), au prochain"
+                        + " lancement.", "Vulkan et OpenGL partagent le même rendu du terrain."));
+        this.families.add(video);
+    }
+
+    private static void cycleInt(net.minecraft.client.OptionInstance<Integer> option, int step, int low,
+            int high) {
+        int was = option.get();
+        int now = Math.clamp((long) was + step, low, high);
+        if (now != was) {
+            option.set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String gammaLabel() {
+        return Math.round(vanillaOptions().gamma().get() * 100d) + " %";
+    }
+
+    private static void cycleGamma(int step) {
+        double was = vanillaOptions().gamma().get();
+        double now = Math.clamp(Math.round((was + 0.1d * step) * 10d) / 10d, 0d, 1d);
+        if (now != was) {
+            vanillaOptions().gamma().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String fpsLabel() {
+        int limit = vanillaOptions().framerateLimit().get();
+        return limit >= 260 ? "illimité" : limit + " i/s";
+    }
+
+    private static void cycleFps(int step) {
+        int was = vanillaOptions().framerateLimit().get();
+        int index = 0;
+        for (int i = 0; i < FPS_STEPS.length; i++) {
+            if (FPS_STEPS[i] <= was) {
+                index = i;
+            }
+        }
+        int next = Math.clamp((long) index + (step > 0 ? 1 : -1), 0, FPS_STEPS.length - 1);
+        if (FPS_STEPS[next] != was) {
+            vanillaOptions().framerateLimit().set(FPS_STEPS[next]);
+            vanillaOptions().save();
+        }
+    }
+
+    private static void toggleVsync(int ignored) {
+        vanillaOptions().enableVsync().set(!vanillaOptions().enableVsync().get());
+        vanillaOptions().save();
+    }
+
+    private static void toggleFullscreen(int ignored) {
+        vanillaOptions().fullscreen().set(!vanillaOptions().fullscreen().get());
+        Minecraft.getInstance().getWindow().updateFullscreenIfChanged();
+        vanillaOptions().save();
+    }
+
+    private static String guiScaleLabel() {
+        int scale = vanillaOptions().guiScale().get();
+        return scale == 0 ? "auto" : String.valueOf(scale);
+    }
+
+    private static void cycleGuiScale(int step) {
+        cycleInt(vanillaOptions().guiScale(), step, 0, 6);
+    }
+
+    private static String entityScalingLabel() {
+        return Math.round(vanillaOptions().entityDistanceScaling().get() * 100d) + " %";
+    }
+
+    private static void cycleEntityScaling(int step) {
+        double was = vanillaOptions().entityDistanceScaling().get();
+        double now = Math.clamp(Math.round((was + 0.25d * step) * 100d) / 100d, 0.5d, 5d);
+        if (now != was) {
+            vanillaOptions().entityDistanceScaling().set(now);
+            vanillaOptions().save();
+        }
+    }
+
+    private static String backendLabel() {
+        try {
+            var device = com.mojang.blaze3d.systems.RenderSystem.tryGetDevice();
+            if (device == null) {
+                return "inconnu";
+            }
+            var info = device.getDeviceInfo();
+            return info.backendName() + " · " + info.name();
+        } catch (Throwable inconnu) {
+            return "inconnu";
+        }
     }
 
     // --- Les shaders (Iris), migres dans le code source de Lanterne le 20-21/09/2026. Voir -----
@@ -231,10 +447,19 @@ public final class Dials extends Screen {
      * jetable jusqu'au menu principal uniquement.
      */
     private void buildShaders() {
-        if (!fr.clubcitrouille.lanterne.report.Compagnons.present("sodium")) {
-            return; // Iris est inerte sans Sodium (voir IrisMixinPlugin.sodiumPresent) : pas de cadran.
-        }
         Family shaders = new Family("Shaders", false, "Iris, migre dans Lanterne");
+        if (!fr.clubcitrouille.lanterne.report.Compagnons.present("sodium")) {
+            // Iris est inerte sans Sodium (voir IrisMixinPlugin.sodiumPresent) : on le DIT au lieu
+            // de cacher la famille, pour que le joueur comprenne pourquoi rien ne s'active.
+            shaders.add(Dial.cycle("Shaders (Iris)", () -> "inerte", () -> FAINT, null,
+                    "Iris est intégré à Lanterne, mais son rendu du terrain s'appuie encore sur"
+                            + " Sodium : sans Sodium, aucun shaderpack ne s'affiche.",
+                    "Le rendu est celui de Minecraft, sans surcoût de shaders.",
+                    "Le moteur de terrain propre à Lanterne, qui rendra Sodium inutile, est en"
+                            + " cours de construction."));
+            this.families.add(shaders);
+            return;
+        }
         shaders.add(Dial.cycle("Shaders (Iris)", Dials::irisShaderLabel, Dials::irisShaderColour,
                 Dials::toggleIrisShaders,
                 "Active ou coupe le shaderpack actuellement selectionne (touche K par defaut,"
@@ -252,7 +477,55 @@ public final class Dials extends Screen {
                         + " secondes est normal, plus long qu'un simple actif/coupe.",
                 "Active automatiquement les shaders si eteints. Vide si aucun shaderpack n'est"
                         + " installe."));
+        shaders.add(Dial.cycle("Distance des ombres", Dials::shadowDistanceLabel, () -> AMBER,
+                Dials::cycleShadowDistance,
+                "Jusqu'où le shaderpack calcule les ombres, en chunks. 0 les coupe.",
+                "C'est le premier levier de coût d'un shaderpack : le terrain est redessiné une"
+                        + " seconde fois dans la carte d'ombres.",
+                "Effet immédiat. Maj + clic : pas de 4. Enregistré dans iris.properties."));
         this.families.add(shaders);
+
+        Family regul = new Family("Régulateur", false, "petites configs, GPU intégrés");
+        regul.add(Dial.toggle("Régulateur de FPS",
+                fr.clubcitrouille.lanterne.client.regul.Regulateur::actif,
+                fr.clubcitrouille.lanterne.client.regul.RegulConfig.ACTIF,
+                "Tient une cible d'images par seconde en baissant la qualité par petits paliers"
+                        + " (ombres des entités, nuages, particules, distance des entités, distance"
+                        + " de rendu, ombres des shaders), puis la remonte quand il y a de la marge.",
+                "Ne dépasse jamais vos réglages vidéo : ce sont des plafonds. Coût : quelques"
+                        + " microsecondes par image.",
+                "Recommandé sur PC sans carte graphique dédiée. Les réglages d'origine sont"
+                        + " rétablis à la déconnexion ou à la coupure du régulateur."));
+        regul.add(Dial.number("Cible de FPS",
+                fr.clubcitrouille.lanterne.client.regul.RegulConfig.CIBLE_FPS, 20, 360, 10,
+                " FPS",
+                "Le nombre d'images par seconde que le régulateur essaie de tenir.",
+                "Plus la cible est haute, plus la qualité descend tôt.",
+                "30 pour une très petite config, 60 pour un usage normal, 120-144 pour un écran"
+                        + " rapide."));
+        this.families.add(regul);
+    }
+
+    private static String shadowDistanceLabel() {
+        try {
+            int d = net.irisshaders.iris.gui.option.IrisVideoSettings.shadowDistance;
+            return d <= 0 ? "coupées" : d + " chunks";
+        } catch (Throwable indisponible) {
+            return "indisponible";
+        }
+    }
+
+    private static void cycleShadowDistance(int step) {
+        try {
+            int was = net.irisshaders.iris.gui.option.IrisVideoSettings.shadowDistance;
+            int now = Math.clamp((long) was + step, 0, 32);
+            if (now != was) {
+                net.irisshaders.iris.gui.option.IrisVideoSettings.shadowDistance = now;
+                net.irisshaders.iris.Iris.getIrisConfig().save();
+            }
+        } catch (Throwable echec) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.debug("Cadran Ombres : {}", echec.toString());
+        }
     }
 
     private static List<String> shaderPackNames = List.of();
@@ -1287,26 +1560,42 @@ public final class Dials extends Screen {
     }
 
     private void drawFamilies(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY) {
+        int tab = tabHeight();
+        boolean roomy = tab >= 26;
         for (int i = 0; i < this.families.size(); i++) {
-            int top = y + HEADER + 4 + i * TAB;
-            boolean over = inside(mouseX, mouseY, x + 4, top, x + SIDEBAR - 5, top + TAB - 4);
+            int top = y + HEADER + 4 + i * tab;
+            boolean over = inside(mouseX, mouseY, x + 4, top, x + SIDEBAR - 5, top + tab - 4);
             if (i == this.picked) {
-                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + TAB - 4, PICKED);
-                graphics.fill(x + 4, top, x + 6, top + TAB - 4, AMBER);
+                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + tab - 4, PICKED);
+                graphics.fill(x + 4, top, x + 6, top + tab - 4, AMBER);
             } else if (over) {
-                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + TAB - 4, HOVER);
+                graphics.fill(x + 4, top, x + SIDEBAR - 5, top + tab - 4, HOVER);
             }
             Family family = this.families.get(i);
             graphics.text(this.font,
-                    this.font.plainSubstrByWidth(family.name, SIDEBAR - 24), x + 14, top + 3,
+                    this.font.plainSubstrByWidth(family.name, SIDEBAR - 24), x + 14,
+                    roomy ? top + 3 : top + (tab - 4 - 8) / 2,
                     i == this.picked ? AMBER : over ? TEXT : DIM, false);
             // « serveur » plutôt qu'un compte : ce qu'il faut savoir avant de cliquer sur un onglet
             // n'est pas combien de lignes il porte, c'est si l'on pourra y toucher.
-            graphics.text(this.font,
-                    family.server ? family.dials.size() + " · serveur"
-                            : family.dials.size() + " réglages",
-                    x + 14, top + 14, FAINT, false);
+            if (roomy) {
+                graphics.text(this.font,
+                        family.server ? family.dials.size() + " · serveur"
+                                : family.dials.size() + " réglages",
+                        x + 14, top + 14, FAINT, false);
+            }
         }
+    }
+
+    /**
+     * La hauteur d'un onglet : {@link #TAB} tant que toutes les familles tiennent dans la colonne, et
+     * plus petite sinon. Avec dix familles, la colonne débordait déjà du panneau ; avec treize, elle
+     * aurait disparu sous le pied de page. Le second libellé (« n réglages ») saute quand la place
+     * manque.
+     */
+    private int tabHeight() {
+        int count = Math.max(1, this.families.size());
+        return Math.min(TAB, (HEIGHT - HEADER - 8) / count);
     }
 
     private void drawRows(GuiGraphicsExtractor graphics, int x, int y, int right,
@@ -1439,9 +1728,9 @@ public final class Dials extends Screen {
         int mouseY = (int) this.fit.y(event.y());
 
         for (int i = 0; i < this.families.size(); i++) {
-            int top = this.panelY + HEADER + 4 + i * TAB;
+            int top = this.panelY + HEADER + 4 + i * tabHeight();
             if (inside(mouseX, mouseY, this.panelX + 4, top,
-                    this.panelX + SIDEBAR - 5, top + TAB - 4)) {
+                    this.panelX + SIDEBAR - 5, top + tabHeight() - 4)) {
                 if (i != this.picked) {
                     this.picked = i;
                     // Le défilement appartient à la famille qu'on quitte : le garder ferait ouvrir
