@@ -97,6 +97,34 @@ pour qui y a droit.
 
 ---
 
+<a id="dernieres-evolutions"></a>
+## 📌 Dernières évolutions (21/09/2026, versions 26.3.105 à 26.3.115)
+
+- **Iris est intégré à Lanterne** (LGPL-3.0, voir `IRIS-ATTRIBUTION.md` et `LICENSE-IRIS`) : un seul mod, plus
+  de jar Iris séparé (la Mèche le retire chez les joueurs). Il s'appuie toujours sur Sodium pour dessiner le
+  terrain ; sans Sodium, Iris reste inerte (rendu vanilla, sans shaders). Le retrait de Sodium est un
+  chantier en cours, voir `RECHERCHE-VULKAN-SANS-SODIUM.md` et `RENDU-LANTERNE-DESIGN.md`.
+- **Rendu des shaders corrigé** : le jar 26.3.106 pouvait produire un rendu explosé avec shaders (une garde
+  qui décidait trop tôt que Sodium était absent désactivait 4 mixins d'Iris). Corrigé, vérifié par capture.
+- **Distant Horizons sous shaders** : DH ne dessine plus ses LOD pendant qu'un shaderpack est actif (repli
+  garanti) et Iris le considère alors comme absent, ce qui supprime l'artefact d'ombre en dôme dans le ciel.
+- **Allocations** : le fil de rendu de JourneyMap générait environ la moitié des octets alloués (il
+  retraduisait ses libellés à chaque image) ; un cache du découpage des textes traduisibles sans arguments
+  (`TranslatableContentsMixin`, désactivable par `-Dlanterne.traduction=off`) et une mémoïsation ciblée
+  (`JourneyMapTraductionMixin`) suppriment ce coût.
+- **Mèche v2** : catalogue de mods clients, `RETIRER.txt`, paquets facultatifs (voir plus bas).
+- **Pré-génération en plan** : `/lanterne pregen-plan <overworld> <nether> <end>` (en blocs), avec reprise
+  automatique après redémarrage, puis rendu complet de BlueMap à la fin.
+- **Méthode de mesure** : `OBJECTIFS-FPS.md` fixe les règles (jeu non bridé — Minecraft 26.3 se limite à
+  ~30 FPS après une minute sans entrée —, GPU cité, scène restaurée, un seul client à la fois). Les chiffres
+  antérieurs qui ne les respectaient pas sont retirés.
+
+> **Une réserve honnête** : les gains de performance marqués « non mesuré » dans `OBJECTIFS-FPS.md`,
+> `PERF-SHADERS-AUDIT.md` et `PERF-MODS-INTEGRES.md` ne sont pas des résultats. Sur GPU intégré avec shaders,
+> le goulot est le GPU (le processeur attend), pas le code du mod.
+
+---
+
 <a id="les-gains-charge-par-charge"></a>
 ## ⚡ Les gains, charge par charge
 
@@ -1902,17 +1930,32 @@ aucune raison de rouvrir une connexion ailleurs. Ce que le client reçoit vient 
 serveur choisi, jamais d'un tiers — une garantie qu'une URL ne peut pas donner par construction. Le
 mécanisme de tranches est celui, déjà éprouvé, des images des Tableaux (`content.painting.PaintingShard`).
 
-**Double refus par défaut, des deux côtés :**
+**Deux réglages, actifs par défaut depuis la 26.3.105 :**
 
 | Réglage | Fichier | Défaut |
 |---|---|:---:|
-| `proposer_maj` | `config/lanterne-server.toml` | éteint |
-| `auto_maj` | `config/lanterne-maj-client.toml` (client) | éteint |
+| `synchronisation_clients` | `config/lanterne-common.toml` (serveur) | actif |
+| `synchro_auto` | `config/lanterne-maj-client.toml` (client) | actif |
 
-Refusé côté client, rien ne change à ce que le mécanisme faisait avant d'exister : le serveur annonce son
-empreinte, le client la compare, et s'il diffère il se contente de le **dire** dans la discussion — un
-message, pas un octet téléchargé. C'est une preuve de concept : seul Lanterne lui-même est aujourd'hui
-un mod « géré » par ce mécanisme.
+Le joueur reste maître : `synchro_auto = false` et le client se contente de **dire** dans la discussion
+qu'une version plus récente existe — un message, pas un octet téléchargé.
+
+### Depuis la 26.3.105 : le catalogue des mods clients
+
+La Mèche ne gère plus seulement le jar de Lanterne. Le serveur publie un **catalogue** :
+
+- `config/lanterne/mods-clients/*.jar` : les mods que chaque client doit avoir dans son `mods/`. Un fichier
+  absent ou dont l'empreinte diffère est téléchargé, **vérifié (SHA-256)**, puis écrit ;
+- `config/lanterne/mods-clients/RETIRER.txt` : des motifs (`*` et `?`) de jars à **retirer** chez les
+  clients, un par ligne (`iris-neoforge-*` : Iris est intégré à Lanterne, le jar séparé ferait doublon) ;
+- un **registre local** des fichiers posés par la Mèche : ce qu'elle a installé et que le serveur ne
+  publie plus est retiré ; les mods personnels du joueur ne sont jamais touchés ;
+- un jar déjà chargé ne peut pas être effacé par Windows tant que le jeu tourne : un petit script
+  `.cmd` temporaire attend la fermeture, supprime le fichier, puis se supprime lui-même.
+
+Les paquets de la Mèche sont **facultatifs** côté réseau : un client plus ancien peut toujours se
+connecter — c'est indispensable pour qu'il puisse se mettre à jour. Testé de bout en bout : mise à jour
+de Lanterne lui-même, ajout d'un mod, retrait d'un mod, nettoyage différé.
 
 ---
 
