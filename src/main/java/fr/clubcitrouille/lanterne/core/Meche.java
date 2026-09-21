@@ -389,12 +389,11 @@ public final class Meche {
         if (published == null) {
             return;
         }
-        byte[] data = BYTES_CACHE.get("file:" + name);
+        // Pas de cache mémoire : le catalogue peut porter des dizaines de Mo de jars clients, que
+        // le serveur n'a aucune raison de garder vivants entre deux (rares) demandes.
+        byte[] data;
         try {
-            if (data == null) {
-                data = Files.readAllBytes(published.path());
-                BYTES_CACHE.put("file:" + name, data);
-            }
+            data = Files.readAllBytes(published.path());
         } catch (Exception unreadable) {
             Lanterne.LOG.warn("[MÈCHE] lecture de « {} » impossible : {}", name, unreadable.toString());
             return;

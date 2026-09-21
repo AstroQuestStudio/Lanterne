@@ -54,7 +54,7 @@ public final class MecheConsent {
                 "",
                 "Le fichier recu ne vient JAMAIS d'ailleurs que du serveur auquel ce client est deja",
                 "connecte : aucune adresse distante n'est jamais contactee par ce mecanisme.")
-                .define("auto_maj", true);
+                .define("synchro_auto", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

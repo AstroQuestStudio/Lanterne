@@ -143,7 +143,7 @@ public final class MecheClient {
         if (!MecheConsent.autoUpdate()) {
             if (TOLD.add(modId)) {
                 tell(Component.literal("Lanterne " + version + " est disponible sur ce serveur "
-                        + "(tu as " + local.version() + "). Active « auto_maj » dans "
+                        + "(tu as " + local.version() + "). Active « synchro_auto » dans "
                         + "lanterne-maj-client.toml pour l'installer automatiquement.")
                         .withStyle(ChatFormatting.YELLOW));
             }
@@ -231,6 +231,10 @@ public final class MecheClient {
     private static FileDownload fileActive;
     private static int filesInstalled;
     private static int filesRemoved;
+    private static volatile int catalogueFailures;
+    /** Retraits différés à la fin de la synchronisation, et noms publiés — sous le verrou de FILE_QUEUE. */
+    private static java.util.List<Path> pendingRemovals;
+    private static Set<String> publishedNames;
 
     private static final class FileDownload {
         private final fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry entry;
@@ -337,40 +341,36 @@ public final class MecheClient {
                 }
             }
 
-            if (toGet.isEmpty() && toRemove.isEmpty()) {
-                Lanterne.LOG.info("[MÈCHE] catalogue du serveur : {} fichier(s), rien à changer.",
-                        published.size());
-                return;
-            }
+            // Pas de retour anticipé même sans rien à faire : applyRemovals cherche aussi les doublons
+            // de modId laissés par une synchronisation interrompue.
             Lanterne.LOG.info("[MÈCHE] catalogue : à télécharger {} ; à retirer {}.",
                     toGet.stream().map(fr.clubcitrouille.lanterne.core.network.MecheCatalogue.Entry::name)
                             .toList(),
                     toRemove.stream().map(p -> p.getFileName().toString()).toList());
             if (!consent) {
+                if (toGet.isEmpty() && toRemove.isEmpty()) {
+                    return;
+                }
                 Minecraft.getInstance().execute(() -> tell(Component.literal("Ce serveur publie "
                         + toGet.size() + " mod(s) à installer et " + toRemove.size() + " à retirer. "
-                        + "Active « auto_maj » dans lanterne-maj-client.toml pour la synchronisation "
+                        + "Active « synchro_auto » dans lanterne-maj-client.toml pour la synchronisation "
                         + "automatique.").withStyle(ChatFormatting.YELLOW)));
                 return;
             }
 
+            // Les retraits ne partent QU'APRÈS les téléchargements réussis : retirer d'abord un
+            // ancien jar puis échouer à récupérer le neuf laisserait le joueur sans le mod, et
+            // sans ses dépendants (voir applyRemovals).
             filesInstalled = 0;
             filesRemoved = 0;
-            for (Path file : toRemove) {
-                if (tryRemove(file) || scheduleDeferredRemoval(file)) {
-                    filesRemoved++;
-                }
-                registry.remove(file.getFileName().toString());
-            }
-            writeRegistry(registry);
+            catalogueFailures = 0;
             synchronized (FILE_QUEUE) {
                 FILE_QUEUE.clear();
                 FILE_QUEUE.addAll(toGet);
+                pendingRemovals = new java.util.ArrayList<>(toRemove);
+                publishedNames = published;
             }
-            Minecraft.getInstance().execute(MecheClient::requestNextFile);
-            if (toGet.isEmpty()) {
-                finishCatalogue();
-            }
+            nextOrFinish();
         } catch (Exception failed) {
             Lanterne.LOG.warn("[MÈCHE] synchronisation du catalogue échouée : {}", failed.toString());
         }
@@ -383,6 +383,13 @@ public final class MecheClient {
             next = FILE_QUEUE.poll();
         }
         if (next == null) {
+            return;
+        }
+        if (Minecraft.getInstance().getConnection() == null) {
+            // Déconnecté entre-temps (une planification tardive peut repeupler la file après reset()).
+            synchronized (FILE_QUEUE) {
+                FILE_QUEUE.clear();
+            }
             return;
         }
         fileActive = new FileDownload(next);
@@ -402,6 +409,8 @@ public final class MecheClient {
             Lanterne.LOG.warn("[MÈCHE] tranche incohérente pour « {} », synchronisation abandonnée.",
                     download.entry.name());
             fileActive = null;
+            catalogueFailures++;
+            nextOrFinish(); // un fichier raté ne doit pas figer toute la file
             return;
         }
         System.arraycopy(chunk.data(), 0, download.buffer, chunk.offset(), chunk.data().length);
@@ -420,11 +429,14 @@ public final class MecheClient {
             Minecraft.getInstance().execute(() -> tell(Component.literal("« " + entry.name()
                     + " » corrompu en transit. Reconnecte-toi pour réessayer.")
                     .withStyle(ChatFormatting.RED)));
+            catalogueFailures++;
+            nextOrFinish();
             return;
         }
+        Path part = null;
         try {
             Path mods = FMLPaths.MODSDIR.get();
-            Path part = mods.resolve(entry.name() + ".part");
+            part = mods.resolve(entry.name() + ".part");
             Files.write(part, download.buffer);
             Files.move(part, mods.resolve(entry.name()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             Set<String> registry = readRegistry();
@@ -435,11 +447,23 @@ public final class MecheClient {
         } catch (Exception writeFailed) {
             Lanterne.LOG.warn("[MÈCHE] écriture de « {} » impossible : {}", entry.name(),
                     writeFailed.toString());
+            if (part != null) {
+                try {
+                    Files.deleteIfExists(part);
+                } catch (Exception ignored) {
+                    // Un .part n'est jamais chargé par NeoForge : au pire il traîne jusqu'au prochain essai.
+                }
+            }
             Minecraft.getInstance().execute(() -> tell(Component.literal("Écriture de « "
                     + entry.name() + " » impossible : " + writeFailed.getMessage())
                     .withStyle(ChatFormatting.RED)));
-            return;
+            catalogueFailures++;
         }
+        nextOrFinish();
+    }
+
+    /** Demande le fichier suivant s'il en reste, sinon conclut. Utilisable depuis n'importe quel fil. */
+    private static void nextOrFinish() {
         boolean more;
         synchronized (FILE_QUEUE) {
             more = !FILE_QUEUE.isEmpty();
@@ -447,17 +471,114 @@ public final class MecheClient {
         if (more) {
             Minecraft.getInstance().execute(MecheClient::requestNextFile);
         } else {
-            finishCatalogue();
+            WORKSHOP.submit(MecheClient::applyRemovals);
         }
     }
 
-    private static void finishCatalogue() {
+    /**
+     * Fin de synchronisation, sur le fil de fond : retire ce que le serveur a retiré, ainsi que tout
+     * ancien jar qui déclare le même {@code modId} qu'un fichier publié sous un AUTRE nom (une mise
+     * à jour de version : sans cela NeoForge refuserait de démarrer, deux jars pour un même mod).
+     * Rien n'est retiré si un téléchargement a échoué : on ne retire jamais l'ancien avant d'avoir le
+     * neuf en main.
+     */
+    private static void applyRemovals() {
+        java.util.List<Path> removals;
+        Set<String> published;
+        synchronized (FILE_QUEUE) {
+            removals = pendingRemovals == null ? new java.util.ArrayList<>()
+                    : new java.util.ArrayList<>(pendingRemovals);
+            published = publishedNames == null ? Set.of() : publishedNames;
+            pendingRemovals = null;
+        }
+        int failures = catalogueFailures;
+        if (failures == 0) {
+            try {
+                Path mods = FMLPaths.MODSDIR.get();
+                Set<String> publishedIds = new HashSet<>();
+                for (String name : published) {
+                    publishedIds.addAll(modIdsOf(mods.resolve(name)));
+                }
+                publishedIds.remove(Lanterne.ID);
+                Meche.JarInfo self = Meche.describeOwnJar(Lanterne.ID);
+                String selfName = self == null ? "" : self.path().getFileName().toString();
+                if (!publishedIds.isEmpty()) {
+                    try (var stream = Files.list(mods)) {
+                        for (Path file : (Iterable<Path>) stream::iterator) {
+                            String name = file.getFileName().toString();
+                            if (!name.endsWith(".jar") || published.contains(name)
+                                    || name.equals(selfName) || removals.contains(file)
+                                    || name.toLowerCase(java.util.Locale.ROOT).startsWith("lanterne")) {
+                                continue;
+                            }
+                            Set<String> ids = new HashSet<>(modIdsOf(file));
+                            ids.retainAll(publishedIds);
+                            if (!ids.isEmpty()) {
+                                Lanterne.LOG.info("[MÈCHE] « {} » double le(s) mod(s) {} publié(s) par le "
+                                        + "serveur : retrait de l'ancien fichier.", name, ids);
+                                removals.add(file);
+                            }
+                        }
+                    }
+                }
+                Set<String> registry = readRegistry();
+                for (Path file : removals) {
+                    if (tryRemove(file) || scheduleDeferredRemoval(file)) {
+                        filesRemoved++;
+                    }
+                    registry.remove(file.getFileName().toString());
+                }
+                writeRegistry(registry);
+            } catch (Exception failed) {
+                Lanterne.LOG.warn("[MÈCHE] retraits échoués : {}", failed.toString());
+            }
+        } else if (!removals.isEmpty()) {
+            Lanterne.LOG.warn("[MÈCHE] {} téléchargement(s) raté(s) : retraits reportés à la prochaine "
+                    + "connexion.", failures);
+        }
         int installed = filesInstalled;
         int removed = filesRemoved;
+        if (installed + removed + failures == 0) {
+            Lanterne.LOG.info("[MÈCHE] catalogue du serveur : rien à changer.");
+            return;
+        }
         Minecraft.getInstance().execute(() -> tell(Component.literal("Synchronisation avec le serveur : "
-                + installed + " mod(s) installé(s), " + removed + " retiré(s). Ferme le jeu et "
-                + "relance-le pour appliquer (les fichiers verrouillés se suppriment tout seuls à la "
-                + "fermeture).").withStyle(ChatFormatting.GREEN)));
+                + installed + " mod(s) installé(s), " + removed + " retiré(s)"
+                + (failures > 0 ? ", " + failures + " échec(s) (réessaie en te reconnectant)" : "")
+                + ". Ferme le jeu et relance-le pour appliquer (les fichiers verrouillés se "
+                + "suppriment tout seuls à la fermeture).")
+                .withStyle(failures > 0 ? ChatFormatting.GOLD : ChatFormatting.GREEN)));
+    }
+
+    /** Les {@code modId} déclarés dans les sections {@code [[mods]]} d'un jar ; vide si illisible. */
+    private static Set<String> modIdsOf(Path jar) {
+        Set<String> ids = new HashSet<>();
+        try (var zip = new java.util.zip.ZipFile(jar.toFile())) {
+            var entry = zip.getEntry("META-INF/neoforge.mods.toml");
+            if (entry == null) {
+                return ids;
+            }
+            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    zip.getInputStream(entry), java.nio.charset.StandardCharsets.UTF_8))) {
+                boolean inMods = false;
+                Pattern modId = Pattern.compile("^\\s*modId\\s*=\\s*[\"']([^\"']+)[\"']");
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.strip();
+                    if (trimmed.startsWith("[")) {
+                        inMods = trimmed.equals("[[mods]]");
+                    } else if (inMods) {
+                        var matcher = modId.matcher(line);
+                        if (matcher.find()) {
+                            ids.add(matcher.group(1));
+                        }
+                    }
+                }
+            }
+        } catch (Exception unreadable) {
+            // Jar absent ou illisible : aucun identifiant, donc aucun retrait sur cette base.
+        }
+        return ids;
     }
 
     /** Une tranche du jar demandé vient d'arriver. */

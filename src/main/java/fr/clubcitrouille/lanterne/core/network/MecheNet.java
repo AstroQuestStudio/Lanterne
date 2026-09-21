@@ -116,6 +116,20 @@ public final class MecheNet {
         }
     }
 
+    /**
+     * Prépare le catalogue dans un fil à part : le premier hachage des jars publiés (des dizaines de
+     * Mo) ne doit pas tomber sur le tick de la première connexion.
+     */
+    @SubscribeEvent
+    public static void onServerStarted(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
+        if (!Settings.meche()) {
+            return;
+        }
+        Thread warmup = new Thread(Meche::catalogue, "Lanterne-mèche-catalogue");
+        warmup.setDaemon(true);
+        warmup.start();
+    }
+
     @SubscribeEvent
     public static void onLeave(PlayerEvent.PlayerLoggedOutEvent event) {
         Meche.forget(event.getEntity().getUUID());
