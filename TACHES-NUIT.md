@@ -1769,3 +1769,52 @@ fichier pour `clear on/off` et `marée on/off`. Compilé sain (`BUILD SUCCESSFUL
   `Bench.running()`), pas creusé plus loin faute de preuve d'un vrai risque.
 
 Commit code : `152b00e`. Commit doc : à la suite de ce même message dans ce fichier.
+
+## Suite de l'audit permissions (~06h20) — élargi à tout le mod, 2 incohérences de plus trouvées
+
+Reprise de l'audit ci-dessus, élargi au-delà de `LanterneCommand.java` : tous les fichiers avec
+`RegisterCommandsEvent`/`Commands.literal(` du mod (11 fichiers : `Bazaar`, `Gates`, `Easel`,
+`Groove`, `Screens`, `Usher`, `Nuancier`, `Loupe`, `RadiographieServeurCommand`, en plus de
+`LanterneCommand`), croisés avec ce que `Guide.java` promet (blocs `if (admin)`).
+
+**2 vraies incohérences trouvées et corrigées** (même famille de bug que `/lanterne on/off` ci-
+dessus, une fois dans chaque sens) :
+
+1. **`/lanterne bench` — le fork précédent l'avait notée "semble intentionnel, pas creusé" : c'était
+   une vraie lacune.** `Guide.java` la liste bien dans son bloc `if (admin)` ligne 206-208 (section
+   "Le laboratoire"), aux côtés de `charge`/`demo`/`test`/`palette`/`memoire`/`nbt` — toutes gardées
+   par `LEVEL_GAMEMASTERS` sauf `bench`, qui n'avait AUCUNE vérification. Elle déclenche
+   `Bench.start(source)`, le même mécanisme que sa jumelle `/lanterne test` (qui elle est bien
+   gardée). N'importe quel joueur pouvait donc lancer un banc de mesure serveur. Corrigé : ajout de
+   `.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))`, alignée sur `test`/`charge`
+   juste en dessous dans le même fichier.
+2. **`/projection domaine ajouter`/`retirer` (`content/screen/Screens.java:450`) exigeait
+   `Commands.LEVEL_ADMINS`** — seul usage de ce niveau dans TOUT le mod (grep exhaustif confirmé,
+   0 autre occurrence). Toutes les autres commandes admin du mod, et le test `admin` de
+   `Guide.java` lui-même (ligne 97, `Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)`),
+   utilisent `LEVEL_GAMEMASTERS`. Conséquence concrète : un joueur avec le rang gamemaster (op
+   niveau 2) voyait `/projection domaine ajouter` dans l'aide (elle teste `admin` avec
+   `LEVEL_GAMEMASTERS`) mais se la voyait refuser à l'exécution (elle exige `LEVEL_ADMINS`, op
+   niveau 3) — exactement le défaut que le commentaire de `Guide.java` ligne 38 met en garde contre
+   ("une aide qui promet ce qu'elle refuse ensuite est pire que pas d'aide du tout"). Sens inverse
+   du bug `bench` (ici pas de risque de sécurité, juste une fausse promesse), mais même famille.
+   Corrigé : alignée sur `LEVEL_GAMEMASTERS` comme le reste du mod.
+
+**Reste vérifié sans problème** : `Bazaar.java` (banque/boutique, économie du serveur — `payer`,
+`classement`, `cours` publics et cohérents avec l'absence de mention admin dans `Guide.java` ;
+`donner`/`masse`/`poser`/`recharger`/`generer` tous gardés `LEVEL_GAMEMASTERS`, cohérent avec leur
+présence dans le bloc admin de `Guide.java`). `Gates.java` (portails) : aucune commande n'a de
+`.requires()`, mais c'est correct — `act()` (ligne 718) vérifie l'appartenance réelle du portail
+via `atlas.gatesOwnedBy(player.getUUID())` côté serveur (pas juste un filtre de suggestion
+d'autocomplétion), donc un joueur ne peut agir que sur ses propres portails ; cohérent avec
+l'absence totale de ces commandes dans le bloc admin de `Guide.java`. `Easel.java`/`Groove.java`
+(tableaux/disques) : `liste`/`prendre`/`etat` publics (cohérent, hors bloc admin),
+`liberer`/`recharger`/`heritage` gardés (cohérent, dans le bloc admin). `Usher.java`/
+`Nuancier.java`/`Loupe.java` : commandes purement client-side/personnelles (guide, nuancier,
+profilage), aucune permission nécessaire, aucune mention dans `Guide.java` — cohérent.
+`RadiographieServeurCommand.java` : `profil-serveur` gardé `LEVEL_GAMEMASTERS` sur le nœud parent,
+hérité correctement par `demarrer`/`arreter` (vérifié : en Brigadier, `.requires()` sur un nœud
+parent s'applique à la résolution de TOUS ses enfants, pas juste au nœud lui-même).
+
+Compilé sain (`BUILD SUCCESSFUL`) après les 2 correctifs. Commits : `08eab7a` (code, `Screens.java`
++ `LanterneCommand.java`), ce paragraphe (doc).
