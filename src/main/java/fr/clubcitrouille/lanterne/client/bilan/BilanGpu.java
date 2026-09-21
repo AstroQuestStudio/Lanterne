@@ -112,7 +112,7 @@ final class BilanGpu {
     }
 
     /** Lit les requêtes prêtes et renvoie la dernière durée GPU en ns, ou -1 s'il n'y en a pas. */
-    static long poll(BilanFrames sink) {
+    static long poll(BilanFrames sink, BilanFrames second) {
         if (!timing) {
             return -1L;
         }
@@ -126,6 +126,9 @@ final class BilanGpu {
                 pending[i] = false;
                 if (nanos > 0) {
                     sink.record(nanos);
+                    if (second != null) {
+                        second.record(nanos);
+                    }
                     last = nanos;
                 }
             }

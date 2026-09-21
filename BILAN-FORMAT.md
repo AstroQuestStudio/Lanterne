@@ -95,3 +95,30 @@ défaut `afk`) : les FPS mesurés alors ne disent rien du rendu.
 - Quand `valid=false`, une ligne `WARN` « AVERTISSEMENT : FPS mesures NON REPRESENTATIFS : jeu bride » est
   écrite dans le journal, et `tools/bilan.ps1` la répète en tête avec les causes. Refaire la mesure fenêtre
   au premier plan, sans vsync ni plafond, sans rester inactif plus d'une minute.
+
+## Mode banc : la même scène à chaque mesure (`-Dlanterne.bench=true`)
+Sans clavier : à l'entrée dans un monde solo (serveur intégré), le mode banc fige la scène puis mesure.
+1. Règles `advance_time`, `advance_weather`, `spawn_mobs`, `spawn_monsters`, `spawn_patrols` = false ;
+   horloge de l'Overworld fixée et mise en pause à l'heure choisie ; météo claire.
+2. Joueur téléporté à la position/orientation choisie, invulnérable, sans gravité, immobile.
+3. Limite de FPS d'inactivité neutralisée (`inactivityFpsLimit` = `minimized` en mémoire + « entrée reçue »
+   à chaque tick) : plus de bridage à ~30 FPS après une minute sans touche.
+4. Chauffe (`warmup` s) puis mesure (`measure` s), puis résultat.
+
+| Propriété | Défaut | Sens |
+|---|---|---|
+| `-Dlanterne.bench=true` | — | active le mode banc |
+| `-Dlanterne.bench.time=<ticks>` | 12500 | heure du jour (12500 = coucher de soleil : ombres longues, le cas le plus coûteux) |
+| `-Dlanterne.bench.pos=x,y,z` | position d'apparition du monde | position du joueur (même monde exigé pour comparer) |
+| `-Dlanterne.bench.rot=yaw,pitch` | `270,-3` | plein ouest vers le soleil couchant, horizon légèrement haut : terrain lointain et ombres longues |
+| `-Dlanterne.bench.warmup=<s>` | 30 | chauffe (chunks, maillage, shaders compilés) |
+| `-Dlanterne.bench.measure=<s>` | 60 | durée de la mesure |
+| `-Dlanterne.bench.exit=true` | non | ferme proprement le jeu après le résultat |
+
+Résultat : une ligne `[BILAN] type=bench result="BENCH RESULT" seconds frames fps low1 low01 ms_mean ms_p99
+ms_max cpu_ms_mean gpu_ms_mean gpu gpu_kind scene_time scene_pos scene_rot unfocused_frames valid
+invalid_causes sodium iris dh shaders shaderpack …`, une ligne de journal `BENCH RESULT : …`, et le fichier
+`logs/lanterne-bench-result.txt` (clé=valeur, une ligne par clé). `valid=false` si la fenêtre a perdu le focus,
+si vsync/plafond/attente du limiteur faussent la mesure, ou si aucune image n'a été comptée. Commande type
+(cachée, un seul fichier à lire) : JVM avec `-Dlanterne.bench=true -Dlanterne.bench.exit=true`, monde solo
+`--quickPlaySingleplayer <nom>`, puis lire `logs/lanterne-bench-result.txt`.

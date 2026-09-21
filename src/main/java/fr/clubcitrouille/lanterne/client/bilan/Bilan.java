@@ -129,13 +129,15 @@ public final class Bilan {
             }
             armHook();
             if (mc.level != null) {
-                BilanGpu.poll(gpuInterval);
+                BilanGpu.poll(gpuInterval, BilanBench.gpuSink());
                 if (lastPre != 0L) {
                     long dt = now - lastPre;
                     if (!mc.isWindowActive()) {
                         unfocusedFrames++; // fenêtre non focalisée : le jeu ralentit volontairement
+                        BilanBench.unfocusedFrame();
                     } else {
                         interval.record(dt);
+                        BilanBench.frame(dt);
                         session.record(dt);
                         if (dt > SPIKE_NANOS) {
                             spike(mc, dt, now);
@@ -168,6 +170,7 @@ public final class Bilan {
             if (mc.level != null) {
                 BilanGpu.end();
                 cpuInterval.record(now - preStart);
+                BilanBench.cpuFrame(now - preStart);
                 if (PERIOD_NANOS > 0L && now - intervalStart >= PERIOD_NANOS) {
                     if (interval.count() > 0) {
                         perf(mc, now);
@@ -282,6 +285,11 @@ public final class Bilan {
     }
 
     /** Sodium / Iris / DH : présence, version, mode, shaderpack. */
+    /** Même contenu que {@code modsState}, pour le résultat du banc. */
+    static void modsStateFor(BilanLine line) {
+        modsState(line);
+    }
+
     private static void modsState(BilanLine line) {
         ModList mods = ModList.get();
         boolean sodium = mods.isLoaded("sodium");
