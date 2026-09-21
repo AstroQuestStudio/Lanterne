@@ -1,3 +1,96 @@
+# RÉSUMÉ POUR LE RÉVEIL DU PATRON (généré ~04h10, dernière mise à jour de cette section)
+
+Ce résumé synthétise toute la nuit du 20 au 21/09/2026 sur Lanterne (branche `26.3`). Rapport de
+travail honnête, pas promotionnel — chaque point dit s'il est confirmé, partiel, ou juste une piste.
+Le détail complet, section par section, suit plus bas dans ce même fichier (rien supprimé).
+
+## 1. Déployé et confirmé stable (VPS + test1)
+
+- **Migration complète du code source d'Iris dans Lanterne** (fusion LGPL-3.0, voir
+  `IRIS-ATTRIBUTION.md`) — 7 crashs de migration trouvés et corrigés un par un, tous par test
+  client réel : `@Mod("iris")` retiré (`e8138a6`), `BlueMapAPI` isolée (`0586528`), fichier
+  `META-INF/services/...` copié (`6e72735`), `getVersion()` corrigé (`c73466d`),
+  `assets/iris/` copié (`587e70e`), dépendances `jarJar` (`115e33b`), `centerDepth`/`colorSpace`
+  copiés (`b65e53d`).
+- **Shaders confirmés fonctionnels en jeu par le patron lui-même** (capture F3 : `[Iris] Version
+  26.3.55`, shaderpack Complementary Reimagined actif, 80-124 FPS).
+- **VPS stable en `26.3.55`**, `Done` confirmé à chaque redémarrage.
+- **Fix Cadence — BlueMap redémarre seul si 0 joueur au boot** (TÂCHE A, commit `9da44c7`),
+  testé et confirmé par log sur le serveur jetable. **Pas encore déployé sur le VPS** — décision
+  volontairement laissée au réveil (touche le comportement au redémarrage, préférence pour un œil
+  humain avant prod même si le test jetable est concluant).
+- **Fix visibilité "iris" comme modId virtuel** (TÂCHE B, commit `7a13b94`) : `neoforge.mods.toml`
+  déclare un second `[[mods]] modId="iris"` passif (sans classe `@Mod`). Confirmé sain par log FML
+  réel (`{lanterne,iris}` dans le jar `26.3.59`). **Déployé sur `test 1`, PAS sur le VPS.**
+- **Artefact visuel du ciel (bordure nette, DH+Iris) : cause confirmée à 100% par preuve bytecode
+  complète** (chaîne DH `ModList.isLoaded("iris")` → `IrisAccessor` jamais bindé avant le fix ci-
+  dessus) — corrigé structurellement par le même fix modId. **Confirmation visuelle humaine encore
+  en attente.**
+- **Onglet "Iris" restauré dans le menu Sodium** : corrigé pour de vrai (pas juste documenté),
+  `Graft.java`/`IrisConfig.java` enregistrent un second `ModOptionsBuilder` indépendant via
+  `registerModOptions("iris")`. Testé en client jetable réel, 0 FATAL, mécanisme confirmé par
+  bytecode + logs. **Non déployé nulle part** (laissé au réveil comme les autres correctifs UI).
+- **Sélection du shaderpack actif ajoutée dans `Dials.java`** (cadran "Shaderpack", en plus du
+  toggle on/off existant), compilé sain, testé partiellement (démarrage propre, 0 FATAL) mais le
+  clic lui-même n'a pas pu être testé visuellement.
+- **`lanterne-common.toml` fusionné** (boutique + carte3D + atelier + server en un seul fichier) —
+  anciennes valeurs réelles (prix boutique, réglages serveur) backupées, PAS reportées
+  automatiquement dans le nouveau fichier (voir section 2).
+- **Monde officiel importé sur le VPS** (13 joueurs, données réelles), backup pré-import conservé.
+- **1 crash de retrait de Sodium corrigé** (`SodiumVertexSerializers`, isolation de classe,
+  commit `a9647c2`) — un premier vrai test client Sodium-absent a été mené (pas juste de la
+  lecture de code) et progresse plus loin qu'avant.
+
+## 2. Nécessite une action humaine demain
+
+- **Re-rentrer les vraies valeurs boutique/serveur** dans `lanterne-common.toml` — les anciennes
+  sont dans `lanterne-anciens-toml-backup/` sur le VPS, le nouveau fichier fusionné a démarré avec
+  les valeurs par défaut du code, pas les vraies valeurs de prod.
+- **Confirmation visuelle en jeu** : onglet Iris dans Sodium, disparition de l'artefact du ciel,
+  fonctionnement réel du cadran shaderpack dans Dials — tout ça est prouvé "mécaniquement sain"
+  (bytecode/logs) mais jamais vu par un œil humain.
+- **Décision à prendre** : déployer TÂCHE A (Cadence boot) et TÂCHE B (modId iris) sur le VPS de
+  prod, une fois les tests `test 1` confirmés visuellement.
+- **Idée proposée, pas implémentée** : un cadran "Preset perf" optionnel dans `Dials.java` (pas un
+  défaut imposé) — jugé être une vraie décision produit, pas une correction, donc pas fait seul
+  cette nuit.
+
+## 3. Progrès Vulkan (recherche pure, RIEN branché au rendu réel)
+
+Chaîne complète prouvée de bout en bout sur des shaders synthétiques modernisés :
+jcpp → glsl-transformer (`patchComposite`/`patchVanilla`) → `UniformReblocker` (prototype maison,
+re-bloque les uniforms en UBO pour respecter SPIR-V/Vulkan) → shaderc → SPIR-V valide, vertex ET
+fragment (5576+3428 octets). Sur un VRAI fichier de shaderpack (`gbuffers_terrain`, Complementary
+Reimagined), deux nouveaux blocages précis et documentés restent à résoudre : couverture
+incomplète du parseur d'uniforms sur les gros fichiers, et un `StackOverflow`/`OutOfMemoryError`
+sur la récursion pour les fichiers de taille réelle (~100K caractères). Tout ceci vit dans
+`lab/ShadercProbe*.java`/`UniformReblocker.java`, jamais connecté au pipeline de rendu qui tourne
+réellement en jeu — c'est un prototype de faisabilité, pas une fonctionnalité livrée.
+
+## 4. Bugs documentés mais non corrigés cette nuit (avec raison)
+
+- **Halo/chute FPS à l'exploration** : cause réelle trouvée avec preuve directe (upload GPU
+  synchrone de `Sodium BufferArena` quand plusieurs sections de chunk finissent de compiler en
+  même temps). Un correctif de plafonnement a été évalué puis ABANDONNÉ après preuve bytecode
+  qu'il aurait causé un bug pire (chunks invisibles en permanence) — le vrai correctif est plus
+  large que prévu (patcher `RenderSectionManager.processChunkBuildResults`), nécessite un test
+  humain en vol rapide, hors de portée d'un fork cette nuit.
+- **Retrait complet de Sodium** : 1 crash corrigé, un 2e trouvé et bien scopé
+  (`WorldRenderingSettings.chunkVertexFormat` typé directement par une interface Sodium, utilisé
+  sur le chemin chaud du rendu shader) — correctif possible (5 fichiers) mais jugé trop risqué à
+  improviser en fin de nuit sans pouvoir retester en jeu après coup. Piste précise documentée dans
+  `RECHERCHE-VULKAN-SANS-SODIUM.md`.
+
+## 5. Aucun risque pris
+
+Aucun déploiement VPS n'a eu lieu cette nuit en dehors de ce qui est explicitement listé en
+section 1 (versions confirmées stables par log/test). Le dépôt est resté compilable à chaque
+étape (`./gradlew compileJava` vérifié avant chaque commit). Aucun process Java du patron n'a été
+touché — chaque fermeture de process de test a été faite individuellement par PID après
+vérification qu'il s'agissait bien d'un dossier de test jetable, jamais un `taskkill` global.
+
+---
+
 # Tâches de la nuit 20-21/09/2026 — continuité de contexte
 
 Ce fichier existe pour qu'une session qui reprend après une perte de contexte sache exactement
@@ -1155,3 +1248,48 @@ copie si bloquée) à un moment avec moins de charge machine concurrente, puis
 (succès ou nouvel échec précis) apparaît, documenter la suite ici.
 
 Commits `8b256d4`, `3baf822` sur `26.3`, jamais poussés. Rien déployé VPS/test1.
+
+## VULKAN — reconfirmation du test réel gbuffers_terrain, résultat précis (fork, 21/09 ~04h10)
+
+Suite directe de la section précédente ("test sur un VRAI fichier de shaderpack", résultat
+"INCONCLUANT" faute de pouvoir relancer sans contention machine).
+
+**Nettoyage préalable** (prudent, un par un, jamais de kill global) : `tasklist`/`Get-CimInstance
+Win32_Process` ont confirmé 8 process `java.exe` actifs — 5 étaient gradle (wrapper compileJava,
+daemon, 3 workers, tous légitimes, non touchés) et 3 étaient des clients de test jetables abandonnés
+identifiables sans ambiguïté par leur `-DlibraryDirectory=C:/lanterne-client-vulkan-test-3` (x2 PID)
+et `-test-4` (x1 PID) — aucun ne référençait le vrai chemin `curseforge\minecraft\Instances`, donc
+aucun risque de fermer le client du patron. Fermés individuellement par PID (`taskkill //PID <n>
+//F`), jamais `/IM java.exe` global. Le process `test-5` mentionné comme "bloqué" dans la section
+précédente n'apparaissait déjà plus dans la liste — probablement mort/crashé entre-temps.
+
+**Relance propre** de `C:\lanterne-client-vulkan-test-5\launch7_v5.bat` (mêmes variables d'env,
+machine désencombrée) : cette fois le menu est atteint et le test se déclenche en ~40s (vs 17 min de
+blocage rapporté précédemment) — confirme que c'était bien de la contention machine, pas un bug.
+
+**Résultat RÉEL et PRÉCIS, log `logs/latest.log` (04:09:51-52)** :
+- Composite/vanilla synthétique : identiques aux preuves déjà acquises (968 / 5576+3428 octets SPIR-V).
+- **VRAI shaderpack (`gbuffers_terrain`, #include résolus, 10446 lignes réelles, JcppProcessor
+  appliqué)** : le re-blocage `UniformReblocker` tourne mais **échoue sur le fichier réel**, avec
+  DEUX problèmes distincts, tous deux nouveaux :
+  1. Après re-blocage, il reste encore 3 erreurs `'non-opaque uniforms outside a block'` (lignes
+     143+) — `UniformReblocker` ne capture pas la totalité des uniforms non-opaques sur ce fichier
+     bien plus gros/complexe (15127 caractères vertex après reblock) que le shader de test synthétique
+     — probablement des uniforms déclarés dans une portion du fichier que le parseur actuel ne
+     couvre pas (héritage d'un `#include` profond, ou syntaxe multi-déclaration `uniform vec3 a, b;`).
+  2. **`java.lang.OutOfMemoryError: Out of stack space`** sur le fragment (99921 → 99794 caractères)
+     — signe d'une récursion non bornée quelque part dans la chaîne (`JcppProcessor` ou
+     `UniformReblocker`) qui explose sur un fichier de cette taille réelle, jamais rencontré sur les
+     shaders de test (~1-2K caractères).
+
+**Conclusion honnête** : la chaîne complète (jcpp → glsl-transformer/patchVanilla → UniformReblocker
+→ shaderc) est prouvée fonctionner de bout en bout sur un shader synthétique modernisé, MAIS ne
+tient PAS encore sur un vrai fichier de shaderpack de taille réelle — deux bugs précis et nouveaux
+restent à corriger avant de pouvoir généraliser : (a) couverture incomplète du parseur d'uniforms de
+`UniformReblocker` sur les gros fichiers, (b) récursion non bornée causant un stack overflow. Ce
+n'est PAS un verdict d'échec du principe Vulkan — c'est la preuve précise du prochain obstacle
+concret, sur un cas réel plutôt qu'un jouet.
+
+Aucune modification de code cette passe (directive = reconfirmation empirique uniquement, pas
+nouvelle investigation). Process `C:\lanterne-client-vulkan-test-5\` laissé actif (pas de kill).
+Rien déployé VPS/test1.
