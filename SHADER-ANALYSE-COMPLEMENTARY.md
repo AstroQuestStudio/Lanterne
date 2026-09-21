@@ -182,8 +182,11 @@ Photon en majorité), on ne peut pas valider hors jeu : l'optimiseur y compte su
 Copie **locale de test, non redistribuée** de Complementary où les 7 uniforms d'état de `lib/uniforms.glsl` sont des constantes
 (`ComplementaryReimagined_r5.9.3_NEUTRAL_TESTONLY.zip`, même nombre de programmes valides que l'original : 51/65). Quatre jobs déposés dans le banc
 central, alternés pour neutraliser les dérives : `shopt_A1_orig`, `shopt_B1_neutre`, `shopt_A2_orig`, `shopt_B2_neutre` (Lanterne 26.3.106 + Sodium, RTX 3080,
-1280×720, distance de rendu 12, heure figée 12500, 60 s, DH coupé). **Résultat : à mesurer** (le runner du banc central était arrêté au moment de la rédaction ; les jobs
-sont en file). Comparer les moyennes A et B ; un écart inférieur à la dispersion A1/A2 signifie « pas de gain mesurable ».
+1280×720, distance de rendu 12, heure figée 12500, 60 s, DH coupé). **Résultat : à mesurer.** Le runner du banc central a exécuté ces jobs à 12:46 mais **tous les jobs
+de la file (les miens comme ceux des autres agents) ont planté en ~8 s** : le fichier `jvm.args` généré coupe le classpath sur des lignes se terminant par `;\` et Java
+prend `;\` pour le nom de la classe principale (`Erreur : impossible de trouver ou de charger la classe principale ;\`, voir `stderr.log` dans `C:\bench\run\<job>\`). Ce n'est pas lié
+au pack. Une fois le runner corrigé, relancer d'une ligne : `powershell -File tools\shaderopt\submit-ab.ps1`. Comparer les moyennes A et B ; un écart inférieur à la dispersion A1/A2 signifie
+« pas de gain mesurable ».
 
 ## 7. Plan « rupture technologique » sous Vulkan, ordonné par le critère sans perte
 
