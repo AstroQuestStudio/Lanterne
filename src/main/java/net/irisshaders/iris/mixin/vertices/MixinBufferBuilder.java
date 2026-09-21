@@ -101,7 +101,7 @@ public abstract class MixinBufferBuilder implements VertexConsumer, BlockSensiti
 	private VertexFormat iris$extendFormat(VertexFormat format) {
 		injectNormalAndUV1 = false;
 
-		if (ImmediateState.skipExtension.get() || !ImmediateState.isRenderingLevel || !Iris.isPackInUseQuick()) {
+		if (ImmediateState.skipExtension.get() || !(ImmediateState.isRenderingLevel || net.irisshaders.iris.vertices.VanillaTerrainContext.isMeshing()) || !Iris.isPackInUseQuick()) {
 			return format;
 		}
 
@@ -270,7 +270,7 @@ public abstract class MixinBufferBuilder implements VertexConsumer, BlockSensiti
 			}
 		} else {
 			// TODO: Temporary fix for EMI item batching
-			boolean recalculateNormal = ImmediateState.isRenderingLevel;
+			boolean recalculateNormal = ImmediateState.isRenderingLevel || net.irisshaders.iris.vertices.VanillaTerrainContext.isMeshing();
 			NormalHelper.computeFaceNormal(normal, polygon);
 			int packedNormal = 0;
 			if (recalculateNormal) {

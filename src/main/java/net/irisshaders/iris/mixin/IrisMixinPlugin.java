@@ -110,9 +110,30 @@ public class IrisMixinPlugin implements IMixinConfigPlugin {
 		return sodiumPresent;
 	}
 
+	/**
+	 * Sans Sodium, un mixin Iris s'applique-t-il ? Oui seulement dans le chemin terrain vanilla
+	 * ({@code -Dlanterne.irisvanilla=true}) et si sa logique n'a pas besoin d'un type Sodium.
+	 * Par défaut (propriété absente) : non, comme avant — Iris reste inerte sans Sodium.
+	 */
+	public static boolean allowedWithoutSodium(String mixinClassName) {
+		if (!net.irisshaders.iris.vertices.VanillaTerrainContext.enabled()) {
+			return false;
+		}
+		if (mixinClassName.contains(".compat.sodium.")) {
+			return false;
+		}
+		String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
+		return !NEEDS_SODIUM.contains(simple);
+	}
+
+	/** Mixins dont le CORPS utilise un type Sodium (pas seulement une cible) : coupés sans Sodium. */
+	private static final java.util.Set<String> NEEDS_SODIUM = java.util.Set.of(
+			"MixinWindow", "MixinDebugScreenEntriesList", "MixinSpriteContents", "MixinFluidRendererImpl",
+			"MixinRenderSection");
+
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (!sodiumPresent()) return false;
+        if (!sodiumPresent() && !allowedWithoutSodium(mixinClassName)) return false;
         if (mixinClassName.contains("VKOnly")) return usingVulkan;
 		return !usingVulkan;
 	}

@@ -23,7 +23,7 @@ public class IrisSodiumGate implements IMixinConfigPlugin {
 
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-		return IrisMixinPlugin.sodiumPresent();
+		return IrisMixinPlugin.sodiumPresent() || IrisMixinPlugin.allowedWithoutSodium(mixinClassName);
 	}
 
 	@Override

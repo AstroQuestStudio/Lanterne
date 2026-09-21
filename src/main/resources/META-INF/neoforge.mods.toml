@@ -69,6 +69,10 @@ config = "mixins.iris.compat.dh.json"
 [[mixins]]
 config = "mixins.iris.forge.json"
 
+# Chemin terrain vanilla d Iris (sans Sodium, -Dlanterne.irisvanilla=true) : inerte sinon.
+[[mixins]]
+config = "mixins.iris.vanillaterrain.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"

@@ -912,3 +912,27 @@ vérifiée saine (`BUILD SUCCESSFUL`).
 
 ## Étape 12 — client sans Sodium démarre (21/09, 26.3.107)
 Solution retenue : Iris inerte sans Sodium (garde précoce par classe + coupe de tous les mixins Iris), pas migration des ~35 classes couplées. Preuves et limites : voir TACHES-NUIT.md, section « Sodium : le client démarre SANS Sodium ». Conséquence : retirer Sodium via la Mèche fait perdre les shaders (Iris) mais pas le jeu.
+
+## ÉTAPE 14 — W1 : sommets et contexte de bloc du mailleur vanilla (21/09/2026 ~11h50, branche `feat-vertex`)
+
+**Livré (commits c36c8d8, 6d460e8 ; jar 26.3.172, build vert)** — tout est derrière `-Dlanterne.irisvanilla=true` ET Sodium absent ; propriété absente ou Sodium présent = comportement strictement inchangé (Iris actif avec Sodium, inerte sans).
+- `vertices/VanillaTerrainContext` : état par fil (le mailleur vanilla tourne sur des fils de fond) = bloc en cours (id, fluide, émission, position locale 0..15) + drapeau « en train de mailler » ; détection de Sodium par ressource (`ModList` n'existe pas au moment des mixins).
+- `mixin/vanillaterrain/MixinSectionCompiler` (cible `SectionCompiler.compile`, noms vérifiés par `javap`/lecture sur `minecraft-patched-26.3.0.7-beta-merged.jar`) : pose le drapeau de maillage, enveloppe `ModelBlockRenderer.tesselateBlock` et `FluidRenderer.tesselate` pour renseigner le bloc (ids via `WorldRenderingSettings.blockStateIds`), et à chaque `getOrBeginLayer` transmet le contexte au `BufferBuilder` étendu (`BlockSensitiveBufferBuilder.beginBlock`) — c'est l'appel qui manquait : sans lui `mc_Entity`/`at_midBlock` restent vides.
+- `mixin/MixinBufferBuilder` : l'extension du format vaut aussi pendant le maillage (`isMeshing()`), pas seulement dans `isRenderingLevel` ; `MixinRenderPipeline` : format terrain = `IrisVertexFormats.TERRAIN` (52 octets) de façon cohérente pour le pipeline ET les tampons (sinon les tampons alloués hors rendu et les données écrites par les fils de fond divergent).
+- `compat/vertexformat/VertexFormatSources` + `VanillaVertexFormatSource` : plus aucune référence directe à `ChunkMeshFormats` hors classe interne chargée seulement avec Sodium ; `VanillaRenderingPipeline` et `MixinRenderPipeline` ne chargent plus de classe Sodium sans Sodium.
+- `IrisMixinPlugin.allowedWithoutSodium` (+ `IrisSodiumGate`) : sans Sodium, les mixins Iris s'appliquent seulement dans ce chemin, hors `compat.sodium.*` et hors les 5 mixins dont le CORPS utilise Sodium (`MixinWindow`, `MixinDebugScreenEntriesList`, `MixinSpriteContents`, `MixinFluidRendererImpl`, `MixinRenderSection`).
+- `helpers/ColorABGR`, `ColorARGB` : remplacement local (palier 0 de l'audit) ; a supprimé un crash réel : `NoClassDefFoundError net/caffeinemc/.../ColorARGB` à `PBRTextureManager.init` (crash 11.17.49).
+
+**Preuves de lancement réel (client sans Sodium, `-Dlanterne.irisvanilla=true`, jeu solo, javaw caché)** :
+1. jar 26.3.171 : crash `NoClassDefFoundError ColorARGB` (NativeImageBackedSingleColorTexture) → corrigé.
+2. jar 26.3.172 : Iris s'initialise (`ARB_direct_state_access detected`, `Shaders are disabled because enableShaders is set to false`), puis crash 11.44.59 :
+   `RuntimeException: Cannot find class net/caffeinemc/mods/sodium/client/render/viewport/ViewportProvider` pendant la transformation d'une classe chargée par `GameRenderer.<init>:134` (fusion de types par ASM, `TransformerClassWriter.getCommonSuperClass`).
+
+**Niveau atteint : A partiel.** Le code des sommets et du contexte de bloc est écrit, compile, et n'est pas la cause du crash ; le terrain n'a PAS pu être rendu, donc aucune capture ni mesure de FPS (ligne « Suivi » non ajoutée : rien de mesurable).
+
+**Points d'intégration restants (hors périmètre W1)** :
+- W2 (`shadows/frustum/**`) : `AdvancedShadowCullingFrustum`, `CullEverythingFrustum` implémentent `ViewportProvider` et `Frustum` de Sodium → toute classe qui fusionne ces types (ternaires, frames ASM) déclenche le crash ci-dessus. Il faut que ces frustums n'implémentent plus d'interface Sodium (interface Iris propre) — voir `AUDIT-IRIS-BESOINS-TERRAIN.md` palier 2.
+- W3 (gating) : `mixin/MixinLevelRenderer.java:115` (`GameRendererStorage.sodium$getProjectionMatrix`), `uniforms/FogUniforms` et `IrisInternalUniforms` (`FogStorage`), `pathways/HandRenderer` (`GameRendererStorage`) : accesseurs d'état posés par des mixins Sodium sur `GameRenderer`; sans Sodium il faut ces accesseurs côté Iris (mixin sur `GameRenderer` qui stocke projection et brouillard). Ce sont des ClassCastException/NoClassDef garantis au premier rendu.
+- `IrisConfig`/`compat/sodium/config` : interface d'options Sodium (paliers 4).
+- Ensuite seulement : la passe d'ombres (`ShadowRenderer.java:444-645`, contre `SodiumWorldRenderer`), puis le format compact (item 9 de `ANALYSE-SODIUM-ET-ECARTS.md` : 28-32 octets au lieu de 52).
+- Non vérifié : stride des `UberGpuBuffer` vanilla avec le format 52 octets (`SectionRenderDispatcher` lit `pipeline.getVertexFormatBinding(0).getVertexSize()` à la construction : mon patch de `MixinRenderPipeline` vise à ce que cette valeur soit 52 dès que le pack est actif, mais la construction peut avoir lieu AVANT le chargement du pack → à valider quand le rendu démarrera).
