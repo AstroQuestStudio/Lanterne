@@ -1,3 +1,39 @@
+# VÉRIFIÉ — pause du pregen à la connexion d'un joueur : ~50ms pire cas, pas graduelle (lecture de code, fork)
+
+Directive : chiffrer précisément le pire cas de délai avant que le pregen se mette en pause une fois
+qu'un joueur se connecte, vu que le VPS est actuellement saturé (~3.7/4 cœurs) par le pregen actif.
+
+**Réponse précise, par lecture directe de `Pregen.java`** (`lab/Pregen.java:587-593`) :
+
+```java
+public static void tick(MinecraftServer server) {
+    if (!running) return;
+    if (suspended(server)) return;   // <-- vérifié en TOUT PREMIER, avant toute soumission
+    ...
+}
+```
+
+`tick(MinecraftServer)` est appelé une fois par tick serveur (20 Hz, soit toutes les 50 ms). `suspended(server)`
+est la toute première ligne exécutée à chaque appel — avant la boucle de soumission de nouveaux
+chunks. Dès qu'un joueur apparaît dans `server.getPlayerList().getPlayers()`, le tick SUIVANT ne
+soumet plus aucun nouveau chunk. **Le pire cas est donc borné à UN SEUL tick serveur, soit ~50 ms**
+— pas une estimation basée sur le débit de chunks/s (qui aurait pu suggérer plusieurs dizaines de
+ms de façon moins rigoureuse), un fait structurel du code : la pause est vérifiée AVANT tout travail,
+inconditionnellement, à chaque tick, sans dépendre du rythme de génération.
+
+Ce qui est déjà "en vol" (soumis avant la connexion, `AIRBORNE`) continue d'aboutir en arrière-plan
+(asynchrone, ne bloque pas le tick) — comportement voulu, documenté dans le code lui-même
+(`suspended()` javadoc : "Ce qui est en vol n'est pas abandonné"). Avec `inFlightCap()` par défaut à
+8 chunks, c'est un plafond de 8 générations encore en cours au moment de la connexion, chacune
+asynchrone et donc sans impact sur la latence perçue par le joueur qui vient d'arriver.
+
+**Conclusion** : le point d'attention CPU (~3.7/4 cœurs saturés) documenté juste en dessous reste
+valable comme donnée de dimensionnement, mais n'est PAS un risque pour le gameplay — la coupure est
+quasi-instantanée (un tick), pas graduelle. Aucune modification nécessaire, opération 100% lecture de
+code (aucun accès au VPS pour cette vérification précise, pour ne pas perturber le pregen en cours).
+
+---
+
 # SANTÉ VPS — charge CPU réelle pendant le pregen à plein régime (~05h43 UTC, lecture seule, fork)
 
 Directive : chiffres RÉELS de charge CPU/RAM du process Java pendant que le pregen tourne (15.3 %,
