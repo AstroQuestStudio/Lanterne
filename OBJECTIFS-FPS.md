@@ -67,3 +67,14 @@ Minecraft 26.3 : option `inactivityFpsLimit` (options.txt, défaut `"afk"`) : ap
 - Cible : sur l'iGPU du banc (AMD Radeon Graphics, Ryzen 7) avec ComplementaryReimagined actif : **≥ 60 FPS moyens et 1 % low ≥ 40**, sans à-coups (pas de creux > 50 ms), en 1080p affiché. « Sans lag » = ressenti stable, pas seulement une moyenne.
 - Leviers innovants à prototyper et MESURER (règle n°0 : jeu non bridé, GPU cité, sous verrou) : (1) échelle de résolution dynamique (rendu interne réduit + agrandissement/netteté type FSR), pilotée par le régulateur adaptatif ; (2) profil automatique d'options du shaderpack selon la classe de GPU (qualité d'ombre, distance d'ombre, réflexions, AO, nuages…), écrit dans le fichier d'options du pack ; (3) ombres en cache/alternées (W2) ; (4) régulateur adaptatif (feat-regul) qui tient la cible ; (5) DH réduit sous shaders sur petite config.
 - Tout PC : le profil se choisit au premier lancement d'après le GPU détecté (log [BILAN] : GPU, VRAM, intégré/dédié).
+
+## Suivi O6 (agent iGPU, 21/09) — détails et validité dans ETAT-FINAL-O6.md
+GPU = AMD Radeon(TM) Graphics (iGPU Ryzen 7 5800H) vérifié dans le log ; 1080p, distance 12, Complementary, `inactivityFpsLimit:"minimized"` ; toutes sous verrou.
+| Essai | Jar / levier | FPS moy | Rendu (capture lue) | Validité |
+|---|---|---|---|---|
+| A | 106 base | 9,8 | CASSÉ | scène différente : non comparable |
+| B | 240 profil+lentille | 16,5 | capture invalide | invalide |
+| C | 240 profil seul | 23,5 | capture invalide | invalide |
+| D | 240 lentille seule | 13,2 | correct | valide (scène Bamboo) |
+| A2 | 106 base, scène figée | 8,3 | CASSÉ | valide |
+Seule paire comparable : A2 (106 cassé, 8,3) contre D (240+lentille, correct, 13,2). Cause non isolée (jar ou lentille) ; tests G/H/E2/F2 non faits.
