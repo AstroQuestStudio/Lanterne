@@ -163,6 +163,10 @@ public final class Lanterne {
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
                 fr.clubcitrouille.lanterne.client.MecheConsent.SPEC, "lanterne-maj-client.toml");
         modBus.addListener(fr.clubcitrouille.lanterne.client.MecheConsent::apply);
+        // Le regulateur adaptatif de qualite (petites configs) : reglages personnels de cette machine.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
+                fr.clubcitrouille.lanterne.client.regul.RegulConfig.SPEC,
+                "lanterne-regulateur-client.toml");
         // Le Regard : l'inspection bloc/entite. Le paquet reseau s'enregistre des deux cotes —
         // meme raison que les reperes juste au-dessus — la tooltip elle-meme (client.regard.Sight)
         // ne s'enregistre que dans le bloc CLIENT ci-dessous.
