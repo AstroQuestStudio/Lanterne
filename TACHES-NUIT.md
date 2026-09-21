@@ -3007,3 +3007,20 @@ inattendus (non liés aux déploiements volontaires du coordinateur) ont eu lieu
 **Conclusion** : rien à corriger, aucune recommandation nécessaire — la résilience systemd a déjà
 fait ses preuves en conditions réelles cette nuit même. Aucune modification de code ni de config,
 opération 100% lecture seule sur le VPS.
+
+---
+
+# Audit des 4 recettes JEI ajoutées cette nuit (Aiguillage/Guichet/CoffreDepot/CoffreReception)
+
+Lecture pure des 4 fichiers `data/lanterne/recipe/{aiguillage,guichet,coffre_depot,coffre_reception}.json`
+(commit `cc7c98f`, jamais testées en jeu) — **tout confirmé correct** :
+- JSON syntaxiquement valide dans les 4 fichiers (accolades/crochets équilibrés, virgules correctes).
+- Tous les ingrédients référencés sont des items VANILLA (iron_ingot, redstone, comparator, glass_pane,
+  lectern, hopper, chest) — aucune référence à un item custom Lanterne inexistant.
+- Les 4 `result.id` (`lanterne:aiguillage`, `lanterne:guichet`, `lanterne:coffre_depot`,
+  `lanterne:coffre_reception`) correspondent EXACTEMENT aux noms d'enregistrement réels dans
+  `content/reseau/Reseaux.java` (`BLOCKS.registerBlock("aiguillage", ...)` etc., vérifié par grep direct).
+- Structure identique à une recette existante et fonctionnelle (`anchor.json` comparé) — mêmes champs
+  (`type`, `category`, `pattern`, `key`, `result.id`/`result.count`), rien de manquant.
+
+Aucune modification nécessaire. Pure lecture, pas de compilation (problème Gradle toujours actif).
