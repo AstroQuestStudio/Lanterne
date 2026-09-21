@@ -2184,3 +2184,26 @@ milieu d'une transaction Bazaar, d'une Rafale en cours, ou avec un GUI custom ou
   place et correct.
 
 Aucun fichier modifié, aucune compilation nécessaire (pas de changement de code).
+
+## Audit UX/permission client-serveur — cohérence après les 3 correctifs de permission (pure lecture de code)
+
+Directive : vérifier que le client (Guide.java, GUI) affichait déjà correctement les 3 commandes
+corrigées ce cycle (`/lanterne on/off`, `/lanterne bench`, `/projection domaine ajouter/retirer`)
+comme admin-only, plutôt qu'un bouton visible qui échouerait désormais silencieusement.
+
+**Résultat : rien à corriger, cohérence déjà présente avant le correctif serveur.**
+
+- Les 3 commandes étaient DÉJÀ affichées uniquement dans un bloc `if (admin)` de
+  `report/Guide.java` (lignes 121-126 pour `on`/`off`, 200-204 pour `/projection domaine`,
+  206-216 pour le bloc "Le laboratoire" contenant `bench`) — donc un joueur non-admin ne voyait
+  même pas ces lignes dans l'aide. Le bug corrigé plus tôt cette nuit était purement une absence
+  d'application côté serveur (un joueur qui aurait connu/deviné la commande pouvait la taper
+  directement malgré l'aide qui la cachait) — pas une incohérence UI visible.
+- Recherche plus large : aucun `hasPermission`/`isOp()`/vérification de permission dans
+  `fr.clubcitrouille.lanterne.client.*` — Lanterne n'a pas de GUI cliquable (boutons) pour des
+  actions admin ; toutes les commandes sensibles passent par la commande texte `/...`, gardée côté
+  serveur (source de vérité), jamais par un bouton client qui pourrait mentir sur ce qui est permis.
+  Rien de comparable au piège "bouton visible, action refusée en silence" trouvé dans ce mod.
+
+Clôture de la série sécurité/permissions de cette nuit — aucun fichier de code modifié, seul ce
+commit de documentation.
