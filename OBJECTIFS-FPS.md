@@ -49,3 +49,10 @@ Plusieurs agents lancent des clients sur la MÊME machine : un FPS mesuré penda
 Cible O5 : le jeu doit aussi tourner nettement mieux sur PC sans GPU dédié. Banc iGPU : le Ryzen 7 de cette machine (AMD Radeon Graphics) — forcer via `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` (valeur = chemin du java.exe, données `GpuPreference=1;` = économie d'énergie/iGPU) ; vérifier dans le log « Backend actif : OpenGL sur AMD Radeon… ».
 - O5a : mesure de base iGPU (sans shaders, distance 8 et 12), puis gain après régulateur adaptatif.
 - O5b : régulateur adaptatif de qualité (distance de rendu, distance d'ombre, particules, entités, LOD) qui tient une cible de FPS choisie (défaut 60), avec profil « petite config » choisi automatiquement au premier lancement.
+
+## Protocole révisé (21/09, coordinateur) — remplace la règle « aucun Gradle/client pendant le verrou »
+Le verrou enchaîné bloquait tous les agents. Nouvelle règle, équitable :
+1. **Un verrou = UNE mesure (≤ 5 min).** Le détenteur le LIBÈRE après chaque mesure, puis se remet en file (attendre ≥ 60 s avant de le reprendre) : les autres agents peuvent ainsi mesurer à leur tour. Interdit d'enchaîner plusieurs mesures sous le même verrou.
+2. **Compilation Gradle et tests fonctionnels (crash, capture, lecture de log) sont AUTORISÉS à tout moment**, en priorité BelowNormal (Gradle : `-Dorg.gradle.workers.max=2`, lancé caché) ; ils ne comptent pas comme mesures.
+3. Une mesure exige toujours : verrou détenu + GPU = celui voulu (RTX pour les bancs classiques, cité dans le tableau) + « sous verrou : oui ». Une mesure faite pendant qu'un autre agent compile est répétée si l'écart avec sa jumelle dépasse 10 %.
+4. Fenêtre de mesure > 5 min ou lot de mesures : à annoncer au coordinateur d'abord.
