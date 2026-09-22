@@ -316,7 +316,7 @@ public final class Sight {
                 rise = 0f;
                 accent = mixRgb(FLASH, AMBER, Ease.smooth(k));
             }
-            paint(graphics, mc, card, alpha, pop, rise, accent);
+            paint(graphics, mc, card, alpha, pop, rise, accent, cameFromNothing);
             return;
         }
 
@@ -339,7 +339,7 @@ public final class Sight {
         float alpha = 1f - Ease.in(vk);
         float pop = Ease.lerp(1f, 0.92f, Ease.in(vk));
         float rise = Ease.lerp(0f, -5f, Ease.in(vk));
-        paint(graphics, mc, lastCard, alpha, pop, rise, AMBER);
+        paint(graphics, mc, lastCard, alpha, pop, rise, AMBER, false);
     }
 
     private static float msSince(long startNanos, long now) {
@@ -619,8 +619,35 @@ public final class Sight {
         }
     }
 
+    /** Taille lissée du panneau — voir {@link #smoothSize}, pourquoi un simple lerp évite le saut de
+     * taille au changement de cible signalé en jeu (retour du 22/09/2026). Négatif : pas encore posé. */
+    private static float smoothedWidth = -1f;
+    private static float smoothedHeight = -1f;
+    /** Vitesse de rattrapage de la taille du panneau — plus rapide que {@link #BAR_SMOOTH}, la boîte
+     * doit avoir fini de bouger avant que {@link #SWAP_MS} ne termine le reste de la transition. */
+    private static final float SIZE_SMOOTH = 0.35f;
+
+    /**
+     * Amortit un saut de largeur/hauteur entre deux cartes de tailles différentes.
+     *
+     * <p>Une nouvelle apparition ({@code snap}) se pose directement à sa taille : {@link #APPEAR_MS}
+     * s'occupe déjà de l'entrée (fondu + pop), lisser la taille en plus ferait deux animations qui se
+     * gênent. Un changement de cible, en revanche, glissait auparavant d'une taille à l'autre d'une
+     * image sur l'autre — ce que le retour de jeu décrit comme un « saut de hauteur ».
+     */
+    private static float[] smoothSize(float targetW, float targetH, boolean snap) {
+        if (snap || smoothedWidth < 0f) {
+            smoothedWidth = targetW;
+            smoothedHeight = targetH;
+        } else {
+            smoothedWidth = Ease.lerp(smoothedWidth, targetW, SIZE_SMOOTH);
+            smoothedHeight = Ease.lerp(smoothedHeight, targetH, SIZE_SMOOTH);
+        }
+        return new float[] {smoothedWidth, smoothedHeight};
+    }
+
     private static void paint(GuiGraphicsExtractor graphics, Minecraft mc, Card card, float alpha,
-            float pop, float riseY, int accent) {
+            float pop, float riseY, int accent, boolean snapSize) {
         Font font = mc.font;
         boolean hasIcon = !card.icon.isEmpty();
         int headerIconW = hasIcon ? ICON + 6 : 0;
@@ -672,8 +699,11 @@ public final class Sight {
                 + (card.furnace ? ICON + 2 : 0)
                 + (iconRows > 0 ? 2 + iconRows * ICON : 0);
 
-        int width = contentWidth + PADDING * 2;
-        int height = PADDING * 2 + headerH + (hasBody ? SEP_GAP + bodyH : 0);
+        int targetWidth = contentWidth + PADDING * 2;
+        int targetHeight = PADDING * 2 + headerH + (hasBody ? SEP_GAP + bodyH : 0);
+        float[] smoothed = smoothSize(targetWidth, targetHeight, snapSize);
+        int width = Math.round(smoothed[0]);
+        int height = Math.round(smoothed[1]);
 
         int x = (graphics.guiWidth() - width) / 2;
         int y = TOP_MARGIN;
@@ -691,11 +721,12 @@ public final class Sight {
 
         graphics.fill(x - 1, y - 1, x + width + 1, y + height + 1, withAlpha(EDGE, alpha));
         graphics.fill(x, y, x + width, y + height, withAlpha(PANEL, alpha));
-        // Le filet supérieur respire lentement même hors transition — un panneau vivant, jamais figé.
-        float breathe = 0.88f + 0.12f * (float) Math.sin(System.nanoTime() / 1.6e9d);
+        // Le filet supérieur reste fixe hors transition : un panneau qui pulse en permanence a été
+        // jugé intrusif en jeu (retour du 22/09/2026) — l'éclat au changement de cible (voir la
+        // Javadoc de classe, branche « changed ») reste le seul moment où sa couleur bouge.
         int accentDeep = mixRgb(accent, 0x000000, 0.4f);
         graphics.fillGradient(x, y, x + width, y + 3,
-                withAlpha(accent, alpha), withAlpha(mixRgb(accentDeep, accent, breathe), alpha));
+                withAlpha(accent, alpha), withAlpha(accentDeep, alpha));
 
         // --- L'en-tête : icône, titre en gras, sous-titre en italique, badge de récolte. -----------
         int headerTop = y + PADDING;
