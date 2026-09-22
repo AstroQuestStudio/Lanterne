@@ -262,6 +262,13 @@ public final class ClientConfig {
                 "dedans - dans l'esprit de Jade/HWYLA, mais construite avec les API de ce moteur et",
                 "reliee aux VRAIS modules de Lanterne plutot que de deviner.",
                 "",
+                "DESACTIVE PAR DEFAUT depuis que Jade (le vrai mod) est installe sur le serveur : deux",
+                "tooltips de bloc/entite qui se disputent l'ecran valent moins qu'une seule, et Jade",
+                "fait deja ce travail. Ne rallumer que si Jade est retire, ou pour retrouver les trois",
+                "informations propres a Lanterne listees plus bas (debit d'entonnoir, portee de fusion,",
+                "cadence de simulation estimee) qu'aucun mod generaliste ne peut montrer - un jour, une",
+                "greffe Jade dediee a Lanterne fera ce travail sans dupliquer la tooltip entiere.",
+                "",
                 "BLOC : nom, mod d'origine, etat de redstone si pertinent, apercu du contenu pour un",
                 "conteneur (demande au serveur - voir content.regard.Regard - un client ne connait",
                 "JAMAIS le contenu d'un coffre qu'il n'a pas ouvert), barre de cuisson/combustible",
@@ -278,7 +285,7 @@ public final class ClientConfig {
                 "Coute une lecture de blocstate/entite par image quand actif, et au plus une petite",
                 "requete reseau toutes les quelques images UNIQUEMENT quand la cible est un conteneur",
                 "reel - voir Radiographie pour la mesure. Desactive : cout nul, rien n'est evalue.")
-                .define("regard", true);
+                .define("regard", false);
         NUTRITION = BUILDER.comment(
                 "LA NUTRITION : en tenant un aliment en main, la barre de faim affiche une",
                 "previsualisation - les points qui seraient gagnes en fantome sur les icones, et",

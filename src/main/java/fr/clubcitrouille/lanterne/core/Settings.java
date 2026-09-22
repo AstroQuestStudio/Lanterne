@@ -642,8 +642,9 @@ public final class Settings {
     /** La lentille : mise a l'echelle de resolution. Voir {@link Lens}. */
     /** La jauge de performance sur le HUD. Voir {@code client.Gauge}. */
     private static boolean gauge;
-    /** Le Regard : la tooltip d'inspection bloc/entité. Voir {@code client.regard.Sight}. */
-    private static boolean regard = true;
+    /** Le Regard : la tooltip d'inspection bloc/entité. Voir {@code client.regard.Sight}.
+     * Faux par défaut : Jade (le vrai mod) est installé sur le serveur et fait déjà ce travail. */
+    private static boolean regard;
     /** La Nutrition : prévisualisation faim/saturation d'un aliment. Voir {@code client.regard.Nutrition}. */
     private static boolean nutrition = true;
     /** La Longuevue : le zoom tenu au clavier. Voir {@code client.regard.Longuevue}. */

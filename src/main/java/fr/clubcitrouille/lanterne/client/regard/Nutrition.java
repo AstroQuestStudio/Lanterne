@@ -68,6 +68,25 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * <p>Le calcul par icône reprend, lui aussi, exactement la boucle désassemblée de
  * {@code Hud.extractFood} : dix icônes, {@code x = droite - i*8 - 9}, chacune représentant deux
  * points de faim.
+ *
+ * <h2>Sous vanilla, pas dessus : le fantôme se pose AVANT, comme dans AppleSkin</h2>
+ *
+ * <p>Première version : les icônes fantômes se dessinaient PAR-DESSUS la barre réelle
+ * ({@code registerAbove}), teintées vert — retour de jeu du 22/09/2026, « un truc jaune et une
+ * pulsation… horrible ». Le vrai AppleSkin (licence Unlicense, domaine public — vérifié sur son
+ * dépôt avant d'en reprendre le PRINCIPE, jamais le fichier) les pose au contraire AVANT, dans
+ * {@code RenderGameOverlayEvent.Pre} : le fantôme apparaît alors DERRIÈRE l'icône vide que vanilla
+ * dessine par-dessus, et ne fait que déborder discrètement de son contour plutôt que de la
+ * recouvrir. {@code registerBelow(VanillaGuiLayers.FOOD_LEVEL, …)} reproduit exactement cet ordre
+ * ici.
+ *
+ * <h2>La saturation, en dessous de la barre plutôt qu'en toute petite ligne de texte</h2>
+ *
+ * <p>Le retour du 22/09/2026 demandait explicitement de « massivement améliorer » ce que ce module
+ * montre de la saturation. {@link #drawSaturationBar} ajoute donc une fine bande sous la rangée de
+ * faim — la saturation ACTUELLE en teinte pleine, le GAIN prévu accolé juste après en teinte plus
+ * claire — plutôt que de la laisser uniquement dans l'infobulle. Largeur bornée à la portée réelle
+ * de la barre de faim (90 px, dix icônes de neuf), jamais au-delà.
  */
 @EventBusSubscriber(modid = Lanterne.ID, value = Dist.CLIENT)
 public final class Nutrition {
@@ -76,8 +95,15 @@ public final class Nutrition {
     private static final Identifier FOOD_HALF =
             Identifier.fromNamespaceAndPath("minecraft", "hud/food_half");
 
-    /** Vert translucide : la teinte du gain, posée sur la même icône que vanilla dessine à vide. */
-    private static final int GHOST_TINT = 0x9057E389;
+    /** Vert translucide : la teinte du gain, posée derrière l'icône vide que vanilla dessine. */
+    private static final int GHOST_TINT = 0xB057E389;
+    /** Saturation ACTUELLE : cyan plein. */
+    private static final int SATURATION_NOW = 0xFF57C7E3;
+    /** GAIN de saturation prévu : même teinte, plus claire. */
+    private static final int SATURATION_GAIN = 0xFFB8ECF5;
+    private static final int SATURATION_TRACK = 0x60000000;
+    private static final int SATURATION_BAR_WIDTH = 90;
+    private static final int SATURATION_BAR_HEIGHT = 2;
 
     private static Player lastAnchoredPlayer;
     private static int lastTop;
@@ -90,7 +116,9 @@ public final class Nutrition {
     }
 
     private static void onRegisterLayers(RegisterGuiLayersEvent event) {
-        event.registerAbove(VanillaGuiLayers.FOOD_LEVEL,
+        // AVANT la vraie barre, pas après — voir la Javadoc de classe : le fantôme doit apparaître
+        // derrière l'icône vide que vanilla dessine ensuite, jamais recouvrir une icône déjà pleine.
+        event.registerBelow(VanillaGuiLayers.FOOD_LEVEL,
                 Identifier.fromNamespaceAndPath(Lanterne.ID, "nutrition"), Nutrition::draw);
     }
 
@@ -120,19 +148,49 @@ public final class Nutrition {
         FoodData data = mc.player.getFoodData();
         int currentLevel = data.getFoodLevel();
         int predictedLevel = predict(currentLevel, food.nutrition());
-        if (predictedLevel <= currentLevel) {
-            return;
+        float currentSat = data.getSaturationLevel();
+        float predictedSat = predictSaturation(currentSat, predictedLevel, food.saturation());
+
+        if (predictedLevel > currentLevel) {
+            for (int i = 0; i < 10; i++) {
+                int already = Mth.clamp(currentLevel - i * 2, 0, 2);
+                int predicted = Mth.clamp(predictedLevel - i * 2, 0, 2);
+                if (predicted <= already) {
+                    continue;
+                }
+                int x = lastRight - i * 8 - 9;
+                Identifier sprite = predicted >= 2 ? FOOD_FULL : FOOD_HALF;
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, x, lastTop, 9, 9, GHOST_TINT);
+            }
         }
 
-        for (int i = 0; i < 10; i++) {
-            int already = Mth.clamp(currentLevel - i * 2, 0, 2);
-            int predicted = Mth.clamp(predictedLevel - i * 2, 0, 2);
-            if (predicted <= already) {
-                continue;
-            }
-            int x = lastRight - i * 8 - 9;
-            Identifier sprite = predicted >= 2 ? FOOD_FULL : FOOD_HALF;
-            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, x, lastTop, 9, 9, GHOST_TINT);
+        drawSaturationBar(graphics, currentSat, predictedSat, predictedLevel);
+    }
+
+    /**
+     * La bande sous la barre de faim : saturation actuelle en plein, gain accolé en clair.
+     *
+     * <p>Bornée à {@code predictedLevel} (jamais au-delà de vingt) comme le fait déjà
+     * {@link #predictSaturation} — la barre ne peut donc jamais paraître plus pleine que la faim
+     * qu'elle accompagne, exactement la contrainte que {@code FoodData.add} applique en jeu.
+     */
+    private static void drawSaturationBar(GuiGraphicsExtractor graphics, float currentSat,
+            float predictedSat, int predictedLevel) {
+        if (predictedLevel <= 0) {
+            return;
+        }
+        int y = lastTop + 9;
+        int left = lastRight - SATURATION_BAR_WIDTH;
+        graphics.fill(left, y, lastRight, y + SATURATION_BAR_HEIGHT, SATURATION_TRACK);
+
+        float scale = SATURATION_BAR_WIDTH / (float) predictedLevel;
+        int nowPx = Math.round(Mth.clamp(currentSat, 0f, (float) predictedLevel) * scale);
+        int gainPx = Math.round(Mth.clamp(predictedSat, 0f, (float) predictedLevel) * scale);
+        if (nowPx > 0) {
+            graphics.fill(left, y, left + nowPx, y + SATURATION_BAR_HEIGHT, SATURATION_NOW);
+        }
+        if (gainPx > nowPx) {
+            graphics.fill(left + nowPx, y, left + gainPx, y + SATURATION_BAR_HEIGHT, SATURATION_GAIN);
         }
     }
 
