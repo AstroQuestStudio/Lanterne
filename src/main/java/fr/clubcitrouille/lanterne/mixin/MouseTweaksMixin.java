@@ -108,6 +108,9 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
     /** {@code Main.accumulatedScrollDelta} — reliquat fractionnaire de molette entre deux appels. */
     private double accumulatedScrollDelta;
 
+    /** Voir le commentaire au point d'usage, dans {@link #lanterne$onMouseScrolled}. */
+    private static final int MAX_ITEMS_PER_SCROLL_EVENT = 8;
+
     /**
      * {@code Main.onMouseClicked} — jamais annulé. Enregistre la case sous la souris et détermine si
      * les glissés LMB/RMB pourront démarrer, selon l'état du curseur À CET INSTANT PRÉCIS (avant que
@@ -261,7 +264,14 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
             return;
         }
 
-        int numItemsToMove = Math.abs(delta);
+        // Plafonné : chaque unité ici coûte un a deux ServerboundContainerClickPacket (voir
+        // handleWheelPush/handleWheelPull). Une molette a defilement libre, ou plusieurs evenements
+        // de scroll agreges par le pilote en un seul appel, pouvait faire grimper "delta" tres haut
+        // d'un coup - une rafale de paquets envoyee au serveur dans le meme instant, ressentie en jeu
+        // comme un gel puis une deconnexion au moment de deplacer beaucoup d'objets (retour du
+        // 22/09/2026). Huit suffit largement a l'usage normal (un ou deux crans de molette) et borne
+        // le pire cas sans rien retirer au confort du geste.
+        int numItemsToMove = Math.min(Math.abs(delta), MAX_ITEMS_PER_SCROLL_EVENT);
         boolean pushItems = delta < 0;
 
         ItemStack selectedSlotStack = selectedSlot.getItem();
