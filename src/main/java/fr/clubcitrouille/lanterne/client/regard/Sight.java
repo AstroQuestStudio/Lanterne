@@ -268,9 +268,28 @@ public final class Sight {
                 Identifier.fromNamespaceAndPath(Lanterne.ID, "regard"), Sight::draw);
     }
 
-    /** Appelée par {@code content.regard.Regard} quand une réponse arrive, sur le fil client. */
+    /**
+     * Appelée par {@code content.regard.Regard} quand une réponse arrive, sur le fil client.
+     *
+     * <h2>Pourquoi la carte est forcée à se reconstruire ici, et pas seulement subie au prochain
+     * cycle de {@link #ASK_PERIOD_TICKS}</h2>
+     *
+     * <p>{@link #maybeRebuildCard} ne reconstruit la carte, quand la cible n'a pas changé, qu'une
+     * fois tous les {@link #ASK_PERIOD_TICKS} ticks (une demi-seconde) : c'était voulu pour ne pas
+     * reconstruire plus vite que la donnée ne peut arriver — voir sa Javadoc. Mais le paquet arrive
+     * en pratique quand IL veut, pas au bon tick pour ce cycle, et le joueur voyait donc
+     * « (lecture du contenu…) » rester affiché jusqu'à une demi-seconde de PLUS après la vraie
+     * réponse : deux latences qui s'additionnent, la vraie (réseau) et celle-ci, artificielle,
+     * ressentie comme un module lent (retour de jeu du 22/09/2026). En avançant
+     * {@link #lastFullBuildTick} dans le passé dès que la réponse concerne le conteneur
+     * actuellement affiché, le prochain appel à {@link #maybeRebuildCard} — la toute prochaine
+     * image — reconstruit immédiatement, sans attendre le cycle.
+     */
     public static void accept(RegardTell tell) {
         lastTell = tell;
+        if (("block:" + tell.pos().asLong()).equals(lastKey)) {
+            lastFullBuildTick = Long.MIN_VALUE;
+        }
     }
 
     // ------------------------------------------------------------------------------------------
