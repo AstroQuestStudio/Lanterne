@@ -50,6 +50,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue RESEAU_LUEUR;
     public static final ModConfigSpec.BooleanValue GAUGE;
     public static final ModConfigSpec.BooleanValue REGARD;
+    public static final ModConfigSpec.BooleanValue NUTRITION;
     public static final ModConfigSpec.BooleanValue ZOOM;
     public static final ModConfigSpec.IntValue ZOOM_FACTOR;
     public static final ModConfigSpec.IntValue ZOOM_SPEED;
@@ -278,6 +279,15 @@ public final class ClientConfig {
                 "requete reseau toutes les quelques images UNIQUEMENT quand la cible est un conteneur",
                 "reel - voir Radiographie pour la mesure. Desactive : cout nul, rien n'est evalue.")
                 .define("regard", true);
+        NUTRITION = BUILDER.comment(
+                "LA NUTRITION : en tenant un aliment en main, la barre de faim affiche une",
+                "previsualisation - les points qui seraient gagnes en fantome sur les icones, et",
+                "l'infobulle de l'aliment ajoute faim/saturation gagnees et les effets (regeneration,",
+                "poison...) qu'il declenche en le mangeant, dans l'esprit d'AppleSkin.",
+                "",
+                "Cout nul quand rien en main n'est un aliment ou que la faim/saturation ne bougerait",
+                "pas ; desactive, ce module n'evalue rien.")
+                .define("nutrition", true);
         ZOOM = BUILDER.comment(
                 "LA LONGUEVUE : touche C maintenue, comme Sodium - le champ de vision se reduit",
                 "progressivement pour zoomer la camera sans avoir besoin d'une longue-vue en main,",

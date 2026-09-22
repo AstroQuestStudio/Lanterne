@@ -644,6 +644,8 @@ public final class Settings {
     private static boolean gauge;
     /** Le Regard : la tooltip d'inspection bloc/entité. Voir {@code client.regard.Sight}. */
     private static boolean regard = true;
+    /** La Nutrition : prévisualisation faim/saturation d'un aliment. Voir {@code client.regard.Nutrition}. */
+    private static boolean nutrition = true;
     /** La Longuevue : le zoom tenu au clavier. Voir {@code client.regard.Longuevue}. */
     private static boolean zoom = true;
     /** Le champ de vision est divisé par cette valeur en zoom complet. */
@@ -1403,6 +1405,11 @@ public final class Settings {
         return regard;
     }
 
+    /** Comme {@link #regard()} : une aide à l'écran, pas un module d'optimisation — pas de {@code master &&}. */
+    public static boolean nutrition() {
+        return nutrition;
+    }
+
     /**
      * Comme {@link #regard()} : un habillage visuel, pas un module d'optimisation — pas de
      * {@code master &&}. Voir {@code client.reseau.Lueur} pour ce que ce réglage allume.
@@ -1723,6 +1730,7 @@ public final class Settings {
         vigil = wanted.contains("vigil") || wanted.contains("garde");
         waypoints = wanted.contains("waypoint") || wanted.contains("reperes");
         regard = wanted.contains("regard");
+        nutrition = wanted.contains("nutrition");
         // « leurre » n'appartient qu'à ce module : aucun autre mot-clé de ce fichier ne le contient,
         // et il ne contient aucun d'eux.
         leurre = wanted.contains("leurre");
@@ -1808,6 +1816,7 @@ public final class Settings {
         din = ClientConfig.DIN.get();
         gauge = ClientConfig.GAUGE.get();
         regard = ClientConfig.REGARD.get();
+        nutrition = ClientConfig.NUTRITION.get();
         zoom = ClientConfig.ZOOM.get();
         zoomFactor = ClientConfig.ZOOM_FACTOR.get();
         zoomSpeedPercent = ClientConfig.ZOOM_SPEED.get();

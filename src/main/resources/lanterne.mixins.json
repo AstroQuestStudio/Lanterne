@@ -123,6 +123,7 @@
     "VulkanRenderPipelineMixin",
     "PortailRenderMixin",
     "DynamicGpuDataMixin",
-    "MouseTweaksMixin"
+    "MouseTweaksMixin",
+    "NutritionAnchorMixin"
   ]
 }
