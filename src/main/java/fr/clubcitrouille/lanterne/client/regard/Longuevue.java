@@ -10,6 +10,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.CalculatePlayerTurnEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.ComputeFovModifierEvent;
+import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -96,11 +97,28 @@ public final class Longuevue {
      */
     private static float progress;
 
+    /**
+     * Multiplicateur supplémentaire appliqué à {@link Settings#zoomFactor}, ajusté à la molette
+     * pendant que la touche est tenue — comme Sodium : zoomer, PUIS molette pour zoomer plus encore.
+     *
+     * <p>Volontairement persistant d'une visée à l'autre plutôt que remis à un à chaque relâchement
+     * de C : c'est le même choix que fait Sodium lui-même, et un joueur qui a réglé son zoom une
+     * fois ne devrait pas avoir à le refaire à chaque pression de touche.
+     */
+    private static float scrollMultiplier = 1f;
+
+    /** Bornes du multiplicateur — voir {@link #onMouseScroll}. */
+    private static final float SCROLL_MIN = 0.25f;
+    private static final float SCROLL_MAX = 4f;
+    /** Part multipliée ou divisée par cran de molette — 20 % par cran. */
+    private static final float SCROLL_STEP = 1.2f;
+
     public static void register(IEventBus modBus) {
         modBus.addListener(Longuevue::onRegisterKeys);
         NeoForge.EVENT_BUS.addListener(Longuevue::onClientTick);
         NeoForge.EVENT_BUS.addListener(Longuevue::onComputeFovModifier);
         NeoForge.EVENT_BUS.addListener(Longuevue::onCalculatePlayerTurn);
+        NeoForge.EVENT_BUS.addListener(Longuevue::onMouseScroll);
     }
 
     private static void onRegisterKeys(RegisterKeyMappingsEvent event) {
@@ -147,8 +165,31 @@ public final class Longuevue {
             return;
         }
         float eased = Ease.smooth(progress);
-        float zoomed = 1f / Settings.zoomFactor();
+        float zoomed = 1f / (Settings.zoomFactor() * scrollMultiplier);
         event.setNewFovModifier(Ease.lerp(event.getNewFovModifier(), zoomed, eased));
+    }
+
+    /**
+     * La molette, PENDANT le zoom : ajuste {@link #scrollMultiplier} au lieu de faire défiler la
+     * barre d'objets — exactement le geste de Sodium (zoomer, puis molette pour zoomer plus).
+     *
+     * <p>Ne s'annule que lorsque le zoom est effectivement engagé ({@link #held}, pas
+     * {@link #progress} : la molette doit réagir dès l'appui, sans attendre le lissage) et hors
+     * écran — sinon la molette garde son usage vanilla partout ailleurs, y compris dans un
+     * inventaire ouvert pendant que C est par ailleurs tenue.
+     */
+    private static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.gui.screen() != null || client.player == null || !held()) {
+            return;
+        }
+        double delta = event.getScrollDeltaY();
+        if (delta == 0d) {
+            return;
+        }
+        float factor = delta > 0d ? SCROLL_STEP : 1f / SCROLL_STEP;
+        scrollMultiplier = Mth.clamp(scrollMultiplier * factor, SCROLL_MIN, SCROLL_MAX);
+        event.setCanceled(true);
     }
 
     /**
