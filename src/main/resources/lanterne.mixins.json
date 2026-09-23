@@ -92,7 +92,8 @@
     "ConnectionMixin",
     "ServerLoginPacketListenerImplMixin",
     "PregenActivityMixin",
-    "SansVolKickMixin"
+    "SansVolKickMixin",
+    "SursisMixin"
   ],
   "client": [
     "JourneyMapTraductionMixin",

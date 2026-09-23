@@ -141,6 +141,23 @@ public final class Settings {
     private static boolean elastique = false;
 
     /**
+     * Le sursis : on ignore un second paquet de position reçu dans le même tick au lieu d'expulser.
+     *
+     * <p>Vanilla ({@code ServerGamePacketListenerImpl.handleMovePlayer}) pose un drapeau
+     * {@code receivedPositionThisTick} au premier paquet de position traité dans un tick, et expulse
+     * le joueur pour "Invalid move player packet received" si un second en arrive avant le tick
+     * suivant. Un client sain n'en envoie jamais deux : c'est le SERVEUR qui, en retard, vide sa file
+     * réseau d'un coup et traite plusieurs paquets légitimes dans le même passage de tick.
+     *
+     * <p>Contrairement à {@link #elastique}, ceci ne relâche aucun seuil anti-triche : la position, la
+     * vitesse et les collisions restent examinées exactement pareil sur le paquet qui EST traité. On
+     * se contente de ne pas expulser pour le seul fait d'en avoir reçu deux d'un coup — le second est
+     * simplement laissé pour le tick suivant. Allumé par défaut : ce n'est pas un compromis, c'est la
+     * correction d'un faux positif pur.
+     */
+    private static boolean sursis = true;
+
+    /**
      * Le sommaire des paquets zip. Voir {@link Sommaire}.
      *
      * <p>Le seul module de ce mod qui n'agit <b>ni pendant le tick ni pendant l'image</b>, mais au
@@ -1168,6 +1185,11 @@ public final class Settings {
         epoch++;
     }
 
+    /** Le sursis. Voir le champ {@link #sursis}. */
+    public static boolean sursis() {
+        return master && sursis;
+    }
+
     /**
      * Le sommaire ne dépend PAS de l'interrupteur général.
      *
@@ -1724,6 +1746,7 @@ public final class Settings {
         // pour le symptôme, pas pour ce module. Un mot-clé qui ressemble à un autre est ce qui a
         // fait mesurer deux modules pour un, trois fois dans ce dépôt.
         elastique = wanted.contains("elastique");
+        sursis = wanted.contains("sursis");
         sommaire = wanted.contains("sommaire");
         tampon = wanted.contains("tampon");
         boxes = wanted.contains("boites") || wanted.contains("boxes");
@@ -1918,6 +1941,7 @@ public final class Settings {
         calque = Config.CALQUE.get();
         digue = Config.DIGUE.get();
         elastique = Config.ELASTIQUE.get();
+        sursis = Config.SURSIS.get();
         sommaire = Config.SOMMAIRE.get();
         decay = Config.DECAY.get();
         decayDelay = Config.DECAY_DELAY.get();
@@ -2044,6 +2068,9 @@ public final class Settings {
         }
         if (elastique) {
             text.append("elastique ");
+        }
+        if (sursis) {
+            text.append("sursis ");
         }
         if (sommaire) {
             text.append("sommaire ");

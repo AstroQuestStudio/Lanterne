@@ -74,6 +74,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue CALQUE;
     public static final ModConfigSpec.BooleanValue DIGUE;
     public static final ModConfigSpec.BooleanValue ELASTIQUE;
+    public static final ModConfigSpec.BooleanValue SURSIS;
     public static final ModConfigSpec.BooleanValue SOMMAIRE;
     public static final ModConfigSpec.BooleanValue REDSTONE;
     public static final ModConfigSpec.BooleanValue IMPASSE;
@@ -538,6 +539,29 @@ public final class Config {
                 "tick sans prevenir. A LAISSER ETEINT sur un serveur qui tient ses ticks : il n'y",
                 "aurait rien a corriger, et il masquerait le signal qu'un serveur va mal.")
                 .define("elastique", false);
+        SURSIS = BUILDER.comment(
+                "SURSIS : ne pas expulser pour avoir recu DEUX paquets de position dans le meme tick.",
+                "",
+                "handleMovePlayer pose un drapeau receivedPositionThisTick au premier paquet de",
+                "position traite dans un tick, et expulse le joueur ('Invalid move player packet",
+                "received') si un second en arrive avant le tick suivant. Un client sain n'en envoie",
+                "JAMAIS deux de son propre chef : c'est le SERVEUR, en retard, qui vide sa file",
+                "reseau d'un coup et traite plusieurs paquets legitimes dans le meme passage de tick.",
+                "Verifie par lecture du bytecode de ServerGamePacketListenerImpl : c'est exactement",
+                "le message 'Invalid move player packet received' que produisent les rapports de",
+                "joueurs expulses en pleine partie, sans avoir triche ni vole.",
+                "",
+                "CE N'EST PAS UN RELACHEMENT DE LA TRICHE, contrairement a ELASTIQUE. La position,",
+                "la vitesse et les collisions restent examinees EXACTEMENT pareil sur le paquet qui",
+                "EST traite. On se contente de ne pas expulser pour le seul fait d'en avoir recu deux",
+                "d'un coup : le second est simplement laisse pour le tick suivant, comme s'il etait",
+                "arrive une fraction de seconde plus tard - ce qui, du point de vue du client, est",
+                "exactement ce qui s'est passe.",
+                "",
+                "ALLUME PAR DEFAUT : ce n'est pas un compromis reglable, c'est la correction d'un",
+                "faux positif pur qui frappe plus fort un serveur charge - donc plus fort les joueurs",
+                "qui bougent beaucoup, comme les scripts d'automatisation.")
+                .define("sursis", true);
         SOMMAIRE = BUILDER.comment(
                 "SOMMAIRE DES ZIP : un paquet se lit une fois, pas deux cent cinquante fois.",
                 "",
