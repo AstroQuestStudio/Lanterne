@@ -208,7 +208,11 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         int x = this.leftPos + 10;
         int lastTier = 0;
         for (Holder<MobEffect> effect : options) {
-            int tier = requiredTier(effect);
+            // Toute case de la rangee secondaire exige un beacon complet, y compris le miroir du
+            // principal ajoute par secondaryOptions() — requiredTier() le classerait a son propre
+            // palier (1 a 3), ce qui le rendrait cliquable trop tot et ferait echouer confirm() en
+            // silence cote serveur (validateEffects exige levels >= 4 pour TOUT secondaire).
+            int tier = primaryRow ? requiredTier(effect) : 4;
             if (lastTier != 0 && tier != lastTier) {
                 x += TIER_GAP;
             }
@@ -366,11 +370,58 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
         return all;
     }
 
+    /**
+     * Les choix de secondaire : la Régénération (et les ajouts de {@link Aureole} au palier 4),
+     * PLUS — nouveau — un miroir du principal actuellement choisi.
+     *
+     * <h2>Ce que vanilla appelle « Power II », et pourquoi l'écran ne le proposait jamais</h2>
+     *
+     * <p>{@code BeaconBlockEntity.validateEffects}, lu au {@code javap} sur le jar patché : au
+     * palier 4, un secondaire dont le palier requis est <b>inférieur</b> à 4 n'est accepté QUE s'il
+     * est <b>égal</b> au principal — {@code Objects.equals(primary, secondary)}. Et
+     * {@code applyEffects} en tire directement l'amplificateur :
+     * {@code if (levels >= 4 && Objects.equals(primary, secondary)) amplifier = 1}. C'est
+     * mot pour mot le mécanisme vanilla qui donne Vitesse II, Hâte II, Résistance II, Saut II ou
+     * Force II à un beacon complet — choisir SON PROPRE effet principal une seconde fois, en
+     * secondaire.
+     *
+     * <p>L'écran d'origine ne proposait en secondaire que {@link #TIER4} (la Régénération) : aucune
+     * case ne permettait jamais de reproduire ce choix, et le niveau II de Hâte — ou de n'importe
+     * quel autre effet principal — restait inatteignable malgré que le jeu l'accepte parfaitement.
+     * Ce n'est pas une extension du beacon : c'est une case manquante pour une mécanique qui
+     * existait déjà.
+     */
     private List<Holder<MobEffect>> secondaryOptions() {
         List<Holder<MobEffect>> all = new ArrayList<>();
         all.addAll(TIER4);
         all.addAll(Aureole.extraEffectsAt(4));
+        if (this.pendingPrimary != null && requiredTier(this.pendingPrimary) < 4
+                && !all.contains(this.pendingPrimary)) {
+            all.add(this.pendingPrimary);
+        }
         return all;
+    }
+
+    /**
+     * Reconstruit la rangée secondaire quand le principal change — le miroir de
+     * {@link #secondaryOptions} n'est plus le même effet.
+     *
+     * <p>Réinitialise aussi {@link #pendingSecondary} s'il pointait vers l'ancien principal : le
+     * garder pointerait sur une icône qui n'existe plus dans la nouvelle rangée, sélectionnée en
+     * apparence mais introuvable au clic.
+     */
+    private void rebuildSecondaryRow(Holder<MobEffect> oldPrimary) {
+        if (this.pendingSecondary != null && this.pendingSecondary.equals(oldPrimary)) {
+            this.pendingSecondary = null;
+        }
+        this.icons.removeIf(icon -> {
+            if (icon.primaryRow) {
+                return false;
+            }
+            this.removeWidget(icon);
+            return true;
+        });
+        addIconRow(secondaryOptions(), secondaryRowY(), false);
     }
 
     private int requiredTier(Holder<MobEffect> effect) {
@@ -393,7 +444,11 @@ public class Phare extends AbstractContainerScreen<BeaconMenu> {
      *  pourquoi l'envoi réseau attend {@link #confirm()}. */
     private void choose(Holder<MobEffect> effect, boolean primaryRow) {
         if (primaryRow) {
+            Holder<MobEffect> oldPrimary = this.pendingPrimary;
             this.pendingPrimary = effect;
+            if (!effect.equals(oldPrimary)) {
+                rebuildSecondaryRow(oldPrimary);
+            }
         } else {
             this.pendingSecondary = effect;
         }
