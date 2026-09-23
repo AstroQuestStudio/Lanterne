@@ -663,7 +663,7 @@ public final class Settings {
      * Faux par défaut : Jade (le vrai mod) est installé sur le serveur et fait déjà ce travail. */
     private static boolean regard;
     /** La Nutrition : prévisualisation faim/saturation d'un aliment. Voir {@code client.regard.Nutrition}. */
-    private static boolean nutrition = true;
+    private static boolean nutrition = false;
     /** La Longuevue : le zoom tenu au clavier. Voir {@code client.regard.Longuevue}. */
     private static boolean zoom = true;
     /** Le champ de vision est divisé par cette valeur en zoom complet. */

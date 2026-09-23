@@ -293,8 +293,11 @@ public final class ClientConfig {
                 "poison...) qu'il declenche en le mangeant, dans l'esprit d'AppleSkin.",
                 "",
                 "Cout nul quand rien en main n'est un aliment ou que la faim/saturation ne bougerait",
-                "pas ; desactive, ce module n'evalue rien.")
-                .define("nutrition", true);
+                "pas ; desactive, ce module n'evalue rien.",
+                "",
+                "ETEINT PAR DEFAUT depuis que le vrai AppleSkin est distribue par le serveur : meme",
+                "raison que REGARD/Jade - inutile de faire concurrence a l'original sur le meme HUD.")
+                .define("nutrition", false);
         ZOOM = BUILDER.comment(
                 "LA LONGUEVUE : touche C maintenue, comme Sodium - le champ de vision se reduit",
                 "progressivement pour zoomer la camera sans avoir besoin d'une longue-vue en main,",
@@ -703,8 +706,13 @@ public final class ClientConfig {
                 "4. Fonctionne sur TOUT ecran de conteneur, vanilla ou modé.",
                 "",
                 "Le comportement vanilla du glisse gauche sans Shift (deplacement de fenetre dans",
-                "certains ecrans) n'est pas affecte - seule la molette ET le shift+glisse changent.")
-                .define("souris_avancee", true);
+                "certains ecrans) n'est pas affecte - seule la molette ET le shift+glisse changent.",
+                "",
+                "ETEINT PAR DEFAUT depuis que le vrai mod Mouse Tweaks existe pour cette version : le",
+                "canal serveur (Meche) le distribue desormais, et il vaut mieux laisser le mod",
+                "d'origine faire son propre travail plutot que de maintenir un port parallele en",
+                "concurrence avec lui sur le meme ecran.")
+                .define("souris_avancee", false);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

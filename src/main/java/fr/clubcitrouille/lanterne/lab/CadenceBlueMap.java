@@ -57,10 +57,35 @@ final class CadenceBlueMap {
         return true;
     }
 
+    /**
+     * Reprend le rendu complet — et surtout, reprogramme un balayage de toutes les cartes avant de
+     * le faire.
+     *
+     * <h2>Le trou qui laissait des chantiers invisibles indéfiniment</h2>
+     *
+     * <p>{@code manager.start()} seul ne fait que relancer la file de rendu EXISTANTE. Pendant une
+     * session, seule {@link #updateAroundPlayers} programme des mises à jour — et seulement dans un
+     * rayon de {@value #TILE_RADIUS} tuiles autour de chaque joueur connecté, en suivi live. Tout ce
+     * qui a été modifié ou nouvellement exploré HORS de ce rayon — un chantier de l'AutoMiner loin
+     * du joueur, une zone traversée puis quittée avant que le suivi ne l'atteigne — n'était jamais
+     * reprogrammé : {@code start()} relançait une file vide pour ces régions-là, qui restaient donc
+     * invisibles sur la carte jusqu'au prochain redémarrage complet du serveur (seul autre point
+     * d'appel de {@link #renderEverything}).
+     *
+     * <p>On reprogramme donc un balayage complet — non forcé, {@code scheduleMapUpdateTask(map,
+     * false)} : BlueMap compare ses propres horodatages de région et ne refait que ce qui a
+     * réellement changé, exactement comme {@link #renderEverything} le fait déjà après la
+     * pré-génération. Le coût d'un balayage sur une carte à jour est donc nul ; son absence, elle,
+     * coûtait des chantiers entiers jamais référencés.
+     */
     static void resumeFullRender() {
         BlueMapAPI.getInstance().ifPresent(api -> {
+            for (BlueMapMap map : api.getMaps()) {
+                api.getRenderManager().scheduleMapUpdateTask(map, false);
+            }
             api.getRenderManager().start();
-            Lanterne.LOG.info("[CADENCE] plus aucun joueur connecté — rendu complet BlueMap repris.");
+            Lanterne.LOG.info("[CADENCE] plus aucun joueur connecté — balayage complet reprogrammé, "
+                    + "rendu repris.");
         });
     }
 
