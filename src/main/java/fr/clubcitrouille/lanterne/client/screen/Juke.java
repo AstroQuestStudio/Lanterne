@@ -222,7 +222,7 @@ public final class Juke {
                         session.failed = true;
                     } else {
                         // Première fois : la question, une fois ; sur « Oui », le tick suivant ouvre.
-                        Consent.ask("de la musique", "youtube.com", null);
+                        Question.ask("de la musique", "youtube.com", null);
                     }
                     return;
                 }

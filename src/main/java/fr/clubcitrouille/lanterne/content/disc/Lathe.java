@@ -184,8 +184,8 @@ public final class Lathe extends Screen {
                 && !fr.clubcitrouille.lanterne.client.screen.Consent.refused()) {
             // Jamais répondu : on pose la question ici, et le graveur revient avec le lien déjà
             // collé et la sonde relancée, quelle que soit la réponse.
-            Minecraft.getInstance().gui.setScreen(fr.clubcitrouille.lanterne.client.screen.Consent
-                    .question("de la musique", "youtube.com", new Lathe(this.pos, typed)));
+            Minecraft.getInstance().gui.setScreen(fr.clubcitrouille.lanterne.client.screen.Question
+                    .screen("de la musique", "youtube.com", new Lathe(this.pos, typed)));
             return;
         }
         this.busy = true;

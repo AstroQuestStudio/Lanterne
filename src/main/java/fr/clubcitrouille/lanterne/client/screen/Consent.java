@@ -133,60 +133,13 @@ public final class Consent {
         return SPEC.isLoaded() && !REMOTE.get() && ANSWERED.get();
     }
 
-    /** Déjà posée cette session, sans réponse : on ne la repose pas avant le prochain lancement. */
-    private static boolean askedThisSession;
-    /** Ce qui attend la réponse : relancé tout de suite sur « Oui ». */
-    private static final java.util.List<Runnable> WAITING = new java.util.ArrayList<>();
-
-    /**
-     * Pose la question, une seule fois, au moment où un contenu distant doit se charger. Ne fait rien
-     * si le joueur a déjà répondu, ou si la question est déjà ouverte / déjà posée cette session. Ne
-     * vole jamais un écran ouvert : on attend qu'aucun ne le soit (appelée à chaque tick par les
-     * appelants tant que la réponse manque).
-     *
-     * @param what « une vidéo », « de la musique »…
-     * @param host le domaine, dit au joueur
-     * @param onYes relancé immédiatement si le joueur accepte
-     */
-    public static void ask(String what, String host, Runnable onYes) {
-        if (!SPEC.isLoaded() || REMOTE.get() || ANSWERED.get() || askedThisSession) {
-            return;
-        }
-        net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
-        if (client.gui.screen() != null || client.player == null) {
-            return;
-        }
-        askedThisSession = true;
-        if (onYes != null) {
-            WAITING.add(onYes);
-        }
-        client.gui.setScreen(question(what, host, null));
+    /** Le joueur a-t-il déjà répondu, dans un sens ou dans l'autre ? Voir {@link Question}. */
+    public static boolean answered() {
+        return SPEC.isLoaded() && (REMOTE.get() || ANSWERED.get());
     }
 
-    /** L'écran de la question, qui rend la main à {@code back} une fois répondu. */
-    public static net.minecraft.client.gui.screens.Screen question(String what, String host,
-            net.minecraft.client.gui.screens.Screen back) {
-        askedThisSession = true;
-        net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
-        return new net.minecraft.client.gui.screens.ConfirmScreen(yes -> {
-            allowRemote(yes);
-            client.gui.setScreen(back);
-            if (yes) {
-                java.util.List<Runnable> ready = new java.util.ArrayList<>(WAITING);
-                WAITING.clear();
-                ready.forEach(Runnable::run);
-            } else {
-                WAITING.clear();
-            }
-        }, net.minecraft.network.chat.Component.literal("Autoriser les médias distants ?"),
-                net.minecraft.network.chat.Component.literal("Ce serveur diffuse " + what + " depuis "
-                        + (host == null || host.isBlank() ? "Internet" : host) + ".\n\n"
-                        + "Oui : ta machine se connecte à cet hôte (il verra ton adresse IP, comme "
-                        + "n'importe quel site que tu visites).\nNon : rien ne se charge ; tu pourras "
-                        + "changer d'avis dans l'écran d'un projecteur."),
-                net.minecraft.network.chat.Component.literal("Oui, autoriser"),
-                net.minecraft.network.chat.Component.literal("Non"));
-    }
+    // Aucun type client ici (écran, Minecraft) : cette classe est chargée aussi par un serveur
+    // dédié, pour enregistrer sa configuration. La question elle-même vit dans Question.
 
     /** Bascule le consentement, et l'écrit. Appelé par l'interrupteur de l'écran de réglages. */
     public static void allowRemote(boolean wanted) {

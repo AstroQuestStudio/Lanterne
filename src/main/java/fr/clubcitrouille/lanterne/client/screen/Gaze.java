@@ -343,7 +343,7 @@ public final class Gaze {
         if (verdict == Engine.Verdict.SANS_CONSENTEMENT) {
             // Première fois qu'un contenu distant veut se charger ici : on pose la question, une
             // fois. Sur « Oui », le tour suivant ouvrira la source tout seul.
-            Consent.ask("une vidéo", fr.clubcitrouille.lanterne.content.screen.Sieve.domain(wanted), null);
+            Question.ask("une vidéo", fr.clubcitrouille.lanterne.content.screen.Sieve.domain(wanted), null);
         }
         if (verdict != Engine.Verdict.PRET) {
             return;
