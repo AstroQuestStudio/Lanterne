@@ -152,6 +152,19 @@ public record Clock(long anchorTick, boolean paused, long anchorMillis, long dur
     }
 
     /**
+     * La position selon le réglage « Boucle » de l'écran : repliée s'il boucle, arrêtée net à la fin
+     * sinon. Calculée à l'identique par chaque client — il n'y a pas de ticker serveur pour arrêter
+     * l'horloge, et il n'en faut pas : la même fonction pure donne la même fin partout.
+     */
+    public long position(long gameTime, float partialTick, boolean loop) {
+        if (loop || this.durationMillis <= 0L || this.paused) {
+            return position(gameTime, partialTick);
+        }
+        long elapsed = Math.round((gameTime - this.anchorTick + partialTick) * TICK_MILLIS);
+        return Math.min(this.durationMillis, this.anchorMillis + Math.max(0L, elapsed));
+    }
+
+    /**
      * La position repliée sur la durée, quand la séance boucle.
      *
      * <p>Une durée nulle veut dire « inconnue » — un direct, ou un moteur qui n'a pas encore lu les

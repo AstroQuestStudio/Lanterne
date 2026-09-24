@@ -446,7 +446,7 @@ public class Console extends Screen {
     private void drawScrubber(GuiGraphicsExtractor graphics, int left, int y, int mouseX,
             int mouseY) {
         long total = this.beat.durationMillis();
-        long now = this.beat.position(clientTime(), 0f);
+        long now = this.beat.position(clientTime(), 0f, this.feed.loop());
         int barLeft = left + 10;
         int barRight = left + WIDTH - 70;
 

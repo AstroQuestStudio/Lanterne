@@ -124,7 +124,7 @@ public final class Chrome implements Engine {
      * ouvrir le canal : il est renvoyé à chaque battement, sans effet s'il est déjà ouvert.
      */
     private static final String SCRIPT_YOUTUBE =
-            "(function(){if(window.__lanterneSync)window.__lanterneSync(%1$s,%2$s,%3$s);})()";
+            "(function(){if(window.__lanterneSync)window.__lanterneSync(%1$s,%2$s,%3$s,%4$s);})()";
 
     /** Les poignées vers Rinku, résolues une fois. Nulles tant que le mod n'est pas là. */
     private static final class Bridge {
@@ -148,6 +148,8 @@ public final class Chrome implements Engine {
             new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.Map<String, Pane> PAGES =
             new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.regex.Pattern PAGE_DURATION =
+            java.util.regex.Pattern.compile("\\[LANTERNE\\] #([a-z0-9]+) duree ([0-9]{1,7}(?:\\.[0-9]{1,3})?)$");
     private static final java.util.regex.Pattern PAGE_ERROR =
             java.util.regex.Pattern.compile("\\[LANTERNE\\] #([a-z0-9]+) erreur lecteur (\\d{1,6})");
 
@@ -366,6 +368,13 @@ public final class Chrome implements Engine {
                         if ("onConsoleMessage".equals(method.getName()) && args != null && args.length >= 3
                                 && args[2] instanceof String line && line.contains("[LANTERNE]")) {
                             Lanterne.LOG.info("[PROJECTION] page : {}", line);
+                            java.util.regex.Matcher length = PAGE_DURATION.matcher(line);
+                            if (length.find()) {
+                                Pane pane = PAGES.get(length.group(1));
+                                if (pane != null) {
+                                    pane.pageDuration = Math.round(Double.parseDouble(length.group(2)) * 1000d);
+                                }
+                            }
                             java.util.regex.Matcher error = PAGE_ERROR.matcher(line);
                             if (error.find()) {
                                 Pane pane = PAGES.get(error.group(1));
@@ -488,10 +497,14 @@ public final class Chrome implements Engine {
             return String.format(Locale.ROOT, SCRIPT_YOUTUBE,
                     String.format(Locale.ROOT, "%.3f", millis / 1000d),
                     this.playing ? "true" : "false",
-                    String.format(Locale.ROOT, "%.0f", Math.clamp(this.gain, 0f, 1f) * 100));
+                    String.format(Locale.ROOT, "%.0f", Math.clamp(this.gain, 0f, 1f) * 100),
+                    this.looping ? "true" : "false");
         }
 
         private volatile boolean playing;
+        private volatile boolean looping;
+        /** Durée réelle rapportée par la page (vidéo normale seulement), en millisecondes. */
+        private volatile long pageDuration;
         private volatile float gain = 1f;
 
         /** Appelé par {@link Gaze} : l'horloge dit si l'on doit jouer ou attendre. */
@@ -545,19 +558,14 @@ public final class Chrome implements Engine {
         }
 
         /**
-         * Durée inconnue, toujours.
-         *
-         * <p>On pourrait la lire dans la page — {@code v.duration} — mais {@code executeJavaScript}
-         * ne rend rien : c'est un envoi sans réponse. La récupérer demanderait un pont de messages
-         * dans l'autre sens, pour une valeur qui ne sert qu'à dessiner une barre de progression.
-         *
-         * <p>Zéro veut dire « inconnue » pour {@link Clock}, qui cesse alors de replier la boucle et
-         * laisse la position courir. C'est le bon comportement pour un lecteur qui gère lui-même sa
-         * fin de vidéo.
+         * La durée que la page a lue dans le lecteur ({@code duree N} en console, relayé par
+         * {@code hookConsole}), une fois stable — zéro tant qu'elle ne l'est pas, et toujours zéro
+         * pour un direct : {@link Clock} ne lui connaît alors ni fin ni boucle, ce qui est juste.
+         * Remonte au serveur par {@code Mail.Measure} (voir {@code Gaze.advance}).
          */
         @Override
         public long duration() {
-            return 0L;
+            return this.pageDuration;
         }
 
         /**
@@ -606,6 +614,13 @@ public final class Chrome implements Engine {
     static void playing(Reel reel, boolean value) {
         if (reel instanceof Pane pane) {
             pane.playing(value);
+        }
+    }
+
+    /** Le réglage « Boucle » de l'écran, pour que la page sache quoi faire à la fin. */
+    static void looping(Reel reel, boolean value) {
+        if (reel instanceof Pane pane) {
+            pane.looping = value;
         }
     }
 }

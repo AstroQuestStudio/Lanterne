@@ -367,7 +367,7 @@ public final class Gaze {
 
         Feed feed = stage.feed();
         Clock beat = stage.clock();
-        long target = beat.position(gameTime(), 0f) + Clock.compensation(ping());
+        long target = beat.position(gameTime(), 0f, feed.loop()) + Clock.compensation(ping());
         // Une source que l'hébergeur refuse pour tout le monde (YouTube 150, par exemple) : on arrête
         // l'horloge partagée, une fois, par la commande ordinaire — donc soumise au verrou « Qui
         // règle ». Sinon l'écran dirait « Pause » et le compteur avancerait sur une vidéo morte.
@@ -383,6 +383,7 @@ public final class Gaze {
         // Un lecteur web tient son propre état de lecture : il faut le lui dire, là où un décodeur
         // se contente de rendre l'image de l'instant demandé.
         Chrome.playing(reel, !beat.paused());
+        Chrome.looping(reel, feed.loop());
 
         // La dérive, et ce qu'on en fait. La politique vit dans Clock — une fonction pure, qu'on
         // peut relire et discuter sans lancer le jeu. Ici on ne fait qu'obéir.
@@ -406,6 +407,7 @@ public final class Gaze {
         // miniature pour toujours (retour anticipé présent du 15/09 au 24/09/2026).
         if (reel.texture() != null) {
             reel.present(target, null);
+            measure(pos, show, beat, reel);
             return;
         }
 
@@ -425,9 +427,14 @@ public final class Gaze {
             }
         }
         reel.present(target, show.film);
+        measure(pos, show, beat, reel);
+    }
 
-        // La durée, une fois, si le serveur ne la connaît pas. Voir Mail.Measure : c'est le seul pli
-        // montant que personne ne réclame, et le seul où le serveur croit un client.
+    /**
+     * La durée, une fois, si le serveur ne la connaît pas. Voir Mail.Measure : c'est le seul pli
+     * montant que personne ne réclame, et le seul où le serveur croit un client.
+     */
+    private static void measure(BlockPos pos, Show show, Clock beat, Engine.Reel reel) {
         if (!show.measured && beat.durationMillis() <= 0L && reel.duration() > 0L) {
             show.measured = true;
             net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(
