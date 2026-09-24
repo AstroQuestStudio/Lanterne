@@ -171,6 +171,24 @@ final class Hote {
     }
 
     /**
+     * Écoute ce que le lecteur YouTube renvoie ({@code onReady}, état, erreur) et l'écrit en console
+     * avec la marque {@code [LANTERNE]}, seulement quand l'état change — {@code Chrome.hookConsole}
+     * le relaie dans le journal du jeu. États YouTube : -1 non démarré, 0 fini, 1 lecture,
+     * 2 pause, 3 mise en tampon, 5 prête (miniature).
+     */
+    private static final String DIAGNOSTIC = "<script>(function(){var last=null;"
+            + "function log(s){if(s!==last){last=s;console.log('[LANTERNE] '+s);}}"
+            + "window.addEventListener('message',function(e){var d;"
+            + "try{d=typeof e.data==='string'?JSON.parse(e.data):e.data;}catch(x){return;}"
+            + "if(!d||!d.event)return;"
+            + "if(d.event==='onReady')log('lecteur pret');"
+            + "else if(d.event==='onError')log('erreur lecteur '+d.info);"
+            + "else if(d.event==='onStateChange')log('etat '+d.info);"
+            + "else if(d.event==='infoDelivery'&&d.info&&d.info.playerState!==undefined)"
+            + "log('etat '+d.info.playerState);});"
+            + "log('page hote chargee');})();</script>";
+
+    /**
      * La page hôte : un {@code <iframe>} en plein cadre, et rien d'autre — pas de barre, pas de
      * script tiers. {@link Chrome} pilote l'iframe depuis l'extérieur, par {@code postMessage}.
      */
@@ -189,6 +207,7 @@ final class Hote {
                 + "iframe{position:fixed;inset:0;width:100%;height:100%;border:0}"
                 + "</style></head><body>"
                 + "<iframe id=\"p\" src=\"" + escaped + "\" allow=\"autoplay\" allowfullscreen></iframe>"
+                + DIAGNOSTIC
                 + "</body></html>";
     }
 }

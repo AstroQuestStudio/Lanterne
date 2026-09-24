@@ -374,8 +374,11 @@ public final class Gaze {
 
         // Une bobine qui porte sa propre texture n'a pas besoin de pellicule : le navigateur
         // peint la sienne. Lui en réserver une serait trois mébioctets et demi de mémoire vidéo
-        // pour une texture que personne n'écrirait jamais.
+        // pour une texture que personne n'écrirait jamais. Mais present() reste l'unique canal
+        // qui lui dit l'heure et « joue » : sans cet appel, la page YouTube restait sur sa
+        // miniature pour toujours (retour anticipé présent du 15/09 au 24/09/2026).
         if (reel.texture() != null) {
+            reel.present(target, null);
             return;
         }
 

@@ -120,18 +120,20 @@ public final class Chrome implements Engine {
      *
      * <h2>Pourquoi « unMute », et pas seulement « setVolume »</h2>
      *
-     * <p>{@code Embed} pose {@code mute=1} sur l'URL d'origine — pas un réglage, une condition :
-     * Chromium refuse de démarrer un média avec du son sans un vrai geste de souris <b>sur sa propre
-     * page</b>, et le clic sur « Lire » a lieu dans l'écran de Lanterne, jamais dans la page CEF. Un
-     * média qui démarre muet échappe à cette règle. Rester muet pour toujours n'est pas le but pour
-     * autant : une fois la lecture réellement engagée, {@code setVolume} ne suffit pas à lever le
-     * drapeau interne « muet » de YouTube — {@code unMute} le fait, et se déclenche dès que le volume
-     * demandé n'est plus nul.
+     * <p>{@code setVolume} ne lève pas le drapeau interne « muet » de YouTube : {@code unMute} le
+     * fait, {@code mute} le pose pour un volume nul.
+     *
+     * <h2>Le message « listening »</h2>
+     *
+     * <p>C'est ce que la bibliothèque officielle ({@code www-widgetapi}) envoie au lecteur pour
+     * ouvrir le canal : il est renvoyé à chaque battement, sans effet s'il est déjà ouvert.
      */
     private static final String SCRIPT_YOUTUBE =
             "(function(){var f=document.getElementById('p');if(!f||!f.contentWindow)return;"
+            + "try{f.contentWindow.postMessage(JSON.stringify({event:'listening',id:1,"
+            + "channel:'widget'}),'*');}catch(e){}"
             + "function send(func,args){try{f.contentWindow.postMessage(JSON.stringify("
-            + "{event:'command',func:func,args:args||[]}),'*');}catch(e){}}"
+            + "{event:'command',func:func,args:args||[],id:1,channel:'widget'}),'*');}catch(e){}}"
             + "if(%1$s!==null)send('seekTo',[%1$s,true]);"
             + "send(%2$s?'playVideo':'pauseVideo',[]);"
             + "send('setVolume',[%3$s]);"
@@ -262,6 +264,7 @@ public final class Chrome implements Engine {
             wired.ok = true;
             Lanterne.LOG.info("[PROJECTION] lecteur intégré détecté : Rinku.");
             hookLoadErrors(entry, loader);
+            hookConsole(entry, loader);
         } catch (Throwable absent) {
             // Absent, ou d'une version dont les signatures ont bougé. Les deux se traitent pareil :
             // on ne s'en sert pas, et l'ardoise dit quoi installer. Au niveau « debug » parce qu'un
@@ -315,6 +318,50 @@ public final class Chrome implements Engine {
     }
 
     /**
+     * Relaie dans le journal les lignes console marquées {@code [LANTERNE]} — celles que la page
+     * hôte ({@link Hote}) écrit à chaque changement d'état du lecteur YouTube. Sans ce canal, l'état
+     * réel du lecteur (prêt, en lecture, erreur 150/101…) restait invisible.
+     *
+     * <p>Les méthodes booléennes de l'interface doivent rendre {@code false}, jamais {@code null} :
+     * {@code RinkuClient.onConsoleMessage} teste le retour de chaque gestionnaire.
+     */
+    private static void hookConsole(Class<?> entry, ClassLoader loader) {
+        try {
+            Object client = MethodHandles.publicLookup().findStatic(entry, "getClient",
+                    MethodType.methodType(Class.forName("de.keksuccino.rinku.RinkuClient", false, loader)))
+                    .invoke();
+            Class<?> handlerType = Class.forName("org.cef.handler.CefDisplayHandler", false, loader);
+            Object proxy = java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[] {handlerType},
+                    (target, method, args) -> {
+                        switch (method.getName()) {
+                            case "equals" -> {
+                                return args != null && args.length == 1 && target == args[0];
+                            }
+                            case "hashCode" -> {
+                                return System.identityHashCode(target);
+                            }
+                            case "toString" -> {
+                                return "LanterneConsoleRelay";
+                            }
+                            default -> { }
+                        }
+                        if ("onConsoleMessage".equals(method.getName()) && args != null && args.length >= 3
+                                && args[2] instanceof String line && line.contains("[LANTERNE]")) {
+                            Lanterne.LOG.info("[PROJECTION] page : {}", line);
+                        }
+                        if (method.getReturnType() == boolean.class) {
+                            return Boolean.FALSE;
+                        }
+                        return null;
+                    });
+            client.getClass().getMethod("addDisplayHandler", handlerType).invoke(client, proxy);
+        } catch (Throwable indisponible) {
+            Lanterne.LOG.debug("[PROJECTION] relais console indisponible : {}",
+                    String.valueOf(indisponible));
+        }
+    }
+
+    /**
      * Une page ouverte, tenue à l'heure de l'horloge partagée.
      *
      * <p>Elle ne décode rien elle-même et n'écrit dans aucune pellicule : le navigateur tient sa
@@ -345,6 +392,7 @@ public final class Chrome implements Engine {
         private long hardSeekAt;
         private long shownMillis;
         private volatile boolean shut;
+        private boolean toldPlay;
         private String trouble = "";
 
         Pane(Object browser, int width, int height, boolean framed) {
@@ -377,6 +425,11 @@ public final class Chrome implements Engine {
                         this.playing ? "true" : "false",
                         String.format(Locale.ROOT, "%.3f", this.gain));
                 bridge.script.invoke(this.browser, code, "", 0);
+                if (this.playing && !this.toldPlay) {
+                    this.toldPlay = true;
+                    Lanterne.LOG.info("[PROJECTION] commande de lecture envoyée à la page ({}).",
+                            this.framed ? "YouTube encadré" : "lecteur direct");
+                }
             } catch (Throwable ignored) {
                 // Une page qui n'a pas fini de charger, ou qui vient d'être fermée. Ni l'un ni
                 // l'autre n'est une panne : le battement suivant réessaiera dans un quart de
