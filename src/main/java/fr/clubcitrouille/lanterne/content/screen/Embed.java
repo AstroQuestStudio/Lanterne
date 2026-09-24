@@ -152,6 +152,52 @@ public final class Embed {
         return null;
     }
 
+    /**
+     * Un lien YouTube de la forme {@code /live/<ID>} : un direct annoncé par l'adresse elle-même.
+     * Un direct collé en {@code watch?v=} ou {@code youtu.be/} n'est pas reconnaissable ici — la page
+     * hôte le détecte alors à la volée ({@code videoData.isLive}).
+     */
+    public static boolean youtubeLiveLink(String source) {
+        URI uri = parse(source);
+        return uri != null && youtubeHost(uri) && uri.getPath() != null
+                && uri.getPath().startsWith("/live/");
+    }
+
+    /**
+     * Un lien de CHAÎNE YouTube vers son direct ({@code /@nom/live}, {@code /channel/…/live},
+     * {@code /c/…/live}, {@code /user/…/live}) : il ne porte aucun identifiant de vidéo, donc aucun
+     * lecteur intégrable ne peut en être construit.
+     */
+    public static boolean youtubeChannelLink(String source) {
+        URI uri = parse(source);
+        if (uri == null || !youtubeHost(uri) || uri.getPath() == null) {
+            return false;
+        }
+        String path = uri.getPath();
+        boolean channel = path.startsWith("/@") || path.startsWith("/channel/")
+                || path.startsWith("/c/") || path.startsWith("/user/");
+        return channel && youtubeId(uri.getHost().toLowerCase(Locale.ROOT), path,
+                uri.getQuery() == null ? "" : uri.getQuery()) == null;
+    }
+
+    private static URI parse(String source) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(source.trim());
+            return uri.getHost() == null ? null : uri;
+        } catch (RuntimeException unreadable) {
+            return null;
+        }
+    }
+
+    private static boolean youtubeHost(URI uri) {
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        return host.equals("youtu.be") || host.endsWith("youtube.com")
+                || host.endsWith("youtube-nocookie.com");
+    }
+
     private static String vimeoId(String host, String path) {
         if (!host.endsWith("vimeo.com")) {
             return null;

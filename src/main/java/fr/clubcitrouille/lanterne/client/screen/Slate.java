@@ -79,6 +79,10 @@ public record Slate(String what, String todo) {
                     "Clique ce bloc → « Autoriser les médias distants »");
         }
 
+        if (Embed.youtubeChannelLink(feed.source())) {
+            return new Slate(CHANNEL_TITLE, CHANNEL_ADVICE);
+        }
+
         // LA FORME D'ABORD, et l'ordre inverse disait n'importe quoi. Un lien YouTube n'a aucun
         // besoin de FFmpeg : il lui faut un navigateur. Interroger l'état du décodeur avant de
         // regarder l'adresse faisait répondre « décodeur pas encore installé » à un joueur qui
@@ -124,6 +128,11 @@ public record Slate(String what, String todo) {
         return new Slate("Ouverture…", host);
     }
 
+    /** Un lien de chaîne YouTube (« …/@nom/live ») : pas d'identifiant de vidéo. */
+    private static final String CHANNEL_TITLE = "Lien de chaîne YouTube, pas de vidéo";
+    private static final String CHANNEL_ADVICE =
+            "Sur le direct : Partager → copie le lien youtu.be/… ou youtube.com/live/…";
+
     /** Le conseil qui suit un refus, adapté à ce qui a été tapé. */
     private static String advice(String source) {
         return Embed.of(source).kind() == Embed.Kind.FICHIER
@@ -143,6 +152,9 @@ public record Slate(String what, String todo) {
     public static String warning(String source) {
         if (source == null || source.isBlank()) {
             return "";
+        }
+        if (Embed.youtubeChannelLink(source)) {
+            return "⚠ " + CHANNEL_TITLE + " — " + CHANNEL_ADVICE;
         }
         Embed.Form form = Embed.of(source);
         boolean browser = Chrome.INSTANCE.verdict() != Engine.Verdict.SANS_MOD;

@@ -107,16 +107,11 @@ public final class Chrome implements Engine {
      * cette frontière, avec le protocole que YouTube publie pour son lecteur intégrable
      * ({@code enablejsapi=1}, déjà posé par {@code Embed}).
      *
-     * <h2>Pourquoi la position n'est corrigée qu'à l'occasion, et pas à chaque battement</h2>
+     * <h2>La page décide, pas ce script</h2>
      *
-     * <p>{@code postMessage} n'attend pas de réponse — {@code Chrome.wire} le dit déjà pour le
-     * chemin direct. Ici c'est pire : il n'y a même pas de {@code v.currentTime} local à lire pour
-     * savoir si la vidéo a dérivé avant de corriger. Imposer {@code seekTo} à chaque battement, à
-     * l'aveugle, remettrait en tampon le flux quatre fois par seconde — précisément le bégaiement
-     * que le seuil du chemin direct existe pour éviter. On imite donc ce seuil sans pouvoir le
-     * mesurer : {@code %1$s} vaut soit une position à imposer, soit le mot {@code null} pour dire
-     * « laisse-la courir toute seule cette fois », et {@link Pane} n'envoie une position que toutes
-     * les {@link Pane#HARD_SEEK} millisecondes.
+     * <p>Ce script ne fait que transmettre position, lecture et volume à {@code __lanterneSync},
+     * défini par la page de {@link Hote}. C'est elle qui lit l'état réel du lecteur (position,
+     * durée, direct ou non) et décide d'un {@code seekTo} — jamais sur un direct, voir {@link Hote}.
      *
      * <h2>Pourquoi « unMute », et pas seulement « setVolume »</h2>
      *
@@ -129,15 +124,7 @@ public final class Chrome implements Engine {
      * ouvrir le canal : il est renvoyé à chaque battement, sans effet s'il est déjà ouvert.
      */
     private static final String SCRIPT_YOUTUBE =
-            "(function(){var f=document.getElementById('p');if(!f||!f.contentWindow)return;"
-            + "try{f.contentWindow.postMessage(JSON.stringify({event:'listening',id:1,"
-            + "channel:'widget'}),'*');}catch(e){}"
-            + "function send(func,args){try{f.contentWindow.postMessage(JSON.stringify("
-            + "{event:'command',func:func,args:args||[],id:1,channel:'widget'}),'*');}catch(e){}}"
-            + "if(%1$s!==null)send('seekTo',[%1$s,true]);"
-            + "send(%2$s?'playVideo':'pauseVideo',[]);"
-            + "send('setVolume',[%3$s]);"
-            + "send(%3$s>0?'unMute':'mute',[]);})()";
+            "(function(){if(window.__lanterneSync)window.__lanterneSync(%1$s,%2$s,%3$s);})()";
 
     /** Les poignées vers Rinku, résolues une fois. Nulles tant que le mod n'est pas là. */
     private static final class Bridge {
@@ -195,11 +182,16 @@ public final class Chrome implements Engine {
             return null;
         }
         Embed.Form form = Embed.of(source);
+        if (Embed.youtubeChannelLink(source)) {
+            // Un lien de chaîne n'a pas d'identifiant de vidéo : l'ouvrir en brut donnerait la page
+            // YouTube entière, hors de tout contrôle. L'ardoise explique quoi coller à la place.
+            return null;
+        }
         try {
             int height = Math.clamp(wantedHeight, 240, 1440);
             int width = Math.max(2, Math.round(height * 16f / 9f) & ~1);
             boolean youtube = form.url().startsWith(Embed.YOUTUBE_EMBED_PREFIX);
-            String address = youtube ? Hote.frame(form.url()) : form.url();
+            String address = youtube ? Hote.frame(form.url(), Embed.youtubeLiveLink(source)) : form.url();
             if (address == null) {
                 // L'hote local n'a pas pu demarrer : pas de repli silencieux vers l'adresse nue,
                 // ce serait rouvrir l'Erreur 153 qu'il existe pour fermer.
@@ -378,18 +370,12 @@ public final class Chrome implements Engine {
          */
         private static final long BEAT = 250L;
 
-        /** Voir le commentaire de {@link Chrome#SCRIPT_YOUTUBE} : trois secondes entre deux
-         *  positions imposées à l'aveugle, assez rare pour ne pas faire bégayer le flux, assez
-         *  fréquent pour rattraper une horloge qui vient de sauter (rembobinage, rejoint en cours). */
-        private static final long HARD_SEEK = 3000L;
-
         private final Object browser;
         private final int width;
         private final int height;
         private final boolean framed;
 
         private long spokeAt;
-        private long hardSeekAt;
         private long shownMillis;
         private volatile boolean shut;
         private boolean toldPlay;
@@ -437,15 +423,10 @@ public final class Chrome implements Engine {
             }
         }
 
-        /** Le code pour {@link Chrome#SCRIPT_YOUTUBE} : voir son commentaire pour {@link #HARD_SEEK}. */
+        /** Le code pour {@link Chrome#SCRIPT_YOUTUBE} : la page décide seule s'il faut recaler. */
         private String speakFramed(long millis) {
-            long now = System.currentTimeMillis();
-            String position = "null";
-            if (now - this.hardSeekAt >= HARD_SEEK) {
-                this.hardSeekAt = now;
-                position = String.format(Locale.ROOT, "%.3f", millis / 1000d);
-            }
-            return String.format(Locale.ROOT, SCRIPT_YOUTUBE, position,
+            return String.format(Locale.ROOT, SCRIPT_YOUTUBE,
+                    String.format(Locale.ROOT, "%.3f", millis / 1000d),
                     this.playing ? "true" : "false",
                     String.format(Locale.ROOT, "%.0f", Math.clamp(this.gain, 0f, 1f) * 100));
         }

@@ -71,13 +71,13 @@ final class Hote {
     private static volatile String hostAddress;
 
     /** L'adresse locale à donner au navigateur pour un embed YouTube, ou nul si indisponible. */
-    static synchronized String frame(String embedUrl) {
+    static synchronized String frame(String embedUrl, boolean live) {
         int p = ensure();
         if (p < 0) {
             return null;
         }
         return "http://" + hostAddress + ":" + p + CONTEXT + "?src="
-                + URLEncoder.encode(embedUrl, StandardCharsets.UTF_8);
+                + URLEncoder.encode(embedUrl, StandardCharsets.UTF_8) + (live ? "&live=1" : "");
     }
 
     private static int ensure() {
@@ -144,7 +144,8 @@ final class Hote {
                 exchange.sendResponseHeaders(400, -1);
                 return;
             }
-            byte[] body = page(src).getBytes(StandardCharsets.UTF_8);
+            boolean live = "1".equals(param(exchange.getRequestURI().getRawQuery(), "live"));
+            byte[] body = page(src, live).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
             exchange.sendResponseHeaders(200, body.length);
             try (OutputStream out = exchange.getResponseBody()) {
@@ -171,28 +172,59 @@ final class Hote {
     }
 
     /**
-     * Écoute ce que le lecteur YouTube renvoie ({@code onReady}, état, erreur) et l'écrit en console
-     * avec la marque {@code [LANTERNE]}, seulement quand l'état change — {@code Chrome.hookConsole}
-     * le relaie dans le journal du jeu. États YouTube : -1 non démarré, 0 fini, 1 lecture,
-     * 2 pause, 3 mise en tampon, 5 prête (miniature).
+     * Le pilote de la page : c'est ICI, et non côté Java, que se décide un {@code seekTo}, parce que
+     * seule la page connaît l'état réel du lecteur ({@code currentTime}, {@code duration},
+     * {@code videoData.isLive}) grâce aux {@code infoDelivery} que YouTube renvoie après
+     * {@code listening}. {@code Chrome.SCRIPT_YOUTUBE} appelle {@code __lanterneSync} quatre fois
+     * par seconde.
+     *
+     * <p><b>Direct :</b> jamais de {@code seekTo} vers la position de séance — elle compte depuis le
+     * début de la séance Lanterne, pas depuis le début du direct, et renverrait le lecteur au début de
+     * la fenêtre DVR. Un direct est déjà synchronisé par nature ; seule une reprise après pause saute
+     * au bord du direct ({@code seekTo(duration)}), une fois. <b>Vidéo normale :</b> {@code seekTo}
+     * seulement si l'écart réel dépasse 1,5 s, et au plus toutes les 3 s. Tant que {@code videoData}
+     * n'est pas arrivé, aucun {@code seekTo} du tout — on ne sait pas encore si c'est un direct.
+     *
+     * <p>Chaque changement d'état est écrit en console avec {@code [LANTERNE]} ;
+     * {@code Chrome.hookConsole} le relaie dans le journal. États YouTube : -1 non démarré, 0 fini,
+     * 1 lecture, 2 pause, 3 tampon, 5 prête (miniature).
      */
-    private static final String DIAGNOSTIC = "<script>(function(){var last=null;"
+    private static final String DRIVER = "<script>(function(){"
+            + "var live=%s,known=false,cur=-1,dur=0,st=-2,seekAt=0,held=false,played=false,last=null,"
+            + "f=document.getElementById('p');"
             + "function log(s){if(s!==last){last=s;console.log('[LANTERNE] '+s);}}"
+            + "function post(o){try{f.contentWindow.postMessage(JSON.stringify(o),'*');}catch(e){}}"
+            + "function send(fn,a){post({event:'command',func:fn,args:a||[],id:1,channel:'widget'});}"
             + "window.addEventListener('message',function(e){var d;"
             + "try{d=typeof e.data==='string'?JSON.parse(e.data):e.data;}catch(x){return;}"
             + "if(!d||!d.event)return;"
             + "if(d.event==='onReady')log('lecteur pret');"
             + "else if(d.event==='onError')log('erreur lecteur '+d.info);"
-            + "else if(d.event==='onStateChange')log('etat '+d.info);"
-            + "else if(d.event==='infoDelivery'&&d.info&&d.info.playerState!==undefined)"
-            + "log('etat '+d.info.playerState);});"
-            + "log('page hote chargee');})();</script>";
+            + "else if(d.event==='onStateChange'){st=d.info;log('etat '+st);}"
+            + "else if(d.event==='infoDelivery'&&d.info){var i=d.info;"
+            + "if(i.playerState!==undefined){st=i.playerState;log('etat '+st);}"
+            + "if(typeof i.currentTime==='number')cur=i.currentTime;"
+            + "if(typeof i.duration==='number')dur=i.duration;"
+            + "if(i.videoData&&!known){known=true;if(i.videoData.isLive===true)live=true;"
+            + "console.log('[LANTERNE] '+(live?'direct detecte':'video normale')"
+            + "+' (isLive='+i.videoData.isLive+', duree='+dur+')');}}});"
+            + "window.__lanterneSync=function(pos,play,vol){"
+            + "post({event:'listening',id:1,channel:'widget'});var now=Date.now();"
+            + "if(play){if(held&&live&&dur>0){send('seekTo',[dur,true]);"
+            + "console.log('[LANTERNE] reprise au bord du direct');}held=false;"
+            + "if(st!==1&&st!==3)send('playVideo');played=true;}"
+            + "else{if(played)held=true;if(st===1||st===3)send('pauseVideo');}"
+            + "if(!live&&known&&cur>=0&&Math.abs(cur-pos)>1.5&&now-seekAt>3000){seekAt=now;"
+            + "send('seekTo',[pos,true]);console.log('[LANTERNE] recalage a '+pos.toFixed(1)"
+            + "+' s (ecart '+(cur-pos).toFixed(1)+' s)');}"
+            + "send('setVolume',[vol]);send(vol>0?'unMute':'mute');};"
+            + "log('page hote chargee'+(live?' (direct annonce par le lien)':''));})();</script>";
 
     /**
      * La page hôte : un {@code <iframe>} en plein cadre, et rien d'autre — pas de barre, pas de
      * script tiers. {@link Chrome} pilote l'iframe depuis l'extérieur, par {@code postMessage}.
      */
-    private static String page(String embedUrl) {
+    private static String page(String embedUrl, boolean live) {
         // « origin » dit à YouTube quelle page a le droit de la piloter par postMessage — sans
         // lui, certaines versions du lecteur ignorent les commandes distantes. On peut enfin le
         // renseigner : c'est précisément ce que cette page hôte apporte, une vraie origine.
@@ -207,7 +239,7 @@ final class Hote {
                 + "iframe{position:fixed;inset:0;width:100%;height:100%;border:0}"
                 + "</style></head><body>"
                 + "<iframe id=\"p\" src=\"" + escaped + "\" allow=\"autoplay\" allowfullscreen></iframe>"
-                + DIAGNOSTIC
+                + String.format(java.util.Locale.ROOT, DRIVER, live ? "true" : "false")
                 + "</body></html>";
     }
 }
