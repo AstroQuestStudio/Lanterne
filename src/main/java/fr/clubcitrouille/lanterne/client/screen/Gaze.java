@@ -67,6 +67,8 @@ public final class Gaze {
      * d'avoir eu le temps de s'en rendre compte.
      */
     private static final int FORGET = 40;
+    /** Trente secondes pour une page web : se retourner ne doit pas recharger YouTube. */
+    private static final int FORGET_PAGE = 600;
 
     /** En deçà, pleine cadence. Au-delà, elle décroît. La même distance que la zone franche du tick. */
     private static final double FULL_RATE = 16d;
@@ -92,6 +94,16 @@ public final class Gaze {
         private Slate slate = Slate.NONE;
         /** Largeur du mur, ou l'envergure du projecteur. Sert au mode automatique de {@link Grade}. */
         private float breadth = 1f;
+        /** L'horloge a déjà été arrêtée pour l'échec de cette bobine. Remis à zéro par shut(). */
+        private boolean clockStopped;
+    }
+
+    /** Ce que la bobine de cet écran a rapporté comme échec, ou une chaîne vide. */
+    public static String trouble(BlockPos pos) {
+        Show show = SHOWS.get(pos);
+        Engine.Reel reel = show == null ? null : show.reel;
+        String said = reel == null ? null : reel.trouble();
+        return said == null ? "" : said;
     }
 
     private static final Map<BlockPos, Show> SHOWS = new HashMap<>();
@@ -249,7 +261,9 @@ public final class Gaze {
         Iterator<Map.Entry<BlockPos, Show>> stale = SHOWS.entrySet().iterator();
         while (stale.hasNext()) {
             Map.Entry<BlockPos, Show> entry = stale.next();
-            if (now - entry.getValue().seenAt > FORGET) {
+            Engine.Reel held = entry.getValue().reel;
+            long keep = held != null && held.costlyToReopen() ? FORGET_PAGE : FORGET;
+            if (now - entry.getValue().seenAt > keep) {
                 shut(entry.getValue());
                 stale.remove();
             }
@@ -308,7 +322,8 @@ public final class Gaze {
         // swscale, et la pellicule est allouée à cette taille. Le seuil évite qu'un joueur qui
         // marche fasse rouvrir le flux à chaque pas — Grade ne rend que trois paliers, mais deux
         // écrans de tailles voisines pourraient osciller entre deux d'entre eux.
-        boolean sameSize = show.openedHeight == height;
+        boolean sameSize = show.openedHeight == height
+                || show.reel != null && show.reel.costlyToReopen();
         if (wanted.equals(show.opened) && show.reel != null && sameSize) {
             return;
         }
@@ -353,6 +368,18 @@ public final class Gaze {
         Feed feed = stage.feed();
         Clock beat = stage.clock();
         long target = beat.position(gameTime(), 0f) + Clock.compensation(ping());
+        // Une source que l'hébergeur refuse pour tout le monde (YouTube 150, par exemple) : on arrête
+        // l'horloge partagée, une fois, par la commande ordinaire — donc soumise au verrou « Qui
+        // règle ». Sinon l'écran dirait « Pause » et le compteur avancerait sur une vidéo morte.
+        if (reel.stopsTheClock()) {
+            if (!show.clockStopped && !beat.paused()) {
+                show.clockStopped = true;
+                net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(
+                        new Mail.Command(pos, Mail.Verb.PAUSE, 0L));
+            }
+            return;
+        }
+
         // Un lecteur web tient son propre état de lecture : il faut le lui dire, là où un décodeur
         // se contente de rendre l'image de l'instant demandé.
         Chrome.playing(reel, !beat.paused());
@@ -491,6 +518,7 @@ public final class Gaze {
     }
 
     private static void shut(Show show) {
+        show.clockStopped = false;
         if (show.sound != null) {
             // « finish » plutôt que « stop » du gestionnaire : l'instance se retire d'elle-même au
             // tick suivant, ce qui laisse au moteur le soin de fermer le canal OpenAL dans son

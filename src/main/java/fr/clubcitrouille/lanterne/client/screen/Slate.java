@@ -123,6 +123,10 @@ public record Slate(String what, String todo) {
             return new Slate("Ouverture…", host);
         }
         if (trouble != null && !trouble.isBlank()) {
+            if (form.kind() == Embed.Kind.LECTEUR) {
+                return new Slate(trouble,
+                        "Essaie une autre vidéo — l'intégration dépend de son auteur");
+            }
             return new Slate("Flux illisible — " + trouble, advice(feed.source()));
         }
         return new Slate("Ouverture…", host);

@@ -82,6 +82,8 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
 
     /** Voir {@code PanelRenderer.SLATE} : la première version était invisible de nuit. */
     private static final int SLATE = 0xFF2A3040;
+    /** Le dos de l'image : un aplat sombre, jamais l'image en miroir. */
+    private static final int BACK = 0xFF15171C;
 
     private static final int EDGE = 0xFFFFC857;
     private static final int HINT = 0xFFBFC6D4;
@@ -224,37 +226,71 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
                 });
     }
 
-    /** L'image, ou l'ardoise qui dit pourquoi il n'y en a pas. */
+    /**
+     * L'image, ou l'ardoise qui dit pourquoi il n'y en a pas.
+     *
+     * <h2>Le repère de l'image n'est pas celui du calage</h2>
+     *
+     * <p>{@code right}/{@code up} (ceux du calage et du cône) valent, vus de derrière le projecteur,
+     * la GAUCHE et le BAS du spectateur : l'image posée avec eux sortait retournée — invisible tant
+     * que l'ardoise, unie, était tout ce qu'on projetait. L'image a donc son propre repère :
+     * {@code screenRight} = droite du spectateur, {@code screenUp} = haut, construits pour que
+     * {@code screenRight × screenUp} pointe vers le projecteur, ce qui fait de la face vue depuis
+     * le projecteur la face AVANT (sens antihoraire). Même table d'UV que {@code PanelRenderer}.
+     * Le calage ({@code target}) garde l'ancien repère : un projecteur déjà réglé ne bouge pas.
+     *
+     * <h2>Opaque, et une face arrière sombre</h2>
+     *
+     * <p>{@code entityTranslucentEmissive} ne tronque aucune face et n'écrit pas la profondeur
+     * (lus dans {@code RenderPipelines}) : l'image se voyait en miroir de dos, et le décor passait à
+     * travers. {@code beaconBeam(texture, false)} est opaque, écrit la profondeur, tronque les faces
+     * arrière et n'est pas éclairé — la lumière projetée reste pleine dans le noir. Le dos reçoit
+     * un aplat sombre plutôt que rien : un écran vu de derrière reste un objet.
+     */
     private void image(State state, PoseStack poseStack, SubmitNodeCollector collector,
             Vector3f target, Vector3f right, Vector3f up, float wide, float high, Vector3f normal) {
         float hw = wide / 2f;
         float hh = high / 2f;
-        Vector3f corner = corner(target, right, up, -hw, -hh);
+        Vector3f screenRight = state.facing.getAxis().isVertical()
+                ? vector(Direction.EAST)
+                : new Vector3f(normal).cross(new Vector3f(0f, 1f, 0f), new Vector3f());
+        Vector3f screenUp = new Vector3f(screenRight).cross(normal, new Vector3f());
+        Vector3f toward = new Vector3f(normal).mul(-1f);
+        Vector3f corner = corner(target, screenRight, screenUp, -hw, -hh);
         boolean hasFilm = state.film != null;
         Identifier texture = hasFilm ? state.film : SLATE_TEXTURE;
         int colour = hasFilm ? -1 : SLATE;
         int turns = state.sight.spin() / 90;
-        // Émissive : l'image projetée est de la lumière, et l'éclairer par la pièce reviendrait à
-        // l'éteindre dans le noir — exactement là où l'on projette.
-        collector.submitCustomGeometry(poseStack,
-                RenderTypes.entityTranslucentEmissive(texture),
+        collector.submitCustomGeometry(poseStack, RenderTypes.beaconBeam(texture, false),
                 (pose, buffer) -> {
                     float[][] uv = {{0f, 1f}, {1f, 1f}, {1f, 0f}, {0f, 0f}};
                     int step = Math.floorMod(turns, 4);
-                    vertex(pose, buffer, corner(corner, right, up, 0f, 0f),
-                            uv[step][0], uv[step][1], LightCoordsUtil.FULL_BRIGHT, colour, normal);
-                    vertex(pose, buffer, corner(corner, right, up, wide, 0f),
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, 0f, 0f),
+                            uv[step][0], uv[step][1], LightCoordsUtil.FULL_BRIGHT, colour, toward);
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, wide, 0f),
                             uv[(step + 1) % 4][0], uv[(step + 1) % 4][1],
-                            LightCoordsUtil.FULL_BRIGHT, colour, normal);
-                    vertex(pose, buffer, corner(corner, right, up, wide, high),
+                            LightCoordsUtil.FULL_BRIGHT, colour, toward);
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, wide, high),
                             uv[(step + 2) % 4][0], uv[(step + 2) % 4][1],
-                            LightCoordsUtil.FULL_BRIGHT, colour, normal);
-                    vertex(pose, buffer, corner(corner, right, up, 0f, high),
+                            LightCoordsUtil.FULL_BRIGHT, colour, toward);
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, 0f, high),
                             uv[(step + 3) % 4][0], uv[(step + 3) % 4][1],
-                            LightCoordsUtil.FULL_BRIGHT, colour, normal);
+                            LightCoordsUtil.FULL_BRIGHT, colour, toward);
+                });
+        collector.submitCustomGeometry(poseStack, RenderTypes.beaconBeam(SLATE_TEXTURE, false),
+                (pose, buffer) -> {
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, 0f, 0f),
+                            0f, 1f, LightCoordsUtil.FULL_BRIGHT, BACK, normal);
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, 0f, high),
+                            0f, 0f, LightCoordsUtil.FULL_BRIGHT, BACK, normal);
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, wide, high),
+                            1f, 0f, LightCoordsUtil.FULL_BRIGHT, BACK, normal);
+                    vertex(pose, buffer, corner(corner, screenRight, screenUp, wide, 0f),
+                            1f, 1f, LightCoordsUtil.FULL_BRIGHT, BACK, normal);
                 });
         if (!hasFilm && !state.what.isEmpty()) {
-            words(state, poseStack, collector, corner, right, up, wide, high, normal);
+            words(state, poseStack, collector, corner(target, right, up, -hw, -hh), right, up,
+                    wide, high, normal);
         }
     }
 
@@ -267,8 +303,10 @@ public class BeamerRenderer implements BlockEntityRenderer<BeamerEntity, BeamerR
      */
     private void words(State state, PoseStack poseStack, SubmitNodeCollector collector,
             Vector3f corner, Vector3f right, Vector3f up, float wide, float high, Vector3f normal) {
+        // Vers le projecteur (-normal) : l'image écrit désormais la profondeur, un texte posé
+        // derrière son plan serait caché par elle.
         Vector3f centre = new Vector3f(corner).fma(wide / 2f, right).fma(high / 2f, up)
-                .fma(0.01f, normal);
+                .fma(-0.01f, normal);
         poseStack.pushPose();
         poseStack.translate(centre.x(), centre.y(), centre.z());
         // Le texte fait face au spectateur le long du faisceau. Pour un projecteur vertical il n'y

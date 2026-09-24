@@ -71,13 +71,14 @@ final class Hote {
     private static volatile String hostAddress;
 
     /** L'adresse locale à donner au navigateur pour un embed YouTube, ou nul si indisponible. */
-    static synchronized String frame(String embedUrl, boolean live) {
+    static synchronized String frame(String embedUrl, boolean live, String token) {
         int p = ensure();
         if (p < 0) {
             return null;
         }
         return "http://" + hostAddress + ":" + p + CONTEXT + "?src="
-                + URLEncoder.encode(embedUrl, StandardCharsets.UTF_8) + (live ? "&live=1" : "");
+                + URLEncoder.encode(embedUrl, StandardCharsets.UTF_8) + (live ? "&live=1" : "")
+                + "&t=" + token;
     }
 
     private static int ensure() {
@@ -145,7 +146,11 @@ final class Hote {
                 return;
             }
             boolean live = "1".equals(param(exchange.getRequestURI().getRawQuery(), "live"));
-            byte[] body = page(src, live).getBytes(StandardCharsets.UTF_8);
+            String token = param(exchange.getRequestURI().getRawQuery(), "t");
+            if (token == null || !token.matches("[a-z0-9]{1,13}")) {
+                token = "0";
+            }
+            byte[] body = page(src, live, token).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
             exchange.sendResponseHeaders(200, body.length);
             try (OutputStream out = exchange.getResponseBody()) {
@@ -190,9 +195,10 @@ final class Hote {
      * 1 lecture, 2 pause, 3 tampon, 5 prête (miniature).
      */
     private static final String DRIVER = "<script>(function(){"
-            + "var live=%s,known=false,cur=-1,dur=0,st=-2,seekAt=0,held=false,played=false,last=null,"
+            + "var tok='%s',live=%s,known=false,cur=-1,dur=0,st=-2,seekAt=0,held=false,played=false,last=null,"
             + "f=document.getElementById('p');"
-            + "function log(s){if(s!==last){last=s;console.log('[LANTERNE] '+s);}}"
+            + "function say(s){console.log('[LANTERNE] #'+tok+' '+s);}"
+            + "function log(s){if(s!==last){last=s;say(s);}}"
             + "function post(o){try{f.contentWindow.postMessage(JSON.stringify(o),'*');}catch(e){}}"
             + "function send(fn,a){post({event:'command',func:fn,args:a||[],id:1,channel:'widget'});}"
             + "window.addEventListener('message',function(e){var d;"
@@ -207,17 +213,17 @@ final class Hote {
             + "if(typeof i.duration==='number')dur=i.duration;"
             + "if(!known&&(i.videoData||dur>0)){known=true;"
             + "var il=i.videoData?i.videoData.isLive:undefined;if(il===true)live=true;"
-            + "console.log('[LANTERNE] '+(live?'direct detecte':'video normale')"
+            + "say((live?'direct detecte':'video normale')"
             + "+' (isLive='+il+', duree='+dur+')');}}});"
             + "window.__lanterneSync=function(pos,play,vol){"
             + "post({event:'listening',id:1,channel:'widget'});var now=Date.now();"
             + "if(play){if(held&&live&&dur>0){send('seekTo',[dur,true]);"
-            + "console.log('[LANTERNE] reprise au bord du direct');}held=false;"
+            + "say('reprise au bord du direct');}held=false;"
             + "if(st!==1&&st!==3)send('playVideo');played=true;}"
             + "else{if(played)held=true;if(st===1||st===3)send('pauseVideo');}"
             + "var edge=dur>0&&dur-cur<30&&cur-pos>60;"
             + "if(!live&&known&&!edge&&cur>=0&&Math.abs(cur-pos)>1.5&&now-seekAt>3000){seekAt=now;"
-            + "send('seekTo',[pos,true]);console.log('[LANTERNE] recalage a '+pos.toFixed(1)"
+            + "send('seekTo',[pos,true]);say('recalage a '+pos.toFixed(1)"
             + "+' s (ecart '+(cur-pos).toFixed(1)+' s)');}"
             + "send('setVolume',[vol]);send(vol>0?'unMute':'mute');};"
             + "log('page hote chargee'+(live?' (direct annonce par le lien)':''));})();</script>";
@@ -226,7 +232,7 @@ final class Hote {
      * La page hôte : un {@code <iframe>} en plein cadre, et rien d'autre — pas de barre, pas de
      * script tiers. {@link Chrome} pilote l'iframe depuis l'extérieur, par {@code postMessage}.
      */
-    private static String page(String embedUrl, boolean live) {
+    private static String page(String embedUrl, boolean live, String token) {
         // « origin » dit à YouTube quelle page a le droit de la piloter par postMessage — sans
         // lui, certaines versions du lecteur ignorent les commandes distantes. On peut enfin le
         // renseigner : c'est précisément ce que cette page hôte apporte, une vraie origine.
@@ -241,7 +247,7 @@ final class Hote {
                 + "iframe{position:fixed;inset:0;width:100%;height:100%;border:0}"
                 + "</style></head><body>"
                 + "<iframe id=\"p\" src=\"" + escaped + "\" allow=\"autoplay\" allowfullscreen></iframe>"
-                + String.format(java.util.Locale.ROOT, DRIVER, live ? "true" : "false")
+                + String.format(java.util.Locale.ROOT, DRIVER, token, live ? "true" : "false")
                 + "</body></html>";
     }
 }

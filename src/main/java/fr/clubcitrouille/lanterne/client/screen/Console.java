@@ -159,27 +159,27 @@ public class Console extends Screen {
         addRenderableWidget(Button.builder(
                         Component.literal(this.beat.paused() ? "▶ Lire" : "⏸ Pause"),
                         button -> command(this.beat.paused() ? Mail.Verb.LIRE : Mail.Verb.PAUSE))
-                .bounds(left + 10, base, 64, 18).build());
+                .bounds(left + 10, base, 54, 18).build());
         addRenderableWidget(Button.builder(Component.literal("⏹"), button ->
                         command(Mail.Verb.ARRET))
-                .bounds(left + 78, base, 22, 18)
+                .bounds(left + 67, base, 18, 18)
                 .tooltip(Tooltip.create(Component.literal("Revenir au début et arrêter")))
                 .build());
 
         addRenderableWidget(Button.builder(Component.literal(
                         this.feed.loop() ? "Boucle ✔" : "Boucle ✘"),
                         button -> send(this.feed.withLoop(!this.feed.loop())))
-                .bounds(left + 106, base, 64, 18).build());
+                .bounds(left + 88, base, 54, 18).build());
         addRenderableWidget(Button.builder(Component.literal(
                         this.feed.autoplay() ? "Auto ✔" : "Auto ✘"),
                         button -> send(this.feed.withAutoplay(!this.feed.autoplay())))
-                .bounds(left + 174, base, 58, 18)
+                .bounds(left + 145, base, 46, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Démarrer tout seul quand la source change")))
                 .build());
         addRenderableWidget(Button.builder(Component.literal(this.feed.shape().label()),
                         button -> send(this.feed.withShape(this.feed.shape().next())))
-                .bounds(left + 236, base, 56, 18)
+                .bounds(left + 194, base, 54, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Étiré : remplit, déforme.\nEntier : tout, avec des bandes.\n"
                                 + "Rempli : remplit, rogne.")))
@@ -194,13 +194,13 @@ public class Console extends Screen {
         addRenderableWidget(Button.builder(
                         Component.literal("⟳ " + this.feed.sight().spin() + "°"),
                         button -> send(this.feed.withSight(this.feed.sight().turned())))
-                .bounds(left + WIDTH - 56, base, 24, 18)
+                .bounds(left + 251, base, 38, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Quart de tour. Pour un projecteur monté de travers.")))
                 .build());
         addRenderableWidget(Button.builder(Component.literal("⌖"),
                         button -> send(this.feed.withSight(Sight.PLUMB)))
-                .bounds(left + WIDTH - 28, base, 18, 18)
+                .bounds(left + 292, base, 18, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Tout remettre d'aplomb : décalage, taille, rotation.")))
                 .build());
@@ -531,7 +531,13 @@ public class Console extends Screen {
         boolean ready = best.verdict() == Engine.Verdict.PRET;
         String note;
         int colour;
-        if (!Consent.remoteAllowed()) {
+        String trouble = Gaze.trouble(this.pos);
+        if (!trouble.isEmpty()) {
+            // L'échec de CET écran passe avant l'état général du décodeur : c'est lui qui explique
+            // pourquoi rien ne s'affiche, et le joueur l'a sous les yeux ici.
+            note = "✘ " + trouble;
+            colour = BAD;
+        } else if (!Consent.remoteAllowed()) {
             note = "Décodeur en attente : autorise les médias distants ci-dessus →";
             colour = AMBER;
         } else if (ready) {

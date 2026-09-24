@@ -143,6 +143,26 @@ public final class Chrome implements Engine {
 
     private static Bridge bridge;
 
+    /** Jeton de chaque page YouTube ouverte : relie une ligne de console à sa bobine. */
+    private static final java.util.concurrent.atomic.AtomicLong SERIAL =
+            new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.Map<String, Pane> PAGES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.regex.Pattern PAGE_ERROR =
+            java.util.regex.Pattern.compile("\\[LANTERNE\\] #([a-z0-9]+) erreur lecteur (\\d{1,6})");
+
+    /** Les codes d'erreur de l'API IFrame de YouTube, dits au joueur. */
+    static String describe(int code) {
+        return switch (code) {
+            case 150, 101 -> "YouTube refuse la lecture intégrée de cette vidéo (erreur " + code + ")";
+            case 100 -> "vidéo introuvable, privée ou supprimée (erreur 100)";
+            case 2 -> "identifiant de vidéo invalide (erreur 2)";
+            case 5 -> "le lecteur YouTube n'a pas pu lire ce flux (erreur 5)";
+            case 152, 153 -> "YouTube refuse ce lecteur intégré (erreur " + code + ")";
+            default -> "YouTube : erreur " + code;
+        };
+    }
+
     private Chrome() {}
 
     @Override
@@ -191,7 +211,9 @@ public final class Chrome implements Engine {
             int height = Math.clamp(wantedHeight, 240, 1440);
             int width = Math.max(2, Math.round(height * 16f / 9f) & ~1);
             boolean youtube = form.url().startsWith(Embed.YOUTUBE_EMBED_PREFIX);
-            String address = youtube ? Hote.frame(form.url(), Embed.youtubeLiveLink(source)) : form.url();
+            String token = Long.toString(SERIAL.incrementAndGet(), 36);
+            String address = youtube
+                    ? Hote.frame(form.url(), Embed.youtubeLiveLink(source), token) : form.url();
             if (address == null) {
                 // L'hote local n'a pas pu demarrer : pas de repli silencieux vers l'adresse nue,
                 // ce serait rouvrir l'Erreur 153 qu'il existe pour fermer.
@@ -202,7 +224,11 @@ public final class Chrome implements Engine {
             if (browser == null) {
                 return null;
             }
-            return new Pane(browser, width, height, youtube);
+            Pane pane = new Pane(browser, width, height, youtube, token);
+            if (youtube) {
+                PAGES.put(token, pane);
+            }
+            return pane;
         } catch (Throwable refused) {
             Lanterne.LOG.warn("[PROJECTION] lecteur intégré indisponible : {}",
                     String.valueOf(refused));
@@ -340,6 +366,13 @@ public final class Chrome implements Engine {
                         if ("onConsoleMessage".equals(method.getName()) && args != null && args.length >= 3
                                 && args[2] instanceof String line && line.contains("[LANTERNE]")) {
                             Lanterne.LOG.info("[PROJECTION] page : {}", line);
+                            java.util.regex.Matcher error = PAGE_ERROR.matcher(line);
+                            if (error.find()) {
+                                Pane pane = PAGES.get(error.group(1));
+                                if (pane != null) {
+                                    pane.fail(Integer.parseInt(error.group(2)));
+                                }
+                            }
                         }
                         if (method.getReturnType() == boolean.class) {
                             return Boolean.FALSE;
@@ -379,18 +412,45 @@ public final class Chrome implements Engine {
         private long shownMillis;
         private volatile boolean shut;
         private boolean toldPlay;
-        private String trouble = "";
+        private volatile String trouble = "";
+        private final String token;
+        /** Refus du lecteur (erreur YouTube) : plus rien n'est envoyé, l'ardoise prend le relais. */
+        private volatile boolean failed;
+        /** Le refus vient de la vidéo elle-même (100, 101, 150, 2), donc vaut pour tout le monde. */
+        private volatile boolean videoLevel;
 
-        Pane(Object browser, int width, int height, boolean framed) {
+        Pane(Object browser, int width, int height, boolean framed, String token) {
             this.browser = browser;
             this.width = width;
             this.height = height;
             this.framed = framed;
+            this.token = token;
+        }
+
+        /** Appelé depuis le fil de CEF quand la page rapporte « erreur lecteur N ». */
+        void fail(int code) {
+            if (this.failed) {
+                return;
+            }
+            this.trouble = describe(code);
+            this.videoLevel = code == 100 || code == 101 || code == 150 || code == 2;
+            this.failed = true;
+            Lanterne.LOG.warn("[PROJECTION] YouTube refuse la lecture : {}", this.trouble);
+        }
+
+        
+        public boolean costlyToReopen() {
+            return true;
+        }
+
+        
+        public boolean stopsTheClock() {
+            return this.failed && this.videoLevel;
         }
 
         @Override
         public boolean present(long millis, Film film) {
-            if (this.shut) {
+            if (this.shut || this.failed) {
                 return false;
             }
             this.shownMillis = millis;
@@ -442,7 +502,7 @@ public final class Chrome implements Engine {
         @Override
         public Identifier texture() {
             try {
-                return this.shut || !(boolean) bridge.textureReady.invoke(this.browser)
+                return this.shut || this.failed || !(boolean) bridge.textureReady.invoke(this.browser)
                         ? null : (Identifier) bridge.textureId.invoke(this.browser);
             } catch (Throwable problem) {
                 return null;
@@ -456,7 +516,7 @@ public final class Chrome implements Engine {
 
         @Override
         public boolean broken() {
-            return this.shut;
+            return this.shut || this.failed;
         }
 
         @Override
@@ -530,6 +590,7 @@ public final class Chrome implements Engine {
                 return;
             }
             this.shut = true;
+            PAGES.remove(this.token);
             try {
                 // Sur le fil de rendu : c'est la condition pour que Rinku libère ses ressources
                 // graphiques tout de suite plutôt qu'à un moment qu'il choisira. Gaze ferme depuis

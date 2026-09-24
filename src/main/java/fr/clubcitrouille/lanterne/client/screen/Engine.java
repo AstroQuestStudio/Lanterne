@@ -146,6 +146,20 @@ public interface Engine {
         }
 
         /**
+         * Rouvrir coûte-t-il la lecture ? Vrai pour une page web : la rouvrir la recharge. Gaze ne la
+         * rouvre alors pas sur un simple changement de palier de qualité, et la garde plus longtemps
+         * hors du champ de vision.
+         */
+        default boolean costlyToReopen() {
+            return false;
+        }
+
+        /** L'échec vient-il de la source elle-même, pour tous les spectateurs ? Voir Gaze. */
+        default boolean stopsTheClock() {
+            return false;
+        }
+
+        /**
          * Le flux est-il ouvert et ses dimensions connues ?
          *
          * <p>Faux au début, et ce n'est pas une erreur : ouvrir une adresse réseau est un
