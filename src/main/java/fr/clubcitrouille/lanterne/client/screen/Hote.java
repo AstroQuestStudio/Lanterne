@@ -196,7 +196,7 @@ final class Hote {
      */
     private static final String DRIVER = "<script>(function(){"
             + "var tok='%s',live=%s,known=false,cur=-1,dur=0,st=-2,seekAt=0,held=false,played=false,last=null,"
-            + "seenDur=-1,seenAt=0,told=false,endTold=false,"
+            + "seenDur=-1,seenAt=0,told=false,endTold=false,titled=false,"
             + "f=document.getElementById('p');"
             + "function say(s){console.log('[LANTERNE] #'+tok+' '+s);}"
             + "function log(s){if(s!==last){last=s;say(s);}}"
@@ -212,6 +212,8 @@ final class Hote {
             + "if(i.playerState!==undefined){st=i.playerState;log('etat '+st);}"
             + "if(typeof i.currentTime==='number')cur=i.currentTime;"
             + "if(typeof i.duration==='number')dur=i.duration;"
+            + "if(!titled&&i.videoData&&typeof i.videoData.title==='string'&&i.videoData.title){"
+            + "titled=true;say('titre '+i.videoData.title.replace(/[\\r\\n]+/g,' ').slice(0,120));}"
             + "if(!known&&(i.videoData||dur>0)){known=true;"
             + "var il=i.videoData?i.videoData.isLive:undefined;if(il===true)live=true;"
             + "say((live?'direct detecte':'video normale')"

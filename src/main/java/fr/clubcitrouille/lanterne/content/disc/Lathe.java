@@ -67,6 +67,9 @@ public final class Lathe extends Screen {
     /** La taille du morceau préparé, en octets. */
     private int size;
 
+    /** L'identifiant de la vidéo YouTube préparée, ou {@code null} pour un fichier. */
+    private String tube;
+
     /** Sa durée, en secondes. */
     private float seconds;
 
@@ -99,7 +102,7 @@ public final class Lathe extends Screen {
         this.link = new EditBox(this.font, left, y, inner, 18,
                 Component.literal("Adresse du morceau"));
         this.link.setMaxLength(512);
-        this.link.setHint(Component.literal("https://…/ma-musique.ogg"));
+        this.link.setHint(Component.literal("https://…/ma-musique.ogg — ou un lien YouTube"));
         this.addRenderableWidget(this.link);
 
         int half = (inner - 6) / 2;
@@ -137,7 +140,7 @@ public final class Lathe extends Screen {
         this.browse.active = !this.busy;
         // On ne peut graver qu'un morceau préparé : le bouton reste éteint tant qu'il n'y en a pas,
         // ce qui évite d'avoir à expliquer un refus après coup.
-        this.burn.active = !this.busy && !this.hash.isEmpty();
+        this.burn.active = !this.busy && (!this.hash.isEmpty() || this.tube != null);
         if (!Hoard.rules().links()) {
             this.link.setEditable(false);
         }
@@ -147,10 +150,98 @@ public final class Lathe extends Screen {
         if (this.busy) {
             return;
         }
+        String typed = this.link.getValue().trim();
+        if (fr.clubcitrouille.lanterne.content.screen.Embed.youtubeChannelLink(typed)
+                || fr.clubcitrouille.lanterne.content.screen.Embed.youtubeVideoId(typed) != null) {
+            this.pullYoutube(typed);
+            return;
+        }
         this.busy = true;
         this.say("Connexion…", false);
         this.refresh();
         Reach.pull(this.link.getValue(), Hoard.rules(), Reach.AUDIO, this.ear());
+    }
+
+    /**
+     * Un lien YouTube : rien n'est téléchargé. La sonde ouvre le lecteur intégré en muet pour lire la
+     * durée, le titre et un éventuel refus d'intégration — voir {@code client.screen.Juke.probe}.
+     */
+    private void pullYoutube(String typed) {
+        this.busy = true;
+        this.hash = "";
+        this.tube = null;
+        this.say("Lecture des informations YouTube…", false);
+        this.refresh();
+        fr.clubcitrouille.lanterne.client.screen.Juke.probe(typed,
+                new fr.clubcitrouille.lanterne.client.screen.Juke.Probe() {
+                    @Override
+                    public void ok(String videoId, float seconds, String title) {
+                        Lathe.this.later(() -> Lathe.this.acceptTube(videoId, seconds, title));
+                    }
+
+                    @Override
+                    public void fail(String reason) {
+                        Lathe.this.later(() -> {
+                            Lathe.this.busy = false;
+                            Lathe.this.say(reason, true);
+                            Lathe.this.refresh();
+                        });
+                    }
+                });
+    }
+
+    private void acceptTube(String videoId, float seconds, String title) {
+        this.busy = false;
+        this.tube = videoId;
+        this.hash = "";
+        this.seconds = seconds;
+        if (this.title.getValue().isBlank()) {
+            if (!title.isBlank()) {
+                this.title.setValue(title.length() > Wax.NAME_LIMIT
+                        ? title.substring(0, Wax.NAME_LIMIT) : title);
+            } else {
+                this.fetchTitle(videoId);
+            }
+        }
+        this.say("Prêt — YouTube · " + format(seconds) + ".", false);
+        this.refresh();
+    }
+
+    /**
+     * Le titre par oEmbed, si la page ne l'a pas donné : l'API publique et documentée de YouTube pour
+     * décrire une vidéo intégrable. Rien d'autre n'est demandé.
+     */
+    private void fetchTitle(String videoId) {
+        String oembed = "https://www.youtube.com/oembed?format=json&url="
+                + java.net.URLEncoder.encode("https://www.youtube.com/watch?v=" + videoId,
+                java.nio.charset.StandardCharsets.UTF_8);
+        java.net.http.HttpClient.newHttpClient().sendAsync(
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(oembed))
+                        .timeout(java.time.Duration.ofSeconds(8)).GET().build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString())
+                .thenAccept(response -> {
+                    if (response.statusCode() != 200) {
+                        return;
+                    }
+                    try {
+                        String found = com.google.gson.JsonParser.parseString(response.body())
+                                .getAsJsonObject().get("title").getAsString().strip();
+                        this.later(() -> {
+                            if (this.title.getValue().isBlank() && !found.isEmpty()) {
+                                this.title.setValue(found.length() > Wax.NAME_LIMIT
+                                        ? found.substring(0, Wax.NAME_LIMIT) : found);
+                            }
+                        });
+                    } catch (RuntimeException unreadable) {
+                        // Pas de titre : le joueur en tape un.
+                    }
+                });
+    }
+
+    @Override
+    public void removed() {
+        fr.clubcitrouille.lanterne.client.screen.Juke.cancelProbe();
+        super.removed();
     }
 
     private void onBrowse() {
@@ -176,8 +267,13 @@ public final class Lathe extends Screen {
             this.say("Donne un titre à ce disque.", true);
             return;
         }
-        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(
-                new Post.Burn(this.pos, name, this.hash, this.size, this.seconds));
+        if (this.tube != null) {
+            net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(
+                    new Post.Tube(this.pos, this.tube, name, this.seconds));
+        } else {
+            net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(
+                    new Post.Burn(this.pos, name, this.hash, this.size, this.seconds));
+        }
         this.onClose();
     }
 
@@ -221,6 +317,7 @@ public final class Lathe extends Screen {
 
     private void accept(Post.Vinyl vinyl, String name) {
         this.busy = false;
+        this.tube = null;
         this.hash = vinyl.hash();
         this.seconds = vinyl.seconds();
         this.size = (int) Math.max(1L, sizeOnDisk());
@@ -292,7 +389,7 @@ public final class Lathe extends Screen {
         int noteY = this.panelY + HEIGHT - 48;
         graphics.fill(left, noteY - 4, right - 14, noteY + 12, WELL);
         String text = this.note.isEmpty()
-                ? "OGG, MP3 ou WAV · max "
+                ? "OGG, MP3, WAV ou YouTube · max "
                         + (fr.clubcitrouille.lanterne.content.painting.Studio.discMaxBytes() / 1048576L)
                         + " Mio"
                 : this.note;

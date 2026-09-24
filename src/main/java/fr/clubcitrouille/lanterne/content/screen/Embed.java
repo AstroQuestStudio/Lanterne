@@ -157,6 +157,16 @@ public final class Embed {
      * Un direct collé en {@code watch?v=} ou {@code youtu.be/} n'est pas reconnaissable ici — la page
      * hôte le détecte alors à la volée ({@code videoData.isLive}).
      */
+    /** L'identifiant de vidéo d'un lien YouTube, sous toutes ses écritures, ou {@code null}. */
+    public static String youtubeVideoId(String source) {
+        URI uri = parse(source);
+        if (uri == null || !youtubeHost(uri)) {
+            return null;
+        }
+        return youtubeId(uri.getHost().toLowerCase(Locale.ROOT),
+                uri.getPath() == null ? "" : uri.getPath(), uri.getQuery() == null ? "" : uri.getQuery());
+    }
+
     public static boolean youtubeLiveLink(String source) {
         URI uri = parse(source);
         return uri != null && youtubeHost(uri) && uri.getPath() != null

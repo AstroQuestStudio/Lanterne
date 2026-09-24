@@ -48,6 +48,31 @@ import net.neoforged.neoforge.event.level.ChunkWatchEvent;
 public final class Retrack {
     private Retrack() {}
 
+    /**
+     * Pour un disque YouTube seulement : dire au joueur où en est le morceau, juste avant le 1010.
+     * Le lecteur intégré sait reprendre au milieu — un fichier, lui, repartirait du début quoi qu'on
+     * fasse. Un client sans ce pli (plus ancien) lève à l'envoi : on l'ignore, il repart du début.
+     */
+    private static void tempo(ServerPlayer player, Registry<JukeboxSong> songs, JukeboxSong song,
+            BlockPos pos, long ticks) {
+        var key = songs.getKey(song);
+        if (key == null || !fr.clubcitrouille.lanterne.Lanterne.ID.equals(key.getNamespace())) {
+            return;
+        }
+        for (int slot = 0; slot < fr.clubcitrouille.lanterne.content.painting.Studio.discSlots(); slot++) {
+            if (Slots.name(slot).equals(key.getPath())) {
+                if (Post.tube(Slots.hashAt(slot))) {
+                    try {
+                        player.connection.send(new Post.Tempo(pos, ticks));
+                    } catch (RuntimeException clientWithoutChannel) {
+                        // Client d'avant les disques YouTube : il repartira du début.
+                    }
+                }
+                return;
+            }
+        }
+    }
+
     public static void register() {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(Retrack.class);
     }
@@ -71,6 +96,7 @@ public final class Retrack {
                 continue;
             }
             BlockPos pos = jukebox.getBlockPos();
+            tempo(player, songs, song, pos, jukebox.getSongPlayer().getTicksSinceSongStarted());
             player.connection.send(
                     new ClientboundLevelEventPacket(LevelEvent.SOUND_PLAY_JUKEBOX_SONG, pos, songId, false));
         }

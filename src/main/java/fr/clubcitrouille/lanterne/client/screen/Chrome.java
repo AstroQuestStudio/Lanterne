@@ -150,6 +150,10 @@ public final class Chrome implements Engine {
             new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.regex.Pattern PAGE_DURATION =
             java.util.regex.Pattern.compile("\\[LANTERNE\\] #([a-z0-9]+) duree ([0-9]{1,7}(?:\\.[0-9]{1,3})?)$");
+    private static final java.util.regex.Pattern PAGE_TITLE =
+            java.util.regex.Pattern.compile("\\[LANTERNE\\] #([a-z0-9]+) titre (.{1,120})$");
+    private static final java.util.regex.Pattern PAGE_LIVE =
+            java.util.regex.Pattern.compile("\\[LANTERNE\\] #([a-z0-9]+) direct detecte");
     private static final java.util.regex.Pattern PAGE_ERROR =
             java.util.regex.Pattern.compile("\\[LANTERNE\\] #([a-z0-9]+) erreur lecteur (\\d{1,6})");
 
@@ -368,6 +372,14 @@ public final class Chrome implements Engine {
                         if ("onConsoleMessage".equals(method.getName()) && args != null && args.length >= 3
                                 && args[2] instanceof String line && line.contains("[LANTERNE]")) {
                             Lanterne.LOG.info("[PROJECTION] page : {}", line);
+                            java.util.regex.Matcher named = PAGE_TITLE.matcher(line);
+                            if (named.find() && PAGES.get(named.group(1)) instanceof Pane pane) {
+                                pane.pageTitle = named.group(2).strip();
+                            }
+                            java.util.regex.Matcher live = PAGE_LIVE.matcher(line);
+                            if (live.find() && PAGES.get(live.group(1)) instanceof Pane pane) {
+                                pane.pageLive = true;
+                            }
                             java.util.regex.Matcher length = PAGE_DURATION.matcher(line);
                             if (length.find()) {
                                 Pane pane = PAGES.get(length.group(1));
@@ -505,6 +517,10 @@ public final class Chrome implements Engine {
         private volatile boolean looping;
         /** Durée réelle rapportée par la page (vidéo normale seulement), en millisecondes. */
         private volatile long pageDuration;
+        /** Titre lu par la page dans {@code videoData}, vide tant qu'inconnu. */
+        private volatile String pageTitle = "";
+        /** La page a reconnu un direct. */
+        private volatile boolean pageLive;
         private volatile float gain = 1f;
 
         /** Appelé par {@link Gaze} : l'horloge dit si l'on doit jouer ou attendre. */
@@ -615,6 +631,16 @@ public final class Chrome implements Engine {
         if (reel instanceof Pane pane) {
             pane.playing(value);
         }
+    }
+
+    /** Le titre que la page a lu, ou une chaîne vide. */
+    static String titleOf(Reel reel) {
+        return reel instanceof Pane pane ? pane.pageTitle : "";
+    }
+
+    /** La page a-t-elle reconnu un direct ? */
+    static boolean liveOf(Reel reel) {
+        return reel instanceof Pane pane && pane.pageLive;
     }
 
     /** Le réglage « Boucle » de l'écran, pour que la page sache quoi faire à la fin. */

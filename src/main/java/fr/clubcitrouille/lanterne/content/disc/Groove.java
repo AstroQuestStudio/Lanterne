@@ -181,6 +181,9 @@ public final class Groove {
         void shard(Post.Shard payload);
 
         void refresh();
+
+        /** Voir {@link Post.Tempo}. Rien par défaut : un serveur dédié ne le reçoit jamais. */
+        default void tempo(Post.Tempo payload) {}
     }
 
     /** Ce qu'un serveur dédié fait de ces plis : rien. Il ne les recevra jamais. */
@@ -235,6 +238,54 @@ public final class Groove {
         registrar.playToServer(Post.Burn.TYPE, Post.Burn.STREAM_CODEC, Groove::onBurn);
         registrar.playToServer(Post.Gift.TYPE, Post.Gift.STREAM_CODEC, Groove::onGift);
         registrar.playToServer(Post.Wish.TYPE, Post.Wish.STREAM_CODEC, Groove::onWish);
+        // Facultatifs : un client d'avant les disques YouTube se connecte quand même ; il ne reçoit
+        // simplement pas ces plis (les envois sont entourés d'un try, comme dans MecheNet).
+        var optional = registrar.optional();
+        optional.playToServer(Post.Tube.TYPE, Post.Tube.STREAM_CODEC, Groove::onTube);
+        optional.playToClient(Post.Tempo.TYPE, Post.Tempo.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> turntable.tempo(payload)));
+    }
+
+    /**
+     * Le joueur grave un lien YouTube. Mêmes gardes que {@link #onBurn} — bloc, portée, graveur prêt,
+     * durée, sillon libre — mais aucun transfert : le disque ne porte que l'identifiant de la vidéo.
+     * Aucune extraction de flux, ni ici ni chez les clients : voir {@code client.screen.Juke}.
+     */
+    private static void onTube(Post.Tube tube, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer player)) {
+                return;
+            }
+            if (!Studio.links()) {
+                tell(player, "Ce serveur refuse les liens.");
+                return;
+            }
+            if (!(player.level().getBlockEntity(tube.pos()) instanceof BurnerEntity burner)) {
+                return;
+            }
+            if (player.distanceToSqr(tube.pos().getX() + 0.5d, tube.pos().getY() + 0.5d,
+                    tube.pos().getZ() + 0.5d) > 64.0d * 64.0d) {
+                return;
+            }
+            if (burner.busy() || burner.empty() || burner.holdsFinished()) {
+                tell(player, "Le graveur n'est pas prêt.");
+                return;
+            }
+            if (!Post.plausibleVideoId(tube.videoId()) || !(tube.seconds() >= 1f)) {
+                return;
+            }
+            if (tube.seconds() > Studio.discMaxSeconds()) {
+                tell(player, "Trop long : la limite est " + Studio.discMaxSeconds() + " s.");
+                return;
+            }
+            String hash = Post.TUBE_PREFIX + tube.videoId();
+            if (Slots.holding(hash) < 0 && Slots.vacant(tube.seconds()) < 0) {
+                tell(player, "Plus aucun sillon libre assez long. Un opérateur peut en libérer un"
+                        + " avec « /disque liberer <n> », ou en ajouter dans lanterne-atelier.toml.");
+                return;
+            }
+            burner.begin(hash, clean(tube.title()), player.getGameProfile().name(), tube.seconds());
+        });
     }
 
     private static void onAddPackFinders(AddPackFindersEvent event) {

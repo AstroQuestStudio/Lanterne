@@ -186,4 +186,59 @@ public final class Post {
             return TYPE;
         }
     }
+
+    /**
+     * Graver un lien YouTube. Aucun octet de musique ne voyage : le disque porte l'identifiant de la
+     * vidéo, et chaque client la joue dans le lecteur intégré officiel (voir {@code client.screen.Juke}).
+     * La durée et le titre viennent de la sonde du client ; le serveur borne la durée comme pour un
+     * fichier, et c'est elle qui choisit le sillon.
+     */
+    public record Tube(BlockPos pos, String videoId, String title, float seconds)
+            implements CustomPacketPayload {
+        public static final Type<Tube> TYPE = new Type<>(id("graveur_youtube"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Tube> STREAM_CODEC =
+                StreamCodec.composite(
+                        BlockPos.STREAM_CODEC, Tube::pos,
+                        ByteBufCodecs.stringUtf8(16), Tube::videoId,
+                        ByteBufCodecs.stringUtf8(Wax.NAME_LIMIT), Tube::title,
+                        ByteBufCodecs.FLOAT, Tube::seconds,
+                        Tube::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Où en est le morceau d'un jukebox, pour un joueur qui le découvre en cours de lecture. Envoyé
+     * juste avant l'évènement 1010 que rejoue {@link Retrack}, pour les seuls disques YouTube : un
+     * fichier vanilla repart du début quoi qu'on fasse, un lecteur intégré sait reprendre au milieu.
+     */
+    public record Tempo(BlockPos pos, long ticks) implements CustomPacketPayload {
+        public static final Type<Tempo> TYPE = new Type<>(id("disque_tempo"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Tempo> STREAM_CODEC =
+                StreamCodec.composite(
+                        BlockPos.STREAM_CODEC, Tempo::pos,
+                        ByteBufCodecs.VAR_LONG, Tempo::ticks,
+                        Tempo::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Le préfixe d'empreinte d'un disque YouTube : {@code yt-<identifiant de vidéo>}. */
+    public static final String TUBE_PREFIX = "yt-";
+
+    /** Ce sillon porte-t-il un disque YouTube ? */
+    public static boolean tube(String hash) {
+        return hash != null && hash.startsWith(TUBE_PREFIX);
+    }
+
+    /** Un identifiant de vidéo YouTube plausible : onze caractères de l'alphabet d'URL. */
+    public static boolean plausibleVideoId(String id) {
+        return id != null && id.matches("[A-Za-z0-9_-]{11}");
+    }
 }

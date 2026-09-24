@@ -263,7 +263,9 @@ public final class Wheel {
         }
         int missing = 0;
         for (Post.Vinyl cut : roll.cuts()) {
-            if (cut.hash().isEmpty() || Files.isRegularFile(Groove.cachedFile(cut.hash()))) {
+            // Un disque YouTube n'a pas d'octets à recevoir : il se joue dans le lecteur intégré.
+            if (cut.hash().isEmpty() || Post.tube(cut.hash())
+                    || Files.isRegularFile(Groove.cachedFile(cut.hash()))) {
                 continue;
             }
             if (ASKED.add(cut.hash())) {
@@ -386,7 +388,13 @@ public final class Wheel {
                 Groove.forget();
                 Minecraft.getInstance().reloadResourcePacks();
             }
+
+            @Override
+            public void tempo(Post.Tempo payload) {
+                fr.clubcitrouille.lanterne.client.screen.Juke.tempo(payload.pos(), payload.ticks());
+            }
         });
+        fr.clubcitrouille.lanterne.client.screen.Juke.register();
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> pump());
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
