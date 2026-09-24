@@ -75,8 +75,11 @@ public record Slate(String what, String todo) {
         }
 
         if (!Consent.remoteAllowed()) {
-            return new Slate("Médias distants non autorisés sur ce client",
-                    "Clique ce bloc → « Autoriser les médias distants »");
+            return Consent.refused()
+                    ? new Slate("Médias distants refusés",
+                            "Modifiable dans l'écran de ce bloc (clic) → « Autoriser »")
+                    : new Slate("Autorisation demandée",
+                            "Réponds à la question à l'écran — ou clique ce bloc → « Autoriser »");
         }
 
         if (Embed.youtubeChannelLink(feed.source())) {
@@ -99,7 +102,7 @@ public record Slate(String what, String todo) {
                         form.needsBrowser()
                                 ? form.host() + " demande le lecteur intégré"
                                 : "Cette page demande un navigateur",
-                        "Installe « " + COMPANION + " » — " + COMPANION_URL);
+                        COMPANION + " arrive par la synchro du serveur : relance le jeu quand elle le demande");
             }
         } else {
             // Un fichier : c'est FFmpeg qu'il faut, et lui seul.
@@ -166,7 +169,7 @@ public record Slate(String what, String todo) {
             case FICHIER -> "";
             case LECTEUR -> browser
                     ? "▶ " + form.host() + " — lecteur intégré, via " + COMPANION
-                    : "⚠ " + form.host() + " demande « " + COMPANION + " » — pas installé";
+                    : "⚠ " + form.host() + " : " + COMPANION + " arrive par la synchro du serveur — relance le jeu";
             case PAGE -> browser
                     ? "⚠ Page quelconque : elle s'affichera, sans garantie de vidéo."
                     : "⚠ Ni fichier vidéo, ni lecteur connu. Essaie un lien .mp4 / .m3u8.";

@@ -209,16 +209,21 @@ public final class Juke {
             Engine.Verdict verdict = Chrome.INSTANCE.verdict();
             switch (verdict) {
                 case SANS_MOD -> {
-                    tell(session, "Ce jukebox joue un disque YouTube : installe « Rinku » pour "
-                            + "l'entendre.", ChatFormatting.YELLOW);
+                    tell(session, "Ce jukebox joue un disque YouTube : le lecteur intégré (Rinku) "
+                            + "arrive par la synchronisation du serveur — relance le jeu quand elle "
+                            + "te le demande.", ChatFormatting.YELLOW);
                     session.failed = true;
                     return;
                 }
                 case SANS_CONSENTEMENT -> {
-                    tell(session, "Ce jukebox joue un disque YouTube. Pour l'entendre, autorise les "
-                            + "médias distants (clic sur un écran ou un projecteur → « Autoriser les "
-                            + "médias distants »).", ChatFormatting.YELLOW);
-                    session.failed = true;
+                    if (Consent.refused()) {
+                        tell(session, "Disque YouTube muet : médias distants refusés (modifiable "
+                                + "dans l'écran d'un projecteur).", ChatFormatting.GRAY);
+                        session.failed = true;
+                    } else {
+                        // Première fois : la question, une fois ; sur « Oui », le tick suivant ouvre.
+                        Consent.ask("de la musique", "youtube.com", null);
+                    }
                     return;
                 }
                 case PRET -> { }
@@ -321,11 +326,12 @@ public final class Juke {
         }
         switch (Chrome.INSTANCE.verdict()) {
             case SANS_MOD -> {
-                ear.fail("YouTube demande le mod « Rinku » (lecteur intégré).");
+                ear.fail("Le lecteur intégré (Rinku) arrive par la synchro du serveur : relance le "
+                        + "jeu quand elle le demande.");
                 return;
             }
             case SANS_CONSENTEMENT -> {
-                ear.fail("Autorise d'abord les médias distants (clic sur un écran → « Autoriser »).");
+                ear.fail("Médias distants refusés — modifiable dans l'écran d'un projecteur.");
                 return;
             }
             case PRET -> { }

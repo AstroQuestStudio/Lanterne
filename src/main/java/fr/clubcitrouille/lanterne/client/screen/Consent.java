@@ -42,6 +42,7 @@ public final class Consent {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.BooleanValue REMOTE;
+    public static final ModConfigSpec.BooleanValue ANSWERED;
     public static final ModConfigSpec.IntValue ACTIVE_CAP;
     public static final ModConfigSpec.IntValue FRAME_CAP;
     public static final ModConfigSpec.IntValue DISTANCE;
@@ -66,6 +67,13 @@ public final class Consent {
                 "connaitra alors votre adresse IP, comme n'importe quel site que vous visitez.",
                 "La liste blanche du serveur limite a QUI cela peut arriver ; elle ne l'empeche pas.")
                 .define("charger_medias_distants", false);
+
+        ANSWERED = BUILDER.comment(
+                "Le joueur a-t-il deja repondu a la question des medias distants ?",
+                "A FAUX et charger_medias_distants a FAUX : on la posera une fois, au premier ecran",
+                "ou disque YouTube a portee. A VRAI et charger_medias_distants a FAUX : refus retenu,",
+                "on ne redemande plus (le projecteur permet de changer d'avis).")
+                .define("medias_distants_repondu", false);
 
         ACTIVE_CAP = BUILDER.comment(
                 "Nombre d'ecrans qui decodent en meme temps, au maximum.",
@@ -117,12 +125,76 @@ public final class Consent {
         return SPEC.isLoaded() && REMOTE.get();
     }
 
+    /**
+     * Refus explicite et retenu. Un joueur qui avait activé le réglage avant l'existence de la
+     * question reste autorisé : {@link #remoteAllowed} ne regarde que {@code REMOTE}.
+     */
+    public static boolean refused() {
+        return SPEC.isLoaded() && !REMOTE.get() && ANSWERED.get();
+    }
+
+    /** Déjà posée cette session, sans réponse : on ne la repose pas avant le prochain lancement. */
+    private static boolean askedThisSession;
+    /** Ce qui attend la réponse : relancé tout de suite sur « Oui ». */
+    private static final java.util.List<Runnable> WAITING = new java.util.ArrayList<>();
+
+    /**
+     * Pose la question, une seule fois, au moment où un contenu distant doit se charger. Ne fait rien
+     * si le joueur a déjà répondu, ou si la question est déjà ouverte / déjà posée cette session. Ne
+     * vole jamais un écran ouvert : on attend qu'aucun ne le soit (appelée à chaque tick par les
+     * appelants tant que la réponse manque).
+     *
+     * @param what « une vidéo », « de la musique »…
+     * @param host le domaine, dit au joueur
+     * @param onYes relancé immédiatement si le joueur accepte
+     */
+    public static void ask(String what, String host, Runnable onYes) {
+        if (!SPEC.isLoaded() || REMOTE.get() || ANSWERED.get() || askedThisSession) {
+            return;
+        }
+        net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
+        if (client.gui.screen() != null || client.player == null) {
+            return;
+        }
+        askedThisSession = true;
+        if (onYes != null) {
+            WAITING.add(onYes);
+        }
+        client.gui.setScreen(question(what, host, null));
+    }
+
+    /** L'écran de la question, qui rend la main à {@code back} une fois répondu. */
+    public static net.minecraft.client.gui.screens.Screen question(String what, String host,
+            net.minecraft.client.gui.screens.Screen back) {
+        askedThisSession = true;
+        net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
+        return new net.minecraft.client.gui.screens.ConfirmScreen(yes -> {
+            allowRemote(yes);
+            client.gui.setScreen(back);
+            if (yes) {
+                java.util.List<Runnable> ready = new java.util.ArrayList<>(WAITING);
+                WAITING.clear();
+                ready.forEach(Runnable::run);
+            } else {
+                WAITING.clear();
+            }
+        }, net.minecraft.network.chat.Component.literal("Autoriser les médias distants ?"),
+                net.minecraft.network.chat.Component.literal("Ce serveur diffuse " + what + " depuis "
+                        + (host == null || host.isBlank() ? "Internet" : host) + ".\n\n"
+                        + "Oui : ta machine se connecte à cet hôte (il verra ton adresse IP, comme "
+                        + "n'importe quel site que tu visites).\nNon : rien ne se charge ; tu pourras "
+                        + "changer d'avis dans l'écran d'un projecteur."),
+                net.minecraft.network.chat.Component.literal("Oui, autoriser"),
+                net.minecraft.network.chat.Component.literal("Non"));
+    }
+
     /** Bascule le consentement, et l'écrit. Appelé par l'interrupteur de l'écran de réglages. */
     public static void allowRemote(boolean wanted) {
         if (!SPEC.isLoaded()) {
             return;
         }
         REMOTE.set(wanted);
+        ANSWERED.set(true);
         // Sans « save », le choix ne vaudrait que pour cette session — et un joueur qui a lu
         // l'avertissement et dit non le redirait à chaque lancement, ce qui finirait par le faire
         // dire oui par lassitude.

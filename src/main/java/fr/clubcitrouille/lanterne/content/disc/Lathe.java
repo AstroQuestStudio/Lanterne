@@ -88,6 +88,14 @@ public final class Lathe extends Screen {
         this.pos = pos;
     }
 
+    /** Lien déjà collé, à relancer dès l'ouverture : retour de la question des médias distants. */
+    private String preset;
+
+    Lathe(BlockPos pos, String preset) {
+        this(pos);
+        this.preset = preset;
+    }
+
     @Override
     protected void init() {
         this.fit.measure(this.width, this.height, WIDTH, HEIGHT);
@@ -127,6 +135,11 @@ public final class Lathe extends Screen {
                 .bounds(left + inner - 70, footY, 70, 18).build());
 
         this.refresh();
+        if (this.preset != null) {
+            this.link.setValue(this.preset);
+            this.preset = null;
+            this.onPull();
+        }
     }
 
     @Override
@@ -167,6 +180,14 @@ public final class Lathe extends Screen {
      * durée, le titre et un éventuel refus d'intégration — voir {@code client.screen.Juke.probe}.
      */
     private void pullYoutube(String typed) {
+        if (!fr.clubcitrouille.lanterne.client.screen.Consent.remoteAllowed()
+                && !fr.clubcitrouille.lanterne.client.screen.Consent.refused()) {
+            // Jamais répondu : on pose la question ici, et le graveur revient avec le lien déjà
+            // collé et la sonde relancée, quelle que soit la réponse.
+            Minecraft.getInstance().gui.setScreen(fr.clubcitrouille.lanterne.client.screen.Consent
+                    .question("de la musique", "youtube.com", new Lathe(this.pos, typed)));
+            return;
+        }
         this.busy = true;
         this.hash = "";
         this.tube = null;

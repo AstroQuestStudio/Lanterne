@@ -339,7 +339,13 @@ public final class Gaze {
             return;
         }
         Engine engine = Engine.forSource(wanted);
-        if (engine.verdict() != Engine.Verdict.PRET) {
+        Engine.Verdict verdict = engine.verdict();
+        if (verdict == Engine.Verdict.SANS_CONSENTEMENT) {
+            // Première fois qu'un contenu distant veut se charger ici : on pose la question, une
+            // fois. Sur « Oui », le tour suivant ouvrira la source tout seul.
+            Consent.ask("une vidéo", fr.clubcitrouille.lanterne.content.screen.Sieve.domain(wanted), null);
+        }
+        if (verdict != Engine.Verdict.PRET) {
             return;
         }
         show.reel = engine.open(wanted, height);
