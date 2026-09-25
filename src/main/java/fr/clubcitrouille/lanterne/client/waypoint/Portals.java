@@ -78,8 +78,8 @@ public final class Portals {
                 }
             }
         }
-        // Un portail privé d'un autre joueur ne nous est jamais annoncé : il existe, on le voit, et
-        // l'on ne sait rien de lui. L'ambre du mod est la réponse honnête — pas une couleur inventée.
+        // Une nappe que la dernière synchro n'a pas encore annoncée (portail tout juste allumé) :
+        // l'ambre du mod est la réponse honnête — pas une couleur inventée.
         return fr.clubcitrouille.lanterne.content.waypoint.Waypoint.PALETTE[0];
     }
 
