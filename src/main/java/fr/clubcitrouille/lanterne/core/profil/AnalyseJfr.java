@@ -189,6 +189,12 @@ public final class AnalyseJfr {
             String fil = nomFil(event);
             List<RecordedFrame> frames = pile.getFrames();
             String sommet = nomMethode(frames.get(0));
+            // Un fil qui DORT dans du natif (poll, epoll, accept, park...) n'est pas du travail : le
+            // compter faisait apparaître « FileSystemWatchService 100 % poll » en tête du rapport.
+            // Les appels natifs utiles (OpenGL, compression, E/S réelles) restent comptés.
+            if (type.equals("jdk.NativeMethodSample") && estAttente(sommet)) {
+                continue;
+            }
             selfParFil.computeIfAbsent(fil, k -> new HashMap<>()).merge(sommet, 1, Integer::sum);
             totalEchantillonsParFil.merge(fil, 1, Integer::sum);
 
@@ -468,6 +474,16 @@ public final class AnalyseJfr {
                 return "(fil inconnu)";
             }
         }
+    }
+
+    /** Méthode native où un fil ATTEND (sommet d'un jdk.NativeMethodSample) plutôt qu'il ne travaille. */
+    private static boolean estAttente(String methode) {
+        String m = methode.substring(methode.lastIndexOf('.') + 1);
+        return m.equals("poll") || m.equals("poll0") || m.startsWith("epollWait") || m.equals("wait")
+                || m.equals("wait0") || m.equals("park") || m.equals("sleep") || m.equals("sleep0")
+                || m.equals("accept") || m.equals("accept0") || m.equals("select") || m.equals("select0")
+                || m.equals("socketAccept") || m.equals("take") || m.equals("GetQueuedCompletionStatus")
+                || m.equals("waitForMultipleObjects") || m.equals("waitForReferencePendingList");
     }
 
     private static String nomMethode(RecordedFrame frame) {

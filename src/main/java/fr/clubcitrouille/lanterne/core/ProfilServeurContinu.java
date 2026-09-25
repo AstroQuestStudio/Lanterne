@@ -139,6 +139,14 @@ public final class ProfilServeurContinu {
         }
     }
 
+    /** Début du tick en cours (Pre) : le MSPT est le TRAVAIL d'un tick, Pre → Post, pas l'intervalle. */
+    private static long debutTickNanos;
+
+    @SubscribeEvent
+    public static void onServerTickPre(ServerTickEvent.Pre event) {
+        debutTickNanos = System.nanoTime();
+    }
+
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         if (!actif) {
@@ -146,8 +154,10 @@ public final class ProfilServeurContinu {
         }
         long now = System.nanoTime();
         ticksVus++;
-        if (lastTickNanos != 0L) {
-            double ms = (now - lastTickNanos) / 1e6d;
+        // Temps de TRAVAIL du tick (Pre → Post). L'ancienne mesure (Post → Post) donnait l'intervalle
+        // entre ticks, ~50 ms par construction à 20 TPS, même serveur vide : inutilisable.
+        if (debutTickNanos != 0L) {
+            double ms = (now - debutTickNanos) / 1e6d;
             int seau = (int) (ms / HISTO_PAS_MS);
             histogrammeMspt[Math.max(0, Math.min(HISTO_BUCKETS, seau))]++;
             maxMspt = Math.max(maxMspt, ms);
@@ -258,11 +268,17 @@ public final class ProfilServeurContinu {
     }
 
     private static Path ecrireRapport(TrancheSnapshot snap, Path jfrFichier) throws IOException {
-        double avgMspt = snap.ticksVus() > 0 ? (snap.sessionSec() * 1000.0d) / snap.ticksVus() : 0;
+        // Moyenne du temps de TRAVAIL, lue dans l'histogramme (milieu de chaque seau, max pour le seau
+        // « au-delà ») — sessionSec / ticks donnerait l'intervalle entre ticks, pas le MSPT.
         long totalTicks = 0;
-        for (long compte : snap.histogrammeMspt()) {
-            totalTicks += compte;
+        double sommeMs = 0;
+        long[] histo = snap.histogrammeMspt();
+        for (int i = 0; i < histo.length; i++) {
+            totalTicks += histo[i];
+            double milieu = i == histo.length - 1 ? snap.maxMspt() : (i + 0.5d) * HISTO_PAS_MS;
+            sommeMs += histo[i] * milieu;
         }
+        double avgMspt = totalTicks > 0 ? sommeMs / totalTicks : 0;
 
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
         Files.createDirectories(snap.profilsDir());
