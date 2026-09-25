@@ -187,6 +187,10 @@ public final class Lanterne {
             // JourneyMap est tardif (piloté par son propre ordonnanceur de tâches), donc largement
             // après ce point.
             fr.clubcitrouille.lanterne.client.Eclaireur.install();
+            // Gel de connexion mesuré (config + icônes de mob relues depuis le disque) : préchauffe
+            // le cache disque de l'OS sur un fil de fond, sans jamais toucher l'état interne de
+            // JourneyMap — voir la Javadoc de PrechauffageJourneyMap pour la limite de sûreté choisie.
+            fr.clubcitrouille.lanterne.client.PrechauffageJourneyMap.install();
             fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
             // Apres Compass : la touche de la boutique reutilise la categorie de
             // raccourcis qu'il declare, et NeoForge refuse un identifiant en double.
