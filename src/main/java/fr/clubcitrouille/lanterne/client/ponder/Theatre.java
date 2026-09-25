@@ -498,7 +498,7 @@ public final class Theatre extends Screen {
         }
         int mx = (int) this.fit.x(event.x());
         int my = (int) this.fit.y(event.y());
-        if (event.button() != 0) {
+        if (event.button() != com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT) {
             return super.mouseClicked(event, doubled);
         }
 

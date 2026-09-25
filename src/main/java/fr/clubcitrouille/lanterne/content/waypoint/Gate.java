@@ -150,14 +150,23 @@ public record Gate(UUID id, UUID owner, String ownerName, String name, Identifie
                 colour, shared, true, target);
     }
 
-    /** Vrai si ce joueur a le droit de modifier ce portail : son propriétaire, et lui seul. */
+    /**
+     * Vrai si ce joueur a posé ce portail. Le droit de le modifier revient à son propriétaire et aux
+     * opérateurs — voir {@code Gates.mayManage}.
+     */
     public boolean ownedBy(UUID who) {
         return owner.equals(who);
     }
 
-    /** Vrai si ce joueur a le droit de le voir dans une liste et de le traverser. */
+    /**
+     * Tout portail est public : visible par tous, et traversable ou choisi comme destination par tous.
+     *
+     * <p>Le champ {@link #shared} reste dans le format (sauvegarde et réseau) pour que les mondes et les
+     * clients déjà en circulation se relisent sans migration de format ; il vaut désormais toujours
+     * vrai — voir {@code Atlas}, qui rend publics au chargement les portails autrefois privés.
+     */
     public boolean visibleTo(UUID who) {
-        return shared || ownedBy(who);
+        return true;
     }
 
     /** Ce bloc fait-il partie de la nappe de portail de ce cadre ? */

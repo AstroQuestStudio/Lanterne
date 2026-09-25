@@ -49,6 +49,11 @@ public final class Waypoints {
                 (payload, context) -> context.enqueueWork(
                         () -> fr.clubcitrouille.lanterne.client.waypoint.Portals.accept(payload.gates())));
         registrar.playToServer(GateAsk.TYPE, GateAsk.STREAM_CODEC, Gates::onAsk);
+        // Facultatif : un client d'avant ce paquet doit pouvoir se connecter (et recevoir sa mise à
+        // jour par Mèche) ; il ne verra simplement pas le retour affiché dans l'écran.
+        registrar.optional().playToClient(GateReply.TYPE, GateReply.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> fr.clubcitrouille.lanterne.client.waypoint.Gateway.accept(payload)));
     }
 
     /**

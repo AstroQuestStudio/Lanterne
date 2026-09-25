@@ -379,10 +379,17 @@ public final class Gates {
      * <p>Chaque refus est expliqué à voix haute. Un portail qui ne fait rien et ne dit rien est
      * indiscernable d'un mod cassé, et c'est le genre de doute qui fait désinstaller.
      *
-     * <p>La <b>dernière vérification se fait dans le monde</b>, pas dans la fiche : on relit le bloc du
-     * portail de destination avant de partir. C'est un chargement de chunk, parfois dans une autre
-     * dimension, et il est délibéré — c'est le seul moyen de ne pas déposer un joueur et son inventaire
-     * dans la pierre parce que la fiche disait « allumé » et que le monde disait autre chose.
+     * <p><b>Distance et chunks déchargés.</b> Rien ici ne dépend de la distance : la fiche du portail
+     * de destination vit dans l'{@link Atlas} (données persistées, toujours en mémoire), et la seule
+     * lecture du monde — {@code beyond.getBlockState(there.min())} — passe par
+     * {@code Level.getBlockState} puis {@code getChunk(x, z)}, qui CHARGE le chunk s'il ne l'est pas
+     * (lu dans le source patché de 26.3), y compris dans une autre dimension. La transition pose
+     * ensuite un ticket de portail ({@code PLACE_PORTAL_TICKET}) comme un portail vanilla. Un portail
+     * lointain ou dans un chunk déchargé se traverse donc normalement.
+     *
+     * <p>La dernière vérification se fait dans le monde, pas dans la fiche : si le cadre de destination
+     * a été détruit pendant que son chunk dormait, la fiche passe à « éteint » et le voyageur est
+     * prévenu, plutôt que déposé dans la pierre.
      */
     static TeleportTransition destination(ServerLevel level, Entity entity, BlockPos entry) {
         MinecraftServer server = level.getServer();
@@ -394,51 +401,58 @@ public final class Gates {
         if (here == null) {
             return null;
         }
-        UUID traveller = travellerOf(entity);
-        if (traveller == null ? !here.shared() : !here.visibleTo(traveller)) {
-            // Sans voyageur identifiable — un wagon poussé, une bête égarée — seul un portail public
-            // accepte le passage. Autrement, un chariot lancé dans la porte dérobée de quelqu'un
-            // suffirait à en faire une porte ouverte, et « privé » ne voudrait plus rien dire.
-            say(entity, "Ce portail est privé.");
-            return null;
-        }
         if (here.target().isEmpty()) {
-            say(entity, "« " + here.name() + " » ne mène nulle part. Clic droit sur son cœur "
-                    + "pour choisir une destination.");
+            refuse(entity, here, "« " + here.name() + " » ne mène nulle part. Clic droit sur son "
+                    + "cœur pour choisir une destination.");
             return null;
         }
         Gate there = atlas.gate(here.target().get());
         if (there == null) {
-            say(entity, "La destination de « " + here.name() + " » n'existe plus.");
-            return null;
-        }
-        if (traveller == null ? !there.shared() : !there.visibleTo(traveller)) {
-            say(entity, "« " + there.name() + " » est devenu privé.");
+            refuse(entity, here, "La destination de « " + here.name() + " » n'existe plus. Clic "
+                    + "droit sur son cœur pour en choisir une autre.");
             return null;
         }
         ServerLevel beyond = server.getLevel(
                 ResourceKey.create(Registries.DIMENSION, there.dimension()));
         if (beyond == null) {
-            say(entity, "Le monde de « " + there.name() + " » n'est pas chargé sur ce serveur.");
+            refuse(entity, here, "Le monde de « " + there.name() + " » n'est pas chargé sur ce serveur.");
             return null;
         }
         if (!there.lit() || !beyond.getBlockState(there.min()).is(GATE.get())) {
-            // La fiche et le monde ne disaient pas la même chose : c'est le monde qui a raison.
-            atlas.replaceGate(there.withLit(false));
-            atlas.syncAll(server);
-            say(entity, "« " + there.name() + " » est éteint. Rallume-le avant de le rejoindre.");
+            if (there.lit()) {
+                atlas.replaceGate(there.withLit(false));
+                atlas.syncAll(server);
+                Lanterne.LOG.info("[PORTAIL] « {} » trouvé détruit à la traversée : marqué éteint.",
+                        there.name());
+            }
+            refuse(entity, here, "« " + there.name() + " » est éteint. Rallume-le avant de le rejoindre.");
             return null;
         }
-
         Vec3 spot = PortalShape.findCollisionFreePosition(there.landing(), beyond, entity,
                 entity.getDimensions(entity.getPose()));
-        // Le quart de tour de vanilla : si les deux cadres ne sont pas sur le même axe, le voyageur
-        // ressort tourné de quatre-vingt-dix degrés et continue donc de marcher « à travers » plutôt
-        // que « le long ». Relative.ROTATION veut dire que l'angle s'AJOUTE au sien.
+        // Quart de tour si les deux cadres ne sont pas dans le même plan, pour qu'on sorte face au
+        // portail d'arrivée plutôt que de biais.
         int turn = here.axis() == there.axis() ? 0 : 90;
+        Lanterne.LOG.info("[PORTAIL] traversée : {} de « {} » ({}) vers « {} » ({} {} {} {}).",
+                entity.getName().getString(), here.name(), here.dimension(), there.name(),
+                there.dimension(), there.heart().getX(), there.heart().getY(), there.heart().getZ());
         return new TeleportTransition(beyond, spot, Vec3.ZERO, turn, 0.0F,
                 Relative.union(Relative.DELTA, Relative.ROTATION),
                 TeleportTransition.PLAY_PORTAL_SOUND.then(TeleportTransition.PLACE_PORTAL_TICKET));
+    }
+
+    /** Dernier refus journalisé, par portail : une entité immobile dans la nappe redemande sans cesse. */
+    private static final java.util.Map<UUID, Long> LAST_REFUSAL =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void refuse(Entity entity, Gate here, String why) {
+        say(entity, why);
+        long now = System.currentTimeMillis();
+        Long last = LAST_REFUSAL.get(here.id());
+        if (last == null || now - last > 10_000L) {
+            LAST_REFUSAL.put(here.id(), now);
+            Lanterne.LOG.info("[PORTAIL] traversée refusée à « {} » : {}", here.name(), why);
+        }
     }
 
     /**
@@ -479,75 +493,118 @@ public final class Gates {
     /**
      * Traite une demande de l'écran, sur le fil du serveur.
      *
-     * <p>Comme pour les repères, le propriétaire n'est jamais celui que le paquet annonce : il est lu
-     * dans la connexion. Un client modifié peut donc demander n'importe quoi sur n'importe quel portail,
-     * et n'obtiendra rien sur ceux qui ne sont pas à lui.
+     * <p>Le demandeur n'est jamais celui que le paquet annonce : il est lu dans la connexion. Un client
+     * modifié peut demander n'importe quoi, il n'obtiendra que ce que {@link #mayManage} lui accorde.
      */
     public static void onAsk(GateAsk ask, net.neoforged.neoforge.network.handling.IPayloadContext context) {
         // enqueueWork n'est pas une précaution de style : le gestionnaire est appelé sur le fil réseau,
         // et toucher aux données de monde depuis là serait une course pure et simple.
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer player) {
-                apply(ask, player);
+                apply(ask, player, true);
             }
         });
+    }
+
+    /**
+     * Qui peut régler un portail : celui qui l'a posé, et les opérateurs (niveau « maître du jeu »,
+     * même permission que la peinture — voir {@code Canvas}). Tout le monde peut le traverser et le
+     * choisir comme destination : les portails sont publics.
+     */
+    public static boolean mayManage(ServerPlayer player, Gate gate) {
+        return gate.ownedBy(player.getUUID()) || player.permissions().hasPermission(
+                net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+    }
+
+    /**
+     * Répond au joueur. Depuis l'écran, la réponse s'affiche DANS l'écran ({@link GateReply}) : le chat
+     * est invisible tant qu'un écran est ouvert, et c'est exactement ce qui rendait un lien refusé
+     * indiscernable d'un clic perdu. Depuis une commande, elle part dans le chat, où l'on regarde.
+     */
+    private static void answer(ServerPlayer player, boolean fromScreen, boolean ok, String text) {
+        Lanterne.LOG.info("[PORTAIL] réponse à {} ({}) : {}", player.getGameProfile().name(),
+                ok ? "ok" : "refus", text);
+        if (fromScreen) {
+            try {
+                net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player,
+                        new GateReply(ok, text.length() > GateReply.TEXT_LIMIT
+                                ? text.substring(0, GateReply.TEXT_LIMIT) : text));
+                return;
+            } catch (RuntimeException clientWithoutChannel) {
+                // Client d'avant ce paquet (canal facultatif) : on retombe sur le chat.
+            }
+        }
+        Waypoints.tell(player, text);
     }
 
     /**
      * Le traitement proprement dit, sur le fil du serveur.
      *
      * <p>L'écran et les commandes entrent par ici, et par ici seulement : toute règle ajoutée vaut
-     * aussitôt pour les deux. Une commande qui aurait sa propre copie des règles finirait par en avoir
-     * d'autres.
+     * aussitôt pour les deux. Chaque issue — réussite comme refus — produit une réponse et une ligne
+     * {@code [PORTAIL]} dans le journal : plus jamais un clic qui ne dit rien.
      */
-    private static void apply(GateAsk ask, ServerPlayer player) {
+    private static void apply(GateAsk ask, ServerPlayer player, boolean fromScreen) {
+        Lanterne.LOG.info("[PORTAIL] demande reçue de {} : {} sur {}{}", player.getGameProfile().name(),
+                ask.verb(), ask.gate(), ask.target().map(id -> " vers " + id).orElse(""));
         MinecraftServer server = player.level().getServer();
-        if (server == null || !Settings.waypoints()) {
+        if (server == null) {
+            return;
+        }
+        if (!Settings.waypoints()) {
+            answer(player, fromScreen, false, "Les portails sont désactivés sur ce serveur.");
             return;
         }
         Atlas atlas = Atlas.of(server);
         Gate mine = atlas.gate(ask.gate());
         if (mine == null) {
-            Waypoints.tell(player, "Ce portail n'existe plus.");
+            answer(player, fromScreen, false, "Ce portail n'existe plus.");
             atlas.syncAll(server);
             return;
         }
-        if (!mine.ownedBy(player.getUUID())) {
-            Waypoints.tell(player, "Ce portail appartient à " + mine.ownerName() + ".");
+        if (!mayManage(player, mine)) {
+            answer(player, fromScreen, false, "Ce portail appartient à " + mine.ownerName()
+                    + " : tu peux le traverser, pas le régler.");
             return;
         }
-
         switch (ask.verb()) {
             case LINK -> {
-                String refusal = link(atlas, player, mine, ask.target().orElse(null));
+                String refusal = link(atlas, player, fromScreen, mine, ask.target().orElse(null));
                 if (refusal != null) {
-                    Waypoints.tell(player, refusal);
+                    answer(player, fromScreen, false, refusal);
+                    atlas.syncAll(server);
                     return;
                 }
             }
             case UNLINK -> {
-                atlas.replaceGate(mine.withTarget(Optional.empty()));
-                Waypoints.tell(player, "« " + mine.name() + " » ne mène plus nulle part.");
-            }
-            case SHARE -> {
-                boolean wanted = !mine.shared();
-                atlas.replaceGate(mine.withShared(wanted));
-                Waypoints.tell(player, "Portail « " + mine.name()
-                        + (wanted ? " » rendu public." : " » redevenu privé."));
-                if (!wanted) {
-                    Waypoints.tell(player, "Les liens que d'autres avaient posés vers lui "
-                            + "cesseront de fonctionner.");
+                if (mine.target().isEmpty()) {
+                    answer(player, fromScreen, false, "« " + mine.name() + " » ne menait déjà nulle part.");
+                    atlas.syncAll(server);
+                    return;
                 }
+                atlas.replaceGate(mine.withTarget(Optional.empty()));
+                answer(player, fromScreen, true, "« " + mine.name() + " » ne mène plus nulle part.");
+            }
+            // Conservé dans le format du paquet pour les clients plus anciens : les portails sont
+            // désormais toujours publics, il n'y a plus rien à basculer.
+            case SHARE -> {
+                answer(player, fromScreen, true, "Les portails sont toujours publics.");
+                atlas.syncAll(server);
+                return;
             }
             case RENAME -> {
                 String name = Waypoints.clean(ask.name());
                 if (name.isEmpty()) {
-                    Waypoints.tell(player, "Un portail a besoin d'un nom.");
+                    answer(player, fromScreen, false, "Un portail a besoin d'un nom.");
                     return;
                 }
                 atlas.replaceGate(mine.withName(name));
+                answer(player, fromScreen, true, "Portail renommé « " + name + " ».");
             }
-            case TINT -> atlas.replaceGate(mine.withColour(ask.colour() & 0xFFFFFF));
+            case TINT -> {
+                atlas.replaceGate(mine.withColour(ask.colour() & 0xFFFFFF));
+                answer(player, fromScreen, true, "Teinte changée.");
+            }
             case FORGET -> {
                 ServerLevel where = server.getLevel(
                         ResourceKey.create(Registries.DIMENSION, mine.dimension()));
@@ -556,16 +613,21 @@ public final class Gates {
                     sweep(where, mine);
                 }
                 atlas.removeGate(mine.id());
-                Waypoints.tell(player, "Portail « " + mine.name() + " » oublié.");
+                answer(player, fromScreen, true, "Portail « " + mine.name() + " » oublié.");
             }
         }
-        // Un partage, un nom ou une teinte changent ce que les AUTRES voient dans leur liste de
-        // destinations : on renvoie à tout le monde. Voir Atlas.syncAll.
         atlas.syncAll(server);
     }
 
-    /** Pose le lien, et offre le retour si la destination n'en avait pas. Voir l'en-tête du fichier. */
-    private static String link(Atlas atlas, ServerPlayer player, Gate mine, UUID targetId) {
+    /**
+     * Pose le lien, et offre le retour si la destination n'en avait pas. Voir l'en-tête du fichier.
+     *
+     * <p>Ne lit QUE l'{@link Atlas} : aucune lecture du monde, donc ni la distance, ni un chunk
+     * déchargé, ni une autre dimension ne peuvent empêcher un lien. Le monde n'est consulté qu'à la
+     * traversée (voir {@link #destination}).
+     */
+    private static String link(Atlas atlas, ServerPlayer player, boolean fromScreen, Gate mine,
+                               UUID targetId) {
         if (targetId == null) {
             return "Aucune destination choisie.";
         }
@@ -573,25 +635,26 @@ public final class Gates {
             return "Un portail ne mène pas à lui-même.";
         }
         Gate there = atlas.gate(targetId);
-        if (there == null || !there.visibleTo(player.getUUID())) {
-            return "Cette destination n'existe pas, ou elle est privée.";
+        if (there == null) {
+            return "Cette destination n'existe plus.";
+        }
+        if (mine.target().isPresent() && mine.target().get().equals(there.id())) {
+            return "« " + mine.name() + " » mène déjà à « " + there.name() + " ».";
         }
         atlas.replaceGate(mine.withTarget(Optional.of(there.id())));
-        Waypoints.tell(player, "« " + mine.name() + " » mène maintenant à « " + there.name() + " ».");
+        String said = "« " + mine.name() + " » mène maintenant à « " + there.name() + " ».";
         if (there.target().isEmpty()) {
             atlas.replaceGate(there.withTarget(Optional.of(mine.id())));
-            Waypoints.tell(player, "« " + there.name() + " » ne menait nulle part : il te ramène "
-                    + "ici. Son propriétaire peut le changer quand il veut.");
+            said += " Retour installé : « " + there.name() + " » ramène ici.";
         } else if (!there.target().get().equals(mine.id())) {
-            Waypoints.tell(player, "« " + there.name() + " » mène ailleurs : le retour n'est pas "
-                    + "automatique.");
+            said += " (« " + there.name() + " » mène ailleurs : pas de retour automatique.)";
         }
+        if (!there.lit()) {
+            said += " Attention : « " + there.name() + " » est éteint, il faudra le rallumer.";
+        }
+        answer(player, fromScreen, true, said);
         return null;
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Les commandes
-    // ------------------------------------------------------------------------------------------
 
     /**
      * {@code /lanterne portail …}, greffé sur la racine existante.
@@ -605,11 +668,6 @@ public final class Gates {
         event.getDispatcher().register(Commands.literal("lanterne")
                 .then(Commands.literal("portail")
                         .executes(context -> list(context.getSource()))
-                        .then(Commands.literal("public")
-                                .then(Commands.argument("portail", StringArgumentType.greedyString())
-                                        .suggests(Gates::mineSuggestions)
-                                        .executes(context -> share(context.getSource(),
-                                                StringArgumentType.getString(context, "portail")))))
                         .then(Commands.literal("delier")
                                 .then(Commands.argument("portail", StringArgumentType.greedyString())
                                         .suggests(Gates::mineSuggestions)
@@ -679,18 +737,11 @@ public final class Gates {
                     gate.name(), gate.heart().getX(), gate.heart().getY(), gate.heart().getZ(),
                     gate.dimension().getPath(), target,
                     gate.lit() ? "" : "  · éteint",
-                    gate.ownedBy(player.getUUID())
-                            ? (gate.shared() ? "  · public" : "  · privé")
-                            : "  · de " + gate.ownerName());
+                    gate.ownedBy(player.getUUID()) ? "  · à toi" : "  · de " + gate.ownerName());
             source.sendSuccess(() -> Component.literal(line)
                     .withStyle(style -> style.withColor(gate.colour())), false);
         }
         return seen.size();
-    }
-
-    private static int share(CommandSourceStack source, String name)
-            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        return act(source, name, GateAsk.Verb.SHARE, null);
     }
 
     private static int unlink(CommandSourceStack source, String name)
@@ -709,7 +760,7 @@ public final class Gates {
         Gate destination = byName(Atlas.of(source.getServer())
                 .gatesVisibleTo(player.getUUID()), target);
         if (destination == null) {
-            Waypoints.tell(player, "Aucun portail nommé « " + target + " » à ta portée.");
+            Waypoints.tell(player, "Aucun portail nommé « " + target + " ».");
             return 0;
         }
         return act(source, name, GateAsk.Verb.LINK, destination.id());
@@ -721,11 +772,18 @@ public final class Gates {
         Atlas atlas = Atlas.of(source.getServer());
         Gate gate = byName(atlas.gatesOwnedBy(player.getUUID()), name);
         if (gate == null) {
+            // Un opérateur peut régler n'importe quel portail : on cherche alors parmi tous.
+            Gate any = byName(atlas.gatesVisibleTo(player.getUUID()), name);
+            if (any != null && mayManage(player, any)) {
+                gate = any;
+            }
+        }
+        if (gate == null) {
             Waypoints.tell(player, "Tu n'as pas de portail nommé « " + name + " ».");
             return 0;
         }
         apply(new GateAsk(verb, gate.id(), Optional.ofNullable(target), gate.name(), gate.colour()),
-                player);
+                player, false);
         return 1;
     }
 

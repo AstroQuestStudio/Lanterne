@@ -75,7 +75,24 @@ public class Atlas extends SavedData {
 
     private Atlas(List<Waypoint> loaded, List<Gate> loadedGates) {
         this.marks = new ArrayList<>(loaded);
-        this.gates = new ArrayList<>(loadedGates);
+        this.gates = new ArrayList<>(loadedGates.size());
+        // Les portails sont désormais tous publics. Un portail sauvegardé « privé » par une version
+        // précédente le devient au chargement, et le carnet est marqué modifié pour que la prochaine
+        // sauvegarde l'écrive ainsi : aucune donnée perdue, aucun lien rompu.
+        int opened = 0;
+        for (Gate gate : loadedGates) {
+            if (gate.shared()) {
+                this.gates.add(gate);
+            } else {
+                this.gates.add(gate.withShared(true));
+                opened++;
+            }
+        }
+        if (opened > 0) {
+            Lanterne.LOG.info("[PORTAIL] {} portail(s) autrefois privé(s) rendu(s) public(s) au chargement.",
+                    opened);
+            setDirty();
+        }
     }
 
     /** Le carnet du serveur. Toujours celui de l'Overworld — voir l'en-tête. */
