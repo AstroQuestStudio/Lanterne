@@ -76,11 +76,15 @@ final class CarteBlueMap {
             }
             map.getMarkerSets().put(source.id(), set);
         }
+        Lanterne.LOG.info("[CARTE] « {} » : {} marqueur(s) publié(s) sur la carte.", source.label(),
+                markers.size());
     }
 
     /** Ce point appartient-il au monde de cette carte ? Même résolution que {@code CadenceBlueMap}. */
     private static boolean sameWorld(BlueMapAPI api, BlueMapMap map, CarteMarker marker) {
-        return api.getWorld(marker.dimension())
+        // En texte : BlueMapAPI#getWorld ne reconnaît que String, ResourceKey ou ServerLevel — un
+        // Identifier brut rendait Optional.empty() et chaque marqueur était écarté en silence.
+        return api.getWorld(marker.dimension().toString())
                 .map(world -> world.getMaps().contains(map))
                 .orElse(false);
     }

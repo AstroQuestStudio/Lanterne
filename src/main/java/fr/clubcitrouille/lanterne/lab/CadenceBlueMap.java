@@ -211,7 +211,7 @@ final class CadenceBlueMap {
     }
 
     private static void updateAround(BlueMapAPI api, ServerPlayer player) {
-        api.getWorld(player.level().dimension().identifier()).ifPresent(world -> {
+        api.getWorld(player.level().dimension().identifier().toString()).ifPresent(world -> {
             double x = player.getX();
             double z = player.getZ();
             for (BlueMapMap map : world.getMaps()) {
