@@ -664,6 +664,40 @@ public final class Settings {
     private static boolean regard;
     /** La Nutrition : prévisualisation faim/saturation d'un aliment. Voir {@code client.regard.Nutrition}. */
     private static boolean nutrition = false;
+    /** La souris avancée : glissés et molette dans les inventaires. Voir {@code mixin.MouseTweaksMixin}. */
+    private static boolean souris = false;
+    /**
+     * Vrai si le vrai mod AppleSkin / Mouse Tweaks est chargé : le module Lanterne correspondant est
+     * alors éteint quelle que soit la config. Un changement de valeur par défaut ne touche pas un
+     * fichier de config déjà écrit (NeoForge garde la valeur), et deux gestionnaires de souris actifs
+     * à la fois se disputent le même glissé — d'où une coupure dans le code, pas seulement dans la
+     * config.
+     */
+    private static Boolean appleSkinPresent;
+    private static Boolean mouseTweaksPresent;
+    private static boolean replacedLogged;
+
+    private static boolean appleSkinPresent() {
+        if (appleSkinPresent == null) {
+            appleSkinPresent = modLoaded("appleskin");
+        }
+        return appleSkinPresent;
+    }
+
+    private static boolean mouseTweaksPresent() {
+        if (mouseTweaksPresent == null) {
+            mouseTweaksPresent = modLoaded("mousetweaks");
+        }
+        return mouseTweaksPresent;
+    }
+
+    private static boolean modLoaded(String modId) {
+        try {
+            return net.neoforged.fml.ModList.get().isLoaded(modId);
+        } catch (Throwable tooEarly) {
+            return false;
+        }
+    }
     /** La Longuevue : le zoom tenu au clavier. Voir {@code client.regard.Longuevue}. */
     private static boolean zoom = true;
     /** Le champ de vision est divisé par cette valeur en zoom complet. */
@@ -1430,7 +1464,12 @@ public final class Settings {
 
     /** Comme {@link #regard()} : une aide à l'écran, pas un module d'optimisation — pas de {@code master &&}. */
     public static boolean nutrition() {
-        return nutrition;
+        return nutrition && !appleSkinPresent();
+    }
+
+    /** La souris avancée de Lanterne, éteinte d'office si le vrai Mouse Tweaks est chargé. */
+    public static boolean souris() {
+        return souris && !mouseTweaksPresent();
     }
 
     /**
@@ -1841,6 +1880,18 @@ public final class Settings {
         gauge = ClientConfig.GAUGE.get();
         regard = ClientConfig.REGARD.get();
         nutrition = ClientConfig.NUTRITION.get();
+        souris = ClientConfig.SOURIS_AVANCEE.get();
+        if (!replacedLogged) {
+            replacedLogged = true;
+            if (mouseTweaksPresent()) {
+                fr.clubcitrouille.lanterne.Lanterne.LOG.info("[RÉGLAGES] souris avancée de Lanterne éteinte : "
+                        + "Mouse Tweaks présent{}.", souris ? " (souris_avancee = true ignoré)" : "");
+            }
+            if (appleSkinPresent()) {
+                fr.clubcitrouille.lanterne.Lanterne.LOG.info("[RÉGLAGES] nutrition de Lanterne éteinte : "
+                        + "AppleSkin présent{}.", nutrition ? " (nutrition = true ignoré)" : "");
+            }
+        }
         zoom = ClientConfig.ZOOM.get();
         zoomFactor = ClientConfig.ZOOM_FACTOR.get();
         zoomSpeedPercent = ClientConfig.ZOOM_SPEED.get();

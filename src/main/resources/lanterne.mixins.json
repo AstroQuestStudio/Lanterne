@@ -94,6 +94,7 @@
     "PregenActivityMixin",
     "SansVolKickMixin",
     "SursisMixin",
+    "TagInconnuMixin",
     "BouclierFallbackMixin"
   ],
   "client": [

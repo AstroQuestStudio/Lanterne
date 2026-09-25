@@ -297,7 +297,10 @@ public final class ClientConfig {
                 "pas ; desactive, ce module n'evalue rien.",
                 "",
                 "ETEINT PAR DEFAUT depuis que le vrai AppleSkin est distribue par le serveur : meme",
-                "raison que REGARD/Jade - inutile de faire concurrence a l'original sur le meme HUD.")
+                "raison que REGARD/Jade - inutile de faire concurrence a l'original sur le meme HUD.",
+                "",
+                "REMPLACE PAR APPLESKIN : si AppleSkin est installe, ce module reste eteint meme a",
+                "true - le reglage n'a d'effet que sans AppleSkin.")
                 .define("nutrition", false);
         ZOOM = BUILDER.comment(
                 "LA LONGUEVUE : touche C maintenue, comme Sodium - le champ de vision se reduit",
@@ -700,6 +703,9 @@ public final class ClientConfig {
 
         SOURIS_AVANCEE = BUILDER.comment(
                 "SOURIS AVANCEE : les quatre mecaniques du mod Mouse Tweaks.",
+                "",
+                "REMPLACE PAR MOUSE TWEAKS : si le vrai mod Mouse Tweaks est installe, ce module reste",
+                "eteint meme a true (deux gestionnaires de souris se disputeraient le meme glisse).",
                 "",
                 "1. Shift + clic gauche + glisse : chaque case survole reçoit un transfert rapide.",
                 "2. Clic droit + glisse : avec une pile en main, chaque case reçoit un exemplaire.",

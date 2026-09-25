@@ -253,33 +253,93 @@ public final class MecheClient {
         }
     }
 
-    /** Ce que Mèche a posé lui-même dans mods/ : seuls ces fichiers-là seront retirés par oubli. */
+    /**
+     * Ce que Mèche a posé lui-même dans mods/, PAR SERVEUR : une ligne {@code serveur<TAB>jar}.
+     *
+     * <p>Avant, le registre était global : un jar installé pour le serveur A était retiré en
+     * rejoignant le serveur B, qui ne le publiait pas (vécu le 25/09/2026 : AppleSkin et Jade,
+     * installés depuis le VPS, supprimés en rejoignant le serveur de test). Désormais un jar n'est
+     * retiré que si le serveur qui l'a installé ne le publie plus ET qu'aucun autre serveur ne le
+     * revendique. Une ligne sans serveur (ancien format) n'est jamais retirée : le premier serveur
+     * qui publie ce jar la revendique.
+     */
     private static Path registry() {
         return FMLPaths.CONFIGDIR.get().resolve("lanterne-meche-registre.txt");
     }
 
-    private static Set<String> readRegistry() {
-        Set<String> names = new HashSet<>();
+    /** Clé des lignes de l'ancien registre global, que personne n'a encore revendiquées. */
+    private static final String UNCLAIMED = "";
+
+    /** Le serveur du catalogue en cours de traitement — posé sur le fil du jeu, lu par l'atelier. */
+    private static volatile String currentServer = UNCLAIMED;
+
+    /** Identité du serveur courant : l'adresse saisie par le joueur, sinon l'adresse distante. */
+    private static String serverKey() {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            var data = mc.getCurrentServer();
+            if (data != null && data.ip != null && !data.ip.isBlank()) {
+                return data.ip.strip().toLowerCase(java.util.Locale.ROOT);
+            }
+            var connection = mc.getConnection();
+            if (connection != null) {
+                return String.valueOf(connection.getConnection().getRemoteAddress())
+                        .toLowerCase(java.util.Locale.ROOT);
+            }
+        } catch (Throwable unknown) {
+            // Clé inconnue : les jars installés sous cette clé ne seront retirés que par ce même
+            // serveur « inconnu », jamais en rejoignant un serveur identifié.
+        }
+        return "inconnu";
+    }
+
+    /** serveur -> jars installés pour lui. La clé {@link #UNCLAIMED} porte l'ancien format. */
+    private static java.util.Map<String, Set<String>> readRegistry() {
+        java.util.Map<String, Set<String>> byServer = new java.util.TreeMap<>();
         try {
             if (Files.isRegularFile(registry())) {
-                for (String line : Files.readAllLines(registry())) {
-                    if (SAFE_JAR.matcher(line.strip()).matches()) {
-                        names.add(line.strip());
+                for (String raw : Files.readAllLines(registry())) {
+                    String line = raw.strip();
+                    if (line.isEmpty()) {
+                        continue;
+                    }
+                    int tab = raw.indexOf('\t');
+                    String server = tab < 0 ? UNCLAIMED : raw.substring(0, tab).strip();
+                    String name = tab < 0 ? line : raw.substring(tab + 1).strip();
+                    if (SAFE_JAR.matcher(name).matches()) {
+                        byServer.computeIfAbsent(server, k -> new HashSet<>()).add(name);
                     }
                 }
             }
         } catch (Exception unreadable) {
             Lanterne.LOG.warn("[MÈCHE] registre illisible : {}", unreadable.toString());
         }
-        return names;
+        return byServer;
     }
 
-    private static void writeRegistry(Set<String> names) {
+    private static void writeRegistry(java.util.Map<String, Set<String>> byServer) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        for (var entry : byServer.entrySet()) {
+            for (String name : new java.util.TreeSet<>(entry.getValue())) {
+                lines.add(entry.getKey().isEmpty() ? name : entry.getKey() + "\t" + name);
+            }
+        }
         try {
-            Files.write(registry(), new java.util.TreeSet<>(names));
+            Files.write(registry(), lines);
         } catch (Exception unwritable) {
             Lanterne.LOG.warn("[MÈCHE] registre non écrit : {}", unwritable.toString());
         }
+    }
+
+    /** Un serveur autre que {@code server} revendique-t-il ce jar ? (l'ancien format compte.) */
+    private static boolean claimedElsewhere(java.util.Map<String, Set<String>> byServer, String server,
+            String name) {
+        for (var entry : byServer.entrySet()) {
+            if (!entry.getKey().equals(server) && entry.getValue().contains(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Pattern glob(String pattern) {
@@ -301,11 +361,14 @@ public final class MecheClient {
      */
     public static void acceptCatalogue(fr.clubcitrouille.lanterne.core.network.MecheCatalogue catalogue) {
         boolean consent = MecheConsent.autoUpdate();
-        WORKSHOP.submit(() -> planCatalogue(catalogue, consent));
+        String server = serverKey();
+        WORKSHOP.submit(() -> planCatalogue(catalogue, consent, server));
     }
 
     private static void planCatalogue(
-            fr.clubcitrouille.lanterne.core.network.MecheCatalogue catalogue, boolean consent) {
+            fr.clubcitrouille.lanterne.core.network.MecheCatalogue catalogue, boolean consent,
+            String server) {
+        currentServer = server;
         try {
             Path mods = FMLPaths.MODSDIR.get();
             Set<String> published = new HashSet<>();
@@ -329,7 +392,24 @@ public final class MecheClient {
             for (String pattern : catalogue.retired()) {
                 retired.add(glob(pattern));
             }
-            Set<String> registry = readRegistry();
+            java.util.Map<String, Set<String>> registry = readRegistry();
+            Set<String> mine = registry.computeIfAbsent(server, k -> new HashSet<>());
+            // Revendication : une ligne de l'ancien format que CE serveur publie devient la sienne.
+            boolean claimed = false;
+            Set<String> legacy = registry.get(UNCLAIMED);
+            if (legacy != null) {
+                for (java.util.Iterator<String> it = legacy.iterator(); it.hasNext(); ) {
+                    String name = it.next();
+                    if (published.contains(name)) {
+                        mine.add(name);
+                        it.remove();
+                        claimed = true;
+                    }
+                }
+            }
+            if (claimed) {
+                writeRegistry(registry);
+            }
             Meche.JarInfo self = Meche.describeOwnJar(Lanterne.ID);
             String selfName = self == null ? "" : self.path().getFileName().toString();
             java.util.List<Path> toRemove = new java.util.ArrayList<>();
@@ -341,8 +421,13 @@ public final class MecheClient {
                         continue;
                     }
                     boolean retiredByServer = retired.stream().anyMatch(p -> p.matcher(name).matches());
-                    if (retiredByServer || registry.contains(name)) {
+                    // Retiré par oubli seulement si CE serveur l'avait installé et qu'aucun autre ne le
+                    // revendique : passer d'un serveur à l'autre ne retire plus jamais rien.
+                    boolean forgotten = mine.contains(name) && !claimedElsewhere(registry, server, name);
+                    if (retiredByServer || forgotten) {
                         toRemove.add(file);
+                    } else if (mine.remove(name)) {
+                        writeRegistry(registry); // plus publié ici mais tenu par un autre serveur : on lâche
                     }
                 }
             }
@@ -445,8 +530,8 @@ public final class MecheClient {
             part = mods.resolve(entry.name() + ".part");
             Files.write(part, download.buffer);
             Files.move(part, mods.resolve(entry.name()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            Set<String> registry = readRegistry();
-            registry.add(entry.name());
+            java.util.Map<String, Set<String>> registry = readRegistry();
+            registry.computeIfAbsent(currentServer, k -> new HashSet<>()).add(entry.name());
             writeRegistry(registry);
             filesInstalled++;
             Lanterne.LOG.info("[MÈCHE] « {} » installé et vérifié.", entry.name());
@@ -528,12 +613,15 @@ public final class MecheClient {
                     }
                 }
                 addStaleDuplicates(mods, published, selfName, removals);
-                Set<String> registry = readRegistry();
+                java.util.Map<String, Set<String>> registry = readRegistry();
                 for (Path file : removals) {
                     if (tryRemove(file) || scheduleDeferredRemoval(file)) {
                         filesRemoved++;
                     }
-                    registry.remove(file.getFileName().toString());
+                    String gone = file.getFileName().toString();
+                    for (Set<String> names : registry.values()) {
+                        names.remove(gone);
+                    }
                 }
                 writeRegistry(registry);
             } catch (Exception failed) {

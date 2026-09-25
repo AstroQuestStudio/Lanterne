@@ -93,6 +93,17 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
     @Shadow
     private boolean skipNextRelease;
 
+    /**
+     * Boutons de {@link MouseButtonEvent#button()} en numérotation SDL (26.3) : gauche = 1, droit = 3.
+     * L'ancien code comparait à 0 et 1 (numérotation GLFW) : le clic GAUCHE était pris pour un clic
+     * droit, et un glissé gauche avec une pile en main posait un exemplaire par case au lieu de
+     * répartir la pile. Les boutons passés à {@code slotClicked(int)} plus bas restent, eux, ceux du
+     * protocole de conteneur (0 gauche, 1 droit) — vanilla fait la même conversion
+     * ({@code AbstractContainerScreen.getContainerClickButton}).
+     */
+    private static final int LEFT = com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT;
+    private static final int RIGHT = com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_RIGHT;
+
     /** {@code Main.oldSelectedSlot} — la case sous la souris au dernier évènement traité. */
     private Slot lastSelectedSlot;
 
@@ -118,15 +129,15 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
      */
     @Inject(method = "mouseClicked(Lnet/minecraft/client/input/MouseButtonEvent;Z)Z", at = @At("HEAD"))
     private void lanterne$onMouseClicked(MouseButtonEvent event, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
-        if (!ClientConfig.SOURIS_AVANCEE.get()) {
+        if (!fr.clubcitrouille.lanterne.core.Settings.souris()) {
             return;
         }
         this.lastSelectedSlot = this.hoveredSlot;
         ItemStack carried = this.menu.getCarried();
         int button = event.button();
-        if (button == 0) {
+        if (button == LEFT) {
             this.canDoLmbDrag = carried.isEmpty();
-        } else if (button == 1) {
+        } else if (button == RIGHT) {
             this.canDoRmbDrag = !carried.isEmpty();
             this.rmbTweakLeftOriginalSlot = false;
         }
@@ -135,10 +146,13 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
     /** {@code Main.onMouseReleased} — referme les deux glissés, jamais annulé. */
     @Inject(method = "mouseReleased(Lnet/minecraft/client/input/MouseButtonEvent;)Z", at = @At("HEAD"))
     private void lanterne$onMouseReleased(MouseButtonEvent event, CallbackInfoReturnable<Boolean> cir) {
+        if (!fr.clubcitrouille.lanterne.core.Settings.souris()) {
+            return;
+        }
         int button = event.button();
-        if (button == 0) {
+        if (button == LEFT) {
             this.canDoLmbDrag = false;
-        } else if (button == 1) {
+        } else if (button == RIGHT) {
             this.canDoRmbDrag = false;
         }
     }
@@ -149,7 +163,7 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
      */
     @Inject(method = "mouseDragged(Lnet/minecraft/client/input/MouseButtonEvent;DD)Z", at = @At("HEAD"))
     private void lanterne$onMouseDragged(MouseButtonEvent event, double x, double y, CallbackInfoReturnable<Boolean> cir) {
-        if (!ClientConfig.SOURIS_AVANCEE.get()) {
+        if (!fr.clubcitrouille.lanterne.core.Settings.souris()) {
             return;
         }
 
@@ -164,10 +178,10 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
         // Au premier vrai départ de la case d'origine pendant un glissé droit : désarmer le
         // quick-craft vanilla (pas annuler l'évènement — voir la Javadoc de classe), puis cliquer la
         // case d'origine elle-même.
-        if (this.canDoRmbDrag && button == 1 && !this.rmbTweakLeftOriginalSlot) {
+        if (this.canDoRmbDrag && button == RIGHT && !this.rmbTweakLeftOriginalSlot) {
             this.rmbTweakLeftOriginalSlot = true;
             this.skipNextRelease = true;
-            if (this.isQuickCrafting && this.quickCraftingButton == 1) {
+            if (this.isQuickCrafting && this.quickCraftingButton == RIGHT) {
                 this.isQuickCrafting = false;
             }
             rmbTweakMaybeClickSlot(this.lastSelectedSlot, stackOnMouse);
@@ -179,7 +193,7 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
             return;
         }
 
-        if (button == 0) {
+        if (button == LEFT) {
             if (!this.canDoLmbDrag) {
                 return;
             }
@@ -212,7 +226,7 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
                     }
                 }
             }
-        } else if (button == 1) {
+        } else if (button == RIGHT) {
             if (!this.canDoRmbDrag) {
                 return;
             }
@@ -244,7 +258,7 @@ public abstract class MouseTweaksMixin<T extends AbstractContainerMenu> {
      */
     @Inject(method = "mouseScrolled(DDDD)Z", at = @At("HEAD"), cancellable = true)
     private void lanterne$onMouseScrolled(double x, double y, double horizontal, double vertical, CallbackInfoReturnable<Boolean> cir) {
-        if (!ClientConfig.SOURIS_AVANCEE.get()) {
+        if (!fr.clubcitrouille.lanterne.core.Settings.souris()) {
             return;
         }
         Slot selectedSlot = this.hoveredSlot;
