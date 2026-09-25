@@ -154,6 +154,9 @@ public final class Gates {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
         modBus.addListener(Gates::onBuildTab);
+        // S'enregistre toujours, même si aucune carte (BlueMap ou autre) n'est présente — voir
+        // compat.carte.CarteMarkers, qui ne référence lui-même aucun type de carte particulier.
+        fr.clubcitrouille.lanterne.compat.carte.CarteMarkers.register(GatesMarkerSource.INSTANCE);
     }
 
     /** Le cœur rejoint l'onglet du mod, à côté du carnet dont il est la suite. */
