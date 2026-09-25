@@ -62,12 +62,26 @@ public final class RecettesDiag {
                 continue;
             }
             for (Ingredient ingredient : ingredients) {
-                ingredient.getValues().unwrapKey().ifPresent(tag -> {
-                    if (!synced.contains(tag)) {
-                        orphans.computeIfAbsent(tag, k -> new TreeSet<>())
-                                .add(holder.id().identifier().toString());
-                    }
-                });
+                // Un ingrédient personnalisé NeoForge (isCustom() = compound, intersection, strict NBT…)
+                // n'a pas de HolderSet vanilla : ingredient.getValues() lève IllegalStateException
+                // ("Cannot retrieve values from custom ingredient!"). Ces ingrédients ne passent pas par
+                // le HolderSet.Named nommé que TagInconnuMixin corrige : rien à diagnostiquer ici.
+                if (ingredient.isCustom()) {
+                    continue;
+                }
+                try {
+                    ingredient.getValues().unwrapKey().ifPresent(tag -> {
+                        if (!synced.contains(tag)) {
+                            orphans.computeIfAbsent(tag, k -> new TreeSet<>())
+                                    .add(holder.id().identifier().toString());
+                        }
+                    });
+                } catch (Throwable ingredientFailed) {
+                    // Un ingrédient récalcitrant ne doit jamais empêcher l'analyse des autres.
+                    Lanterne.LOG.debug("[RECETTES] ingrédient ignoré ({}) dans {} : {}",
+                            ingredient.getClass().getSimpleName(), holder.id().identifier(),
+                            ingredientFailed.toString());
+                }
             }
         }
         if (orphans.isEmpty()) {
