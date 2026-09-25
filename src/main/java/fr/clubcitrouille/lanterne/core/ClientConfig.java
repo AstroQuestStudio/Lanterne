@@ -68,6 +68,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue DIN_WINDOW;
     public static final ModConfigSpec.BooleanValue EMPREINTE;
     public static final ModConfigSpec.BooleanValue GUET;
+    public static final ModConfigSpec.BooleanValue PROFIL_AUTO;
     public static final ModConfigSpec.BooleanValue SONDE_INDEXATION;
     public static final ModConfigSpec.BooleanValue RESERVE;
     public static final ModConfigSpec.IntValue RESERVE_CAPACITE;
@@ -729,6 +730,16 @@ public final class ClientConfig {
                 "peut l'imposer : ce reglage n'a alors aucun effet tant que tu y es connecte. Prend",
                 "effet au prochain chargement des ressources (F3+T). Voir core.Bouclier.")
                 .define("bouclier", true);
+
+        PROFIL_AUTO = BUILDER.comment(
+                "RADIOGRAPHIE AUTOMATIQUE : echantillonne le fil de rendu toutes les 15 ms pendant",
+                "toute la partie et ecrit un rapport config/lanterne/profil-*.txt a la sortie du monde.",
+                "ETEINT par defaut depuis 26.3.137 : chaque releve force un point de synchronisation",
+                "(safepoint) de la JVM, soit ~66 par seconde en continu, et trois joueurs ont plante le",
+                "25/09/2026 sur un bug connu du ramasse-miettes G1 de Java 25 qui survient justement",
+                "a un safepoint. N'allumer que pour un diagnostic ; /lanterne profil demarrer|arreter",
+                "reste disponible pour une session ciblee.")
+                .define("profil_auto", false);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

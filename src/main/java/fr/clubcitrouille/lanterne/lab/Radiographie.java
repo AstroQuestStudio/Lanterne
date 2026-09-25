@@ -128,8 +128,12 @@ public final class Radiographie {
         Minecraft mc = Minecraft.getInstance();
         boolean inWorld = mc.level != null;
         if (inWorld && !wasInWorld) {
-            start();
-        } else if (!inWorld && wasInWorld) {
+            // Plus automatique par défaut (26.3.137) : ~66 relevés de pile par seconde = autant de
+            // safepoints JVM en continu chez chaque joueur ; voir ClientConfig.PROFIL_AUTO.
+            if (profilAutoActif()) {
+                start();
+            }
+        } else if (!inWorld && wasInWorld && running.get()) {
             stop("monde quitté");
         }
         wasInWorld = inWorld;
@@ -143,6 +147,15 @@ public final class Radiographie {
 
         recordFrame(mc);
         recordLentille();
+    }
+
+    /** Réglage client {@code profil_auto} ; faux si la config n'est pas encore chargée. */
+    private static boolean profilAutoActif() {
+        try {
+            return fr.clubcitrouille.lanterne.core.ClientConfig.PROFIL_AUTO.get();
+        } catch (IllegalStateException pasEncoreCharge) {
+            return false;
+        }
     }
 
     /** Démarre l'échantillonnage. Idempotent : un second appel pendant une session en cours ne fait rien. */

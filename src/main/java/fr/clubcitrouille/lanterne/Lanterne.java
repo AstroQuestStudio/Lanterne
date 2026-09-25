@@ -204,6 +204,9 @@ public final class Lanterne {
             // le cache disque de l'OS sur un fil de fond, sans jamais toucher l'état interne de
             // JourneyMap — voir la Javadoc de PrechauffageJourneyMap pour la limite de sûreté choisie.
             fr.clubcitrouille.lanterne.client.PrechauffageJourneyMap.install();
+            // Bug G1 de Java 25 (3 plantages identiques remontés par la Boîte noire le 25/09) :
+            // passe l'instance CurseForge sur ZGC pour le prochain lancement — voir ParadeG1.
+            fr.clubcitrouille.lanterne.client.ParadeG1.install();
             fr.clubcitrouille.lanterne.client.waypoint.Compass.register(modBus);
             // Apres Compass : la touche de la boutique reutilise la categorie de
             // raccourcis qu'il declare, et NeoForge refuse un identifiant en double.

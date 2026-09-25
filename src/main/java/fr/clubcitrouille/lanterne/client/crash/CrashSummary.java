@@ -79,26 +79,31 @@ public final class CrashSummary {
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
         StringBuilder out = new StringBuilder();
 
-        // L'en-tête : "A fatal error has been detected...", le signal, le motif.
+        // L'en-tête : "A fatal error has been detected...", le motif, la JVM, le cadre fautif.
         appendUntilBlank(lines, 0, 20, out);
 
-        int frame = indexOf(lines, "Problematic frame:");
-        if (frame >= 0) {
-            appendSection(lines, frame, 4, out);
-        }
-
-        // Le pilote ou la bibliothèque en cause se lit souvent dans la ligne "C  [xxx.dll+0x...]"
-        // ou "C  [xxx.so+0x...]" du cadre fautif, déjà couverte ci-dessus, et dans la liste des
-        // bibliothèques natives chargées : on ne garde que les lignes qui en nomment une.
-        out.append("Bibliothèques natives citées dans le cadre fautif :\n");
-        for (String line : lines) {
-            if (line.contains(".dll") || line.contains(".so ") || line.contains(".so+")
-                    || line.contains(".dylib")) {
-                out.append(line).append('\n');
-                if (out.length() > BUDGET_BYTES) {
-                    break;
-                }
+        // Les lignes qui disent QUI plantait et DANS QUEL contexte — c'est ce qui manquait aux
+        // rapports du 25/09 (trois plantages G1 identiques, fil fautif inconnu). Les lignes de hs_err
+        // commencent souvent par "# " : on cherche par contenu, pas par début de ligne.
+        for (String key : new String[] {"Command Line:", "Time:", "Host:", "VM_Operation",
+                "VM Operation", "Current CompileTask"}) {
+            int at = indexOfContaining(lines, key);
+            if (at >= 0) {
+                appendSection(lines, at, key.startsWith("Current") ? 3 : 1, out);
             }
+        }
+        int thread = indexOfContaining(lines, "Current thread (");
+        if (thread >= 0) {
+            // La ligne du fil (nom, état) puis sa pile native et Java, jusqu'à 60 lignes.
+            appendUntilBlankLine(lines, thread, 60, out);
+            int java = indexOfContaining(lines, "Java frames:");
+            if (java > thread) {
+                appendUntilBlankLine(lines, java, 40, out);
+            }
+        }
+        int heap = indexOfContaining(lines, "Heap:");
+        if (heap >= 0) {
+            appendSection(lines, heap, 8, out);
         }
 
         return anonymize(cap(out.toString()));
@@ -111,6 +116,27 @@ public final class CrashSummary {
             }
         }
         return -1;
+    }
+
+    private static int indexOfContaining(List<String> lines, String needle) {
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).contains(needle)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Recopie à partir de {@code from} jusqu'à la première ligne vide, au plus {@code max} lignes. */
+    private static void appendUntilBlankLine(List<String> lines, int from, int max, StringBuilder out) {
+        int end = Math.min(lines.size(), from + max);
+        for (int i = from; i < end; i++) {
+            if (i > from && lines.get(i).isBlank()) {
+                break;
+            }
+            out.append(lines.get(i)).append('\n');
+        }
+        out.append('\n');
     }
 
     private static void appendUntilBlank(List<String> lines, int from, int max, StringBuilder out) {
