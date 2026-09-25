@@ -65,6 +65,11 @@ public final class Pane {
         // son rapport sans qu'on le lui demande. Voir Radiographie pour le pourquoi.
         fr.clubcitrouille.lanterne.lab.Radiographie.pulse();
 
+        // Les profils de performance continus (JFR) : même rythme (monde vu/quitté) que la
+        // radiographie ci-dessus, mais un moteur d'échantillonnage différent — voir la Javadoc de
+        // client.profil.ProfilClient pour pourquoi il ne réintroduit AUCUN safepoint en continu.
+        fr.clubcitrouille.lanterne.client.profil.ProfilClient.pulse();
+
         // Capture d'ecran automatique de verification (LANTERNE_AUTO_SCREENSHOT=1 uniquement,
         // jamais pour un joueur normal). Voir Snap.
         fr.clubcitrouille.lanterne.lab.Snap.pulse();

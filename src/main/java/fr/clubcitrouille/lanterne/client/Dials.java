@@ -661,6 +661,16 @@ public final class Dials extends Screen {
                 "Le texte envoyé est tronqué (en-tête, cause, mods suspectés, quelques lignes de "
                         + "pile) et les chemins de ton disque sont anonymisés avant de partir.",
                 "Pris en compte à la prochaine connexion à un serveur Lanterne."));
+        confidentialite.add(Dial.toggleCustom("Profils de performance",
+                fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent::profilsAllowed,
+                () -> fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent.setProfilsAllowed(
+                        !fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent.profilsAllowed()),
+                "Envoyer automatiquement un profil de performance détaillé (FPS, méthodes chaudes, "
+                        + "pauses du ramasse-miettes) toutes les ~60 minutes de jeu au serveur Lanterne "
+                        + "auquel tu te connectes.",
+                "Une copie locale reste de toute façon écrite dans config/lanterne/profils/, que ce "
+                        + "réglage soit actif ou non — il ne décide que de l'envoi.",
+                "Pris en compte à la prochaine rotation ou à la prochaine connexion."));
         this.families.add(confidentialite);
     }
 

@@ -30,6 +30,8 @@ public final class BoiteNoireConsent {
 
     public static final ModConfigSpec.BooleanValue ENVOYER;
     public static final ModConfigSpec.BooleanValue REPONDU;
+    public static final ModConfigSpec.BooleanValue ENVOYER_PROFILS;
+    public static final ModConfigSpec.BooleanValue PROFILS_REPONDU;
 
     public static final ModConfigSpec SPEC;
 
@@ -59,6 +61,27 @@ public final class BoiteNoireConsent {
                 "ou accord retenu, on ne redemande plus (cet ecran de reglages permet de changer d'avis).")
                 .define("boite_noire_repondu", false);
 
+        ENVOYER_PROFILS = BUILDER.comment(
+                "Envoyer automatiquement les PROFILS DE PERFORMANCE (JFR : methodes chaudes, pauses",
+                "GC, allocations...) de cette machine, environ toutes les 60 minutes de jeu en monde,",
+                "au serveur Lanterne auquel elle est connectee ?",
+                "",
+                "A FAUX (par defaut) : rien ne part jamais d'ici tout seul. Une copie locale reste",
+                "toujours ecrite dans config/lanterne/profils/, que ce reglage soit actif ou non.",
+                "",
+                "A VRAI : chaque rapport tronque (~200 Ko) part vers le serveur, qui l'ecrit dans son",
+                "dossier logs/lanterne-profils/. Reglage independant de « envoyer_automatiquement »",
+                "ci-dessus : un profil de performance ne contient ni chemin de disque ni nom de compte,",
+                "mais reste une decision separee, jamais devinee a la place du joueur.")
+                .define("envoyer_profils_automatiquement", false);
+
+        PROFILS_REPONDU = BUILDER.comment(
+                "Le joueur a-t-il deja repondu a la question des profils de performance ?",
+                "Meme logique que boite_noire_repondu ci-dessus, pour la question des profils : posee",
+                "une fois (souvent en meme temps que celle des plantages, en une seule question si",
+                "aucune des deux n'a encore de reponse), jamais reposee ensuite.")
+                .define("profils_repondu", false);
+
         BUILDER.pop();
         SPEC = BUILDER.build();
     }
@@ -82,6 +105,26 @@ public final class BoiteNoireConsent {
         }
         ENVOYER.set(wanted);
         REPONDU.set(true);
+        SPEC.save();
+    }
+
+    /** Le joueur accepte-t-il l'envoi automatique de ses profils de performance ? */
+    public static boolean profilsAllowed() {
+        return SPEC.isLoaded() && ENVOYER_PROFILS.get();
+    }
+
+    /** Le joueur a-t-il déjà répondu à la question des profils de performance, dans un sens ou dans l'autre ? */
+    public static boolean profilsAnswered() {
+        return SPEC.isLoaded() && PROFILS_REPONDU.get();
+    }
+
+    /** Bascule le consentement des profils de performance, et l'écrit — même geste que {@link #setAllowed}. */
+    public static void setProfilsAllowed(boolean wanted) {
+        if (!SPEC.isLoaded()) {
+            return;
+        }
+        ENVOYER_PROFILS.set(wanted);
+        PROFILS_REPONDU.set(true);
         SPEC.save();
     }
 

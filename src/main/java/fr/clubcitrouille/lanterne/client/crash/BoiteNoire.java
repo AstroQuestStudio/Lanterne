@@ -56,6 +56,12 @@ public final class BoiteNoire {
 
     private static boolean askedThisSession;
     private static List<Path> pendingAsk;
+    // Vrai si la question qui va s'afficher ne porte QUE sur les profils de performance — voir
+    // onLoggingIn : cas où la question des plantages a déjà une réponse mais pas celle des profils.
+    // Faux : question "combinée" (plantages + profils), posée quand ni l'une ni l'autre n'a encore
+    // de réponse — voir BoiteNoireConsent pour pourquoi ce sont deux réglages séparés malgré une
+    // question parfois commune.
+    private static boolean profilsSeulementAsk;
     private static final Deque<BoiteNoireTranche> FILE_ATTENTE = new ArrayDeque<>();
     private static int cooldown;
 
@@ -70,15 +76,20 @@ public final class BoiteNoire {
             return; // rien à prévenir : le « serveur » est cette même machine
         }
         List<Path> pending = findPending();
-        if (pending.isEmpty()) {
-            return;
-        }
+        // Voir la Javadoc de BoiteNoireConsent : deux questions distinctes (plantages, profils de
+        // performance), mais une seule popup si aucune des deux n'a encore de réponse — pour ne pas
+        // harceler le joueur de deux fenêtres à la suite au moment où il vient de se connecter.
         if (!BoiteNoireConsent.answered()) {
-            pendingAsk = pending; // posée au tick suivant, une fois l'écran de connexion refermé
-            return;
+            pendingAsk = pending; // peut être vide : "0 plantage" est un cas valide de la question combinée
+            profilsSeulementAsk = false;
+            return; // posée au tick suivant, une fois l'écran de connexion refermé
         }
-        if (BoiteNoireConsent.allowed()) {
+        if (BoiteNoireConsent.allowed() && !pending.isEmpty()) {
             sendAll(pending);
+        }
+        if (!BoiteNoireConsent.profilsAnswered()) {
+            pendingAsk = List.of(); // la question des plantages a déjà sa réponse, rien à envoyer ici
+            profilsSeulementAsk = true;
         }
     }
 
@@ -88,9 +99,14 @@ public final class BoiteNoire {
         if (pendingAsk != null && !askedThisSession && client.gui.screen() == null
                 && client.player != null) {
             List<Path> toAsk = pendingAsk;
+            boolean profilsSeulement = profilsSeulementAsk;
             pendingAsk = null;
             askedThisSession = true;
-            ask(toAsk);
+            if (profilsSeulement) {
+                askProfilsSeulement();
+            } else {
+                ask(toAsk);
+            }
         }
         if (cooldown > 0) {
             cooldown--;
@@ -111,23 +127,58 @@ public final class BoiteNoire {
         }
     }
 
+    /**
+     * La question combinée : posée quand ni les plantages ni les profils de performance n'ont encore
+     * de réponse (le cas le plus fréquent, à la toute première connexion). Une seule popup, une seule
+     * décision — voir la Javadoc de {@link BoiteNoireConsent} pour pourquoi ce sont malgré tout deux
+     * réglages séparés une fois répondu (l'un peut changer d'avis dans les réglages sans l'autre).
+     */
     private static void ask(List<Path> pending) {
         Minecraft client = Minecraft.getInstance();
         String serveur = client.getCurrentServer() != null ? client.getCurrentServer().ip : "ce serveur";
+        String ligneDeplantage = pending.isEmpty()
+                ? "Cette machine n'a aucun plantage en attente.\n\n"
+                : "Cette machine a gardé " + pending.size()
+                        + (pending.size() == 1 ? " plantage" : " plantages") + " non encore envoyé"
+                        + (pending.size() == 1 ? "" : "s") + ".\n\n";
         client.gui.setScreen(new ConfirmScreen(yes -> {
             BoiteNoireConsent.setAllowed(yes);
+            BoiteNoireConsent.setProfilsAllowed(yes);
             client.gui.setScreen(null);
-            if (yes) {
+            if (yes && !pending.isEmpty()) {
                 sendAll(pending);
             }
-        }, Component.literal("Envoyer tes rapports de plantage ?"),
-                Component.literal("Cette machine a gardé " + pending.size()
-                        + (pending.size() == 1 ? " plantage" : " plantages") + " non encore envoyé"
-                        + (pending.size() == 1 ? "" : "s") + ".\n\n"
-                        + "Oui : un extrait tronqué (cause, mods suspectés, quelques lignes de pile) "
-                        + "part vers les admins de " + serveur + " — les chemins de ton disque sont "
-                        + "anonymisés avant l'envoi.\nNon : rien ne part ; tu pourras changer d'avis "
-                        + "dans les réglages de Lanterne."),
+        }, Component.literal("Envoyer tes rapports de plantage et de performance ?"),
+                Component.literal(ligneDeplantage
+                        + "Oui : un extrait tronqué de chaque plantage (cause, mods suspectés, quelques "
+                        + "lignes de pile) part vers les admins de " + serveur + ", et un profil de "
+                        + "performance détaillé (FPS, méthodes chaudes, pauses du ramasse-miettes) partira "
+                        + "aussi automatiquement toutes les ~60 minutes de jeu — les chemins de ton disque "
+                        + "sont anonymisés avant l'envoi.\nNon : rien ne part ; tu pourras changer d'avis "
+                        + "séparément pour chacun dans les réglages de Lanterne."),
+                Component.literal("Oui, envoyer"),
+                Component.literal("Non")));
+    }
+
+    /**
+     * La question dédiée aux profils de performance seuls : posée quand la question des plantages a
+     * déjà une réponse (typiquement, un joueur déjà présent avant que ce mécanisme des profils
+     * n'existe) mais que celle des profils n'en a pas encore. Ne touche jamais au consentement des
+     * plantages, déjà tranché.
+     */
+    private static void askProfilsSeulement() {
+        Minecraft client = Minecraft.getInstance();
+        String serveur = client.getCurrentServer() != null ? client.getCurrentServer().ip : "ce serveur";
+        client.gui.setScreen(new ConfirmScreen(yes -> {
+            BoiteNoireConsent.setProfilsAllowed(yes);
+            client.gui.setScreen(null);
+        }, Component.literal("Envoyer tes profils de performance ?"),
+                Component.literal("Lanterne peut mesurer précisément où passe le temps sur cette machine "
+                        + "(méthodes chaudes, pauses du ramasse-miettes, FPS) et envoyer un rapport détaillé "
+                        + "aux admins de " + serveur + " toutes les ~60 minutes de jeu, pour trouver où le "
+                        + "jeu coûte cher.\n\nOui : un rapport (~200 Ko, sans chemin de disque ni nom de "
+                        + "compte) part automatiquement. Non : rien ne part ; une copie reste quand même "
+                        + "sur cette machine, dans config/lanterne/profils/."),
                 Component.literal("Oui, envoyer"),
                 Component.literal("Non")));
     }

@@ -99,6 +99,9 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.Rafale.register();
         fr.clubcitrouille.lanterne.lab.Cadence.register();
         fr.clubcitrouille.lanterne.lab.RadiographieServeur.register();
+        // Le profil de performance continu du serveur (JFR, rotation 60 minutes) — voir sa Javadoc
+        // pour pourquoi il tourne par defaut, contrairement a la radiographie manuelle juste au-dessus.
+        fr.clubcitrouille.lanterne.core.ProfilServeurContinu.register();
         // Les portails Lanterne sur une carte web (BlueMap aujourd'hui) : couche d'extension neutre,
         // voir compat.carte.Carte — ne charge aucune classe BlueMap si le mod est absent.
         fr.clubcitrouille.lanterne.compat.carte.Carte.register();
@@ -140,6 +143,9 @@ public final class Lanterne {
                 "lanterne-boite-noire-client.toml");
         modBus.addListener(fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent::apply);
         fr.clubcitrouille.lanterne.core.network.BoiteNoireNet.register(modBus);
+        // Le canal jumeau pour les profils de performance — voir la Javadoc de ProfilNet pour
+        // pourquoi ce n'est pas un type de rapport en plus sur le canal de la Boîte noire.
+        fr.clubcitrouille.lanterne.core.network.ProfilNet.register(modBus);
         fr.clubcitrouille.lanterne.content.screen.Screens.register(modBus);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.screen.Screens::onRegisterCommands);

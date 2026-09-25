@@ -163,6 +163,8 @@ public final class Config {
 
     public static final ModConfigSpec.BooleanValue ETALON_AUTO;
 
+    public static final ModConfigSpec.BooleanValue PROFIL_SERVEUR;
+
     public static final ModConfigSpec SPEC;
 
     static {
@@ -1656,6 +1658,22 @@ public final class Config {
                 "A false : la valeur explicite (ou, a defaut, Quota.cores()) prime sans etre corrigee -",
                 "aucune surprise silencieuse, et le journal dit dans quel cas on se trouve.")
                 .define("auto", true);
+
+        BUILDER.pop();
+
+        BUILDER.comment(
+                "Les profils de performance continus - voir core.ProfilServeurContinu.").push("profils");
+
+        PROFIL_SERVEUR = BUILDER.comment(
+                "Profil de performance continu du SERVEUR, par JFR : rotation toutes les 60 minutes,",
+                "ecrit dans logs/lanterne-profils/serveur-*.txt (MSPT, methodes chaudes par fil,",
+                "pauses GC, allocations, contention, instantane par dimension). Cout annonce : 1 a 2 %.",
+                "",
+                "VRAI par defaut : c'est le mecanisme demande pour auditer precisement ou le serveur",
+                "coute cher, sans redemarrer une commande a chaque fois. A FAUX : aucun enregistrement",
+                "JFR ne demarre ; '/lanterne profil serveur maintenant' reste inoperant (rien n'est en",
+                "cours a forcer).")
+                .define("profil_serveur", true);
 
         BUILDER.pop();
 
