@@ -190,6 +190,7 @@ public final class Dials extends Screen {
         buildImage();
         buildShaders();
         buildSound();
+        buildConfidentialite();
         buildCreatures();
         buildWorld();
         buildMachine();
@@ -638,6 +639,29 @@ public final class Dials extends Screen {
                 "Longue, elle attrape les rafales lentes ; courte, elle ne voit que les salves.",
                 "Effet immédiat."));
         this.families.add(sound);
+    }
+
+    /**
+     * La confidentialité : aujourd'hui, un seul interrupteur — la Boîte noire.
+     *
+     * <p>Un {@code Dial} ordinaire écrit dans {@link ClientConfig}. Celui-ci écrit dans
+     * {@link fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent}, un fichier séparé — même
+     * raison que {@code client.screen.Consent} et {@code client.MecheConsent} : c'est une décision
+     * personnelle, qui n'a rien à faire dans le fichier de rendu.
+     */
+    private void buildConfidentialite() {
+        Family confidentialite = new Family("Confidentialité", false,
+                "ce que ce client envoie de lui-même");
+        confidentialite.add(Dial.toggleCustom("Boîte noire",
+                fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent::allowed,
+                () -> fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent.setAllowed(
+                        !fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent.allowed()),
+                "Envoyer automatiquement tes rapports de plantage (crash-reports, hs_err) aux "
+                        + "admins du serveur Lanterne auquel tu te connectes.",
+                "Le texte envoyé est tronqué (en-tête, cause, mods suspectés, quelques lignes de "
+                        + "pile) et les chemins de ton disque sont anonymisés avant de partir.",
+                "Pris en compte à la prochaine connexion à un serveur Lanterne."));
+        this.families.add(confidentialite);
     }
 
     // --- Ce qui se lit seulement : le fichier serveur -----------------------
@@ -1577,9 +1601,22 @@ public final class Dials extends Screen {
         private final int leap;
         private final String[] notes;
 
+        /**
+         * Un interrupteur qui n'écrit pas dans {@link ModConfigSpec.BooleanValue#set} mais appelle
+         * ce geste à la place — pour un réglage rangé dans un AUTRE fichier que {@link ClientConfig}.
+         * Voir {@link #toggleCustom}.
+         */
+        private final Runnable custom;
+
         private Dial(String name, boolean binary, boolean editable, BooleanSupplier state,
                 ModConfigSpec.BooleanValue backing, Supplier<String> value, IntSupplier colour,
                 IntConsumer step, int leap, String[] notes) {
+            this(name, binary, editable, state, backing, value, colour, step, leap, notes, null);
+        }
+
+        private Dial(String name, boolean binary, boolean editable, BooleanSupplier state,
+                ModConfigSpec.BooleanValue backing, Supplier<String> value, IntSupplier colour,
+                IntConsumer step, int leap, String[] notes, Runnable custom) {
             this.name = name;
             this.binary = binary;
             this.editable = editable;
@@ -1590,12 +1627,23 @@ public final class Dials extends Screen {
             this.step = step;
             this.leap = leap;
             this.notes = notes;
+            this.custom = custom;
         }
 
         static Dial toggle(String name, BooleanSupplier state, ModConfigSpec.BooleanValue backing,
                 String what, String cost, String when) {
             return new Dial(name, true, true, state, backing, () -> "", () -> AMBER, null, 1,
                     new String[] {what, cost, when});
+        }
+
+        /**
+         * Un interrupteur binaire dont le clic relance {@code onClick} au lieu d'écrire dans
+         * {@link ClientConfig} — pour un consentement rangé dans son propre fichier CLIENT.
+         */
+        static Dial toggleCustom(String name, BooleanSupplier state, Runnable onClick,
+                String what, String cost, String when) {
+            return new Dial(name, true, true, state, null, () -> "", () -> AMBER, null, 1,
+                    new String[] {what, cost, when}, onClick);
         }
 
         /** Un sélecteur. {@code step} nul : la valeur s'affiche, et rien ne la change. */
@@ -1665,6 +1713,10 @@ public final class Dials extends Screen {
          * endroit du mod qui puisse arrêter le jeu.
          */
         void click(int direction, boolean big) {
+            if (this.custom != null) {
+                this.custom.run();
+                return;
+            }
             if (!ClientConfig.SPEC.isLoaded()) {
                 return;
             }

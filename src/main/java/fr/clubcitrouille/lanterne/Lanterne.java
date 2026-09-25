@@ -127,6 +127,16 @@ public final class Lanterne {
                 fr.clubcitrouille.lanterne.client.portals.PortailsConfig.SPEC,
                 "lanterne-portails-client.toml");
         modBus.addListener(fr.clubcitrouille.lanterne.client.portals.PortailsConfig::apply);
+        // La boîte noire : le consentement du joueur à l'envoi automatique de ses rapports de
+        // plantage, fichier CLIENT séparé — même raison que Consent et PortailsConfig juste
+        // au-dessus. Le canal réseau (client -> serveur, optionnel) s'enregistre inconditionnellement
+        // des deux côtés, comme MecheNet — voir sa Javadoc pour pourquoi cela ne charge aucune classe
+        // client sur un serveur dédié.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
+                fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent.SPEC,
+                "lanterne-boite-noire-client.toml");
+        modBus.addListener(fr.clubcitrouille.lanterne.client.crash.BoiteNoireConsent::apply);
+        fr.clubcitrouille.lanterne.core.network.BoiteNoireNet.register(modBus);
         fr.clubcitrouille.lanterne.content.screen.Screens.register(modBus);
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.screen.Screens::onRegisterCommands);
