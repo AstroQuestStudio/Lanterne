@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import fr.clubcitrouille.lanterne.content.Contents;
 
 /**
- * Le menu du Trieur : les cinq cases du hopper, plus neuf cases de filtre, plus un bouton de mode.
+ * Le menu du Trieur : les cinq cases du hopper, plus dix-huit cases de filtre, plus un bouton de mode.
  *
  * <h2>Deux constructeurs, comme {@code HopperMenu} vanilla</h2>
  *
@@ -66,12 +66,12 @@ public class TrieurMenu extends AbstractContainerMenu {
         this.mode = this.addDataSlot(mode);
 
         for (int i = 0; i < HOPPER_SLOTS; i++) {
-            this.addSlot(new Slot(hopper, i, 44 + i * 18, 18));
+            this.addSlot(new Slot(hopper, i, 8 + i * 18, 18));
         }
-        for (int row = 0; row < 3; row++) {
-            for (int col = 0; col < 3; col++) {
-                int index = row * 3 + col;
-                this.addSlot(new FiltreSlot(filtre, index, 44 + col * 18, 44 + row * 18));
+        for (int row = 0; row < 2; row++) {
+            for (int col = 0; col < 9; col++) {
+                int index = row * 9 + col;
+                this.addSlot(new FiltreSlot(filtre, index, 8 + col * 18, 44 + row * 18));
             }
         }
         this.addStandardInventorySlots(inventory, 8, 118);

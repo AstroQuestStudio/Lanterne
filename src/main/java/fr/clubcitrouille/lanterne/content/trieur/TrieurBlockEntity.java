@@ -17,7 +17,7 @@ import fr.clubcitrouille.lanterne.content.Contents;
 import fr.clubcitrouille.lanterne.core.Settings;
 
 /**
- * Ce que le Trieur ajoute à un entonnoir : neuf gabarits, et un sens de lecture.
+ * Ce que le Trieur ajoute à un entonnoir : dix-huit gabarits, et un sens de lecture.
  *
  * <h2>Le filtre, sémantique exacte</h2>
  *
@@ -51,13 +51,13 @@ import fr.clubcitrouille.lanterne.core.Settings;
  * {@code BlockEntityType} ferait à notre place serait de toute façon triviale.
  */
 public class TrieurBlockEntity extends HopperBlockEntity {
-    public static final int FILTER_SLOTS = 9;
+    public static final int FILTER_SLOTS = 18;
 
     private static final String WHITELIST_KEY = "liste_blanche";
     private static final String FILTER_KEY = "filtre";
 
     /**
-     * Neuf gabarits, jamais consommés : voir {@link TrieurMenu} pour la case qui les ramène toujours
+     * Dix-huit gabarits, jamais consommés : voir {@link TrieurMenu} pour la case qui les ramène toujours
      * à un seul exemplaire. {@code setChanged} est relayé au bloc-entité pour que poser ou retirer un
      * gabarit déclenche bien une sauvegarde — {@code SimpleContainer} seul ne sait pas qu'il vit dans
      * un bloc-entité.

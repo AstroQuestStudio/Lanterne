@@ -31,7 +31,7 @@ import fr.clubcitrouille.lanterne.content.trieur.TrieurMenu;
  *
  * <h2>Un seul widget cliquable, le reste est vanilla</h2>
  *
- * <p>Les quatorze cases réelles (cinq du hopper, neuf du filtre) se dessinent par le mécanisme
+ * <p>Les vingt-trois cases réelles (cinq du hopper, dix-huit du filtre) se dessinent par le mécanisme
  * standard de {@code AbstractContainerScreen} — {@link TrieurMenu} les a déclarées, rien de plus à
  * faire ici. Seul le bouton de bascule liste blanche / liste noire est un vrai {@code AbstractWidget}
  * (un {@link Button}, comme le « Confirmer » de {@link Phare}) : survol, clic et infobulle passent
@@ -76,7 +76,7 @@ public class TrieurScreen extends AbstractContainerScreen<TrieurMenu> {
     protected void init() {
         super.init();
         this.toggle = this.addRenderableWidget(Button.builder(modeLabel(), button -> onToggle())
-                .bounds(this.leftPos + 106, this.topPos + 53, 62, 20)
+                .bounds(this.leftPos + 106, this.topPos + 15, 62, 16)
                 .build());
     }
 
@@ -111,7 +111,7 @@ public class TrieurScreen extends AbstractContainerScreen<TrieurMenu> {
         graphics.fill(left, top, left + IMAGE_WIDTH, top + 2, AMBER);
 
         graphics.text(this.font, "TRIEUR", left + 10, top + 9, AMBER, false);
-        graphics.text(this.font, "Filtre (glisser un objet, un exemplaire par case)",
+        graphics.text(this.font, "Filtre (glisser un objet, un par case)",
                 left + 8, top + 33, DIM, false);
 
         drawSlotFrames(graphics);
