@@ -1453,7 +1453,7 @@ public final class Dials extends Screen {
                 return true;
             }
         }
-        if (this.hovered >= 0 && (button == 0 || button == 1)) {
+        if (this.hovered >= 0 && (button == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT || button == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_RIGHT)) {
             Dial dial = this.families.get(this.picked).dials.get(this.hovered);
             if (!dial.editable) {
                 say(this.families.get(this.picked).server
@@ -1461,11 +1461,11 @@ public final class Dials extends Screen {
                         : "Non disponible sur cette machine.");
                 return true;
             }
-            dial.click(button == 0 ? 1 : -1, shiftHeld());
+            dial.click(button == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT ? 1 : -1, shiftHeld());
             this.flash = "";
             return true;
         }
-        if (button == 0 && inside(mouseX, mouseY, guideLeft(this.panelX + WIDTH) - 4,
+        if (button == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT && inside(mouseX, mouseY, guideLeft(this.panelX + WIDTH) - 4,
                 this.panelY + HEIGHT - FOOTER + 4,
                 this.panelX + WIDTH - 8, this.panelY + HEIGHT - 4)) {
             if (fr.clubcitrouille.lanterne.client.ponder.Guide.ready()) {

@@ -574,7 +574,7 @@ public class Console extends Screen {
         if (super.mouseClicked(local, doubleClick)) {
             return true;
         }
-        if (local.button() != 0) {
+        if (local.button() != com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT) {
             return false;
         }
         int mouseX = (int) local.x();
