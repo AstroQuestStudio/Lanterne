@@ -197,6 +197,12 @@ public class Atlas extends SavedData {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             syncTo(player);
         }
+        // Le seul point d'accroche dont la couche carte a besoin : chaque création, liaison,
+        // suppression ou renommage de portail dans Gates.java appelle syncAll juste après s'être
+        // modifié — voir compat.carte.CarteMarkers pour ce que cet appel déclenche, ou pas, selon
+        // qu'une carte est présente. Les repères ordinaires ne sont pas concernés (pas de source
+        // déclarée pour eux), mais notifier sans raison ne coûte qu'un parcours de liste vide.
+        fr.clubcitrouille.lanterne.compat.carte.CarteMarkers.notifyChanged();
     }
 
     public int total() {

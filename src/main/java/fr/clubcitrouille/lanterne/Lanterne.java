@@ -99,6 +99,9 @@ public final class Lanterne {
         fr.clubcitrouille.lanterne.core.Rafale.register();
         fr.clubcitrouille.lanterne.lab.Cadence.register();
         fr.clubcitrouille.lanterne.lab.RadiographieServeur.register();
+        // Les portails Lanterne sur une carte web (BlueMap aujourd'hui) : couche d'extension neutre,
+        // voir compat.carte.Carte — ne charge aucune classe BlueMap si le mod est absent.
+        fr.clubcitrouille.lanterne.compat.carte.Carte.register();
         NeoForge.EVENT_BUS.addListener(
                 fr.clubcitrouille.lanterne.content.painting.Easel::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(
