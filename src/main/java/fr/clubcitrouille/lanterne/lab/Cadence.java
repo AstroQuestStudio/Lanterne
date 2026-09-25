@@ -35,11 +35,7 @@ public final class Cadence {
     /** Cinq minutes à 20 ticks/s — voir la demande du patron : « max 5 min actualisé ». */
     private static final int UPDATE_PERIOD_TICKS = 20 * 60 * 5;
 
-    /** Une minute : filet périodique « 0 joueur → rendu actif », voir {@link CadenceBlueMap#ensureRenderingIfIdle}. */
-    private static final int IDLE_CHECK_PERIOD_TICKS = 20 * 60;
-
     private static int ticksSinceUpdate;
-    private static int ticksSinceIdleCheck;
     private static boolean fullRenderPaused;
 
     private Cadence() {}
@@ -118,15 +114,8 @@ public final class Cadence {
         }
         java.util.List<ServerPlayer> players = event.getServer().getPlayerList().getPlayers();
         if (players.isEmpty()) {
-            // Filet toutes les minutes : garantit un rendu actif quand personne n'est connecté,
-            // sans le vérifier à chaque tick (serveur mono-cœur, voir Javadoc de classe).
-            if (++ticksSinceIdleCheck >= IDLE_CHECK_PERIOD_TICKS) {
-                ticksSinceIdleCheck = 0;
-                CadenceBlueMap.ensureRenderingIfIdle(true);
-            }
             return;
         }
-        ticksSinceIdleCheck = 0;
         if (++ticksSinceUpdate < UPDATE_PERIOD_TICKS) {
             return;
         }

@@ -118,10 +118,44 @@ final class CadenceBlueMap {
             Lanterne.LOG.info("[CADENCE] BlueMap prêt, 0 joueur connecté — balayage programmé, rendu "
                     + "complet démarré automatiquement (plus besoin d'attendre une connexion/déconnexion).");
         });
+        demarrerFiletMinute(aucunJoueurConnecte);
+    }
+
+    /** Fil unique du filet minute, créé une seule fois par processus. */
+    private static java.util.concurrent.ScheduledExecutorService filet;
+
+    /**
+     * Lance le filet minute sur un fil à part, PAS sur le tick serveur : avec
+     * {@code pause-when-empty-seconds}, vanilla cesse d'émettre les événements de tick une minute
+     * après le départ du dernier joueur (voir la Javadoc de {@link Pregen#keepServerAwake}) — un
+     * compteur de ticks ne se déclencherait donc jamais dans le seul cas qui l'intéresse. BlueMap
+     * lit les régions sur disque avec ses propres fils et n'a pas besoin que le serveur tique ; son
+     * {@link RenderManager} est sûr à appeler depuis un autre fil.
+     */
+    private static synchronized void demarrerFiletMinute(
+            java.util.function.Supplier<Boolean> aucunJoueurConnecte) {
+        if (filet != null) {
+            return;
+        }
+        filet = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "Lanterne-Cadence-filet");
+            t.setDaemon(true);
+            return t;
+        });
+        filet.scheduleWithFixedDelay(() -> {
+            try {
+                if (net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer() == null) {
+                    return; // arrêt en cours : ne rien relancer
+                }
+                ensureRenderingIfIdle(Boolean.TRUE.equals(aucunJoueurConnecte.get()));
+            } catch (Throwable t) {
+                Lanterne.LOG.warn("[CADENCE] vérification minute impossible : {}", t.toString());
+            }
+        }, 1, 1, java.util.concurrent.TimeUnit.MINUTES);
     }
 
     /**
-     * Filet périodique (une fois par minute, voir {@link Cadence#onServerTick}) : si personne n'est
+     * Filet périodique (une fois par minute, voir {@link #demarrerFiletMinute}) : si personne n'est
      * connecté et qu'aucun rendu n'est déjà en cours, (re)programme un balayage non forcé de toutes
      * les cartes et redémarre le rendu. Couvre les cas où ni {@link #startOnReady} ni
      * {@link #resumeFullRender} n'ont pu s'exécuter au bon moment (BlueMap devenu prêt entre deux
