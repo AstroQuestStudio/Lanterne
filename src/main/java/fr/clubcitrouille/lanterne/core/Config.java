@@ -141,6 +141,8 @@ public final class Config {
 
     public static final ModConfigSpec.BooleanValue LEURRE;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> LEURRE_BLOCKS;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> LEURRE_EXEMPTS;
+    public static final ModConfigSpec.BooleanValue BOUCLIER_OBLIGATOIRE;
 
     public static final ModConfigSpec.BooleanValue MECHE;
     public static final ModConfigSpec.BooleanValue BROOM;
@@ -1342,7 +1344,35 @@ public final class Config {
                         "minecraft:nether_quartz_ore",
                         "minecraft:ancient_debris"),
                         entry -> entry instanceof String s && Identifier.tryParse(s) != null);
+        LEURRE_EXEMPTS = BUILDER.comment(
+                "Comptes (UUID) qui recoivent les chunks NON voiles - a condition d'avoir AUSSI le",
+                "mod autominer reellement charge (canal d'identite, voir core.Leurre). Les DEUX sont",
+                "exiges : un joueur quelconque qui installerait AutoMiner, ou un faux mod portant son",
+                "identifiant, reste voile ; un compte liste sans AutoMiner aussi. Exemption",
+                "silencieuse : rien n'est journalise ni annonce. Liste vide = personne n'est exempte.")
+                .defineListAllowEmpty("exemptes",
+                        List.of("01fca04f-b488-4b44-875d-2f56f1ff04c6"),
+                        () -> "",
+                        entry -> entry instanceof String s && estUuid(s));
 
+        BUILDER.pop();
+
+        BUILDER.comment(
+                "",
+                "LE BOUCLIER - un pack de ressources ne peut plus rendre la roche transparente.",
+                "",
+                "Dans ce moteur, la couche de rendu d'une face vient de la transparence de SA TEXTURE :",
+                "une pierre au PNG transparent devient invisible et montre filons et grottes. Le",
+                "bouclier, cote client, ignore pour les blocs de terrain (pierre, deepslate, terre,",
+                "sable, netherrack...) toute texture transparente, tout modele ou etat de bloc remplace",
+                "par un pack, toute source d'atlas et tout shader du moteur venant d'un pack non fiable",
+                "(vanilla, mods et Lanterne restent fiables). Cout nul en jeu : tri au chargement des",
+                "ressources. Voir core.Bouclier.").push("bouclier");
+        BOUCLIER_OBLIGATOIRE = BUILDER.comment(
+                "Imposer le bouclier aux clients connectes : un client qui l'a coupe dans sa propre",
+                "configuration le voit rallume (et ses ressources rechargees) tant qu'il est sur ce",
+                "serveur.")
+                .define("obligatoire", true);
         BUILDER.pop();
 
         BUILDER.comment(
@@ -1696,5 +1726,14 @@ public final class Config {
         }
         Settings.applyFromConfig();
         Lanterne.LOG.info("[RÉGLAGES] configuration lue — modules actifs : {}", Settings.describe());
+    }
+
+    private static boolean estUuid(String texte) {
+        try {
+            java.util.UUID.fromString(texte.strip());
+            return true;
+        } catch (IllegalArgumentException invalide) {
+            return false;
+        }
     }
 }

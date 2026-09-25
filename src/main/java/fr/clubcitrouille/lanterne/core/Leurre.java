@@ -200,6 +200,9 @@ public final class Leurre {
     private static long epochVue = -1L;
     private static Set<Block> proteges = Set.of();
 
+    /** Comptes exemptables (voir {@link Config#LEURRE_EXEMPTS}), résolus au même rythme que {@link #proteges}. */
+    private static Set<java.util.UUID> exemptes = Set.of();
+
     // ------------------------------------------------------------------------------------------
     // Le cache : une section réelle vaut la section à envoyer (elle-même, ou une doublure).
     // ------------------------------------------------------------------------------------------
@@ -241,6 +244,17 @@ public final class Leurre {
     private static final ThreadLocal<Boolean> EXEMPT = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     /** Posé par {@code LeurreConnexionMixin} avant la construction du paquet de cette connexion. */
+    /**
+     * Ce compte peut-il être exempté ? Deux conditions cumulées, jamais une seule : le canal
+     * d'identité AutoMiner négocié par la connexion (vérifié par l'appelant) ET l'UUID listé dans
+     * {@link Config#LEURRE_EXEMPTS}. Avant, le canal seul suffisait — n'importe quel joueur qui
+     * installait AutoMiner, ou un faux mod portant son identifiant, recevait les chunks non voilés.
+     */
+    public static boolean exemptable(java.util.UUID compte) {
+        rafraichitReglages();
+        return exemptes.contains(compte);
+    }
+
     public static void beginEnvoi(boolean exempt) {
         EXEMPT.set(exempt);
     }
@@ -451,6 +465,15 @@ public final class Leurre {
             }
         }
         proteges = Set.copyOf(resolu);
+        Set<java.util.UUID> comptes = new HashSet<>();
+        for (String brut : Config.LEURRE_EXEMPTS.get()) {
+            try {
+                comptes.add(java.util.UUID.fromString(brut.strip()));
+            } catch (IllegalArgumentException invalide) {
+                // ligne invalide : ignorée, jamais une exemption par défaut
+            }
+        }
+        exemptes = Set.copyOf(comptes);
         // La liste vient peut-être de changer : tout ce qui est en cache pourrait être faux (un
         // bloc retiré de la liste ne doit plus être caché, un bloc ajouté doit l'être dès le
         // prochain envoi). Purger est le seul moyen honnête de le garantir.
@@ -463,6 +486,51 @@ public final class Leurre {
      * à la tête de {@code LevelChunk.setBlockState} — le chemin chaud de ce module, comme pour
      * {@link Emballage#oublie}, d'où le même court-circuit sur {@link #vide}.
      */
+    private static final net.minecraft.core.Direction[] FACES = net.minecraft.core.Direction.values();
+
+    /**
+     * Un bloc vient de changer : s'il est devenu non opaque (cassé, remplacé par de l'air, de l'eau,
+     * une vitre…), ses voisins protégés sont désormais exposés — mais le client les a reçus voilés,
+     * sous forme de roche. Sans ce renvoi, il garderait la fausse roche jusqu'au prochain envoi du
+     * chunk : on creuse à côté d'un diamant, on voit de la pierre, on la casse, on obtient un diamant.
+     *
+     * <p>{@code ServerChunkCache.blockChanged} met simplement ces positions dans la même file que
+     * n'importe quelle mise à jour de bloc : elles partent en fin de tick avec leur VRAIE valeur,
+     * lue dans le chunk. Coût : six lectures d'état, seulement quand le nouveau bloc n'est pas opaque.
+     */
+    public static void revele(LevelChunk chunk, BlockPos pos, BlockState nouvel) {
+        if (!Settings.leurre() || nouvel.isSolidRender()) {
+            return;
+        }
+        Level level = chunk.getLevel();
+        if (!(level instanceof ServerLevel serverLevel) || !serverLevel.getServer().isSameThread()) {
+            return;
+        }
+        rafraichitReglages();
+        if (proteges.isEmpty()) {
+            return;
+        }
+        int cx = chunk.getPos().x();
+        int cz = chunk.getPos().z();
+        for (net.minecraft.core.Direction face : FACES) {
+            BlockPos voisin = pos.relative(face);
+            int vx = voisin.getX() >> 4;
+            int vz = voisin.getZ() >> 4;
+            LevelChunk porteur = (vx == cx && vz == cz) ? chunk
+                    : serverLevel.getChunkSource().getChunkNow(vx, vz);
+            if (porteur != null && estProtege(porteur.getBlockState(voisin))) {
+                serverLevel.getChunkSource().blockChanged(voisin);
+                revelations++;
+            }
+        }
+    }
+
+    private static long revelations;
+
+    public static long revelations() {
+        return revelations;
+    }
+
     public static void invalidate(LevelChunk chunk, BlockPos pos) {
         if (vide) {
             return;

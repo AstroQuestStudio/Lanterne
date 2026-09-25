@@ -139,7 +139,31 @@ public final class Envol {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
+        if (!allowed(player.getUUID())) {
+            retire(player);
+            return;
+        }
         reapply(player);
+    }
+
+    /**
+     * Le vol est désactivé par défaut pour tous : un joueur en survie ou en aventure qui n'est PAS
+     * listé perd {@code mayfly}/{@code flying} à la connexion, en silence. Sans ce retrait, retirer
+     * une ligne du fichier ne suffisait pas — {@code abilities.mayfly} est aussi sauvegardé dans les
+     * données du joueur, et revenait tout seul. Créatif et spectateur ne sont jamais touchés : leur
+     * vol vient du mode de jeu, que vanilla gère lui-même (y compris au passage en survie).
+     */
+    private static void retire(ServerPlayer player) {
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
+        var abilities = player.getAbilities();
+        if (!abilities.mayfly && !abilities.flying) {
+            return;
+        }
+        abilities.mayfly = false;
+        abilities.flying = false;
+        player.onUpdateAbilities();
     }
 
     /**

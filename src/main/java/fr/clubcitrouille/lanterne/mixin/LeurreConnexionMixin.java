@@ -65,7 +65,8 @@ public abstract class LeurreConnexionMixin {
     @Inject(method = "sendChunk", at = @At("HEAD"))
     private static void lanterne$beginEnvoi(ServerGamePacketListenerImpl connection,
             ServerLevel level, LevelChunk chunk, CallbackInfo callback) {
-        Leurre.beginEnvoi(connection.hasChannel(AutominerPresence.TYPE));
+        Leurre.beginEnvoi(connection.hasChannel(AutominerPresence.TYPE)
+                && Leurre.exemptable(connection.player.getUUID()));
     }
 
     @Inject(method = "sendChunk", at = @At("RETURN"))

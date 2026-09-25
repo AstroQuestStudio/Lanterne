@@ -154,6 +154,8 @@ public final class Lanterne {
         // cotes (voir la Javadoc de LeurreNet pour pourquoi la decision de le declarer diverge par
         // cote malgre un appel partage, exactement comme MecheNet et SouvenirNet juste au-dessus).
         fr.clubcitrouille.lanterne.core.network.LeurreNet.register(modBus);
+        // Le bouclier (anti x-ray cote client) : le serveur annonce s'il l'impose. Voir core.Bouclier.
+        fr.clubcitrouille.lanterne.core.network.BouclierNet.register(modBus);
         // Le pont AutoMiner pour la construction en masse : meme canal client->serveur que Meche,
         // voir la Javadoc de RafaleNet et core.Rafale pour la garde (canal AutominerPresence +
         // reglage "rafale", jamais autre chose).

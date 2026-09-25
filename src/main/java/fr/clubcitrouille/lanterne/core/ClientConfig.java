@@ -73,6 +73,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue RESERVE_CAPACITE;
     public static final ModConfigSpec.BooleanValue JOINTURE;
     public static final ModConfigSpec.BooleanValue SOURIS_AVANCEE;
+    public static final ModConfigSpec.BooleanValue BOUCLIER;
 
     public static final ModConfigSpec SPEC;
 
@@ -713,6 +714,15 @@ public final class ClientConfig {
                 "d'origine faire son propre travail plutot que de maintenir un port parallele en",
                 "concurrence avec lui sur le meme ecran.")
                 .define("souris_avancee", false);
+
+        BOUCLIER = BUILDER.comment(
+                "BOUCLIER : aucun pack de ressources ne peut rendre transparents la roche, la terre,",
+                "le sable, le netherrack... (anti x-ray par pack). Un pack cosmetique OPAQUE reste",
+                "affiche ; seules les textures transparentes, modeles/etats de bloc remplaces, sources",
+                "d'atlas et shaders du moteur venant d'un pack sont ignores pour ces blocs. Un serveur",
+                "peut l'imposer : ce reglage n'a alors aucun effet tant que tu y es connecte. Prend",
+                "effet au prochain chargement des ressources (F3+T). Voir core.Bouclier.")
+                .define("bouclier", true);
 
         BUILDER.pop();
         SPEC = BUILDER.build();

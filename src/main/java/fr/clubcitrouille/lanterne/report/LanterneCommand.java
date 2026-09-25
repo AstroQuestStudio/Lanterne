@@ -661,7 +661,7 @@ public final class LanterneCommand {
         source.sendSuccess(() -> Component.literal(target.getGameProfile().name()
                         + (allowed ? " peut désormais voler." : " ne peut plus voler.")
                         + (allowed ? " (survivra à la reconnexion)" : ""))
-                .withStyle(allowed ? ChatFormatting.GREEN : ChatFormatting.YELLOW), true);
+                .withStyle(allowed ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
         return 1;
     }
 

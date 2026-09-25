@@ -36,4 +36,16 @@ public abstract class LeurreInvalidationMixin {
             CallbackInfoReturnable<BlockState> callback) {
         Leurre.invalidate((LevelChunk) (Object) this, position);
     }
+
+    @Inject(
+            method = "setBlockState(Lnet/minecraft/core/BlockPos;"
+                    + "Lnet/minecraft/world/level/block/state/BlockState;I)"
+                    + "Lnet/minecraft/world/level/block/state/BlockState;",
+            at = @At("RETURN"))
+    private void lanterne$reveleVoisins(BlockPos position, BlockState etat, int drapeaux,
+            CallbackInfoReturnable<BlockState> callback) {
+        if (callback.getReturnValue() != null) {
+            Leurre.revele((LevelChunk) (Object) this, position, etat);
+        }
+    }
 }
