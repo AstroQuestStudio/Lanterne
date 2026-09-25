@@ -1,7 +1,5 @@
 package fr.clubcitrouille.lanterne.report;
 
-import java.nio.file.Path;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -20,7 +18,15 @@ import fr.clubcitrouille.lanterne.core.ProfilServeurContinu;
  *
  * <p>Réservée aux opérateurs, comme {@code report.RadiographieServeurCommand}. Ne démarre RIEN si le
  * profil continu n'est pas actif (réglage {@code profil_serveur=false}, ou serveur qui vient tout juste
- * de démarrer) : voir {@link ProfilServeurContinu#forcerMaintenant} qui rend alors {@code null}.
+ * de démarrer) : voir {@link ProfilServeurContinu#forcerMaintenant} qui rend alors {@code false}.
+ *
+ * <h2>Pourquoi la commande ne peut plus annoncer le chemin du rapport</h2>
+ *
+ * <p>{@link ProfilServeurContinu#forcerMaintenant} ne bloque plus le Server thread — voir sa Javadoc de
+ * classe : l'écriture a lieu sur un fil d'analyse séparé, après le retour de cet appel. Cette commande
+ * ne peut donc plus connaître le nom du fichier au moment de répondre ; le journal serveur
+ * ({@code [PROFIL] Rapport serveur écrit : ...}) et le dossier {@code logs/lanterne-profils/} restent
+ * la source de vérité.
  */
 @EventBusSubscriber(modid = Lanterne.ID)
 public final class ProfilServeurCommand {
@@ -33,12 +39,13 @@ public final class ProfilServeurCommand {
                         .then(Commands.literal("serveur")
                                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                                 .then(Commands.literal("maintenant").executes(context -> {
-                                    Path written = ProfilServeurContinu.forcerMaintenant(
+                                    boolean lance = ProfilServeurContinu.forcerMaintenant(
                                             context.getSource().getServer());
-                                    tell(context.getSource(), written != null
-                                            ? "Rapport écrit : " + written
+                                    tell(context.getSource(), lance
+                                            ? "Rotation demandée — le rapport arrive sous peu dans "
+                                                    + "logs/lanterne-profils/ (voir le journal serveur)."
                                             : "Rien n'est en cours — voir le réglage « profil_serveur ».",
-                                            written != null);
+                                            lance);
                                     return 1;
                                 })))));
     }

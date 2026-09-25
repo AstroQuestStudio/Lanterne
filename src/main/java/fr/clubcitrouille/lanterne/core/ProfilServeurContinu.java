@@ -6,12 +6,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import jdk.jfr.Recording;
 
@@ -38,24 +39,56 @@ import fr.clubcitrouille.lanterne.core.profil.MoteurJfr;
  * consentement (ce sont les données du serveur, sur sa propre machine, écrites dans son propre dossier
  * {@code logs/}, jamais envoyées nulle part).
  *
+ * <h2>Le Server thread ne fait QUE figer un instantané</h2>
+ *
+ * <p>Exactement le même problème, et la même réponse, que {@code client.profil.ProfilClient} — voir sa
+ * Javadoc de classe. Arrêter/vider un enregistrement JFR d'une heure puis l'analyser prend, mesuré,
+ * jusqu'à quelques secondes : un tick qui ferait ça bloquerait TOUS les joueurs connectés, une fois par
+ * heure. {@link #onServerTick} ne fait donc, sur le Server thread, que copier des compteurs primitifs
+ * dans un {@link TrancheSnapshot} immuable, détacher l'enregistrement JFR, et redémarrer aussitôt la
+ * tranche suivante ; {@link #ANALYSE_EXECUTOR} (fil démon unique, priorité basse) fait tout le reste.
+ * Seule exception délibérée : {@link #onServerStopping}, où l'on ATTEND la fin de l'écriture — le
+ * process va se terminer de toute façon, et un rapport de fin de session perdu ne se rattrape pas.
+ *
+ * <h2>L'instantané par dimension reste plafonné</h2>
+ *
+ * <p>Pris SUR le Server thread (il touche l'état du monde, non thread-safe) mais borné en coût :
+ * {@link #MAX_ENTITES_INSTANTANE} et {@link #MAX_CHUNKS_INSTANTANE} arrêtent le parcours dès que le
+ * plafond est atteint plutôt que de laisser un monde immense allonger un seul tick sans limite.
+ *
  * <h2>Réglage {@code profil_serveur}, vrai par défaut</h2>
  *
  * <p>Contrairement à {@code lab.RadiographieServeur} (manuel, réservé aux diagnostics ponctuels), ce
- * mécanisme est actif par défaut : c'est la demande explicite du propriétaire — un flux continu de
- * profils serveur, sans avoir à se souvenir de lancer une commande. {@link Config#PROFIL_SERVEUR}
+ * mécanisme est actif par défaut : c'est la demande explicite du propriétaire. {@link Config#PROFIL_SERVEUR}
  * permet de l'éteindre sur un hébergement où même le coût annoncé (1-2 %) ne serait pas souhaité.
  *
  * <h2>Repli si {@code jdk.jfr} est absent</h2>
  *
  * <p>Comme côté client : {@link MoteurJfr#disponible()} est vérifié avant tout démarrage. Si le module
- * manque, ce mécanisme se contente de suivre le MSPT (accumulé à la main depuis
- * {@link ServerTickEvent.Post}, sans coût de safepoint) et l'écrit quand même à chaque rotation — un
- * rapport moins riche, jamais un plantage.
+ * manque, ce mécanisme se contente de suivre le MSPT (accumulé à la main, sans coût de safepoint) et
+ * l'écrit quand même à chaque rotation — un rapport moins riche, jamais un plantage.
  */
 public final class ProfilServeurContinu {
     private ProfilServeurContinu() {}
 
     private static final long ROTATION_NANOS = 60L * 60L * 1_000_000_000L;
+
+    // --- Histogramme MSPT, pas fixe de 0,1 ms jusqu'à 250 ms + un seau "au-delà" — même technique
+    // que ProfilClient.histogrammeFrameMs, voir sa Javadoc : zéro allocation par tick.
+    private static final double HISTO_PAS_MS = 0.1d;
+    private static final int HISTO_BUCKETS = 2500;
+
+    /** Bornes de coût de l'instantané par dimension — voir la Javadoc de classe. */
+    private static final int MAX_ENTITES_INSTANTANE = 20_000;
+    private static final int MAX_CHUNKS_INSTANTANE = 4_000;
+
+    /** Le fil unique, démon, priorité basse, qui fait tout le travail lourd d'une rotation. */
+    private static final ExecutorService ANALYSE_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread fil = new Thread(runnable, "Lanterne-Profil-Analyse-Serveur");
+        fil.setDaemon(true);
+        fil.setPriority(Thread.MIN_PRIORITY);
+        return fil;
+    });
 
     private static boolean actif;
     private static Recording recordingEnCours;
@@ -64,8 +97,14 @@ public final class ProfilServeurContinu {
     private static long trancheDebutNanos;
     private static long ticksVus;
     private static long lastTickNanos;
-    private static final List<Double> msptTriables = new ArrayList<>();
+    private static long[] histogrammeMspt = new long[HISTO_BUCKETS + 1];
+    private static double maxMspt;
     private static long ticksAuDela50ms;
+
+    private record TrancheSnapshot(
+            String why, double sessionSec, long ticksVus, long[] histogrammeMspt, double maxMspt,
+            long ticksAuDela50ms, Recording recording, boolean jfrDisponible, String instantaneDimensions,
+            Path profilsDir) {}
 
     public static void register() {
         NeoForge.EVENT_BUS.register(ProfilServeurContinu.class);
@@ -80,13 +119,24 @@ public final class ProfilServeurContinu {
         demarrer();
     }
 
+    /**
+     * Seule rotation qui ATTEND la fin de l'écriture — voir la Javadoc de classe : le process va se
+     * terminer, un rapport de fin de session perdu ne se rattrape pas. Le délai (10 s) protège quand
+     * même un arrêt normal d'un blocage indéfini si l'analyse traîne anormalement.
+     */
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         if (!actif) {
             return;
         }
-        rotation(event.getServer(), "arrêt du serveur");
         actif = false;
+        var future = rotationAsync(event.getServer(), "arrêt du serveur");
+        try {
+            future.get(10, TimeUnit.SECONDS);
+        } catch (Exception attenteEchouee) {
+            Lanterne.LOG.warn("[PROFIL] Le rapport de fin de session n'a pas pu être confirmé à temps.",
+                    attenteEchouee);
+        }
     }
 
     @SubscribeEvent
@@ -98,7 +148,9 @@ public final class ProfilServeurContinu {
         ticksVus++;
         if (lastTickNanos != 0L) {
             double ms = (now - lastTickNanos) / 1e6d;
-            msptTriables.add(ms);
+            int seau = (int) (ms / HISTO_PAS_MS);
+            histogrammeMspt[Math.max(0, Math.min(HISTO_BUCKETS, seau))]++;
+            maxMspt = Math.max(maxMspt, ms);
             if (ms > 50.0d) {
                 ticksAuDela50ms++;
             }
@@ -106,7 +158,7 @@ public final class ProfilServeurContinu {
         lastTickNanos = now;
 
         if (now - trancheDebutNanos >= ROTATION_NANOS) {
-            rotation(event.getServer(), "rotation automatique (60 minutes)");
+            rotationAsync(event.getServer(), "rotation automatique (60 minutes)");
             demarrerTranche();
         }
     }
@@ -121,7 +173,8 @@ public final class ProfilServeurContinu {
         trancheDebutNanos = System.nanoTime();
         ticksVus = 0;
         lastTickNanos = 0L;
-        msptTriables.clear();
+        histogrammeMspt = new long[HISTO_BUCKETS + 1]; // une seule allocation ici, jamais par tick
+        maxMspt = 0;
         ticksAuDela50ms = 0;
 
         jfrDisponible = MoteurJfr.disponible();
@@ -139,33 +192,60 @@ public final class ProfilServeurContinu {
         }
     }
 
-    /** Force une rotation immédiate — voir {@code report.ProfilServeurCommand} ("/lanterne profil serveur maintenant"). */
-    public static synchronized Path forcerMaintenant(MinecraftServer server) {
+    /**
+     * Force une rotation immédiate — voir {@code report.ProfilServeurCommand} ("/lanterne profil
+     * serveur maintenant"). Ne bloque jamais l'appelant (le Server thread, dans le cas d'une commande) :
+     * rend {@code true} si une rotation a bien été programmée, le rapport arrive ensuite dans
+     * {@code logs/lanterne-profils/} et dans le journal serveur.
+     */
+    public static synchronized boolean forcerMaintenant(MinecraftServer server) {
         if (!actif) {
-            return null;
+            return false;
         }
-        Path ecrit = rotation(server, "forcé par commande OP");
+        rotationAsync(server, "forcé par commande OP");
         demarrerTranche();
-        return ecrit;
+        return true;
     }
 
-    private static synchronized Path rotation(MinecraftServer server, String why) {
+    /**
+     * Fige l'instantané SUR LE FIL APPELANT (Server thread, bon marché — voir la Javadoc de classe),
+     * puis délègue l'analyse et l'écriture à {@link #ANALYSE_EXECUTOR}. Rend le futur de cette tâche
+     * pour le seul appelant qui a besoin d'attendre : {@link #onServerStopping}.
+     */
+    private static synchronized java.util.concurrent.Future<?> rotationAsync(MinecraftServer server, String why) {
+        double sessionSec = Math.max(0.001d, (System.nanoTime() - trancheDebutNanos) / 1e9d);
+
+        Recording recording = recordingEnCours;
+        recordingEnCours = null; // détaché : le fil d'analyse en devient seul propriétaire
+
+        TrancheSnapshot snap = new TrancheSnapshot(
+                why, sessionSec, ticksVus, histogrammeMspt, maxMspt, ticksAuDela50ms,
+                recording, jfrDisponible,
+                instantaneDimensions(server), // touche le monde : DOIT rester sur ce fil, voir la Javadoc
+                server.getServerDirectory().resolve("logs").resolve("lanterne-profils"));
+
+        return ANALYSE_EXECUTOR.submit(() -> traiterTranche(snap));
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Le travail lourd — TOUJOURS sur ANALYSE_EXECUTOR, jamais sur le Server thread.
+    // ------------------------------------------------------------------------------------------
+
+    private static void traiterTranche(TrancheSnapshot snap) {
         Path jfrTemp = null;
         boolean jfrOk = false;
-        if (recordingEnCours != null) {
+        if (snap.recording() != null) {
             try {
                 jfrTemp = Files.createTempFile("lanterne-profil-serveur-", ".jfr");
-                jfrOk = MoteurJfr.arreterEtVider(recordingEnCours, jfrTemp);
+                jfrOk = MoteurJfr.arreterEtVider(snap.recording(), jfrTemp);
             } catch (IOException echec) {
                 Lanterne.LOG.warn("[PROFIL] Fichier temporaire JFR serveur impossible.", echec);
             }
-            recordingEnCours = null;
         }
         try {
-            return ecrireRapport(server, why, jfrOk ? jfrTemp : null);
+            ecrireRapport(snap, jfrOk ? jfrTemp : null);
         } catch (Throwable echec) {
             Lanterne.LOG.warn("[PROFIL] Échec de l'écriture du profil serveur.", echec);
-            return null;
         } finally {
             if (jfrTemp != null) {
                 try {
@@ -177,34 +257,36 @@ public final class ProfilServeurContinu {
         }
     }
 
-    private static Path ecrireRapport(MinecraftServer server, String why, Path jfrFichier) throws IOException {
-        double sessionSec = Math.max(0.001d, (System.nanoTime() - trancheDebutNanos) / 1e9d);
-        double avgMspt = ticksVus > 0 ? (sessionSec * 1000.0d) / ticksVus : 0;
-
-        List<Double> triees = new ArrayList<>(msptTriables);
-        triees.sort(Comparator.naturalOrder());
+    private static Path ecrireRapport(TrancheSnapshot snap, Path jfrFichier) throws IOException {
+        double avgMspt = snap.ticksVus() > 0 ? (snap.sessionSec() * 1000.0d) / snap.ticksVus() : 0;
+        long totalTicks = 0;
+        for (long compte : snap.histogrammeMspt()) {
+            totalTicks += compte;
+        }
 
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
-        Path dir = server.getServerDirectory().resolve("logs").resolve("lanterne-profils");
-        Files.createDirectories(dir);
-        Path out = dir.resolve("serveur-" + timestamp + ".txt");
+        Files.createDirectories(snap.profilsDir());
+        Path out = snap.profilsDir().resolve("serveur-" + timestamp + ".txt");
 
         StringBuilder sb = new StringBuilder();
         sb.append("PROFIL LANTERNE — serveur, tranche continue\n").append("=".repeat(60)).append('\n');
-        sb.append("Fin de tranche  : ").append(why).append('\n');
-        sb.append(String.format(Locale.ROOT, "Durée observée  : %.1f s (%d tick(s))%n", sessionSec, ticksVus));
+        sb.append("Fin de tranche  : ").append(snap.why()).append('\n');
+        sb.append(String.format(Locale.ROOT, "Durée observée  : %.1f s (%d tick(s))%n",
+                snap.sessionSec(), snap.ticksVus()));
         sb.append('\n');
 
         sb.append("MSPT\n").append("-".repeat(60)).append('\n');
         sb.append(String.format(Locale.ROOT, "Moyenne : %.2f ms (%.1f ticks/s)%n", avgMspt,
-                ticksVus / sessionSec));
-        if (!triees.isEmpty()) {
+                snap.ticksVus() / snap.sessionSec()));
+        if (totalTicks > 0) {
             sb.append(String.format(Locale.ROOT, "p50 : %.2f ms — p95 : %.2f ms — p99 : %.2f ms — max : %.2f ms%n",
-                    percentile(triees, 0.50), percentile(triees, 0.95), percentile(triees, 0.99),
-                    triees.get(triees.size() - 1)));
+                    percentileHisto(snap.histogrammeMspt(), totalTicks, 0.50, snap.maxMspt()),
+                    percentileHisto(snap.histogrammeMspt(), totalTicks, 0.95, snap.maxMspt()),
+                    percentileHisto(snap.histogrammeMspt(), totalTicks, 0.99, snap.maxMspt()),
+                    snap.maxMspt()));
         }
         sb.append(String.format(Locale.ROOT, "Ticks au-delà de 50 ms (le tick vanilla entier) : %d%n",
-                ticksAuDela50ms));
+                snap.ticksAuDela50ms()));
         sb.append("Repère : 20 TPS = 50 ms/tick visé.\n\n");
 
         if (jfrFichier != null) {
@@ -217,16 +299,33 @@ public final class ProfilServeurContinu {
             sb.append("PROFIL JFR INDISPONIBLE — module jdk.jfr absent ou démarrage échoué : MSPT seul.\n\n");
         }
 
-        sb.append(instantaneDimensions(server));
+        sb.append(snap.instantaneDimensions());
 
         Files.writeString(out, sb.toString(), StandardCharsets.UTF_8);
         Lanterne.LOG.info("[PROFIL] Rapport serveur écrit : {}", out);
         return out;
     }
 
+    private static double percentileHisto(long[] histo, long total, double p, double maxExact) {
+        if (total <= 0) {
+            return 0;
+        }
+        long cible = (long) Math.ceil(p * total);
+        long cumul = 0;
+        for (int i = 0; i < histo.length; i++) {
+            cumul += histo[i];
+            if (cumul >= cible) {
+                return i == histo.length - 1 ? maxExact : (i + 1) * HISTO_PAS_MS;
+            }
+        }
+        return maxExact;
+    }
+
     /**
      * Un instantané, PAR DIMENSION, pris à la rotation : chunks chargés, entités, block entities par
-     * type, et les dix chunks les plus chargés en entités.
+     * type, et les dix chunks les plus chargés en entités. Appelée SUR LE SERVER THREAD (voir
+     * {@link #rotationAsync}) : rend directement du texte déjà formaté, pour que le fil d'analyse n'ait
+     * plus jamais besoin de toucher {@code server}/{@code level} — non thread-safe hors de ce fil.
      *
      * <h2>Pourquoi limité aux chunks autour des joueurs pour les block entities</h2>
      *
@@ -237,6 +336,12 @@ public final class ProfilServeurContinu {
      * chunks effectivement chargés autour de chaque joueur (le même rayon que la distance de
      * simulation) : c'est là que vit la quasi-totalité de ce qui tourne réellement sur un serveur
      * survival, et un serveur sans joueur n'a de toute façon rien à profiler.
+     *
+     * <h2>Plafonds</h2>
+     *
+     * <p>{@link #MAX_ENTITES_INSTANTANE} et {@link #MAX_CHUNKS_INSTANTANE} bornent le pire cas : sur un
+     * monde immense ou saturé d'entités, l'instantané s'arrête et le dit, plutôt que d'allonger le tick
+     * de rotation sans limite.
      */
     private static String instantaneDimensions(MinecraftServer server) {
         StringBuilder sb = new StringBuilder();
@@ -245,7 +350,12 @@ public final class ProfilServeurContinu {
             int chunksCharges = level.getChunkSource().getLoadedChunksCount();
             Map<ChunkPos, Integer> entitesParChunk = new HashMap<>();
             int totalEntites = 0;
+            boolean entitesTronquees = false;
             for (var entity : level.getAllEntities()) {
+                if (totalEntites >= MAX_ENTITES_INSTANTANE) {
+                    entitesTronquees = true;
+                    break;
+                }
                 entitesParChunk.merge(entity.chunkPosition(), 1, Integer::sum);
                 totalEntites++;
             }
@@ -254,10 +364,16 @@ public final class ProfilServeurContinu {
             int totalBlockEntities = 0;
             int simDistance = server.getPlayerList().getSimulationDistance();
             java.util.Set<ChunkPos> vus = new java.util.HashSet<>();
+            boolean chunksTronques = false;
+            chunks:
             for (var player : level.players()) {
                 ChunkPos centre = player.chunkPosition();
                 for (int dx = -simDistance; dx <= simDistance; dx++) {
                     for (int dz = -simDistance; dz <= simDistance; dz++) {
+                        if (vus.size() >= MAX_CHUNKS_INSTANTANE) {
+                            chunksTronques = true;
+                            break chunks;
+                        }
                         ChunkPos pos = new ChunkPos(centre.x() + dx, centre.z() + dz);
                         if (!vus.add(pos)) {
                             continue;
@@ -275,9 +391,11 @@ public final class ProfilServeurContinu {
                 }
             }
 
-            sb.append(String.format(Locale.ROOT, "  %s : %d chunk(s) chargé(s), %d entité(s), "
-                    + "%d block entity/entities (autour des joueurs)%n",
-                    level.dimension().identifier(), chunksCharges, totalEntites, totalBlockEntities));
+            sb.append(String.format(Locale.ROOT, "  %s : %d chunk(s) chargé(s), %d entité(s)%s, "
+                    + "%d block entity/entities (autour des joueurs)%s%n",
+                    level.dimension().identifier(), chunksCharges, totalEntites,
+                    entitesTronquees ? " (plafond atteint, tronqué)" : "", totalBlockEntities,
+                    chunksTronques ? " (plafond de chunks scannés atteint, tronqué)" : ""));
 
             if (!blockEntitiesParType.isEmpty()) {
                 sb.append("    Top block entities par type :\n");
@@ -298,14 +416,5 @@ public final class ProfilServeurContinu {
         }
         sb.append('\n');
         return sb.toString();
-    }
-
-    private static double percentile(List<Double> triees, double p) {
-        if (triees.isEmpty()) {
-            return 0;
-        }
-        int index = (int) Math.ceil(p * triees.size()) - 1;
-        index = Math.max(0, Math.min(triees.size() - 1, index));
-        return triees.get(index);
     }
 }

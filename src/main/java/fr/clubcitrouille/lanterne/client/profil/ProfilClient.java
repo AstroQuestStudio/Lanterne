@@ -7,13 +7,15 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import jdk.jfr.Recording;
 
@@ -43,21 +45,32 @@ import fr.clubcitrouille.lanterne.report.Compagnons;
  * {@link #DUREE_MINIMALE_NANOS} (sortie du monde prématurée) n'écrit rien : trop peu de données pour
  * qu'un rapport serve à quoi que ce soit.
  *
- * <h2>Ce que fait, et ne fait pas, chaque tranche</h2>
+ * <h2>Le fil de rendu ne fait QUE figer un instantané</h2>
  *
- * <p>Statistiques d'images (FPS moyen/min/percentiles, histogramme, pires images) : accumulées à la
- * main, image par image, exactement comme {@code Radiographie} — bon marché, voir sa Javadoc citée
- * dans la demande d'origine. Tout le reste (méthodes chaudes par fil, pauses GC, allocations,
- * contention, arbre d'appel) vient d'un {@link Recording} JFR démarré au début de la tranche et
- * vidé/arrêté à sa fin, puis lu par {@link AnalyseJfr}.
+ * <p>Arrêter un enregistrement JFR d'une heure, le vider sur disque, le relire et le mettre en forme
+ * prend, mesuré, plusieurs centaines de millisecondes à quelques secondes — inacceptable sur le fil de
+ * rendu, qui aurait figé le jeu une fois par heure et à chaque sortie de monde. {@link #pulse} ne fait
+ * donc, sur ce fil, que trois choses bon marché : copier les compteurs primitifs de la tranche dans un
+ * {@link TrancheSnapshot} immuable, détacher l'enregistrement JFR en cours (retiré du champ statique,
+ * jamais touché par deux fils à la fois), et redémarrer aussitôt la tranche suivante. Tout le reste —
+ * arrêt/vidage JFR, lecture par {@link AnalyseJfr}, mise en forme, écriture disque, mise en file réseau
+ * — est délégué à {@link #ANALYSE_EXECUTOR}, un fil démon unique et de priorité basse : un rapport en
+ * retard de quelques secondes ne coûte rien, une image qui saute en coûte beaucoup.
+ *
+ * <h2>Zéro allocation par image</h2>
+ *
+ * <p>{@link #enregistrerImage} incrémente des compteurs primitifs et une case d'histogramme à pas fixe
+ * ({@link #histogrammeFrameMs}) — jamais de boîte {@code Double} ajoutée à une liste qui grandirait
+ * toute l'heure (~216 000 images). Les centiles 1 % et 0,1 % se lisent depuis cet histogramme, déjà là.
  *
  * <h2>Copie locale toujours écrite, envoi réseau sous consentement</h2>
  *
  * <p>Le rapport texte est toujours écrit dans {@code config/lanterne/profils/} — utile même hors
  * ligne, ou sur un serveur non-Lanterne. Il n'est mis en file pour le RÉSEAU que si
- * {@link BoiteNoireConsent#profilsAllowed()} répond vrai, exactement comme {@code client.crash.BoiteNoire}
- * pour les plantages — voir sa Javadoc de classe pour la garde {@code Dist.CLIENT} et pourquoi ce
- * fichier ne doit jamais être chargé par un serveur dédié.
+ * {@link BoiteNoireConsent#profilsAllowed()} répond vrai (vérifié sur le fil de rendu, AVANT de passer
+ * la main au fil d'analyse — {@code Minecraft.hasSingleplayerServer()} ne doit être lu que là) —
+ * exactement comme {@code client.crash.BoiteNoire} pour les plantages, voir sa Javadoc de classe pour
+ * la garde {@code Dist.CLIENT} et pourquoi ce fichier ne doit jamais être chargé par un serveur dédié.
  */
 public final class ProfilClient {
     private ProfilClient() {}
@@ -76,6 +89,21 @@ public final class ProfilClient {
     /** Plafond du rapport écrit — voir la demande d'origine ("≤ ~200 Ko"). */
     private static final int TAILLE_RAPPORT_MAX = 200 * 1024;
 
+    // --- Histogramme de temps d'image, pas fixe de 0,1 ms, jusqu'à 250 ms + un seau "au-delà". ---
+    // Alloué UNE FOIS par tranche (demarrerTranche), jamais dans enregistrerImage : voir la Javadoc
+    // de classe sur le zéro-allocation par image.
+    private static final double HISTO_PAS_MS = 0.1d;
+    private static final int HISTO_BUCKETS = 2500; // 250 ms / 0,1 ms
+    private static long[] histogrammeFrameMs = new long[HISTO_BUCKETS + 1]; // dernier = "au-delà de 250 ms"
+
+    /** Le fil unique, démon, priorité basse, qui fait tout le travail lourd d'une rotation. */
+    private static final ExecutorService ANALYSE_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread fil = new Thread(runnable, "Lanterne-Profil-Analyse");
+        fil.setDaemon(true);
+        fil.setPriority(Thread.MIN_PRIORITY);
+        return fil;
+    });
+
     private static boolean running;
     private static boolean wasInWorld;
     private static long renderThreadId = -1L;
@@ -84,40 +112,58 @@ public final class ProfilClient {
     // --- La tranche JFR en cours ---
     private static Recording recordingEnCours;
     private static boolean jfrDisponibleCetteTranche;
-    private static Path fichierJfrTemp;
 
     // --- Repère pour convertir System.nanoTime() en Instant JFR — voir enregistrerImage. ---
     private static Instant refInstant;
     private static long refNanos;
 
-    // --- Statistiques d'images de la tranche en cours ---
+    // --- Statistiques d'images de la tranche en cours (compteurs primitifs uniquement). ---
     private static long trancheDebutNanos;
     private static long framesVues;
     private static double sommeFrameMs;
     private static double minFrameMs;
     private static double maxFrameMs;
-    private static final List<Double> frameMsTriables = new ArrayList<>();
     private static final int[] BORNES_FPS = {20, 40, 60, 90, 120};
     private static final long[] histogrammeFps = new long[BORNES_FPS.length + 1];
     private static long fenetreFrames;
     private static long fenetreDebutNanos;
 
-    private static final class PireImage {
-        final Instant instant;
-        final double ms;
-
-        PireImage(Instant instant, double ms) {
-            this.instant = instant;
-            this.ms = ms;
-        }
-    }
+    private record PireImage(Instant instant, double ms) {}
 
     private static final List<PireImage> piresImages = new ArrayList<>();
 
-    // --- File d'attente réseau, drainée depuis pulse() (une image = un tick de cooldown ici). ---
-    private static final Deque<ProfilTranche> FILE_ATTENTE = new ArrayDeque<>();
+    // --- File d'attente réseau : remplie par le fil d'analyse, drainée par le fil client. ---
+    private static final Deque<ProfilTranche> FILE_ATTENTE = new ConcurrentLinkedDeque<>();
     private static final int IMAGES_ENTRE_PAQUETS = 3;
     private static int cooldown;
+
+    /**
+     * Tout ce qu'un rapport de tranche a besoin de lire — figé sur le fil de rendu, lu ensuite
+     * uniquement par {@link #ANALYSE_EXECUTOR}. Rien ici ne référence un champ statique mutable : voir
+     * la Javadoc de classe.
+     */
+    private record TrancheSnapshot(
+            String why,
+            double sessionSec,
+            long framesVues,
+            double sommeFrameMs,
+            double minFrameMs,
+            double maxFrameMs,
+            long[] histogrammeFrameMs,
+            long[] histogrammeFps,
+            List<PireImage> piresImages,
+            String renderThreadName,
+            Recording recording,
+            boolean jfrDisponible,
+            SystemeSnapshot systeme,
+            Path profilsDir,
+            boolean envoiAutorise) {}
+
+    /** Tout ce que le rapport dit du système — lu UNIQUEMENT sur le fil de rendu (GL, options MC). */
+    private record SystemeSnapshot(
+            int coeurs, long memoireMaxMo, String javaVersion, String javaVendor, List<String> gc,
+            String backendGraphique, int renderDistance, int simulationDistance, int framerateLimit,
+            String gpu, List<String> modsRendu) {}
 
     /** Appelée depuis {@code Pane.onFrame}, juste après {@code Radiographie.pulse()}. */
     public static void pulse() {
@@ -162,8 +208,8 @@ public final class ProfilClient {
         sommeFrameMs = 0;
         minFrameMs = Double.MAX_VALUE;
         maxFrameMs = 0;
-        frameMsTriables.clear();
-        java.util.Arrays.fill(histogrammeFps, 0L);
+        histogrammeFrameMs = new long[HISTO_BUCKETS + 1]; // une seule allocation, ici, jamais par image
+        Arrays.fill(histogrammeFps, 0L);
         fenetreFrames = 0;
         fenetreDebutNanos = trancheDebutNanos;
         piresImages.clear();
@@ -185,46 +231,48 @@ public final class ProfilClient {
 
     private static void terminerSession(String why) {
         running = false;
-        double dureeMin = (System.nanoTime() - trancheDebutNanos) / 60e9d;
-        if (dureeMin * 60e9d >= DUREE_MINIMALE_NANOS) {
+        double dureeSec = (System.nanoTime() - trancheDebutNanos) / 1e9d;
+        if (dureeSec * 1e9d >= DUREE_MINIMALE_NANOS) {
             rotation(why);
         } else if (recordingEnCours != null) {
-            // Tranche trop courte pour un rapport utile : on ferme l'enregistrement sans l'analyser.
-            recordingEnCours.close();
+            // Tranche trop courte pour un rapport utile : on ferme l'enregistrement sans l'analyser,
+            // mais toujours HORS du fil de rendu — close() sur un enregistrement "to disk" peut
+            // encore flusher un tampon, même bref, on ne le suppose pas gratuit sur ce fil-ci.
+            Recording aFermer = recordingEnCours;
             recordingEnCours = null;
+            ANALYSE_EXECUTOR.submit(aFermer::close);
         }
     }
 
-    /** Clôt la tranche en cours : arrête/vide le JFR, écrit et met en file le rapport. */
+    /**
+     * Fige l'instantané de la tranche en cours (fil de rendu, bon marché) puis délègue tout le travail
+     * lourd à {@link #ANALYSE_EXECUTOR} — voir la Javadoc de classe. Ne bloque jamais l'appelant.
+     */
     private static void rotation(String why) {
-        Path jfrTemp = null;
-        boolean jfrOk = false;
-        if (recordingEnCours != null) {
-            try {
-                jfrTemp = Files.createTempFile("lanterne-profil-", ".jfr");
-                jfrOk = MoteurJfr.arreterEtVider(recordingEnCours, jfrTemp);
-            } catch (IOException echec) {
-                Lanterne.LOG.warn("[PROFIL] Fichier temporaire JFR impossible.", echec);
-            }
-            recordingEnCours = null;
-        }
-        try {
-            Path rapport = ecrireRapport(why, jfrOk ? jfrTemp : null);
-            Lanterne.LOG.info("[PROFIL] Rapport écrit : {}", rapport);
-            if (BoiteNoireConsent.profilsAllowed() && !Minecraft.getInstance().hasSingleplayerServer()) {
-                mettreEnFile(rapport);
-            }
-        } catch (Throwable echec) {
-            Lanterne.LOG.warn("[PROFIL] Échec de l'écriture du rapport de performance.", echec);
-        } finally {
-            if (jfrTemp != null) {
-                try {
-                    Files.deleteIfExists(jfrTemp);
-                } catch (IOException ignored) {
-                    // Fichier temporaire : pas grave s'il traîne, le système le nettoiera.
-                }
-            }
-        }
+        Minecraft mc = Minecraft.getInstance();
+        double sessionSec = Math.max(0.001d, (System.nanoTime() - trancheDebutNanos) / 1e9d);
+
+        Recording recording = recordingEnCours;
+        recordingEnCours = null; // détaché : le fil d'analyse en devient seul propriétaire
+
+        TrancheSnapshot snap = new TrancheSnapshot(
+                why,
+                sessionSec,
+                framesVues,
+                sommeFrameMs,
+                minFrameMs,
+                maxFrameMs,
+                histogrammeFrameMs, // le tableau lui-même : demarrerTranche() en alloue un NOUVEAU juste après
+                Arrays.copyOf(histogrammeFps, histogrammeFps.length),
+                List.copyOf(piresImages), // au plus PIRES_IMAGES_MAX (40) éléments : copie négligeable
+                renderThreadName,
+                recording,
+                jfrDisponibleCetteTranche,
+                capturerSysteme(mc),
+                mc.gameDirectory.toPath().resolve("config").resolve(Lanterne.ID).resolve("profils"),
+                BoiteNoireConsent.profilsAllowed() && !mc.hasSingleplayerServer());
+
+        ANALYSE_EXECUTOR.submit(() -> traiterTranche(snap));
     }
 
     private static void enregistrerImage(Minecraft mc) {
@@ -234,7 +282,10 @@ public final class ProfilClient {
         sommeFrameMs += frameMs;
         minFrameMs = Math.min(minFrameMs, frameMs);
         maxFrameMs = Math.max(maxFrameMs, frameMs);
-        frameMsTriables.add(frameMs);
+
+        // Histogramme à pas fixe : un incrément d'entier, zéro allocation — voir la Javadoc de classe.
+        int seau = (int) (frameMs / HISTO_PAS_MS);
+        histogrammeFrameMs[Math.max(0, Math.min(HISTO_BUCKETS, seau))]++;
 
         if (frameMs > SEUIL_PIRE_IMAGE_MS && piresImages.size() < PIRES_IMAGES_MAX) {
             Instant instant = refInstant.plusNanos(now - refNanos);
@@ -258,57 +309,135 @@ public final class ProfilClient {
         }
     }
 
+    /** Tout ce que le rapport dit du système — GL et options MC compris, donc UNIQUEMENT sur ce fil. */
+    private static SystemeSnapshot capturerSysteme(Minecraft mc) {
+        Runtime rt = Runtime.getRuntime();
+        List<String> gc = new ArrayList<>();
+        for (var bean : java.lang.management.ManagementFactory.getGarbageCollectorMXBeans()) {
+            gc.add(bean.getName());
+        }
+        String backend = "(indisponible)";
+        int renderDistance = -1;
+        int simulationDistance = -1;
+        int framerateLimit = -1;
+        try {
+            var options = mc.options;
+            backend = options.preferredGraphicsBackend().get().toString();
+            renderDistance = options.renderDistance().get();
+            simulationDistance = options.simulationDistance().get();
+            framerateLimit = options.framerateLimit().get();
+        } catch (Throwable pasEncorePret) {
+            // Réglages indisponibles à cet instant : les champs gardent leur valeur sentinelle -1.
+        }
+        String gpu = null;
+        try {
+            String renderer = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER);
+            String vendor = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VENDOR);
+            String version = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VERSION);
+            if (renderer != null) {
+                gpu = renderer + (vendor != null ? " (" + vendor + ")" : "")
+                        + (version != null ? " — pilote " + version : "");
+            }
+        } catch (Throwable pasDeContexteGl) {
+            // Hors contexte GL courant : pas d'erreur à remonter, juste une ligne en moins.
+        }
+        List<String> modsRendu = new ArrayList<>();
+        for (var entry : Map.of(
+                Compagnons.SODIUM, "Sodium",
+                Compagnons.HORIZONS, "Distant Horizons",
+                Compagnons.IRIS, "Iris").entrySet()) {
+            if (Compagnons.present(entry.getKey())) {
+                modsRendu.add(entry.getValue());
+            }
+        }
+        return new SystemeSnapshot(rt.availableProcessors(), rt.maxMemory() / 1024 / 1024,
+                System.getProperty("java.version"), System.getProperty("java.vendor"), gc, backend,
+                renderDistance, simulationDistance, framerateLimit, gpu, modsRendu);
+    }
+
     // ------------------------------------------------------------------------------------------
-    // Le rapport
+    // Le travail lourd — TOUJOURS sur ANALYSE_EXECUTOR, jamais sur le fil de rendu.
     // ------------------------------------------------------------------------------------------
 
-    private static Path ecrireRapport(String why, Path jfrFichier) throws IOException {
-        double sessionSec = Math.max(0.001d, (System.nanoTime() - trancheDebutNanos) / 1e9d);
-        double avgFps = framesVues / sessionSec;
-        double avgFrameMs = framesVues > 0 ? sommeFrameMs / framesVues : 0;
+    private static void traiterTranche(TrancheSnapshot snap) {
+        Path jfrTemp = null;
+        boolean jfrOk = false;
+        if (snap.recording() != null) {
+            try {
+                jfrTemp = Files.createTempFile("lanterne-profil-", ".jfr");
+                jfrOk = MoteurJfr.arreterEtVider(snap.recording(), jfrTemp);
+            } catch (IOException echec) {
+                Lanterne.LOG.warn("[PROFIL] Fichier temporaire JFR impossible.", echec);
+            }
+        }
+        try {
+            Path rapport = ecrireRapport(snap, jfrOk ? jfrTemp : null);
+            Lanterne.LOG.info("[PROFIL] Rapport écrit : {}", rapport);
+            if (snap.envoiAutorise()) {
+                mettreEnFile(rapport);
+            }
+        } catch (Throwable echec) {
+            Lanterne.LOG.warn("[PROFIL] Échec de l'écriture du rapport de performance.", echec);
+        } finally {
+            if (jfrTemp != null) {
+                try {
+                    Files.deleteIfExists(jfrTemp);
+                } catch (IOException ignored) {
+                    // Fichier temporaire : pas grave s'il traîne, le système le nettoiera.
+                }
+            }
+        }
+    }
 
-        List<Double> triees = new ArrayList<>(frameMsTriables);
-        triees.sort(Comparator.naturalOrder());
-        double p1Ms = percentile(triees, 0.99); // pire 1 % des images = 99e centile du TEMPS d'image
-        double p01Ms = percentile(triees, 0.999);
+    private static Path ecrireRapport(TrancheSnapshot snap, Path jfrFichier) throws IOException {
+        double avgFps = snap.framesVues() / snap.sessionSec();
+        double avgFrameMs = snap.framesVues() > 0 ? snap.sommeFrameMs() / snap.framesVues() : 0;
+
+        long totalImages = 0;
+        for (long compte : snap.histogrammeFrameMs()) {
+            totalImages += compte;
+        }
+        double p1Ms = percentileHisto(snap.histogrammeFrameMs(), totalImages, 0.99, snap.maxFrameMs());
+        double p01Ms = percentileHisto(snap.histogrammeFrameMs(), totalImages, 0.999, snap.maxFrameMs());
 
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
-        Path dir = Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve(Lanterne.ID)
-                .resolve("profils");
-        Files.createDirectories(dir);
-        Path out = dir.resolve("client-" + timestamp + ".txt");
+        Files.createDirectories(snap.profilsDir());
+        Path out = snap.profilsDir().resolve("client-" + timestamp + ".txt");
 
         StringBuilder sb = new StringBuilder();
         sb.append("PROFIL LANTERNE — client, tranche de session\n").append("=".repeat(60)).append('\n');
-        sb.append("Fin de tranche  : ").append(why).append('\n');
-        sb.append(String.format(Locale.ROOT, "Durée observée  : %.1f s (%d image(s))%n", sessionSec, framesVues));
+        sb.append("Fin de tranche  : ").append(snap.why()).append('\n');
+        sb.append(String.format(Locale.ROOT, "Durée observée  : %.1f s (%d image(s))%n",
+                snap.sessionSec(), snap.framesVues()));
         sb.append('\n');
 
-        sb.append(parametresSysteme());
+        sb.append(formatSysteme(snap.systeme()));
 
         sb.append("IMAGES\n").append("-".repeat(60)).append('\n');
         sb.append(String.format(Locale.ROOT, "FPS moyen : %.1f (%.2f ms/image en moyenne)%n", avgFps, avgFrameMs));
-        if (minFrameMs <= maxFrameMs) {
-            sb.append(String.format(Locale.ROOT, "Image min/max : %.1f ms / %.1f ms%n", minFrameMs, maxFrameMs));
+        if (snap.minFrameMs() <= snap.maxFrameMs()) {
+            sb.append(String.format(Locale.ROOT, "Image min/max : %.1f ms / %.1f ms%n",
+                    snap.minFrameMs(), snap.maxFrameMs()));
         }
-        if (!triees.isEmpty()) {
+        if (totalImages > 0) {
             sb.append(String.format(Locale.ROOT,
                     "Pire 1 %% des images : %.1f ms (~%.1f FPS) — pire 0,1 %% : %.1f ms (~%.1f FPS)%n",
                     p1Ms, 1000.0 / Math.max(0.01, p1Ms), p01Ms, 1000.0 / Math.max(0.01, p01Ms)));
         }
         long totalFenetres = 0;
-        for (long compte : histogrammeFps) {
+        for (long compte : snap.histogrammeFps()) {
             totalFenetres += compte;
         }
         if (totalFenetres > 0) {
             String[] etiquettes = {"< 20", "20-40", "40-60", "60-90", "90-120", "120+"};
             sb.append("Répartition FPS (fenêtres de 1s) :\n");
-            for (int i = 0; i < histogrammeFps.length; i++) {
-                if (histogrammeFps[i] == 0) {
+            long[] histoFps = snap.histogrammeFps();
+            for (int i = 0; i < histoFps.length; i++) {
+                if (histoFps[i] == 0) {
                     continue;
                 }
                 sb.append(String.format(Locale.ROOT, "  %-7s : %5.1f %% (%d s)%n", etiquettes[i],
-                        100.0 * histogrammeFps[i] / totalFenetres, histogrammeFps[i]));
+                        100.0 * histoFps[i] / totalFenetres, histoFps[i]));
             }
         }
         sb.append('\n');
@@ -316,13 +445,13 @@ public final class ProfilClient {
         if (jfrFichier != null) {
             try {
                 List<AnalyseJfr.Fenetre> fenetres = new ArrayList<>();
-                for (PireImage pire : piresImages) {
+                for (PireImage pire : snap.piresImages()) {
                     fenetres.add(new AnalyseJfr.Fenetre(
-                            pire.instant.minusMillis((long) pire.ms),
-                            pire.instant,
-                            String.format(Locale.ROOT, "image de %.1f ms à %s", pire.ms, pire.instant)));
+                            pire.instant().minusMillis((long) pire.ms()),
+                            pire.instant(),
+                            String.format(Locale.ROOT, "image de %.1f ms à %s", pire.ms(), pire.instant())));
                 }
-                sb.append(AnalyseJfr.rapportTexte(jfrFichier, renderThreadName, fenetres));
+                sb.append(AnalyseJfr.rapportTexte(jfrFichier, snap.renderThreadName(), fenetres));
             } catch (IOException echecLecture) {
                 sb.append("(lecture du profil JFR impossible : ").append(echecLecture.getMessage()).append(")\n\n");
             }
@@ -344,70 +473,58 @@ public final class ProfilClient {
         return out;
     }
 
-    /** Infos système : CPU, RAM, GPU/pilote, Java, GC, options de rendu, mods de rendu présents. */
-    private static String parametresSysteme() {
+    /** Met en texte un {@link SystemeSnapshot} déjà capturé — aucun appel MC/GL ici, sûr hors fil de rendu. */
+    private static String formatSysteme(SystemeSnapshot sys) {
         StringBuilder sb = new StringBuilder();
         sb.append("SYSTÈME\n").append("-".repeat(60)).append('\n');
-        Runtime rt = Runtime.getRuntime();
         sb.append(String.format(Locale.ROOT, "Cœurs logiques : %d — mémoire JVM max : %d Mo%n",
-                rt.availableProcessors(), rt.maxMemory() / 1024 / 1024));
-        sb.append("Java : ").append(System.getProperty("java.version"))
-                .append(" (").append(System.getProperty("java.vendor")).append(")\n");
-        sb.append("Ramasse-miettes actif(s) : ");
-        List<String> gc = new ArrayList<>();
-        for (var bean : java.lang.management.ManagementFactory.getGarbageCollectorMXBeans()) {
-            gc.add(bean.getName());
-        }
-        sb.append(gc.isEmpty() ? "(inconnu)" : String.join(", ", gc)).append('\n');
-        try {
-            var options = Minecraft.getInstance().options;
-            sb.append("Backend graphique : ").append(options.preferredGraphicsBackend().get()).append('\n');
+                sys.coeurs(), sys.memoireMaxMo()));
+        sb.append("Java : ").append(sys.javaVersion()).append(" (").append(sys.javaVendor()).append(")\n");
+        sb.append("Ramasse-miettes actif(s) : ")
+                .append(sys.gc().isEmpty() ? "(inconnu)" : String.join(", ", sys.gc())).append('\n');
+        if (sys.renderDistance() >= 0) {
+            sb.append("Backend graphique : ").append(sys.backendGraphique()).append('\n');
             sb.append(String.format(Locale.ROOT, "Distance de vue/simulation : %d / %d chunks%n",
-                    options.renderDistance().get(), options.simulationDistance().get()));
-            sb.append("Limite FPS (réglage joueur) : ").append(options.framerateLimit().get()).append('\n');
-        } catch (Throwable pasEncorePret) {
-            sb.append("(réglages de rendu indisponibles à cet instant)\n");
+                    sys.renderDistance(), sys.simulationDistance()));
+            sb.append("Limite FPS (réglage joueur) : ").append(sys.framerateLimit()).append('\n');
+        } else {
+            sb.append("(réglages de rendu indisponibles à la capture)\n");
         }
-        try {
-            String renderer = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER);
-            String vendor = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VENDOR);
-            String version = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VERSION);
-            if (renderer != null) {
-                sb.append("GPU : ").append(renderer)
-                        .append(vendor != null ? " (" + vendor + ")" : "")
-                        .append(version != null ? " — pilote " + version : "").append('\n');
-            }
-        } catch (Throwable pasDeContexteGl) {
-            // Hors contexte GL courant : pas d'erreur à remonter, juste une ligne en moins.
+        if (sys.gpu() != null) {
+            sb.append("GPU : ").append(sys.gpu()).append('\n');
         }
-        sb.append("Mods de rendu présents : ");
-        List<String> presents = new ArrayList<>();
-        for (var entry : Map.of(
-                Compagnons.SODIUM, "Sodium",
-                Compagnons.HORIZONS, "Distant Horizons",
-                Compagnons.IRIS, "Iris").entrySet()) {
-            if (Compagnons.present(entry.getKey())) {
-                presents.add(entry.getValue());
-            }
-        }
-        sb.append(presents.isEmpty() ? "(aucun)" : String.join(", ", presents)).append('\n');
+        sb.append("Mods de rendu présents : ")
+                .append(sys.modsRendu().isEmpty() ? "(aucun)" : String.join(", ", sys.modsRendu())).append('\n');
         sb.append('\n');
         return sb.toString();
     }
 
-    private static double percentile(List<Double> triees, double p) {
-        if (triees.isEmpty()) {
+    /**
+     * Centile approché depuis l'histogramme à pas fixe : compte depuis le bas jusqu'à atteindre la
+     * fraction {@code p} des images, et rend la borne haute du seau atteint. Le dernier seau
+     * (au-delà de 250 ms) n'a pas de borne haute connue : on rend alors le maximum EXACT déjà
+     * conservé à côté ({@link TrancheSnapshot#maxFrameMs()}), jamais une valeur inventée.
+     */
+    private static double percentileHisto(long[] histo, long total, double p, double maxExact) {
+        if (total <= 0) {
             return 0;
         }
-        int index = (int) Math.ceil(p * triees.size()) - 1;
-        index = Math.max(0, Math.min(triees.size() - 1, index));
-        return triees.get(index);
+        long cible = (long) Math.ceil(p * total);
+        long cumul = 0;
+        for (int i = 0; i < histo.length; i++) {
+            cumul += histo[i];
+            if (cumul >= cible) {
+                return i == histo.length - 1 ? maxExact : (i + 1) * HISTO_PAS_MS;
+            }
+        }
+        return maxExact;
     }
 
     // ------------------------------------------------------------------------------------------
     // Envoi réseau — même découpage que client.crash.BoiteNoire, voir sa Javadoc.
     // ------------------------------------------------------------------------------------------
 
+    /** Appelée depuis {@link #ANALYSE_EXECUTOR} : lecture disque, jamais sur le fil de rendu. */
     private static void mettreEnFile(Path rapport) {
         try {
             byte[] bytes = Files.readAllBytes(rapport);
@@ -433,6 +550,7 @@ public final class ProfilClient {
         }
     }
 
+    /** Appelée depuis {@link #pulse}, donc sur le fil de rendu — {@link #FILE_ATTENTE} est concurrente. */
     private static void drainerFileAttente() {
         if (cooldown > 0) {
             cooldown--;
