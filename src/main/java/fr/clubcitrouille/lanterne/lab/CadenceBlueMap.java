@@ -108,10 +108,44 @@ final class CadenceBlueMap {
                 return; // Un joueur s'est deja connecte avant que BlueMap ne soit pret : Cadence
                         // gere deja ce cas via onPlayerJoin, ne pas demarrer par-dessus.
             }
+            // Comme resumeFullRender/renderEverything : programmer un balayage (non forcé) avant de
+            // démarrer, sinon manager.start() ne fait que relancer une file VIDE — rien ne serait
+            // jamais rendu tant qu'aucune autre mise à jour n'a été programmée ailleurs.
+            for (BlueMapMap map : api.getMaps()) {
+                api.getRenderManager().scheduleMapUpdateTask(map, false);
+            }
             api.getRenderManager().start();
-            Lanterne.LOG.info("[CADENCE] BlueMap prêt, 0 joueur connecté — rendu complet démarré "
-                    + "automatiquement (plus besoin d'attendre une connexion/déconnexion).");
+            Lanterne.LOG.info("[CADENCE] BlueMap prêt, 0 joueur connecté — balayage programmé, rendu "
+                    + "complet démarré automatiquement (plus besoin d'attendre une connexion/déconnexion).");
         });
+    }
+
+    /**
+     * Filet périodique (une fois par minute, voir {@link Cadence#onServerTick}) : si personne n'est
+     * connecté et qu'aucun rendu n'est déjà en cours, (re)programme un balayage non forcé de toutes
+     * les cartes et redémarre le rendu. Couvre les cas où ni {@link #startOnReady} ni
+     * {@link #resumeFullRender} n'ont pu s'exécuter au bon moment (BlueMap devenu prêt entre deux
+     * vérifications, plugin rechargé, file épuisée sans que personne ne se soit reconnecté…), sans
+     * jamais lancer une deuxième file par-dessus une déjà active.
+     */
+    static void ensureRenderingIfIdle(boolean aucunJoueurConnecte) {
+        if (!aucunJoueurConnecte) {
+            return;
+        }
+        BlueMapAPI.getInstance().ifPresentOrElse(api -> {
+            RenderManager manager = api.getRenderManager();
+            if (manager.isRunning()) {
+                Lanterne.LOG.debug("[CADENCE] vérification minute : 0 joueur, rendu déjà en cours, "
+                        + "rien à faire.");
+                return;
+            }
+            for (BlueMapMap map : api.getMaps()) {
+                manager.scheduleMapUpdateTask(map, false);
+            }
+            manager.start();
+            Lanterne.LOG.info("[CADENCE] vérification minute : 0 joueur, rendu inactif — balayage "
+                    + "reprogrammé et rendu relancé.");
+        }, () -> Lanterne.LOG.debug("[CADENCE] vérification minute : BlueMap pas encore prêt."));
     }
 
     /**
