@@ -25,6 +25,8 @@ public abstract class PregenActivityMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/server/players/PlayerList;getPlayerCount()I"))
     private int lanterne$keepAliveForPregen(int original) {
-        return Pregen.keepServerAwake(original);
+        // Le chantier (API de construction) a le même besoin : un travail en file doit avancer même
+        // quand personne n'est connecté — c'est précisément son cas d'usage. Voir chantier.Chantier.
+        return fr.clubcitrouille.lanterne.chantier.Chantier.garderEveille(Pregen.keepServerAwake(original));
     }
 }
