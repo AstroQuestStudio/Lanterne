@@ -77,6 +77,19 @@ public final class MecheNet {
                         Meche.onFileRequest(player, request.name());
                     }
                 }));
+
+        // La Mèche de CONFIGURATION (26.3.147) : avant la synchronisation des registres, voir
+        // core.MecheConfig. Canaux optionnels, eux aussi : un client ≤ 26.3.146 ne les connaît pas et
+        // ne doit pas être refusé pour autant (la tâche n'est alors jamais planifiée pour lui).
+        var config = event.registrar(MecheConfigPaquets.PROTOCOLE).optional();
+        config.configurationToClient(MecheConfigPaquets.Annonce.TYPE, MecheConfigPaquets.Annonce.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        fr.clubcitrouille.lanterne.client.MecheConfigClient.annonce(payload, context)));
+        config.configurationToClient(MecheConfigPaquets.Tranche.TYPE, MecheConfigPaquets.Tranche.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        fr.clubcitrouille.lanterne.client.MecheConfigClient.tranche(payload, context)));
+        config.configurationToServer(MecheConfigPaquets.Reponse.TYPE, MecheConfigPaquets.Reponse.STREAM_CODEC,
+                fr.clubcitrouille.lanterne.core.MecheConfig::onReponse);
     }
 
     private static void onRequest(MecheRequest request, IPayloadContext context) {
@@ -92,7 +105,14 @@ public final class MecheNet {
         if (!(event.getEntity() instanceof ServerPlayer player) || !Settings.meche()) {
             return;
         }
-        for (String modId : Meche.managedIds()) {
+        // Antichambre (client ancien sur un serveur à clés nouvelles, voir core.MecheCompat) : le
+        // manifeste seul — ni catalogue ni liste de pairs, le joueur relance dans quelques secondes.
+        boolean antichambre = fr.clubcitrouille.lanterne.core.MecheCompat.entrerAntichambre(player);
+        // Un client qui a la Mèche de configuration a déjà été servi AVANT d'entrer : lui renvoyer
+        // le manifeste de jeu déclencherait un second téléchargement du même jar.
+        boolean dejaServi = !antichambre
+                && fr.clubcitrouille.lanterne.core.MecheConfig.clientConfigurable(player.connection.getConnection());
+        for (String modId : dejaServi ? java.util.Set.<String>of() : Meche.managedIds()) {
             var manifest = Meche.manifestFor(modId);
             if (manifest == null) {
                 continue;
@@ -103,6 +123,9 @@ public final class MecheNet {
                 // Voir la Javadoc de classe : un client sur une version antérieure à ce mécanisme ne
                 // reçoit rien — il continue exactement comme si ce module n'existait pas.
             }
+        }
+        if (antichambre) {
+            return;
         }
         var catalogue = Meche.catalogue();
         if (!catalogue.files().isEmpty() || !catalogue.retired().isEmpty()) {
@@ -128,6 +151,26 @@ public final class MecheNet {
      */
     @SubscribeEvent
     public static void onServerStarted(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
+        // Ce que les clients anciens (≤ 26.3.146) ne connaissent pas — voir core.MecheRegistres.
+        var inconnues = fr.clubcitrouille.lanterne.core.MecheRegistres.inconnuesDesAnciens();
+        if (inconnues.isEmpty()) {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.info("[MÈCHE] registres : aucune clé Lanterne inconnue "
+                    + "des clients anciens, ils entrent normalement.");
+        } else {
+            fr.clubcitrouille.lanterne.Lanterne.LOG.info("[MÈCHE] registres : {} clé(s) Lanterne inconnue(s) "
+                    + "des clients ≤ 26.3.146 {} — ils passeront par l'antichambre de mise à jour.",
+                    inconnues.size(), inconnues);
+        }
+        String vidage = System.getProperty("lanterne.meche.cles");
+        if (vidage != null && !vidage.isBlank()) {
+            try {
+                java.nio.file.Files.write(java.nio.file.Path.of(vidage),
+                        fr.clubcitrouille.lanterne.core.MecheRegistres.clesLanterne());
+            } catch (Exception illisible) {
+                fr.clubcitrouille.lanterne.Lanterne.LOG.warn("[MÈCHE] vidage des clés impossible : {}",
+                        illisible.toString());
+            }
+        }
         if (!Settings.meche()) {
             return;
         }

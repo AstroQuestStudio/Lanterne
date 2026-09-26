@@ -1,0 +1,47 @@
+# Clés de registre synchronisées de Lanterne connues de TOUS les clients anciens (≤ 26.3.146).
+# Relevées sur la 26.3.147 (mêmes clés que la 26.3.146, et que toutes les versions depuis la 26.3.16 environ).
+# NE JAMAIS RÉGÉNÉRER en ajoutant un bloc : voir core/MecheRegistres.java.
+minecraft:block lanterne:aiguillage
+minecraft:block lanterne:anchor
+minecraft:block lanterne:coeur_de_repere
+minecraft:block lanterne:coffre_depot
+minecraft:block lanterne:coffre_reception
+minecraft:block lanterne:ecran
+minecraft:block lanterne:graveur
+minecraft:block lanterne:guichet
+minecraft:block lanterne:portail_repere
+minecraft:block lanterne:projecteur
+minecraft:block lanterne:recycleur
+minecraft:block lanterne:trieur
+minecraft:block lanterne:veilleuse
+minecraft:block_entity_type lanterne:aiguillage
+minecraft:block_entity_type lanterne:coffre_depot
+minecraft:block_entity_type lanterne:coffre_reception
+minecraft:block_entity_type lanterne:ecran
+minecraft:block_entity_type lanterne:graveur
+minecraft:block_entity_type lanterne:guichet
+minecraft:block_entity_type lanterne:projecteur
+minecraft:block_entity_type lanterne:trieur
+minecraft:block_entity_type lanterne:veilleuse
+minecraft:data_component_type lanterne:encre
+minecraft:entity_type lanterne:tableau
+minecraft:item lanterne:aiguillage
+minecraft:item lanterne:anchor
+minecraft:item lanterne:boussole_ancre
+minecraft:item lanterne:carnet
+minecraft:item lanterne:coeur_de_repere
+minecraft:item lanterne:coffre_depot
+minecraft:item lanterne:coffre_reception
+minecraft:item lanterne:disque
+minecraft:item lanterne:disque_vierge
+minecraft:item lanterne:ecran
+minecraft:item lanterne:graveur
+minecraft:item lanterne:guichet
+minecraft:item lanterne:pinceau
+minecraft:item lanterne:projecteur
+minecraft:item lanterne:recycleur
+minecraft:item lanterne:trieur
+minecraft:item lanterne:veilleuse
+minecraft:menu lanterne:guichet
+minecraft:menu lanterne:trieur
+minecraft:sound_event lanterne:ecran

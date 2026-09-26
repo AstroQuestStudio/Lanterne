@@ -112,6 +112,34 @@ public final class MecheClient {
         reset();
     }
 
+    /**
+     * Messages décidés PENDANT la configuration (Mèche de configuration, voir
+     * {@link MecheConfigClient}), quand il n'y a pas encore de joueur pour les afficher : montrés à
+     * l'arrivée dans le monde.
+     */
+    private static final java.util.List<Component> A_DIRE = new java.util.ArrayList<>();
+
+    static void direApresConnexion(Component message) {
+        synchronized (A_DIRE) {
+            A_DIRE.add(message);
+        }
+    }
+
+    @SubscribeEvent
+    static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+        java.util.List<Component> messages;
+        synchronized (A_DIRE) {
+            messages = java.util.List.copyOf(A_DIRE);
+            A_DIRE.clear();
+        }
+        messages.forEach(MecheClient::tell);
+    }
+
+    /** Le fil de fond de la Mèche (hachage, écriture) — partagé avec {@link MecheConfigClient}. */
+    static void atelier(Runnable travail) {
+        WORKSHOP.submit(travail);
+    }
+
     /** Le serveur vient d'annoncer l'empreinte qu'il fait tourner pour {@code manifest.modId()}. */
     public static void acceptManifest(MecheManifest manifest) {
         String modId = manifest.modId();
@@ -894,7 +922,7 @@ public final class MecheClient {
      * @return {@code true} si le processus de nettoyage a bien été lancé (pas s'il a réussi — ça,
      *     seul le prochain lancement de Lanterne pourra le confirmer indirectement).
      */
-    private static boolean scheduleDeferredRemoval(Path oldPath) {
+    static boolean scheduleDeferredRemoval(Path oldPath) {
         if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")) {
             return false; // ailleurs, deleteIfExists() sur un fichier deja ouvert reussit deja seul
         }
@@ -944,7 +972,7 @@ public final class MecheClient {
         }
     }
 
-    private static boolean tryRemove(Path oldPath) {
+    static boolean tryRemove(Path oldPath) {
         if (oldPath == null) {
             return false;
         }
@@ -958,11 +986,11 @@ public final class MecheClient {
         }
     }
 
-    private static boolean safe(String s) {
+    static boolean safe(String s) {
         return s != null && !s.isEmpty() && SAFE.matcher(s).matches();
     }
 
-    private static String fileName(String modId, String version) {
+    static String fileName(String modId, String version) {
         return modId + "-" + version + ".jar";
     }
 

@@ -248,9 +248,14 @@ public final class Meche {
         }
     }
 
+    /** Les octets du jar de Lanterne — pour la Mèche de configuration et le téléchargement HTTP. */
+    public static byte[] ownJarBytesPourConfig() {
+        return ownJarBytes(Lanterne.ID);
+    }
+
     /**
-     * Un client demande le jar de {@code modId}. Voir la Javadoc de {@code MecheRequest} pour ce qu'on
-     * n'y croit pas.
+     * Un client demande le jar de {@code modId} (voie historique, connexion de jeu). Voir la Javadoc
+     * de {@code MecheRequest} pour ce qu'on n'y croit pas.
      */
     public static void onRequest(ServerPlayer player, String modId) {
         if (!Settings.meche() || !managed(modId) || CONVOYS.containsKey(player.getUUID())) {
@@ -265,6 +270,7 @@ public final class Meche {
         carrier.data = data;
         carrier.offset = 0;
         CONVOYS.put(player.getUUID(), carrier);
+        MecheCompat.demandeRecue(player);
         Lanterne.LOG.info("[MÈCHE] {} demande « {} » ({} octets).", player.getGameProfile().name(),
                 modId, data.length);
     }
@@ -295,6 +301,7 @@ public final class Meche {
                 carrier.offset += length;
                 if (carrier.offset >= carrier.data.length) {
                     CONVOYS.remove(player.getUUID());
+                    MecheCompat.envoiTermine(player);
                     Lanterne.LOG.info("[MÈCHE] envoi de « {} » terminé pour {}.", carrier.modId,
                             player.getGameProfile().name());
                     break;

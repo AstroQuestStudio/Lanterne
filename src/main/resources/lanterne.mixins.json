@@ -96,7 +96,10 @@
     "SansVolKickMixin",
     "SursisMixin",
     "TagInconnuMixin",
-    "BouclierFallbackMixin"
+    "BouclierFallbackMixin",
+    "MecheConfigurationMixin",
+    "MecheEnvoiMixin",
+    "MecheHoteMixin"
   ],
   "client": [
     "JourneyMapTraductionMixin",
@@ -128,6 +131,7 @@
     "PortailRenderMixin",
     "DynamicGpuDataMixin",
     "MouseTweaksMixin",
-    "NutritionAnchorMixin"
+    "NutritionAnchorMixin",
+    "DisconnectedScreenAccessor"
   ]
 }

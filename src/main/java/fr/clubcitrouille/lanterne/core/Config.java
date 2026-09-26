@@ -147,6 +147,8 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue BOUCLIER_OBLIGATOIRE;
 
     public static final ModConfigSpec.BooleanValue MECHE;
+    public static final ModConfigSpec.IntValue MECHE_HTTP_PORT;
+    public static final ModConfigSpec.ConfigValue<String> MECHE_HTTP_ADRESSE;
     public static final ModConfigSpec.BooleanValue BROOM;
     public static final ModConfigSpec.IntValue BROOM_PERIOD;
     public static final ModConfigSpec.BooleanValue BROOM_ITEMS;
@@ -1415,6 +1417,18 @@ public final class Config {
                 "Publie aussi le dossier config/lanterne/mods-clients/ (ajouts, remplacements, et retraits",
                 "listes dans RETIRER.txt) : les clients qui ont consenti se synchronisent a la connexion.")
                 .define("synchronisation_clients", true);
+
+        MECHE_HTTP_PORT = BUILDER.comment(
+                "Dernier recours pour un client trop ancien pour se mettre a jour tout seul : un petit",
+                "serveur HTTP qui ne sert QUE le jar de Lanterne de ce serveur, et dont l'adresse est",
+                "affichee dans le message de refus. 0 = eteint (defaut). Il faut ouvrir ce port (TCP)",
+                "dans le pare-feu de l'hebergeur.")
+                .defineInRange("http_port", 0, 0, 65535);
+
+        MECHE_HTTP_ADRESSE = BUILDER.comment(
+                "Adresse publique complete a afficher au joueur (ex. http://mon.domaine:25580/lanterne.jar).",
+                "Vide = http://<hote tape par le joueur>:<http_port>/lanterne-<version>.jar.")
+                .define("http_adresse", "");
 
         BUILDER.pop();
 
