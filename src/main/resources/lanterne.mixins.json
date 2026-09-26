@@ -54,6 +54,7 @@
     "RemblaiVoisinsMixin",
     "RemblaiNavigationMixin",
     "HopperBulkMixin",
+    "HopperCooldownAccessor",
     "ItemMergeMixin",
     "SpawnGuardMixin",
     "StrollMixin",

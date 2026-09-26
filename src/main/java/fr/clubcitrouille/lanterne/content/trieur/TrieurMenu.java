@@ -5,6 +5,7 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -34,6 +35,19 @@ import fr.clubcitrouille.lanterne.content.Contents;
  * que la table d'enchantement utilise pour choisir un emplacement — vérifié au {@code javap} sur
  * {@code EnchantmentMenu} et sur l'écran qui l'appelle, {@code MultiPlayerGameMode
  * .handleInventoryButtonClick(int, int)}, présent tel quel dans ce moteur.
+ *
+ * <h2>Les motifs, et l'étiquette qu'on ne rend jamais</h2>
+ *
+ * <p>Un motif tapé dans l'écran arrive par {@link TrieurCablage.AjoutMotif} et se pose, par {@link
+ * #ajouterMotif}, dans la première case libre sous la forme d'une étiquette VIRTUELLE ({@link
+ * Motif#etiquette}, marquée {@link Motif#MARQUE}). Cette étiquette n'a jamais été payée : la rendre
+ * au joueur ferait du champ texte une fabrique d'étiquettes. Tous les chemins par lesquels une case
+ * peut se vider vers le joueur sont donc refermés pour elle — clic ({@link #clicked}), clic
+ * majuscule ({@link #quickMoveStack}), touche de barre rapide et main secondaire ({@code SWAP}, dans
+ * {@link #clicked}), double clic qui ramasse tout ({@link #canTakeItemForPickAll}), jeter ({@code
+ * THROW}) — et tous font la même chose : la case se vide, rien n'atterrit nulle part. Une VRAIE
+ * étiquette renommée à l'enclume, posée à la main, reste un gabarit ordinaire au sens de ce menu :
+ * le joueur la reprend comme n'importe quel objet posé dans le filtre.
  */
 public class TrieurMenu extends AbstractContainerMenu {
     public static final int HOPPER_SLOTS = HopperBlockEntity.HOPPER_CONTAINER_SIZE;
@@ -41,6 +55,12 @@ public class TrieurMenu extends AbstractContainerMenu {
 
     /** Seul bouton de ce menu : bascule liste blanche / liste noire. */
     public static final int BUTTON_BASCULE = 0;
+
+    /**
+     * Hauteur de l'inventaire du joueur dans l'écran. 118 jusqu'à 26.3.140 ; descendu pour laisser la
+     * place au champ de motif et à son aperçu (voir {@code client.screen.TrieurScreen}).
+     */
+    public static final int INVENTORY_Y = 134;
 
     private final Container hopper;
     private final Container filtre;
@@ -74,7 +94,7 @@ public class TrieurMenu extends AbstractContainerMenu {
                 this.addSlot(new FiltreSlot(filtre, index, 8 + col * 18, 44 + row * 18));
             }
         }
-        this.addStandardInventorySlots(inventory, 8, 118);
+        this.addStandardInventorySlots(inventory, 8, INVENTORY_Y);
 
         Player player = inventory.player;
         hopper.startOpen(player);
@@ -108,12 +128,84 @@ public class TrieurMenu extends AbstractContainerMenu {
         return true;
     }
 
+    /**
+     * Pose un motif dans la première case de filtre libre. Rend {@code false} si le filtre est plein ;
+     * un motif déjà présent (même texte, casse et accents compris) n'est pas dupliqué.
+     */
+    public boolean ajouterMotif(String motif) {
+        Slot libre = null;
+        for (int i = HOPPER_SLOTS; i < HOPPER_SLOTS + FILTER_SLOTS; i++) {
+            Slot slot = this.slots.get(i);
+            ItemStack contenu = slot.getItem();
+            if (contenu.isEmpty()) {
+                if (libre == null) {
+                    libre = slot;
+                }
+            } else if (Motif.estMotif(contenu) && Motif.texte(contenu).equals(motif)) {
+                return true;
+            }
+        }
+        if (libre == null) {
+            return false;
+        }
+        libre.set(Motif.etiquette(motif));
+        this.broadcastChanges();
+        return true;
+    }
+
+    private static boolean caseVirtuelle(Slot slot) {
+        return slot instanceof FiltreSlot && Motif.estVirtuel(slot.getItem());
+    }
+
+    /**
+     * Un clic, quel qu'il soit, sur une case qui porte un motif tapé : la case se vide, rien ne va
+     * dans la main ni dans l'inventaire. Si le joueur tenait un objet, il le pose à la place (un
+     * exemplaire, comme sur n'importe quelle case de filtre). Le numéro de bouton n'est volontairement
+     * PAS testé — voir le piège SDL de 26.3 où le clic gauche ne vaut plus 0 : ce chemin ne dépend
+     * d'aucun numéro. Exécuté à l'identique côté client (prédiction) et serveur (vérité).
+     */
+    @Override
+    public void clicked(int slotIndex, int buttonNum, ContainerInput input, Player player) {
+        if (slotIndex >= HOPPER_SLOTS && slotIndex < HOPPER_SLOTS + FILTER_SLOTS
+                && input != ContainerInput.QUICK_CRAFT && input != ContainerInput.CLONE
+                && caseVirtuelle(this.slots.get(slotIndex))) {
+            Slot slot = this.slots.get(slotIndex);
+            ItemStack tenu = this.getCarried();
+            if (input == ContainerInput.PICKUP && !tenu.isEmpty()) {
+                slot.set(tenu.copyWithCount(1));
+                tenu.shrink(1);
+            } else {
+                slot.set(ItemStack.EMPTY);
+            }
+            slot.setChanged();
+            return;
+        }
+        super.clicked(slotIndex, buttonNum, input, player);
+    }
+
+    /** Le double clic « tout ramasser » ne vide jamais une case de motif tapé dans la main. */
+    @Override
+    public boolean canTakeItemForPickAll(ItemStack carried, Slot target) {
+        return !caseVirtuelle(target) && super.canTakeItemForPickAll(carried, target);
+    }
+
+    /** Un glisser-déposer ne recouvre pas un motif tapé (il serait perdu sans avoir été cliqué). */
+    @Override
+    public boolean canDragTo(Slot slot) {
+        return !caseVirtuelle(slot) && super.canDragTo(slot);
+    }
+
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
         ItemStack moved = ItemStack.EMPTY;
         Slot slot = this.slots.get(index);
         if (slot == null || !slot.hasItem()) {
             return moved;
+        }
+        if (caseVirtuelle(slot)) {
+            // Voir la javadoc de classe : un motif tapé se retire, il ne se reprend pas.
+            slot.set(ItemStack.EMPTY);
+            return ItemStack.EMPTY;
         }
         ItemStack held = slot.getItem();
         moved = held.copy();
@@ -158,8 +250,8 @@ public class TrieurMenu extends AbstractContainerMenu {
      * C'est plus sûr que de compter sur {@code getMaxStackSize} seul : cette dernière borne
      * l'INSERTION dans les calculs vanilla, mais ne garantit rien sur ce que {@link #set} reçoit
      * directement. Retirer l'unique exemplaire vide la case, donc efface l'entrée du filtre — aucun
-     * code séparé n'est nécessaire pour cela, {@link TrieurBlockEntity#matchesAnyTemplate} ignore déjà
-     * les cases vides.
+     * code séparé n'est nécessaire pour cela, le filtre compilé ({@code TrieurBlockEntity.Crible})
+     * ignore déjà les cases vides.
      */
     private static final class FiltreSlot extends Slot {
         FiltreSlot(Container container, int index, int x, int y) {
@@ -179,6 +271,12 @@ public class TrieurMenu extends AbstractContainerMenu {
         @Override
         public void set(ItemStack stack) {
             super.set(stack.isEmpty() ? stack : stack.copyWithCount(1));
+        }
+
+        /** Une étiquette de motif tapé ne se prend pas : voir la javadoc de {@link TrieurMenu}. */
+        @Override
+        public boolean mayPickup(Player player) {
+            return !Motif.estVirtuel(this.getItem());
         }
     }
 }

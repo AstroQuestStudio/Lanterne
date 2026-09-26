@@ -1,15 +1,17 @@
 package fr.clubcitrouille.lanterne.content.trieur;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.InsideBlockEffectApplier;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.HopperBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 import fr.clubcitrouille.lanterne.content.Contents;
+import fr.clubcitrouille.lanterne.core.Settings;
 
 /**
  * Le Trieur : un entonnoir qui n'accepte que ce qu'on lui a montré.
@@ -60,6 +62,15 @@ import fr.clubcitrouille.lanterne.content.Contents;
  * le bloc-entité s'annonce sous son propre type (voir la javadoc de {@link TrieurBlockEntity} pour
  * la raison, elle aussi trouvée au {@code javap}), ne matcherait donc JAMAIS ce test et ne tickerait
  * plus du tout si cette méthode n'était pas refaite ici, contre {@link Contents#TRIEUR_ENTITY}.
+ *
+ * <h2>Depuis 26.3.141 : un ticker à lui</h2>
+ *
+ * <p>Le ticker rendu n'est plus {@code HopperBlockEntity::pushItemsTick} mais {@link
+ * TrieurTransfert#tick} : transfert en vrac par l'API de transfert NeoForge, même horloge de huit
+ * ticks, et priorité au Trieur du dessous. Ce qui est dit plus haut de {@code HopperBulkMixin} ne vaut
+ * donc plus que pour un Trieur désactivé par configuration ({@code trieur_actif = false}), qui
+ * retrouve le tick vanilla exact. Voir {@link TrieurTransfert} pour le raisonnement complet, et
+ * {@link #entityInside} pour le seul autre chemin vanilla qu'il a fallu refermer.
  */
 public class Trieur extends HopperBlock {
     public Trieur(Properties properties) {
@@ -75,6 +86,23 @@ public class Trieur extends HopperBlock {
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state,
             BlockEntityType<T> type) {
         return level.isClientSide() ? null
-                : createTickerHelper(type, Contents.TRIEUR_ENTITY.get(), HopperBlockEntity::pushItemsTick);
+                : createTickerHelper(type, Contents.TRIEUR_ENTITY.get(), TrieurTransfert::tick);
+    }
+
+    /**
+     * Un objet au sol qui tombe DANS le bloc. {@code HopperBlock.entityInside} appellerait {@code
+     * HopperBlockEntity.entityInside}, dont le {@code tryMoveItems} pousse aussi vers l'avant — sans la
+     * priorité au Trieur du dessous. Filtrage actif : on ne fait que ramasser (voir {@link
+     * TrieurTransfert#entiteDedans}). Filtrage coupé : vanilla, exactement.
+     */
+    @Override
+    protected void entityInside(BlockState state, Level level, BlockPos pos, Entity entity,
+            InsideBlockEffectApplier effectApplier, boolean isPrecise) {
+        if (Settings.trieur() && !level.isClientSide()
+                && level.getBlockEntity(pos) instanceof TrieurBlockEntity trieur) {
+            TrieurTransfert.entiteDedans(level, pos, state, entity, trieur);
+            return;
+        }
+        super.entityInside(state, level, pos, entity, effectApplier, isPrecise);
     }
 }

@@ -107,6 +107,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ANCHOR;
     public static final ModConfigSpec.BooleanValue VIGIL;
     public static final ModConfigSpec.BooleanValue TRIEUR_ACTIF;
+    public static final ModConfigSpec.IntValue TRIEUR_DEBIT;
     public static final ModConfigSpec.BooleanValue RUMEUR;
     public static final ModConfigSpec.BooleanValue MANNE;
     public static final ModConfigSpec.BooleanValue RECYCLEUR_ACTIF;
@@ -1019,12 +1020,20 @@ public final class Config {
                 .define("lanterne_de_veille", true);
         TRIEUR_ACTIF = BUILDER.comment(
                 "Le Trieur : un entonnoir qui filtre, en liste blanche ou noire.",
-                "Coupe seulement le FILTRAGE - le bloc reste enregistre et pose, et transfere",
-                "toujours par lots comme n'importe quel entonnoir (voir Bulk). A false, un Trieur",
-                "pose se comporte comme un entonnoir ordinaire : tout passe.",
+                "Coupe le FILTRAGE et le transfert en vrac - le bloc reste enregistre et pose. A",
+                "false, un Trieur pose reprend le ticker EXACT d'un entonnoir vanilla (par lots,",
+                "voir Bulk) : tout passe, sans priorite au Trieur du dessous ni motif texte.",
                 "Il n'est jamais retire du registre : un bloc absent devient de l'air dans les",
                 "mondes ou il etait pose, et un reglage ne doit pas detruire un tri deja construit.")
                 .define("trieur_actif", true);
+        TRIEUR_DEBIT = BUILDER.comment(
+                "Trieur : objets deplaces PAR OPERATION (ressource par ressource, jusqu'a ce total),",
+                "recharge de 8 ticks comme vanilla entre deux operations. 64 (defaut) = une pile par",
+                "operation,",
+                "soit jusqu'a 160 objets/seconde par Trieur ; 1 = rythme d'un entonnoir vanilla",
+                "(2,5 objets/seconde). N'agit que si trieur_actif = true : Trieur coupe = ticker",
+                "vanilla exact. Ne touche JAMAIS aux entonnoirs vanilla (voir entonnoirs_vitesse).")
+                .defineInRange("trieur_debit", 64, 1, 64);
         RUMEUR = BUILDER.comment(
                 "RUMEUR : la reputation gagnee en guerissant un villageois zombifie profite a TOUS",
                 "les joueurs connectes, pas seulement a celui qui a tenu la pomme d'or.",

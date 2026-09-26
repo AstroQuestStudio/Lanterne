@@ -469,6 +469,11 @@ public final class Settings {
      */
     private static boolean trieur = true;
     /**
+     * Objets par opération du Trieur, entre deux recharges de huit ticks — voir {@code
+     * content.trieur.TrieurTransfert}. Borné 1..64 par {@code Config#TRIEUR_DEBIT}.
+     */
+    private static int trieurDebit = 64;
+    /**
      * L'enclos : une bête qui a prouvé qu'elle n'allait nulle part cesse de décider d'y aller.
      *
      * <p>Voir {@link Pasture}. C'est le chaînon qui bloquait {@link Jam} et le repos posé : tant que
@@ -1653,6 +1658,11 @@ public final class Settings {
         return trieur;
     }
 
+    /** Voir {@link #trieurDebit} : toujours entre 1 et 64, même si le fichier a été bricolé. */
+    public static int trieurDebit() {
+        return Math.max(1, Math.min(64, trieurDebit));
+    }
+
     /**
      * Le balai ne dépend PAS de l'interrupteur général.
      *
@@ -1978,6 +1988,7 @@ public final class Settings {
         broom = Config.BROOM.get();
         vigil = Config.VIGIL.get();
         trieur = Config.TRIEUR_ACTIF.get();
+        trieurDebit = Config.TRIEUR_DEBIT.get();
         pasture = Config.PASTURE.get();
         wire = Config.WIRE.get();
         poi = Config.POI.get();

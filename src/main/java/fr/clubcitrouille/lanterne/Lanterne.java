@@ -180,6 +180,9 @@ public final class Lanterne {
         // voir la Javadoc de RafaleNet et core.Rafale pour la garde (canal AutominerPresence +
         // reglage "rafale", jamais autre chose).
         fr.clubcitrouille.lanterne.core.network.RafaleNet.register(modBus);
+        // Le Trieur : sa capacite d'objets (visible des tuyaux et des autres Trieurs) et le paquet
+        // facultatif "ajouter un motif" de son ecran. Voir la Javadoc de TrieurCablage.
+        fr.clubcitrouille.lanterne.content.trieur.TrieurCablage.register(modBus);
         // Le consentement du joueur a la mise a jour automatique : fichier CLIENT, enregistre des
         // deux cotes — meme raison que ClientConfig et Consent juste en dessous.
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
