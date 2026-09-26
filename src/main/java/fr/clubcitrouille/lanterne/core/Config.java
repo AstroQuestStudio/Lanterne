@@ -114,6 +114,7 @@ public final class Config {
 
     public static final ModConfigSpec.BooleanValue RESEAU_ACTIF;
     public static final ModConfigSpec.IntValue RESEAU_INTERVALLE_REAPPRO;
+    public static final ModConfigSpec.IntValue RESEAU_PORTEE_SALLE;
 
     public static final ModConfigSpec.BooleanValue BEACON_OVERHAUL;
     public static final ModConfigSpec.IntValue BEACON_RANGE_LEVEL_1;
@@ -1122,6 +1123,13 @@ public final class Config {
                 "100 (defaut) : cinq secondes. Un module de confort, jamais un chemin chaud - inutile de",
                 "verifier a chaque tick un filtre qui ne change qu'au clic droit d'un joueur.")
                 .defineInRange("reseau_intervalle_reapprovisionnement_ticks", 100, 20, 12000);
+        RESEAU_PORTEE_SALLE = BUILDER.comment(
+                "Portee (blocs, horizontale ; moitie en vertical) a laquelle un Guichet decouvre la salle",
+                "de tri voisine : chaque Trieur de la zone, puis le chemin reel des objets depuis lui",
+                "(Trieur -> coffre -> entonnoir dessous -> coffre suivant...). Les coffres ainsi trouves",
+                "entrent dans le stock du Guichet sans aucun Aiguillage. Releve fait a l'ouverture et a",
+                "la demande, jamais en tache de fond. 0 = le Guichet ne voit que le Reseau classique.")
+                .defineInRange("reseau_portee_salle", 48, 0, 96);
 
         BUILDER.pop();
 

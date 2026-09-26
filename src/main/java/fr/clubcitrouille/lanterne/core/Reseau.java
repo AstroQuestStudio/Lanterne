@@ -1,10 +1,13 @@
 package fr.clubcitrouille.lanterne.core;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -100,9 +103,19 @@ public final class Reseau {
      * l'abri d'une future surprise plutôt que de la découvrir en production.
      */
     public static Map<Item, Integer> aggregate(ServerLevel level) {
+        return aggregate(level, List.of());
+    }
+
+    /**
+     * Même total, en ajoutant aux nœuds du registre des positions fournies par l'appelant — les coffres
+     * d'une salle de tri relevés par {@code content.reseau.SalleDeTri}. Une position présente des deux
+     * côtés n'est comptée qu'une fois ; une position dont le chunk n'est pas chargé est ignorée, jamais
+     * chargée de force.
+     */
+    public static Map<Item, Integer> aggregate(ServerLevel level, Collection<BlockPos> extra) {
         Map<Item, Integer> total = new LinkedHashMap<>();
-        for (BlockPos pos : positions(level)) {
-            if (!(level.getBlockEntity(pos) instanceof Container conteneur)) {
+        for (BlockPos pos : positions(level, extra)) {
+            if (!level.isLoaded(pos) || !(level.getBlockEntity(pos) instanceof Container conteneur)) {
                 continue;
             }
             for (int i = 0; i < conteneur.getContainerSize(); i++) {
@@ -140,15 +153,27 @@ public final class Reseau {
      * simplement SA PROPRE instance comme {@code destination} — voir sa Javadoc de classe.
      */
     public static int withdraw(ServerLevel level, Item item, int quantite, Container destination) {
+        return withdraw(level, item, quantite, destination, List.of(), Set.of());
+    }
+
+    /**
+     * {@link #withdraw} élargi : les positions {@code extra} (une salle de tri) s'ajoutent aux nœuds du
+     * registre, et aucune position de {@code exclus} n'est jamais puisée. {@code exclus} porte les
+     * moitiés du coffre de collecte : quand {@code destination} est le conteneur COMBINÉ d'un coffre
+     * double, l'égalité de référence ne suffit plus à reconnaître « la source est la destination ».
+     */
+    public static int withdraw(ServerLevel level, Item item, int quantite, Container destination,
+            Collection<BlockPos> extra, Set<BlockPos> exclus) {
         if (quantite <= 0) {
             return 0;
         }
         int obtenu = 0;
-        for (BlockPos pos : positions(level)) {
+        for (BlockPos pos : positions(level, extra)) {
             if (obtenu >= quantite) {
                 break;
             }
-            if (!(level.getBlockEntity(pos) instanceof Container source) || source == destination) {
+            if (exclus.contains(pos) || !level.isLoaded(pos)
+                    || !(level.getBlockEntity(pos) instanceof Container source) || source == destination) {
                 continue;
             }
             obtenu += drain(source, item, quantite - obtenu, destination);
@@ -185,7 +210,7 @@ public final class Reseau {
      * réellement, et rend ce nombre. {@code apport} lui-même n'est jamais modifié ni ne rejoint aucun
      * conteneur tel quel : il ne sert que de gabarit (objet, composants) pour ce qui est écrit.
      */
-    private static int deposit(Container destination, ItemStack apport) {
+    public static int deposit(Container destination, ItemStack apport) {
         int restant = apport.getCount();
         int taille = destination.getContainerSize();
         for (int i = 0; i < taille && restant > 0; i++) {
@@ -216,8 +241,15 @@ public final class Reseau {
         return accepte;
     }
 
-    private static List<BlockPos> positions(ServerLevel level) {
+    private static Collection<BlockPos> positions(ServerLevel level, Collection<BlockPos> extra) {
         Map<BlockPos, Integer> noeuds = NOEUDS.get(level);
-        return noeuds == null ? List.of() : new ArrayList<>(noeuds.keySet());
+        if (extra.isEmpty()) {
+            return noeuds == null ? List.of() : new ArrayList<>(noeuds.keySet());
+        }
+        Set<BlockPos> toutes = new LinkedHashSet<>(extra);
+        if (noeuds != null) {
+            toutes.addAll(noeuds.keySet());
+        }
+        return toutes;
     }
 }

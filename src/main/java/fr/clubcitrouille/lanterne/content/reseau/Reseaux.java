@@ -6,7 +6,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
@@ -123,7 +122,7 @@ public final class Reseaux {
     private static final double REACH_SQ = 64.0d;
 
     /** Une demande ne peut jamais dépasser cent stacks : borne large, mais une borne quand même. */
-    private static final int DEMANDE_MAX = 6400;
+    static final int DEMANDE_MAX = 6400;
 
     private Reseaux() {}
 
@@ -170,6 +169,8 @@ public final class Reseaux {
         modBus.addListener(Reseaux::onBuildCreativeTab);
         modBus.addListener(Reseaux::onRegisterPayloads);
         NeoForge.EVENT_BUS.register(Reseaux.class);
+        NeoForge.EVENT_BUS.register(Appel.class);
+        NeoForge.EVENT_BUS.register(CoffreDepot.Liaison.class);
     }
 
     private static void onRegisterPayloads(RegisterPayloadHandlersEvent event) {
@@ -225,17 +226,10 @@ public final class Reseaux {
             if (!(level.getBlockEntity(pos) instanceof GuichetBlockEntity guichet)) {
                 return;
             }
-            Container collecte = guichet.coffreAdjacent();
-            if (collecte == null) {
-                tell(player, "Aucun coffre de collecte à côté du Guichet.");
-                return;
-            }
             int quantite = Math.clamp(payload.quantite(), 1, DEMANDE_MAX);
-            int obtenu = Reseau.withdraw(level, payload.item(), quantite, collecte);
-            if (obtenu > 0) {
-                // Le joueur voit l'effet de son clic tout de suite, sans attendre le prochain passage
-                // du ticker — voir Guichet#RAFRAICHISSEMENT_TICKS.
-                guichet.republierSiChange(level);
+            // livrer() republie aussitôt : le joueur voit l'effet de son clic sans attendre le ticker.
+            if (guichet.livrer(level, payload.item(), quantite) < 0) {
+                tell(player, "Aucun coffre de collecte à côté du Guichet.");
             }
         });
     }
