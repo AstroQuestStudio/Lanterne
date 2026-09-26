@@ -79,18 +79,31 @@ import fr.clubcitrouille.lanterne.mixin.HopperCooldownAccessor;
  * situé directement SOUS lui. Trois cas :
  *
  * <ul>
- * <li>le Trieur du dessous l'accepte (selon SON filtre) et a de la place : l'objet descend ;</li>
- * <li>il l'accepte mais il est plein : l'objet ATTEND ici — il ne file jamais vers l'avant, sinon un
- * coffre de tri plein laisserait fuir son tri au bout de la ligne ; les autres cases continuent de
- * circuler ;</li>
+ * <li>le Trieur du dessous l'accepte (selon SON filtre) et en prend au moins un : l'objet descend
+ * (le reste d'une pile prise en partie attend l'opération suivante, où la même règle rejoue) ;</li>
+ * <li>il l'accepte mais n'a PLUS DE PLACE (il n'en prend aucun) : l'objet file vers {@code facing},
+ * exactement comme un objet qu'il n'accepte pas ;</li>
  * <li>il ne l'accepte pas, ou il n'y a pas de Trieur dessous : l'objet part vers {@code facing},
  * comme d'habitude.</li>
  * </ul>
  *
  * <p>Conséquence : une ligne de Trieurs en liste noire vide (qui acceptent tout) posée au-dessus
- * d'une rangée de Trieurs-filtres orientés vers le bas ne laisse plus jamais filer un objet trié. Une
- * ligne d'entonnoirs VANILLA, elle, garde son comportement vanilla : c'est pour ça que la salle de
- * tri conseillée remplace la ligne d'entonnoirs par une ligne de Trieurs.
+ * d'une rangée de Trieurs-filtres orientés vers le bas ne laisse jamais filer un objet trié <b>tant
+ * que sa colonne a de la place</b>. Colonne pleine, l'objet continue sa route : vers la colonne
+ * suivante de même filtre si l'on en a prévu une (« Pierre (suite) »), sinon jusqu'au trop-plein en bout
+ * de ligne. Une ligne d'entonnoirs VANILLA, elle, garde son comportement vanilla : c'est pour ça que la
+ * salle de tri conseillée remplace la ligne d'entonnoirs par une ligne de Trieurs.
+ *
+ * <h3>Pourquoi l'objet n'attend plus (26.3.145)</h3>
+ *
+ * <p>Jusqu'à 26.3.144, un objet accepté par un dessous plein ATTENDAIT sur place, pour qu'un coffre de
+ * tri plein ne laisse pas fuir son tri. Sur le serveur, l'effet réel a été l'inverse de la
+ * protection voulue : colonne « Pierre » pleine, le Trieur de ligne au-dessus s'est rempli de pierre
+ * taillée sur ses cinq cases — et une fois ses cinq cases occupées par des objets qui attendent, il
+ * n'aspire plus rien. Toute la ligne derrière lui s'est bloquée, tous les objets de toutes les
+ * catégories, et la colonne « Pierre (suite) », prévue pour ce surplus, n'a jamais rien reçu. <b>Une
+ * colonne pleine ne doit jamais bloquer toute la ligne</b> : un objet qui arrive au trop-plein est un
+ * signal visible (« il faut vider la colonne »), une ligne arrêtée est une panne silencieuse.
  *
  * <h2>Le coût à vide, pour un serveur mono-cœur</h2>
  *
@@ -190,9 +203,14 @@ public final class TrieurTransfert {
                 continue;
             }
             if (dessous != null && dessous.accepte(stack)) {
-                // Réservé au Trieur du dessous. S'il est plein, l'objet attend ici : il ne file pas.
-                reste -= verser(trieur, slot, stack, dessous.poignee(), reste);
-                continue;
+                // Le Trieur du dessous d'abord. S'il en prend, l'objet descend ; s'il n'a plus de place,
+                // l'objet file vers l'avant comme un objet refusé — une colonne pleine ne doit jamais
+                // arrêter la ligne (voir « La priorité au tri (F2) »).
+                int pris = verser(trieur, slot, stack, dessous.poignee(), reste);
+                if (pris > 0) {
+                    reste -= pris;
+                    continue;
+                }
             }
             if (!devantCherche) {
                 devant = cible(level, trieur, facing);
