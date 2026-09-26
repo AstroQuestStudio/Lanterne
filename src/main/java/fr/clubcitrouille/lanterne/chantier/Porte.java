@@ -328,6 +328,10 @@ final class Porte {
                         Json.entier(corps, "profondeur", 0, 0, 4096), Json.entier(corps, "echelle", 0, 0, 64),
                         Json.entier(corps, "grille", 0, 0, 4096), f);
             }
+            case "/rendu3d" -> {
+                ServerLevel l = monde(mc, corps, "dim");
+                return new Rendu3d(l, corps, max);
+            }
             default -> {
                 if (chemin.startsWith("/travail/")) {
                     Travail t = Atelier.connu(chemin.substring("/travail/".length()));
@@ -483,7 +487,7 @@ final class Porte {
         for (String r : new String[] {"GET /etat", "GET /journal?n=", "GET /cliches", "GET /travail/<id>",
                 "POST /lire/blocs", "POST /lire/bloc_entites", "POST /lire/entites", "POST /lire/hauteurs",
                 "POST /ecrire/blocs", "POST /ecrire/remplir", "POST /ecrire/remplacer", "POST /ecrire/creuser",
-                "POST /ecrire/cloner", "POST /annuler", "POST /cliche", "POST /diff", "POST /rendu",
+                "POST /ecrire/cloner", "POST /annuler", "POST /cliche", "POST /diff", "POST /rendu", "POST /rendu3d",
                 "POST /verifier/transformations"}) {
             routes.add(r);
         }

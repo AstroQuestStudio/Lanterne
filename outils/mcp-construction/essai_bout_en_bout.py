@@ -339,6 +339,17 @@ for vue, de, a in [("dessus", [196, Y, 196], [273, Y + 5, 253]), ("nord", [196, 
     verifier(f"rendu {vue} {de}→{a}", png[:8] == b"\x89PNG\r\n\x1a\n",
              f"{meta['largeur_px']}×{meta['hauteur_px']} px, {meta['duree_ms']} ms, {len(png)} octets → {f}")
 
+for nom, corps in [("iso", {"de": [196, Y, 196], "a": [273, Y + 5, 253], "angle": "sud-est"}),
+                   ("coupe", {"de": [196, Y, 196], "a": [273, Y + 5, 253], "angle": "nord-ouest", "coupe_y": Y + 2}),
+                   ("perspective", {"camera": [SX0 - 6.5, Y + 6.5, SZ0 - 6.5], "regarder": [SX0 + 5, Y + 1, SZ0 + 5], "distance_max": 48})]:
+    png, h = m.travail("/rendu3d", corps)
+    meta = json.loads(base64.b64decode(m.entete(h, "X-Chantier")))
+    f = os.path.join(SORTIE, f"rendu3d-{nom}.png")
+    with open(f, "wb") as fo:
+        fo.write(png)
+    verifier(f"rendu3d {nom}", png[:8] == b"\x89PNG\r\n\x1a\n" and meta["largeur_px"] == 1280,
+             f"{meta['textures']}, rayons {meta['rayons_ms']} ms, serveur {meta['temps_serveur_ms']} ms → {f}")
+
 # -------------------------------------------------------------------------------------------------
 print("== 7. Protocole MCP (stdio) ==")
 p = subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "serveur_mcp.py")],
@@ -360,6 +371,9 @@ verifier("MCP tools/list", len(noms) >= 15, ", ".join(noms))
 r = rpc(3, "tools/call", {"name": "rendu", "arguments": {"de": DEs, "a": As, "vue": "dessus", "echelle": 8}})
 c = r["result"]["content"]
 verifier("MCP tools/call rendu → image", c[0]["type"] == "image" and base64.b64decode(c[0]["data"])[:4] == b"\x89PNG")
+r = rpc(6, "tools/call", {"name": "rendu3d", "arguments": {"de": DEs, "a": As, "largeur": 320, "hauteur": 200}})
+c = r["result"]["content"]
+verifier("MCP tools/call rendu3d → image", c[0]["type"] == "image" and base64.b64decode(c[0]["data"])[:4] == b"\x89PNG")
 r = rpc(4, "tools/call", {"name": "lire_blocs", "arguments": {"de": [SX0, Y + 1, SZ0], "a": [SX0 + 9, Y + 1, SZ0 + 9], "format_sortie": "couches"}})
 print(r["result"]["content"][0]["text"])
 r = rpc(5, "tools/call", {"name": "annuler", "arguments": {"operation": "inexistante"}})

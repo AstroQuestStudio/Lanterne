@@ -23,7 +23,8 @@ import fr.clubcitrouille.lanterne.Lanterne;
  * retours, aucun moyen de revenir en arrière, et pour relire le monde il fallait télécharger les
  * {@code .mca} et les décoder à la main. Ce paquet ouvre à la place une petite porte HTTP/JSON
  * ({@link Porte}) sur le thread serveur : lecture d'une boîte en une requête, écriture en masse,
- * clonage avec miroir et rotation, annulation exacte, clichés comparables, et un rendu PNG pour
+ * clonage avec miroir et rotation, annulation exacte, clichés comparables, un rendu PNG (plan, et 3D
+ * texturé : {@link Rendu3d}) pour
  * vérifier sans client. Le compagnon naturel est le serveur MCP de {@code outils/mcp-construction}.
  *
  * <h2>Ce qu'il ne fera jamais</h2>
@@ -50,6 +51,7 @@ public final class Chantier {
     public static final ModConfigSpec.IntValue BLOCS_MAX;
     public static final ModConfigSpec.IntValue RAYON_JOUEURS;
     public static final ModConfigSpec.IntValue CORPS_MAX_MO;
+    public static final ModConfigSpec.ConfigValue<String> RENDU_JAR_CLIENT;
     public static final ModConfigSpec SPEC;
 
     static {
@@ -80,6 +82,11 @@ public final class Chantier {
                 .defineInRange("rayon_joueurs", 0, 0, 4096);
         CORPS_MAX_MO = BUILDER.comment("Taille maximale d'une requete, en Mo.")
                 .defineInRange("corps_max_mo", 64, 1, 512);
+        RENDU_JAR_CLIENT = BUILDER.comment(
+                "Jar client Minecraft d'ou le rendu 3D (/rendu3d) tire modeles et textures de blocs.",
+                "Vide = celui que BlueMap a telecharge (bluemap/minecraft-client-<version>.jar, dossier",
+                "\"data\" de config/bluemap/core.conf). Relatif au dossier du serveur. Absent = couleurs de carte.")
+                .define("rendu_jar_client", "");
         SPEC = BUILDER.build();
     }
 

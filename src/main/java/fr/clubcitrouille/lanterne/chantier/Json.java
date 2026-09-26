@@ -69,4 +69,38 @@ final class Json {
         }
         return v;
     }
+
+    static double reel(JsonObject o, String cle, double defaut, double min, double max) {
+        JsonElement e = o.get(cle);
+        if (e == null || e.isJsonNull()) {
+            return defaut;
+        }
+        double v;
+        try {
+            v = e.getAsDouble();
+        } catch (RuntimeException ex) {
+            throw new Refus(400, "« " + cle + " » doit être un nombre");
+        }
+        if (!(v >= min && v <= max)) {
+            throw new Refus(400, "« " + cle + " » hors bornes [" + min + ", " + max + "]");
+        }
+        return v;
+    }
+
+    /** {@code [x, y, z]} en nombres réels, ou {@code null} si la clé est absente. */
+    static double @org.jspecify.annotations.Nullable [] reels(JsonObject o, String cle) {
+        JsonElement e = o.get(cle);
+        if (e == null || e.isJsonNull()) {
+            return null;
+        }
+        if (!e.isJsonArray() || e.getAsJsonArray().size() != 3) {
+            throw new Refus(400, "« " + cle + " » attendu sous la forme [x, y, z]");
+        }
+        JsonArray t = e.getAsJsonArray();
+        try {
+            return new double[] {t.get(0).getAsDouble(), t.get(1).getAsDouble(), t.get(2).getAsDouble()};
+        } catch (RuntimeException ex) {
+            throw new Refus(400, "« " + cle + " » : trois nombres attendus");
+        }
+    }
 }

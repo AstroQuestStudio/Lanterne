@@ -22,6 +22,7 @@ budget_ms = 10        # ms par tick prises au serveur (divisé par 4 si le tick 
 blocs_max = 4000000   # blocs au plus par opération
 rayon_joueurs = 0     # >0 : refuser une écriture si un joueur est à moins de N blocs
 corps_max_mo = 64
+rendu_jar_client = "" # jar client Minecraft pour rendu3d ; vide = celui de BlueMap (bluemap/minecraft-client-*.jar)
 ```
 
 Redémarrer le serveur (le port s'ouvre au démarrage ; le jeton, lui, est relu à chaque requête).
@@ -74,6 +75,7 @@ Essai sans client MCP : `python serveur_mcp.py --appel chantier_etat "{}"`.
 | `journal` | dernières opérations |
 | `cliche` / `diff` | instantané nommé d'une boîte, comparaison au monde actuel |
 | `rendu` | PNG vue de dessus ou élévation nord/sud/est/ouest, couleurs de carte, légende |
+| `rendu3d` | PNG 3D **texturé** : iso depuis un coin, perspective caméra libre (intérieur compris), coupes |
 | `travail` | relire un travail long |
 
 Conventions : coordonnées du monde `[x, y, z]`, boîtes bornes incluses ; ordre des tableaux de blocs
@@ -86,6 +88,43 @@ ne tombe, rien ne se raccorde tout seul — poser les états exacts) ; `voisins`
 L'API elle-même (routes, corps JSON) est décrite par `GET /etat` et par la Javadoc de `Porte`.
 `POST /verifier/transformations` passe tous les états du registre (mods compris) aux identités
 miroir²=id, rotation⁴=id, miroir x+180°=miroir z, et liste les blocs qui se cloneraient mal.
+
+## Rendu 3D (`rendu3d`, `POST /rendu3d`)
+
+Modèles et textures lus dans un jar client Minecraft (le serveur n'a pas les assets) : `rendu_jar_client`,
+sinon celui que BlueMap télécharge (`<data>/minecraft-client-<version>.jar`, `data` lu dans
+`config/bluemap/core.conf`, `bluemap/` par défaut). Blocs de mods : assets cherchés dans `mods/*.jar`. Sans
+jar : formes de collision en couleurs de carte (la réponse le dit dans `note`).
+
+Copie des blocs + lumière sur le thread serveur (budget par tick), rastérisation par lancer de rayons sur
+un fil à part : 64³ blocs en 1280×720 ≈ 0,5 s de rayons sur un cœur de Ryzen, quelques ms de temps serveur.
+
+```json
+{"de": [0, 60, 0], "a": [63, 124, 63], "angle": "sud-est"}
+{"de": [0, 60, 0], "a": [63, 124, 63], "angle": "nord-ouest", "coupe_y": 70}
+{"camera": [10.5, 65.6, 10.5], "regarder": [4, 64, 4], "fov": 80}
+{"camera": [7.5, 68, 30], "lacet": 180, "tangage": 10, "coupe_devant": 12.5}
+{"de": [0, 60, 0], "a": [63, 124, 63], "coupe_plan": {"axe": "z", "valeur": 20, "garder": "moins"}}
+```
+
+- `vue` : `iso` (défaut sans `camera`) ou `perspective` (défaut avec).
+- iso : `angle` = où se tient l'observateur (nord-est, nord-ouest, sud-est, sud-ouest), `inclinaison` (30°).
+- perspective : `camera` = l'œil ; `regarder` [x,y,z] ou `lacet`/`tangage` comme le jeu (lacet 0 = sud,
+  90 = ouest, 180 = nord, -90 = est ; tangage positif = vers le bas) ; `fov` vertical (70) ;
+  `distance_max` (64). Sans `de`/`a`, la zone copiée est la caméra ± `distance_max`.
+- coupes : `coupe_y` (tout y > valeur masqué), `coupe_plan` (axe, valeur, garder moins|plus),
+  `coupe_devant` (plan vertical face à l'observateur, à N blocs de l'œil — ou de la face avant de la
+  boîte en iso ; les blocs pleins tranchés montrent leur matière, assombrie).
+- `largeur`/`hauteur` (1280×720), `lissage` 1-3, `lumiere` (niveaux de lumière du monde, défaut vrai),
+  `occlusion` (ombres de coin, défaut vrai), `fond` hexa | `transparent` | `ciel`.
+
+Réponse : PNG (ou JSON + `png_base64` avec `?json`), métadonnées dans l'en-tête `X-Chantier` :
+`orientation` (droite de l'image / sens du regard en points cardinaux), `textures`, `blocs_sans_modele`
+(coffres, lits, panneaux… : rendus par entité côté client, ici forme de collision + texture de particule),
+`copie_blocs`, `temps_serveur_ms`, `formes_ms`, `rayons_ms`, `png_ms`.
+
+Limites : teintes de biome fixes (plaines) ; entités et blocs-entités animés absents ; parties de modèle
+qui débordent de leur bloc rognées ; eau à hauteur fixe par bloc (pas de pente) ; textures animées figées.
 
 ## Fichiers côté serveur
 

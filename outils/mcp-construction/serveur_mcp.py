@@ -11,6 +11,7 @@ Variables d'environnement :
 Essai en ligne de commande, sans client MCP :
   python serveur_mcp.py --appel chantier_etat '{}'
   python serveur_mcp.py --appel rendu '{"de":[0,60,0],"a":[63,120,63],"vue":"dessus","fichier":"vue.png"}'
+  python serveur_mcp.py --appel rendu3d '{"de":[0,60,0],"a":[63,120,63],"angle":"sud-est","fichier":"iso.png"}'
 """
 from __future__ import annotations
 
@@ -411,6 +412,49 @@ def t_rendu(a):
     return sortie
 
 
+@outil("rendu3d",
+       "Rendu 3D TEXTURÉ (vraies textures de blocs, lues dans un jar client côté serveur) pour VOIR une construction. "
+       "vue 'iso' (défaut sans caméra) : orthographique cadrée sur la boîte de/a, depuis 'angle' nord-est|nord-ouest|sud-est|sud-ouest "
+       "(où se tient l'observateur), 'inclinaison' 30° par défaut. vue 'perspective' : 'camera' [x,y,z] = position de l'œil "
+       "(peut être DANS une salle : mettre la caméra dans l'air de la pièce), puis 'regarder' [x,y,z] OU 'lacet'/'tangage' "
+       "comme le jeu (lacet 0=sud, 90=ouest, 180=nord, -90=est ; tangage + = vers le bas), 'fov' vertical (70), 'distance_max' (64) ; "
+       "sans de/a, la zone copiée est la caméra ± distance_max. Coupes : 'coupe_y' (masque tout y > valeur, pour voir un étage), "
+       "'coupe_plan' {axe x|y|z, valeur, garder moins|plus}, 'coupe_devant' (masque ce qui est à moins de N blocs de l'œil/de la face avant). "
+       "'largeur'/'hauteur' (1280×720), 'lissage' 1-3 (anticrénelage), 'lumiere' (niveaux de lumière du monde, défaut true), "
+       "'occlusion' (ombres de coin, défaut true), 'fond' hexa|transparent|ciel. Renvoie l'image PNG et l'orientation.",
+       {**BOITE, "vue": {"type": "string", "enum": ["iso", "perspective"]},
+        "angle": {"type": "string", "enum": ["nord-est", "nord-ouest", "sud-est", "sud-ouest"]},
+        "inclinaison": {"type": "number"},
+        "camera": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3,
+                   "description": "Position de l'œil [x, y, z] (réels ; ex. [105.5, 65.6, 210.5])."},
+        "regarder": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3,
+                     "description": "Point visé [x, y, z] (remplace lacet/tangage)."},
+        "lacet": {"type": "number"}, "tangage": {"type": "number"}, "fov": {"type": "number"},
+        "distance_max": {"type": "integer"},
+        "coupe_y": {"type": "integer"},
+        "coupe_plan": {"type": "object", "properties": {"axe": {"type": "string", "enum": ["x", "y", "z"]},
+                                                       "valeur": {"type": "integer"},
+                                                       "garder": {"type": "string", "enum": ["moins", "plus"]}}},
+        "coupe_devant": {"type": "number"},
+        "largeur": {"type": "integer"}, "hauteur": {"type": "integer"}, "lissage": {"type": "integer"},
+        "lumiere": {"type": "boolean"}, "occlusion": {"type": "boolean"},
+        "fond": {"type": "string", "description": "Hexa (défaut iso d8e4ec), 'transparent' ou 'ciel' (défaut perspective)."},
+        "fichier": {"type": "string", "description": "Chemin local où enregistrer aussi le PNG."}},
+       [])
+def t_rendu3d(a):
+    corps = {k: v for k, v in a.items() if k != "fichier"}
+    png, h = travail("/rendu3d", corps)
+    meta = json.loads(base64.b64decode(entete(h, "X-Chantier") or "e30="))
+    info = {k: meta.get(k) for k in ("vue", "angle", "orientation", "camera", "lacet", "tangage", "largeur_px", "hauteur_px",
+                                    "boite", "visible", "textures", "note", "blocs_sans_modele", "duree_ms",
+                                    "temps_serveur_ms", "rayons_ms") if meta.get(k) is not None}
+    sortie = [{"type": "image", "data": base64.b64encode(png).decode("ascii"), "mimeType": "image/png"}]
+    if a.get("fichier"):
+        info["fichier"] = ecrire_fichier(a["fichier"], png)
+    sortie.append(texte(info))
+    return sortie
+
+
 @outil("travail",
        "Relit un travail long resté en cours (l'API renvoie son identifiant quand elle n'a pas fini à temps).",
        {"id": {"type": "string"}}, ["id"])
@@ -440,7 +484,7 @@ def traiter(msg: dict) -> dict | None:
             "serverInfo": {"name": "lanterne-chantier", "version": VERSION},
             "instructions": "Outils de construction pour le serveur Minecraft (mod Lanterne). Coordonnées du monde en "
                             "[x, y, z], boîtes bornes incluses. Toute écriture renvoie un identifiant d'opération annulable "
-                            "avec 'annuler'. Vérifier avec 'rendu' (image) ou 'lire_blocs' format_sortie=couches."}}
+                            "avec 'annuler'. Vérifier avec 'rendu3d' (image texturée iso/perspective/coupe), 'rendu' (plan en couleurs de carte) ou 'lire_blocs' format_sortie=couches."}}
     if methode == "ping":
         return {"jsonrpc": "2.0", "id": mid, "result": {}}
     if methode == "tools/list":

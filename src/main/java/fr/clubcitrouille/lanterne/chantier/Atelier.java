@@ -128,7 +128,8 @@ final class Atelier {
             t.termine = System.nanoTime();
             t.etat = "mise_en_forme";
             courant = null;
-            DISQUE.execute(() -> {
+            // Un rendu 3D rastérise plusieurs secondes : son propre fil, pour ne pas retenir les journaux.
+            (t instanceof Rendu3d ? Rendu3d.FIL : DISQUE).execute(() -> {
                 try {
                     t.fin.complete(t.conclure());
                     t.etat = "fini";
