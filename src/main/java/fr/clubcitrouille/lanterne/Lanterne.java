@@ -97,6 +97,11 @@ public final class Lanterne {
         // Le pont Rafale (construction en masse) draine ses files d'attente par tick sur ce meme
         // bus — voir la Javadoc de Rafale pour pourquoi une requete n'est plus traitee d'un coup.
         fr.clubcitrouille.lanterne.core.Rafale.register();
+        // Le chantier : l'API de construction (HTTP local + jeton, eteinte par defaut), fichier de
+        // reglages a part — voir la Javadoc de chantier.Chantier pour pourquoi ce n'est pas du RCON.
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                fr.clubcitrouille.lanterne.chantier.Chantier.SPEC, "lanterne-chantier.toml");
+        fr.clubcitrouille.lanterne.chantier.Chantier.register();
         fr.clubcitrouille.lanterne.lab.Cadence.register();
         fr.clubcitrouille.lanterne.lab.RadiographieServeur.register();
         // Le profil de performance continu du serveur (JFR, rotation 60 minutes) — voir sa Javadoc
