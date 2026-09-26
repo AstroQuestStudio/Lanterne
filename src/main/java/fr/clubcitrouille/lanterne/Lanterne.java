@@ -74,6 +74,10 @@ public final class Lanterne {
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
                 fr.clubcitrouille.lanterne.core.Config.SPEC, "lanterne-common.toml");
         modBus.addListener(fr.clubcitrouille.lanterne.core.Config::apply);
+        // Les zones sans monstres vivent dans ce même fichier (section [sanctuaire]) ; leur cache se
+        // relit ici, leurs événements d'apparition sont sur le bus du jeu — voir core.Sanctuaire.
+        modBus.addListener(fr.clubcitrouille.lanterne.core.Sanctuaire::onConfig);
+        fr.clubcitrouille.lanterne.core.Sanctuaire.register();
         modBus.addListener(fr.clubcitrouille.lanterne.content.shop.Tariff::apply);
         modBus.addListener(fr.clubcitrouille.lanterne.content.relief.ReliefConfig::apply);
         modBus.addListener(fr.clubcitrouille.lanterne.content.painting.Studio::apply);

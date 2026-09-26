@@ -1721,6 +1721,10 @@ public final class Config {
         fr.clubcitrouille.lanterne.content.painting.Studio.defineInto(BUILDER);
         BUILDER.pop();
 
+        BUILDER.comment("Les zones sans monstres - voir core.Sanctuaire.").push("sanctuaire");
+        Sanctuaire.defineInto(BUILDER);
+        BUILDER.pop();
+
         SPEC = BUILDER.build();
     }
 
