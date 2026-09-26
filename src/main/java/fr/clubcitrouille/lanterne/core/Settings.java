@@ -106,6 +106,15 @@ public final class Settings {
      */
     private static boolean anchor = true;
 
+    /** L'Ancre de ferme. Voir {@code core.Ferme} : elle n'agit que si ce drapeau est levé. */
+    private static boolean ferme = true;
+
+    /** Plafond local d'une Ancre de ferme, en monstres, à 32 blocs de son chunk. */
+    private static int fermePlafond = 40;
+
+    /** La difficulté choisie en jeu réécrite dans server.properties. Voir core.DifficultePersistante. */
+    private static boolean difficultePersistante = true;
+
     /** Les comportements composites parcourus sans streams. Voir Mind. */
     private static boolean mind = true;
 
@@ -1160,6 +1169,23 @@ public final class Settings {
         return master && anchor;
     }
 
+    public static boolean ferme() {
+        return master && ferme;
+    }
+
+    /**
+     * Sans {@code master} : ce n'est pas une optimisation, et couper les optimisations ne doit pas
+     * faire revenir la difficulté du fichier au redémarrage suivant.
+     */
+    public static boolean difficultePersistante() {
+        return difficultePersistante;
+    }
+
+    /** Voir {@link #fermePlafond} : toujours entre 0 et 200, même si le fichier a été bricolé. */
+    public static int fermePlafond() {
+        return Math.max(0, Math.min(200, fermePlafond));
+    }
+
     public static boolean mind() {
         return master && mind;
     }
@@ -2026,6 +2052,9 @@ public final class Settings {
         strictYield = Config.STRICT_YIELD.get();
         clump = Config.CLUMP.get();
         anchor = Config.ANCHOR.get();
+        ferme = Config.FERME.get();
+        fermePlafond = Config.FERME_PLAFOND.get();
+        difficultePersistante = Config.DIFFICULTE_PERSISTANTE.get();
         meche = Config.MECHE.get();
     }
 

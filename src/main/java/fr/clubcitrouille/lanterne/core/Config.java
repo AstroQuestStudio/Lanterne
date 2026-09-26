@@ -105,6 +105,9 @@ public final class Config {
 
     public static final ModConfigSpec.BooleanValue CLUMP;
     public static final ModConfigSpec.BooleanValue ANCHOR;
+    public static final ModConfigSpec.BooleanValue FERME;
+    public static final ModConfigSpec.IntValue FERME_PLAFOND;
+    public static final ModConfigSpec.BooleanValue DIFFICULTE_PERSISTANTE;
     public static final ModConfigSpec.BooleanValue VIGIL;
     public static final ModConfigSpec.BooleanValue TRIEUR_ACTIF;
     public static final ModConfigSpec.IntValue TRIEUR_DEBIT;
@@ -1012,6 +1015,30 @@ public final class Config {
                 "Il n'est jamais retire du registre : un bloc absent devient de l'air dans les",
                 "mondes ou il etait pose, et un reglage ne doit pas detruire une construction.")
                 .define("ancre_de_chunk", true);
+        FERME = BUILDER.comment(
+                "L'Ancre de ferme : son chunk reste charge ET continue de faire apparaitre des",
+                "monstres quand le joueur est loin (a des milliers de blocs), tant qu'au moins un",
+                "joueur est connecte dans la dimension. Sans elle, un chunk garde par /forceload ou",
+                "par l'Ancre de chunk fait tourner cultures et entonnoirs, mais aucun monstre n'y nait :",
+                "vanilla exige un joueur a moins de 128 blocs. Le plafond GLOBAL de vanilla (70",
+                "monstres pour un joueur) reste applique tel quel ; seul le plafond LOCAL est remplace",
+                "par ferme_plafond. Les monstres d'un chunk ferme ne disparaissent plus d'un coup a",
+                "128 blocs du joueur, mais gardent la disparition aleatoire vanilla (1/800 par tick",
+                "apres 30 s d'inaction) : un monstre coince finit par partir.",
+                "Coupee, le bloc reste posable - il ne fait plus rien apparaitre.")
+                .define("ancre_de_ferme", true);
+        FERME_PLAFOND = BUILDER.comment(
+                "Nombre maximal de monstres (categorie MONSTER) a 32 blocs autour du chunk d'une",
+                "Ancre de ferme, au-dela duquel elle n'en fait plus apparaitre. 40 par defaut, du",
+                "meme ordre que le plafond local d'un joueur ; 0 = l'ancre ne fait rien apparaitre.")
+                .defineInRange("ferme_plafond", 40, 0, 200);
+        DIFFICULTE_PERSISTANTE = BUILDER.comment(
+                "Serveur dedie : /difficulty ecrit aussi la ligne difficulty= de server.properties.",
+                "Vanilla reapplique cette ligne a chaque demarrage et ecrase donc la difficulte",
+                "choisie en jeu. Seule cette ligne est remplacee (fichier temporaire puis",
+                "deplacement atomique) ; le reste du fichier est recopie tel quel.",
+                "Journal : [DIFFICULTE]. Sans effet en solo.")
+                .define("difficulte_persistante", true);
         VIGIL = BUILDER.comment(
                 "La Lanterne de Veille : aucun monstre n'apparait dans son chunk.",
                 "C'est le SEUL ajout qui rend le serveur plus rapide au lieu de plus riche :",

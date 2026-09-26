@@ -67,6 +67,9 @@ public final class Lanterne {
         // dans le registre transforme en air toutes les ancres déjà posées dans les mondes des
         // joueurs — un interrupteur ne doit jamais pouvoir détruire une construction.
         fr.clubcitrouille.lanterne.content.Contents.register(modBus);
+        // Le ticket de l'Ancre de ferme s'enregistre avec le contenu, pour la meme raison : un type de
+        // ticket absent du registre rendrait illisible chunk_tickets.dat. Voir core.Ferme.
+        fr.clubcitrouille.lanterne.core.Ferme.register(modBus);
         // Fusion du 20/09/2026 : UN SEUL fichier "lanterne-common.toml" pour Config, Tariff (boutique),
         // ReliefConfig (carte3d) et Studio (atelier, ex-COMMON) — voir la Javadoc de Config juste avant
         // son bloc static pour l'orchestration complète et le changement de comportement assumé pour

@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "CEC",
+    "BAB",
+    "CEC"
+  ],
+  "key": {
+    "C": "minecraft:crying_obsidian",
+    "E": "minecraft:echo_shard",
+    "B": "minecraft:bone_block",
+    "A": "lanterne:anchor"
+  },
+  "result": {
+    "id": "lanterne:ancre_de_ferme",
+    "count": 1
+  }
+}

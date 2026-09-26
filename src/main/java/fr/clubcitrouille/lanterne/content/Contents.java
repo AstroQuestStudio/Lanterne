@@ -65,6 +65,24 @@ public final class Contents {
             ANCHOR_ITEM = ITEMS.registerSimpleBlockItem("anchor", ANCHOR);
 
     /**
+     * L'Ancre de ferme : l'ancre, plus l'apparition des monstres loin des joueurs. Mêmes propriétés
+     * physiques que l'ancre — dure, insensible aux explosions (une ferme à monstres a des creepers) —
+     * à une exception près : elle n'éclaire <b>pas</b>. Depuis 1.18, un monstre ne naît qu'à lumière
+     * de blocs nulle ; la lumière 7 de l'ancre stériliserait une douzaine de blocs autour d'elle, et
+     * un bloc qui éclairerait sa propre salle d'apparition se saboterait. Voir {@link AncreDeFerme}.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredBlock<AncreDeFerme> ANCRE_DE_FERME =
+            BLOCKS.registerBlock("ancre_de_ferme", AncreDeFerme::new, () -> BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.COLOR_PURPLE)
+                    .strength(50.0F, 1200.0F)
+                    .sound(SoundType.NETHERITE_BLOCK)
+                    .lightLevel(state -> 0)
+                    .requiresCorrectToolForDrops());
+
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem>
+            ANCRE_DE_FERME_ITEM = ITEMS.registerSimpleBlockItem("ancre_de_ferme", ANCRE_DE_FERME);
+
+    /**
      * La Lanterne de Veille.
      *
      * <p>Éclaire au maximum — quinze, comme une pierre lumineuse — parce qu'un bloc qui empêche les
@@ -167,6 +185,7 @@ public final class Contents {
                     .icon(() -> new net.minecraft.world.item.ItemStack(ANCHOR_ITEM.get()))
                     .displayItems((params, output) -> {
                         output.accept(ANCHOR_ITEM.get());
+                        output.accept(ANCRE_DE_FERME_ITEM.get());
                         output.accept(VIGIL_ITEM.get());
                         output.accept(CARNET.get());
                         output.accept(ANCHOR_COMPASS.get());

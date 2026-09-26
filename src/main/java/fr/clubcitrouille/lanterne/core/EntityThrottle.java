@@ -226,6 +226,15 @@ public final class EntityThrottle {
         if (carriesPlayer(entity)) {
             return true;
         }
+        // <h2>Une ferme ancrée tourne à plein régime</h2>
+        //
+        // Une Ancre de ferme est posée précisément là où aucun joueur ne se trouve — donc là où la
+        // cadence de ce mod est la plus lente. Un zombie tické une fois sur huit met huit fois plus
+        // longtemps à marcher jusqu'au courant d'eau : la ferme « tournerait », à un huitième de son
+        // rendement. Le joueur a payé une ancre pour ce chunk, il en a le plein. Voir core.Ferme.
+        if (Ferme.covers(entity)) {
+            return true;
+        }
         // <h2>Une chute, et non un sautillement</h2>
         //
         // Ce qu'on protège n'est pas le fait de quitter le sol, c'est la <b>chute</b> : celle des

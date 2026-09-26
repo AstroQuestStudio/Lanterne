@@ -891,6 +891,11 @@ public final class Dials extends Screen {
                 "Coupée, le bloc existe toujours et reste posable — il ne garde plus rien. Il n'est"
                         + " jamais retiré du registre : un bloc absent devient de l'air dans les"
                         + " mondes où il était posé."));
+        extras.add(Dial.serverFlag("Ancre de ferme", Config.FERME,
+                "Son chunk fait naître des monstres même quand le joueur est loin.",
+                "Il faut au moins un joueur connecté dans la dimension. Plafond propre à la ferme"
+                        + " (ferme_plafond, 40 par défaut) ; le plafond global de vanilla reste"
+                        + " appliqué. Coupée, le bloc reste posable et ne fait plus rien naître."));
         extras.add(Dial.serverFlag("Lanterne de veille", Config.VIGIL,
                 "Aucun monstre n'apparaît dans son chunk.",
                 "Le SEUL ajout qui rend le serveur plus rapide : la tentative d'apparition est"

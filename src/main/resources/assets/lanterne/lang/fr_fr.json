@@ -1,6 +1,8 @@
 {
   "block.lanterne.anchor": "Ancre de chunk",
   "item.lanterne.anchor": "Ancre de chunk",
+  "block.lanterne.ancre_de_ferme": "Ancre de ferme",
+  "item.lanterne.ancre_de_ferme": "Ancre de ferme",
   "block.lanterne.veilleuse": "Lanterne de Veille",
   "item.lanterne.veilleuse": "Lanterne de Veille",
   "itemGroup.lanterne": "Lanterne",

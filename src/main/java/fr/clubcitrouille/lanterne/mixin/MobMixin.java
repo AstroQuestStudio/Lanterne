@@ -55,6 +55,11 @@ public abstract class MobMixin {
             return;
         }
         Mob self = (Mob) (Object) this;
+        // Une ferme ancrée garde le rythme de vanilla, disparition aléatoire comprise : ralentir
+        // ce test ici rallongerait la vie des monstres coincés, et boucherait la salle. Voir Ferme.
+        if (fr.clubcitrouille.lanterne.core.Ferme.covers(self)) {
+            return;
+        }
         // La MEME pression qu'EntityThrottle, et non celle du seul budget de tick. Les deux
         // lisaient des nombres differents, si bien que la zone franche n'avait pas le meme rayon
         // selon qui la consultait — une garantie en deux exemplaires n'en est pas une.

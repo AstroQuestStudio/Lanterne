@@ -8,6 +8,11 @@
   },
   "mixins": [
     "ServerEntityMixin",
+    "ChunkMapTicketsAccessor",
+    "TicketStorageAccessor",
+    "FermeChunkMapMixin",
+    "FermeSpawnMixin",
+    "FermeDespawnMixin",
     "ProfilerMixin",
     "ManneMixin",
     "LivingEntityMixin",
@@ -99,7 +104,8 @@
     "BouclierFallbackMixin",
     "MecheConfigurationMixin",
     "MecheEnvoiMixin",
-    "MecheHoteMixin"
+    "MecheHoteMixin",
+    "DifficultyMixin"
   ],
   "client": [
     "JourneyMapTraductionMixin",
@@ -133,5 +139,9 @@
     "MouseTweaksMixin",
     "NutritionAnchorMixin",
     "DisconnectedScreenAccessor"
+  ],
+  "server": [
+    "DedicatedServerAccessor",
+    "DedicatedServerSettingsAccessor"
   ]
 }
