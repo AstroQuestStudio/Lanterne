@@ -47,9 +47,9 @@ public final class MecheFilet {
             event.setNewScreen(new DisconnectedScreen(acces.lanterne$parent(), ecran.getTitle(),
                     Component.literal("Le serveur a une version plus récente de Lanterne, avec des blocs "
                             + "ou objets que la tienne ne connaît pas.\n\n"
-                            + "Mets Lanterne à jour : vérifie que synchro_auto = true dans "
-                            + "config/lanterne-maj-client.toml et reconnecte-toi, ou installe le jar de "
-                            + "Lanterne du serveur dans mods/ (en retirant l'ancien). Puis relance le jeu.")));
+                            + "Mets Lanterne à jour, puis relance le jeu : si ce serveur propose la mise à "
+                            + "jour automatique, vérifie que synchro_auto = true dans config/lanterne-maj-client.toml "
+                            + "et reconnecte-toi ; sinon, demande le jar de Lanterne du serveur à son administrateur et mets-le dans mods/ (en retirant l'ancien).")));
         } catch (RuntimeException imprevu) {
             // Au pire, le message d'origine reste affiché : jamais pire qu'avant ce filet.
         }

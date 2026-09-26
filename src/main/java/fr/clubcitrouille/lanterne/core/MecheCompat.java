@@ -379,8 +379,8 @@ public final class MecheCompat {
                 Connection connection = listener.getConnection();
                 String url = MecheHttp.adresse(HOTES.get(connection), version);
                 listener.disconnect(Component.literal("Ce serveur utilise Lanterne " + version
-                        + ", avec des blocs ou objets que ta version de Lanterne ne connaît pas, et ta "
-                        + "version est trop ancienne pour se mettre à jour toute seule.\n\n"
+                        + ", avec des blocs ou objets que ta version de Lanterne ne connaît pas, et la mise "
+                        + "à jour automatique n'est pas possible ici (coupée sur ce serveur, ou version trop ancienne).\n\n"
                         + (url != null ? "Télécharge la nouvelle version : " + url + "\n"
                                 : "Demande le fichier lanterne-" + version + ".jar à l'administrateur.\n")
                         + "Mets-le dans ton dossier mods/, SUPPRIME l'ancien lanterne-….jar, puis relance le jeu."));
