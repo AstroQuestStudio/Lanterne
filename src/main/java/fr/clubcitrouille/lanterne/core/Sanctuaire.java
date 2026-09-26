@@ -121,8 +121,11 @@ public final class Sanctuaire {
                 lues.add(z);
             }
         }
+        // Relu jusqu'à trois fois par commande (la nôtre, le Reloading tiré par save(), l'observateur de
+        // fichier) : on ne l'annonce que si le compte change.
+        int avant = zones.length;
         zones = lues.isEmpty() ? AUCUNE : lues.toArray(AUCUNE);
-        if (!lues.isEmpty()) {
+        if (lues.size() != avant) {
             Lanterne.LOG.info("[SANCTUAIRE] {} zone(s) sans monstres", lues.size());
         }
     }
