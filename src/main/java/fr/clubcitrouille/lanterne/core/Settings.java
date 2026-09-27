@@ -115,6 +115,9 @@ public final class Settings {
     /** L'Ancre de ferme tourne pour un joueur connecté dans une autre dimension. Voir {@code core.Ferme}. */
     private static boolean fermeTouteDimension = true;
 
+    /** L'Ancre de ferme tourne aussi quand personne n'est connecté. Voir {@code core.Ferme}. */
+    private static boolean fermeSansJoueur = true;
+
     /** La difficulté choisie en jeu réécrite dans server.properties. Voir core.DifficultePersistante. */
     private static boolean difficultePersistante = true;
 
@@ -1194,6 +1197,11 @@ public final class Settings {
         return ferme() && fermeTouteDimension;
     }
 
+    /** Voir {@link #fermeSansJoueur} ; exige aussi {@code ferme_toute_dimension}. */
+    public static boolean fermeSansJoueur() {
+        return fermeTouteDimension() && fermeSansJoueur;
+    }
+
     public static boolean mind() {
         return master && mind;
     }
@@ -2063,6 +2071,7 @@ public final class Settings {
         ferme = Config.FERME.get();
         fermePlafond = Config.FERME_PLAFOND.get();
         fermeTouteDimension = Config.FERME_TOUTE_DIMENSION.get();
+        fermeSansJoueur = Config.FERME_SANS_JOUEUR.get();
         difficultePersistante = Config.DIFFICULTE_PERSISTANTE.get();
         meche = Config.MECHE.get();
     }

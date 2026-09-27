@@ -80,8 +80,11 @@ import fr.clubcitrouille.lanterne.mixin.TicketStorageAccessor;
  * disparition aléatoire vanilla (1/800 par tick après 600 ticks d'inaction).</li>
  * </ol>
  *
- * <p>Ce qui reste exigé, volontairement : un joueur <b>connecté</b>. Sans personne en ligne, rien
- * n'apparaît : une ferme ne doit pas remplir un serveur vide.
+ * <p>Depuis la 26.3.150, aucun joueur n'est exigé ({@code ferme_sans_joueur}, vrai par défaut) : une
+ * ferme laissée la nuit, serveur vide, produit. Le « joueur lointain » des calculs de distance est
+ * alors le faux joueur de NeoForge ({@link #estLoin}). La ferme ne partage plus non plus le plafond
+ * global des joueurs ({@code FermeChunkCacheMixin}) : seul son plafond local ({@code ferme_plafond})
+ * la borne.
  *
  * <h2>Un joueur connecté, dans n'importe quelle dimension</h2>
  *
@@ -335,7 +338,45 @@ public final class Ferme {
         for (FakePlayer temoin : Temoin.ACTIFS.keySet()) {
             return temoin;
         }
-        return null;
+        return Settings.fermeSansJoueur() ? FakePlayerFactory.getMinecraft(level) : null;
+    }
+
+    /**
+     * Ce joueur est-il « très loin » de la ferme ({@link #LOIN}) ? Oui s'il est dans une autre
+     * dimension, ou si c'est le fantôme d'un serveur vide ({@code ferme_sans_joueur}) : le faux joueur
+     * de NeoForge vit dans la dimension, à une position qui ne veut rien dire.
+     */
+    public static boolean estLoin(Player player, Level level) {
+        return player.level() != level || (total != 0 && player instanceof FakePlayer
+                && !Temoin.ACTIFS.containsKey(player));
+    }
+
+    /**
+     * La catégorie MONSTER est-elle tentée dans ce chunk malgré le plafond global de vanilla ? Oui
+     * pour un chunk « ferme » sans joueur proche, dès qu'un joueur (ou le fantôme) le permet : la
+     * ferme a son propre plafond ({@link #roomFor}) et n'entame plus celui des joueurs (voir
+     * {@link #horsPlafondJoueurs}). Avant la 26.3.150, un joueur connecté dans l'Overworld partageait
+     * ses 70 monstres avec la ferme : la nuit, ses alentours les prenaient tous, et la ferme ne tentait
+     * rien.
+     */
+    public static boolean monstresPourFerme(ServerLevel level, ChunkPos chunk) {
+        return total != 0 && isFarm(level, chunk)
+                && !level.getChunkSource().chunkMap.anyPlayerCloseEnoughForSpawning(chunk)
+                && (!sansJoueur(level) || ailleurs(level) != null);
+    }
+
+    /**
+     * Ce monstre sort-il du compte des joueurs ? Un monstre d'une ferme (ou de son pourtour) sans
+     * joueur proche n'entre plus dans le plafond global de sa dimension : quarante creepers à deux
+     * mille blocs ne privent plus un joueur des monstres de sa propre nuit.
+     */
+    public static boolean horsPlafondJoueurs(ServerLevel level, Entity entity) {
+        if (total == 0) {
+            return false;
+        }
+        long chunk = ChunkPos.pack(entity.blockPosition());
+        return nearFarm(level, chunk)
+                && !level.getChunkSource().chunkMap.anyPlayerCloseEnoughForSpawning(ChunkPos.unpack(chunk));
     }
 
     /**
@@ -629,11 +670,15 @@ public final class Ferme {
                                             ? "un joueur est proche (règles vanilla)"
                                             : !sansJoueur(level)
                                                     ? "aucun joueur proche (règles de la ferme)"
-                                                    : ailleurs(level) != null
+                                                    : ailleurs(level) instanceof FakePlayer fantome
+                                                                    && !Temoin.ACTIFS.containsKey(fantome)
+                                                            ? "personne en ligne, la ferme tourne quand même"
+                                                                    + " (ferme_sans_joueur)"
+                                                            : ailleurs(level) != null
                                                             ? "aucun joueur dans la dimension, un joueur"
                                                                     + " connecté ailleurs (règles de la ferme)"
                                                             : Settings.fermeTouteDimension()
-                                                                    ? "aucun joueur connecté : à l'arrêt"
+                                                                    ? "aucun joueur connecté et ferme_sans_joueur=false : à l'arrêt"
                                                                     : "aucun joueur dans la dimension"
                                                                             + " (ferme_toute_dimension=false) :"
                                                                             + " à l'arrêt")), false);

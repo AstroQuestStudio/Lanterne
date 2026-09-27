@@ -66,7 +66,8 @@ public abstract class FermeDespawnMixin {
     @WrapOperation(method = "checkDespawn", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/entity/Entity;distanceToSqr(Lnet/minecraft/world/entity/Entity;)D"))
     private double lanterne$distanceAilleurs(Entity player, Entity self, Operation<Double> original) {
-        return player.level() == self.level() ? original.call(player, self) : Ferme.LOIN;
+        return player instanceof Player joueur && Ferme.estLoin(joueur, self.level())
+                ? Ferme.LOIN : original.call(player, self);
     }
 
     @WrapOperation(method = "checkDespawn", at = @At(value = "INVOKE",

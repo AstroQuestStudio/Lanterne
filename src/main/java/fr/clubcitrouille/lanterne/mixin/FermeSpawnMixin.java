@@ -71,6 +71,21 @@ public abstract class FermeSpawnMixin {
         return original.call(level, mob, distance) && Ferme.prendrePlace();
     }
 
+    /**
+     * Le compte des monstres d'une dimension, dont vanilla tire son plafond global : un monstre d'une
+     * ferme (ou de son pourtour) sans joueur proche n'y entre plus — il passe pour MISC, que vanilla
+     * ne compte pas. La ferme a son propre plafond ({@link Ferme#roomFor}) ; ses quarante creepers
+     * ne privent plus les joueurs des monstres de leur propre nuit. Hors d'une ferme : une
+     * comparaison ({@code total == 0}).
+     */
+    @WrapOperation(method = "createState", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/Entity;getClassification(Z)Lnet/minecraft/world/entity/MobCategory;"))
+    private static MobCategory lanterne$horsPlafondJoueurs(net.minecraft.world.entity.Entity entity, boolean forSpawnCount,
+            Operation<MobCategory> original, @Local(argsOnly = true) ServerLevel level) {
+        MobCategory category = original.call(entity, forSpawnCount);
+        return category == MobCategory.MONSTER && Ferme.horsPlafondJoueurs(level, entity) ? MobCategory.MISC : category;
+    }
+
     /** Fin de la tentative du chunk : le décompte ne déborde ni sur le chunk suivant, ni ailleurs. */
     @Inject(method = "spawnForChunk", at = @At("TAIL"))
     private static void lanterne$finTentative(ServerLevel level, LevelChunk chunk, NaturalSpawner.SpawnState state,
@@ -112,7 +127,7 @@ public abstract class FermeSpawnMixin {
                     target = "Lnet/minecraft/world/entity/player/Player;distanceToSqr(DDD)D"))
     private static double lanterne$distanceAilleurs(Player player, double x, double y, double z,
             Operation<Double> original, @Local(argsOnly = true) ServerLevel level) {
-        return player.level() == level ? original.call(player, x, y, z) : Ferme.LOIN;
+        return Ferme.estLoin(player, level) ? Ferme.LOIN : original.call(player, x, y, z);
     }
 
     /**

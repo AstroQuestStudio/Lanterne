@@ -108,6 +108,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue FERME;
     public static final ModConfigSpec.IntValue FERME_PLAFOND;
     public static final ModConfigSpec.BooleanValue FERME_TOUTE_DIMENSION;
+    public static final ModConfigSpec.BooleanValue FERME_SANS_JOUEUR;
     public static final ModConfigSpec.BooleanValue DIFFICULTE_PERSISTANTE;
     public static final ModConfigSpec.BooleanValue VIGIL;
     public static final ModConfigSpec.BooleanValue TRIEUR_ACTIF;
@@ -1019,11 +1020,11 @@ public final class Config {
         FERME = BUILDER.comment(
                 "L'Ancre de ferme : son chunk reste charge ET continue de faire apparaitre des",
                 "monstres quand le joueur est loin (a des milliers de blocs), tant qu'au moins un",
-                "joueur est connecte (voir ferme_toute_dimension). Sans elle, un chunk garde par /forceload ou",
+                "joueur est connecte (voir ferme_toute_dimension, ferme_sans_joueur). Sans elle, un chunk garde par /forceload ou",
                 "par l'Ancre de chunk fait tourner cultures et entonnoirs, mais aucun monstre n'y nait :",
-                "vanilla exige un joueur a moins de 128 blocs. Le plafond GLOBAL de vanilla (70",
-                "monstres pour un joueur) reste applique tel quel ; seul le plafond LOCAL est remplace",
-                "par ferme_plafond. Les monstres d'un chunk ferme ne disparaissent plus d'un coup a",
+                "vanilla exige un joueur a moins de 128 blocs. La ferme a son propre plafond",
+                "(ferme_plafond) et ne partage plus celui des joueurs (70 monstres) : ses monstres",
+                "n'y comptent pas, et elle tente meme quand il est plein. Les monstres d'un chunk ferme ne disparaissent plus d'un coup a",
                 "128 blocs du joueur, mais gardent la disparition aleatoire vanilla (1/800 par tick",
                 "apres 30 s d'inaction) : un monstre coince finit par partir.",
                 "Coupee, le bloc reste posable - il ne fait plus rien apparaitre.")
@@ -1042,6 +1043,12 @@ public final class Config {
                 "d'un joueur (70) et ferme_plafond reste le plafond local. Aucun joueur connecte (hors",
                 "spectateurs) : rien n'apparait. Coupe : il faut un joueur dans la dimension de la ferme.")
                 .define("ferme_toute_dimension", true);
+        FERME_SANS_JOUEUR = BUILDER.comment(
+                "L'Ancre de ferme tourne aussi quand personne n'est connecte (serveur allume, vide) :",
+                "une ferme laissee la nuit produit. Seuls les chunks a Ancre de ferme font naitre des",
+                "monstres, au plus ferme_plafond chacun. Exige ferme_toute_dimension. Coupe : il faut",
+                "un joueur connecte.")
+                .define("ferme_sans_joueur", true);
         DIFFICULTE_PERSISTANTE = BUILDER.comment(
                 "Serveur dedie : /difficulty ecrit aussi la ligne difficulty= de server.properties.",
                 "Vanilla reapplique cette ligne a chaque demarrage et ecrase donc la difficulte",
