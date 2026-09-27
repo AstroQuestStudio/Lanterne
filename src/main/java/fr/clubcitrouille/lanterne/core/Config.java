@@ -107,6 +107,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ANCHOR;
     public static final ModConfigSpec.BooleanValue FERME;
     public static final ModConfigSpec.IntValue FERME_PLAFOND;
+    public static final ModConfigSpec.BooleanValue FERME_TOUTE_DIMENSION;
     public static final ModConfigSpec.BooleanValue DIFFICULTE_PERSISTANTE;
     public static final ModConfigSpec.BooleanValue VIGIL;
     public static final ModConfigSpec.BooleanValue TRIEUR_ACTIF;
@@ -1018,7 +1019,7 @@ public final class Config {
         FERME = BUILDER.comment(
                 "L'Ancre de ferme : son chunk reste charge ET continue de faire apparaitre des",
                 "monstres quand le joueur est loin (a des milliers de blocs), tant qu'au moins un",
-                "joueur est connecte dans la dimension. Sans elle, un chunk garde par /forceload ou",
+                "joueur est connecte (voir ferme_toute_dimension). Sans elle, un chunk garde par /forceload ou",
                 "par l'Ancre de chunk fait tourner cultures et entonnoirs, mais aucun monstre n'y nait :",
                 "vanilla exige un joueur a moins de 128 blocs. Le plafond GLOBAL de vanilla (70",
                 "monstres pour un joueur) reste applique tel quel ; seul le plafond LOCAL est remplace",
@@ -1032,6 +1033,15 @@ public final class Config {
                 "Ancre de ferme, au-dela duquel elle n'en fait plus apparaitre. 40 par defaut, du",
                 "meme ordre que le plafond local d'un joueur ; 0 = l'ancre ne fait rien apparaitre.")
                 .defineInRange("ferme_plafond", 40, 0, 200);
+        FERME_TOUTE_DIMENSION = BUILDER.comment(
+                "L'Ancre de ferme tourne des qu'au moins un joueur est connecte sur le serveur, dans",
+                "n'importe quelle dimension : une ferme a wither squelettes dans une forteresse du",
+                "Nether produit pendant que tout le monde est dans l'Overworld. Pour les seuls chunks",
+                "a Ancre de ferme ; partout ailleurs, vanilla exige toujours un joueur dans la",
+                "dimension. Dans une dimension sans joueur, le plafond global des monstres est celui",
+                "d'un joueur (70) et ferme_plafond reste le plafond local. Aucun joueur connecte (hors",
+                "spectateurs) : rien n'apparait. Coupe : il faut un joueur dans la dimension de la ferme.")
+                .define("ferme_toute_dimension", true);
         DIFFICULTE_PERSISTANTE = BUILDER.comment(
                 "Serveur dedie : /difficulty ecrit aussi la ligne difficulty= de server.properties.",
                 "Vanilla reapplique cette ligne a chaque demarrage et ecrase donc la difficulte",

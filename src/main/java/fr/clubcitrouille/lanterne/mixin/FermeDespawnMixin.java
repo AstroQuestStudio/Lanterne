@@ -7,9 +7,12 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 
 import fr.clubcitrouille.lanterne.core.Ferme;
 
@@ -35,6 +38,37 @@ import fr.clubcitrouille.lanterne.core.Ferme;
  */
 @Mixin(Mob.class)
 public abstract class FermeDespawnMixin {
+    /**
+     * Sans joueur dans la dimension, {@code checkDespawn} ne fait rien — ni disparition instantanée,
+     * ni aléatoire : un monstre coincé dans une ferme du Nether, tout le monde étant dans
+     * l'Overworld, y resterait pour toujours et boucherait la salle. Pour un monstre d'une ferme (ou
+     * de son pourtour), tant qu'un joueur est connecté ailleurs, on présente ce joueur
+     * ({@link Ferme#ailleurs}) ; l'accroche suivante le met « très loin ». La règle de la ferme
+     * s'applique alors telle quelle : pas d'un coup, parfois au hasard.
+     *
+     * <p>Sans personne en ligne, rien ne change : pas de joueur, pas de disparition — comme vanilla.
+     */
+    @WrapOperation(method = "checkDespawn", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;getNearestPlayer(Lnet/minecraft/world/entity/Entity;D)Lnet/minecraft/world/entity/player/Player;"))
+    private Player lanterne$joueurAilleurs(Level world, Entity source, double range,
+            Operation<Player> original) {
+        Player vanilla = original.call(world, source, range);
+        Mob self = (Mob) (Object) this;
+        if (vanilla == null && self.getType().getCategory() == MobCategory.MONSTER
+                && world instanceof ServerLevel level
+                && Ferme.nearFarm(level, ChunkPos.pack(self.blockPosition()))) {
+            return Ferme.ailleurs(level);
+        }
+        return vanilla;
+    }
+
+    /** La distance à un joueur d'une autre dimension : « très loin ». Voir l'accroche précédente. */
+    @WrapOperation(method = "checkDespawn", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/Entity;distanceToSqr(Lnet/minecraft/world/entity/Entity;)D"))
+    private double lanterne$distanceAilleurs(Entity player, Entity self, Operation<Double> original) {
+        return player.level() == self.level() ? original.call(player, self) : Ferme.LOIN;
+    }
+
     @WrapOperation(method = "checkDespawn", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/entity/Mob;removeWhenFarAway(D)Z", ordinal = 0))
     private boolean lanterne$pasDUnCoup(Mob self, double distance, Operation<Boolean> original) {

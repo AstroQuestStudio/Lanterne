@@ -26,7 +26,8 @@ import fr.clubcitrouille.lanterne.core.Settings;
  *
  * <p>Il pose sur son chunk le ticket {@code lanterne:ferme} (voir {@link Ferme#TICKET}) : persistant,
  * il charge et simule le chunk comme {@code /forceload}, et y autorise l'apparition naturelle des
- * monstres tant qu'un joueur est connecté dans la dimension, où qu'il soit. Tout le reste — pourquoi
+ * monstres tant qu'un joueur est connecté — dans la dimension ou, avec {@code ferme_toute_dimension}
+ * (par défaut), dans n'importe quelle autre. Tout le reste — pourquoi
  * vanilla s'y oppose en cinq endroits, et comment chacun est levé — est dans {@link Ferme}.
  *
  * <h2>Plusieurs ancres de ferme dans un même chunk</h2>

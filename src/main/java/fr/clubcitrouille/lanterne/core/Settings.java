@@ -112,6 +112,9 @@ public final class Settings {
     /** Plafond local d'une Ancre de ferme, en monstres, à 32 blocs de son chunk. */
     private static int fermePlafond = 40;
 
+    /** L'Ancre de ferme tourne pour un joueur connecté dans une autre dimension. Voir {@code core.Ferme}. */
+    private static boolean fermeTouteDimension = true;
+
     /** La difficulté choisie en jeu réécrite dans server.properties. Voir core.DifficultePersistante. */
     private static boolean difficultePersistante = true;
 
@@ -1186,6 +1189,11 @@ public final class Settings {
         return Math.max(0, Math.min(200, fermePlafond));
     }
 
+    /** Voir {@link #fermeTouteDimension} ; sans effet si l'Ancre de ferme elle-même est coupée. */
+    public static boolean fermeTouteDimension() {
+        return ferme() && fermeTouteDimension;
+    }
+
     public static boolean mind() {
         return master && mind;
     }
@@ -2054,6 +2062,7 @@ public final class Settings {
         anchor = Config.ANCHOR.get();
         ferme = Config.FERME.get();
         fermePlafond = Config.FERME_PLAFOND.get();
+        fermeTouteDimension = Config.FERME_TOUTE_DIMENSION.get();
         difficultePersistante = Config.DIFFICULTE_PERSISTANTE.get();
         meche = Config.MECHE.get();
     }

@@ -11,6 +11,7 @@
     "ChunkMapTicketsAccessor",
     "TicketStorageAccessor",
     "FermeChunkMapMixin",
+    "FermeChunkCacheMixin",
     "FermeSpawnMixin",
     "FermeDespawnMixin",
     "ProfilerMixin",

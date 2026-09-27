@@ -22,6 +22,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.Ticket;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.util.AbortableIterationConsumer;
@@ -33,6 +34,8 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.entity.EntityTypeTest;
 import net.minecraft.world.phys.AABB;
+
+import org.jspecify.annotations.Nullable;
 
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.common.NeoForge;
@@ -77,10 +80,39 @@ import fr.clubcitrouille.lanterne.mixin.TicketStorageAccessor;
  * disparition aléatoire vanilla (1/800 par tick après 600 ticks d'inaction).</li>
  * </ol>
  *
- * <p>Ce qui reste exigé, volontairement : un joueur <b>connecté dans la dimension</b>, n'importe où
- * ({@code spawnCategoryForPosition} demande un joueur le plus proche, et c'est lui qui donne son
- * plafond global au monde). Sans personne en ligne, rien n'apparaît : une ferme ne doit pas remplir
- * un serveur vide.
+ * <p>Ce qui reste exigé, volontairement : un joueur <b>connecté</b>. Sans personne en ligne, rien
+ * n'apparaît : une ferme ne doit pas remplir un serveur vide.
+ *
+ * <h2>Un joueur connecté, dans n'importe quelle dimension</h2>
+ *
+ * <p>Vanilla demande davantage : un joueur <em>dans la dimension</em>. Une ferme à wither squelettes
+ * dans une forteresse du Nether resterait donc vide tant que tout le monde est dans l'Overworld. Avec
+ * {@code ferme_toute_dimension} (vrai par défaut), trois obstacles de plus sont levés — pour les seuls
+ * chunks « ferme », et seulement quand la dimension n'a aucun joueur (hors spectateurs) :
+ *
+ * <ol start="6">
+ * <li>Le plafond global ({@code SpawnState.canSpawnForCategoryGlobal}) vaut
+ * {@code 70 × chunks proches d'un joueur / 289} : zéro sans joueur, et la catégorie MONSTER n'est même
+ * pas tentée. <b>Remède :</b> {@code FermeChunkCacheMixin} la rétablit avec le plafond d'un joueur
+ * seul (70 monstres non persistants dans la dimension). Seuls les chunks « ferme » sont alors dans le
+ * tour d'apparition — les autres n'ont aucun joueur autour — et le plafond local de l'étage 2 ne
+ * laisse passer qu'eux.</li>
+ * <li>{@code spawnCategoryForPosition} abandonne la tentative si {@code getNearestPlayer} est nul.
+ * <b>Remède :</b> {@code FermeSpawnMixin} lui présente {@link #ailleurs}, un joueur connecté dans une
+ * autre dimension, et la distance à ce joueur vaut {@link #LOIN} — « très loin », jamais la distance
+ * absurde entre deux dimensions. Tous les tests qui suivent (24 blocs, point d'apparition,
+ * {@code canSpawnFarFromPlayer}, {@code isValidPositionForMob}) voient donc un joueur lointain, ce que
+ * les étages 3 et 4 règlent déjà.</li>
+ * <li>{@code Mob.checkDespawn} ne fait rien sans joueur dans la dimension — pas même la disparition
+ * aléatoire, et un monstre coincé boucherait la salle pour toujours. <b>Remède :</b>
+ * {@code FermeDespawnMixin} lui présente le même joueur lointain : l'étage 5 s'applique tel quel.</li>
+ * </ol>
+ *
+ * <p>Le joueur d'une autre dimension ne sert qu'à ces calculs de distance, jamais ailleurs : il n'est
+ * ni ciblé, ni compté, ni suivi. La simulation ne demande rien de plus : le ticket de ferme porte
+ * {@code FLAG_KEEP_DIMENSION_ACTIVE} (sans joueur, {@code ServerLevel.tick} continue de tiquer les
+ * entités de la dimension) et {@code FLAG_SIMULATION} (le chunk est « entity ticking » : IA,
+ * déplacement, chute).
  *
  * <h2>Pourquoi pas {@code MobDespawnEvent}</h2>
  *
@@ -107,6 +139,13 @@ import fr.clubcitrouille.lanterne.mixin.TicketStorageAccessor;
  */
 public final class Ferme {
     private Ferme() {}
+
+    /**
+     * La distance (au carré) prêtée au joueur d'une autre dimension : un million de blocs. Au-delà de
+     * tous les seuils de vanilla (24, 32, 128 blocs), et finie — rien ne déborde si un calcul la
+     * reprend.
+     */
+    public static final double LOIN = 1.0E12;
 
     /** Rayon, en blocs, autour du chunk, dans lequel on compte les monstres pour le plafond local. */
     public static final int RAYON_PLAFOND = 32;
@@ -175,6 +214,7 @@ public final class Ferme {
     private static long plafonnees;
     private static long epargnees;
     private static long balayes;
+    private static long ailleursNes;
     private static long dernierJournalBalayage = Long.MIN_VALUE / 2;
 
     public static void register(IEventBus modBus) {
@@ -269,6 +309,69 @@ public final class Ferme {
         }
     }
 
+    // ------------------------------------------------------------------ joueur d'une autre dimension
+
+    /**
+     * Un joueur connecté, hors spectateurs, pour une ferme dont la dimension n'en a aucun ; nul si
+     * personne n'est en ligne ou si {@code ferme_toute_dimension} est coupé.
+     *
+     * <p>« Connecté » veut dire : dans la liste des joueurs du serveur. Les faux joueurs des autres
+     * mods n'y sont pas, et ne font donc pas tourner une ferme sur un serveur vide. Les spectateurs
+     * non plus : vanilla ne fait rien naître autour d'eux. Seul le témoin du banc d'essai
+     * ({@link Temoin}, {@code -Dlanterne.labo=true}) compte en plus.
+     *
+     * <p>Appelé seulement quand vanilla n'a trouvé personne dans la dimension, et pour un chunk
+     * « ferme » : le parcours de quelques joueurs ne pèse rien.
+     */
+    public static @Nullable Player ailleurs(ServerLevel level) {
+        if (total == 0 || !Settings.fermeTouteDimension()) {
+            return null;
+        }
+        for (ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
+            if (!player.isSpectator() && !(player instanceof FakePlayer)) {
+                return player;
+            }
+        }
+        for (FakePlayer temoin : Temoin.ACTIFS.keySet()) {
+            return temoin;
+        }
+        return null;
+    }
+
+    /**
+     * La dimension n'a-t-elle aucun joueur, au sens de vanilla ({@code getNearestPlayer} : hors
+     * spectateurs) ? C'est le seul cas où {@link #ailleurs} entre en jeu.
+     */
+    public static boolean sansJoueur(ServerLevel level) {
+        for (ServerPlayer player : level.players()) {
+            if (!player.isSpectator()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Faut-il rétablir la catégorie MONSTER que le plafond global de vanilla vient d'écarter ? Oui
+     * pour une dimension qui porte une ferme et n'a aucun joueur, alors qu'un joueur est connecté
+     * ailleurs — et tant qu'elle compte moins de monstres non persistants que le plafond d'un joueur
+     * seul (70). Voir l'étage 6 du Javadoc de classe. Une fois par tick et par dimension.
+     */
+    public static boolean plafondGlobalPourFerme(ServerLevel level, int monstres) {
+        if (total == 0 || !Settings.fermeTouteDimension()) {
+            return false;
+        }
+        LongOpenHashSet set = CHUNKS.get(level.dimension());
+        return set != null && !set.isEmpty()
+                && monstres < MobCategory.MONSTER.getMaxInstancesPerChunk()
+                && sansJoueur(level) && ailleurs(level) != null;
+    }
+
+    /** Un monstre va naître dans une ferme sans joueur dans sa dimension (rapport seulement). */
+    public static void noteAilleurs() {
+        ailleursNes++;
+    }
+
     /**
      * Le plafond local de la ferme : reste-t-il de la place pour un monstre de plus ?
      *
@@ -284,7 +387,8 @@ public final class Ferme {
             plafonnees++;
             return false;
         }
-        if (countMonsters(level, chunk, cap) >= cap) {
+        int count = countMonsters(level, chunk, cap);
+        if (count >= cap) {
             // Salle pleine : on ne recompte pas avant une demi-seconde. Une ferme au plafond est
             // l'état normal d'une ferme qui tourne, et recompter vingt fois par seconde une salle
             // qu'aucun monstre n'a quittée serait le seul coût récurrent de ce module.
@@ -293,7 +397,35 @@ public final class Ferme {
             return false;
         }
         admises++;
+        placesLibres = cap - count;
         return true;
+    }
+
+    /**
+     * Les places que {@link #roomFor} vient de trouver libres, pour la tentative en cours ; -1 hors
+     * d'une tentative décidée par la ferme. Fil serveur seulement.
+     */
+    private static int placesLibres = -1;
+
+    /**
+     * Un monstre va naître : prend-il une place de la ferme ? Toujours oui hors d'une tentative de
+     * la ferme (joueur proche, autre catégorie, chunk ordinaire) ; sinon oui tant qu'il en reste.
+     */
+    public static boolean prendrePlace() {
+        if (placesLibres < 0) {
+            return true;
+        }
+        if (placesLibres == 0) {
+            plafonnees++;
+            return false;
+        }
+        placesLibres--;
+        return true;
+    }
+
+    /** Clôt la tentative en cours : voir {@link #placesLibres}. */
+    public static void finTentative() {
+        placesLibres = -1;
     }
 
     private static AABB box(ServerLevel level, ChunkPos chunk) {
@@ -427,10 +559,16 @@ public final class Ferme {
             });
             for (Mob mob : frozen) {
                 Player player = level.getNearestPlayer(mob, -1.0);
-                if (player == null) {
+                double distance;
+                if (player != null) {
+                    distance = player.distanceToSqr(mob);
+                } else if (ailleurs(level) != null) {
+                    // Personne dans la dimension, quelqu'un ailleurs : le figé est « très loin », comme
+                    // pour tout le reste de la ferme. Sans personne en ligne, on n'y touche pas.
+                    distance = LOIN;
+                } else {
                     continue;
                 }
-                double distance = player.distanceToSqr(mob);
                 int despawn = mob.getType().getCategory().getDespawnDistance();
                 if (distance > (double) despawn * despawn && mob.removeWhenFarAway(distance)) {
                     mob.discard();
@@ -489,7 +627,16 @@ public final class Ferme {
                                     RAYON_PLAFOND,
                                     level.getChunkSource().chunkMap.anyPlayerCloseEnoughForSpawning(chunk)
                                             ? "un joueur est proche (règles vanilla)"
-                                            : "aucun joueur proche (règles de la ferme)")), false);
+                                            : !sansJoueur(level)
+                                                    ? "aucun joueur proche (règles de la ferme)"
+                                                    : ailleurs(level) != null
+                                                            ? "aucun joueur dans la dimension, un joueur"
+                                                                    + " connecté ailleurs (règles de la ferme)"
+                                                            : Settings.fermeTouteDimension()
+                                                                    ? "aucun joueur connecté : à l'arrêt"
+                                                                    : "aucun joueur dans la dimension"
+                                                                            + " (ferme_toute_dimension=false) :"
+                                                                            + " à l'arrêt")), false);
                         });
                     }
                     return total;
@@ -521,9 +668,12 @@ public final class Ferme {
     public static String describe() {
         return String.format("[ANCRE] fermes : %d chunk(s), %s, plafond %d ; apparitions admises %d,"
                         + " refusées au plafond %d, disparitions instantanées évitées %d (par tick),"
-                        + " monstres figés retirés %d",
+                        + " monstres figés retirés %d ; joueur d'une autre dimension %s, tentatives"
+                        + " ainsi %d",
                 total, Settings.ferme() ? "actives" : "COUPÉES (ancre_de_ferme=false)",
-                Settings.fermePlafond(), admises, plafonnees, epargnees, balayes);
+                Settings.fermePlafond(), admises, plafonnees, epargnees, balayes,
+                Settings.fermeTouteDimension() ? "accepté" : "refusé (ferme_toute_dimension=false)",
+                ailleursNes);
     }
 
     // ------------------------------------------------------------------ banc d'essai
@@ -531,8 +681,8 @@ public final class Ferme {
     /**
      * Le témoin : un joueur connecté, loin, pour le banc d'essai seulement.
      *
-     * <p>L'Ancre de ferme exige un joueur <em>dans la dimension</em>, et un serveur d'essai n'en a
-     * pas. Le témoin est un {@link FakePlayer} de NeoForge qu'on rend visible aux deux seules
+     * <p>L'Ancre de ferme exige un joueur connecté (dans sa dimension si
+     * {@code ferme_toute_dimension=false}), et un serveur d'essai n'en a pas. Le témoin est un {@link FakePlayer} de NeoForge qu'on rend visible aux deux seules
      * questions que le jeu pose ici : « qui est le joueur le plus proche ? » ({@code level.players()},
      * que lit {@code getNearestPlayer}) et « combien de chunks entourent des joueurs ? » (le
      * {@code DistanceManager}, qui fixe le plafond global de vanilla et charge le terrain autour de
@@ -542,7 +692,7 @@ public final class Ferme {
      * <p>Commande absente sans {@code -Dlanterne.labo=true} : jamais sur un serveur de jeu.
      */
     static final class Temoin {
-        private static final Map<FakePlayer, SectionPos> ACTIFS = new HashMap<>();
+        static final Map<FakePlayer, SectionPos> ACTIFS = new HashMap<>();
 
         static void summon(ServerLevel level, int x, int z) {
             UUID id = UUID.nameUUIDFromBytes(("lanterne-temoin-" + x + "," + z).getBytes());

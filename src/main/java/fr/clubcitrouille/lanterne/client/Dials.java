@@ -893,7 +893,8 @@ public final class Dials extends Screen {
                         + " mondes où il était posé."));
         extras.add(Dial.serverFlag("Ancre de ferme", Config.FERME,
                 "Son chunk fait naître des monstres même quand le joueur est loin.",
-                "Il faut au moins un joueur connecté dans la dimension. Plafond propre à la ferme"
+                "Il faut au moins un joueur connecté, dans n'importe quelle dimension"
+                        + " (ferme_toute_dimension). Plafond propre à la ferme"
                         + " (ferme_plafond, 40 par défaut) ; le plafond global de vanilla reste"
                         + " appliqué. Coupée, le bloc reste posable et ne fait plus rien naître."));
         extras.add(Dial.serverFlag("Lanterne de veille", Config.VIGIL,
