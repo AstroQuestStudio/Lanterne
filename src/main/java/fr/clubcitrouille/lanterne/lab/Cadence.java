@@ -65,9 +65,8 @@ public final class Cadence {
     public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
         // Pregen se met en pause tout seul (voir Javadoc de classe) — seul BlueMap a besoin d'un
         // geste explicite ici, la logique de pause ne lui appartenant pas.
-        if (Compagnons.present(Compagnons.BLUEMAP)) {
-            fullRenderPaused = CadenceBlueMap.pauseFullRender();
-        }
+        // Depuis la 26.3.154, la connexion ne met plus le rendu en pause : le régulateur de marge
+        // ({@link #reguler}) le fait seulement si le serveur en a besoin.
         ticksSinceUpdate = UPDATE_PERIOD_TICKS; // Force une mise à jour immédiate à la connexion.
     }
 
@@ -83,6 +82,34 @@ public final class Cadence {
             CadenceBlueMap.resumeFullRender();
         }
         fullRenderPaused = false;
+    }
+
+    /** Tick moyen (ms) au-delà duquel le rendu BlueMap s'arrête, et en deçà duquel il reprend. */
+    private static final double SEUIL_PAUSE_MS = 35.0;
+    private static final double SEUIL_REPRISE_MS = 25.0;
+
+    /**
+     * Le régulateur de marge (demande du 27/09) : BlueMap rend la carte en direct, joueurs connectés
+     * ou non, tant que le serveur a de la marge ; dès que le tick moyen dépasse
+     * {@link #SEUIL_PAUSE_MS}, ses fils de rendu s'arrêtent pour rendre le processeur au jeu, et
+     * repartent sous {@link #SEUIL_REPRISE_MS}. L'écart entre les deux seuils évite de basculer à
+     * chaque relevé. Une fois par minute : lire un nombre ne coûte rien, mais inutile de le faire plus. La priorité des fils (réglage de BlueMap) ne sert à rien sous Linux sans droits
+     * particuliers : c'est donc ici, au niveau du jeu, que la décision se prend.
+     */
+    private static void reguler(net.minecraft.server.MinecraftServer server) {
+        double mspt = server.getAverageTickTimeNanos() / 1_000_000.0;
+        if (!fullRenderPaused && mspt > SEUIL_PAUSE_MS) {
+            fullRenderPaused = CadenceBlueMap.pauseFullRender();
+            if (fullRenderPaused) {
+                fr.clubcitrouille.lanterne.Lanterne.LOG.info("[CADENCE] tick moyen {} ms : rendu BlueMap en pause.",
+                        String.format("%.1f", mspt));
+            }
+        } else if (fullRenderPaused && mspt < SEUIL_REPRISE_MS) {
+            CadenceBlueMap.resumeFullRender();
+            fullRenderPaused = false;
+            fr.clubcitrouille.lanterne.Lanterne.LOG.info("[CADENCE] tick moyen {} ms : rendu BlueMap relancé.",
+                    String.format("%.1f", mspt));
+        }
     }
 
     /** Ticks avant le rendu complet demandé par la fin d'une pré-génération ; -1 = rien à faire. */
@@ -107,6 +134,9 @@ public final class Cadence {
     public static void onServerTick(ServerTickEvent.Post event) {
         if (!Compagnons.present(Compagnons.BLUEMAP)) {
             return;
+        }
+        if (event.getServer().getTickCount() % 1200 == 0) {
+            reguler(event.getServer());
         }
         if (fullRenderCountdown > 0 && --fullRenderCountdown == 0) {
             fullRenderCountdown = -1;

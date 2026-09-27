@@ -52,8 +52,8 @@ final class CadenceBlueMap {
             return false;
         }
         manager.stop();
-        Lanterne.LOG.info("[CADENCE] rendu complet BlueMap mis en pause — un joueur est connecté. "
-                + "La carte autour de lui continuera d'être mise à jour toutes les 5 minutes.");
+        Lanterne.LOG.info("[CADENCE] rendu complet BlueMap mis en pause. La carte autour des joueurs "
+                + "continuera d'être mise à jour toutes les 5 minutes.");
         return true;
     }
 
