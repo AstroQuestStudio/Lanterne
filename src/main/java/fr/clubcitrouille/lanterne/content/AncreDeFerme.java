@@ -52,6 +52,19 @@ public class AncreDeFerme extends Block {
                             + " joueurs (plafond {} à {} blocs) — ancre de ferme posée en {}.",
                     chunk.x(), chunk.z(), Settings.fermePlafond(), Ferme.RAYON_PLAFOND,
                     pos.toShortString());
+            Ferme.alimentation(server, pos, server.hasNeighborSignal(pos));
+        }
+    }
+
+    /** Un signal redstone sur l'ancre arrête les fermes voisines (voir {@code Ferme.alimentation}). */
+    @Override
+    protected void neighborChanged(BlockState state, Level level, BlockPos pos,
+            net.minecraft.world.level.block.Block neighbor,
+            net.minecraft.world.level.redstone.@org.jspecify.annotations.Nullable Orientation orientation,
+            boolean movedByPiston) {
+        super.neighborChanged(state, level, pos, neighbor, orientation, movedByPiston);
+        if (level instanceof ServerLevel server) {
+            Ferme.alimentation(server, pos, server.hasNeighborSignal(pos));
         }
     }
 
@@ -59,6 +72,7 @@ public class AncreDeFerme extends Block {
     protected void affectNeighborsAfterRemoval(BlockState state, ServerLevel level, BlockPos pos,
             boolean movedByPiston) {
         super.affectNeighborsAfterRemoval(state, level, pos, movedByPiston);
+        Ferme.alimentation(level, pos, false);
         ChunkPos chunk = ChunkPos.containing(pos);
         if (anotherIn(level, chunk, pos)) {
             Lanterne.LOG.info("[ANCRE] ferme : chunk ({}, {}) reste une ferme — une autre ancre de"

@@ -16,6 +16,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -360,7 +361,7 @@ public final class Ferme {
      * rien.
      */
     public static boolean monstresPourFerme(ServerLevel level, ChunkPos chunk) {
-        return total != 0 && isFarm(level, chunk)
+        return total != 0 && isFarm(level, chunk) && !enPause(level, chunk)
                 && !level.getChunkSource().chunkMap.anyPlayerCloseEnoughForSpawning(chunk)
                 && (!sansJoueur(level) || ailleurs(level) != null);
     }
@@ -421,6 +422,10 @@ public final class Ferme {
      * les deux comptent. Le parcours s'arrête dès le plafond atteint.
      */
     public static boolean roomFor(ServerLevel level, ChunkPos chunk) {
+        if (enPause(level, chunk)) {
+            enPauseRefusees++;
+            return false;
+        }
         int cap = Settings.fermePlafond();
         long now = level.getGameTime();
         long key = chunk.pack();
@@ -557,6 +562,9 @@ public final class Ferme {
             return;
         }
         MinecraftServer server = event.getServer();
+        if (server.getTickCount() % 100 == 0) {
+            verifierSaturation(server);
+        }
         if (server.getTickCount() % SWEEP_PERIOD != 0) {
             return;
         }
@@ -631,10 +639,136 @@ public final class Ferme {
 
     private static void onStarted(ServerStartedEvent event) {
         rebuild(event.getServer());
+        chargerCoupees(event.getServer());
     }
 
     private static void onStopping(ServerStoppingEvent event) {
         Temoin.dismissAll();
+    }
+
+
+    // ------------------------------------------------------------------ interrupteur et saturation
+
+    /**
+     * Les Ancres de ferme alimentées en redstone, par dimension (positions de bloc). Une ancre
+     * alimentée arrête toutes les fermes de sa dimension à moins de {@link #RAYON_INTERRUPTEUR}
+     * chunks, la sienne comprise : un levier sur une seule ancre coupe toute une installation.
+     * Tenu dans {@code lanterne-fermes-coupees.txt} à la racine du monde, relu au démarrage.
+     */
+    private static final Map<ResourceKey<Level>, LongOpenHashSet> COUPEES = new HashMap<>();
+    public static final int RAYON_INTERRUPTEUR = 8;
+
+    /**
+     * Les coffres sont pleins : les objets s'entassent autour d'une ferme au lieu d'être ramassés.
+     * Au-delà de {@link #SATURATION_HAUTE} objets au sol dans la boîte d'une ferme, toutes les fermes
+     * s'arrêtent ; elles repartent quand chaque boîte est redescendue sous {@link #SATURATION_BASSE}.
+     */
+    private static boolean saturee;
+    public static final int SATURATION_HAUTE = 4096;
+    public static final int SATURATION_BASSE = 512;
+    private static long enPauseRefusees;
+
+    public static boolean enPause(ServerLevel level, ChunkPos chunk) {
+        if (saturee) {
+            return true;
+        }
+        LongOpenHashSet set = COUPEES.get(level.dimension());
+        if (set == null || set.isEmpty()) {
+            return false;
+        }
+        for (long packed : set) {
+            int cx = BlockPos.getX(packed) >> 4;
+            int cz = BlockPos.getZ(packed) >> 4;
+            if (Math.max(Math.abs(cx - chunk.x()), Math.abs(cz - chunk.z())) <= RAYON_INTERRUPTEUR) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Une Ancre de ferme vient de recevoir (ou de perdre) un signal redstone, ou d'être retirée. */
+    public static void alimentation(ServerLevel level, BlockPos pos, boolean alimentee) {
+        LongOpenHashSet set = COUPEES.computeIfAbsent(level.dimension(), key -> new LongOpenHashSet());
+        boolean change = alimentee ? set.add(pos.asLong()) : set.remove(pos.asLong());
+        if (change) {
+            Lanterne.LOG.info("[ANCRE] ferme : ancre en {} {} ; fermes à moins de {} chunks {}.",
+                    pos.toShortString(), alimentee ? "alimentée" : "libérée", RAYON_INTERRUPTEUR,
+                    alimentee ? "ARRÊTÉES" : "relancées (sauf autre ancre alimentée)");
+            sauverCoupees(level.getServer());
+        }
+    }
+
+    private static java.nio.file.Path fichierCoupees(MinecraftServer server) {
+        return server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+                .resolve("lanterne-fermes-coupees.txt");
+    }
+
+    private static void sauverCoupees(MinecraftServer server) {
+        StringBuilder out = new StringBuilder();
+        COUPEES.forEach((dim, set) -> set.forEach((long p) -> out.append(dim.identifier()).append(' ')
+                .append(BlockPos.getX(p)).append(' ').append(BlockPos.getY(p)).append(' ')
+                .append(BlockPos.getZ(p)).append('\n')));
+        try {
+            java.nio.file.Files.writeString(fichierCoupees(server), out.toString());
+        } catch (java.io.IOException e) {
+            Lanterne.LOG.warn("[ANCRE] ferme : impossible d'écrire {} : {}", fichierCoupees(server), e.toString());
+        }
+    }
+
+    private static void chargerCoupees(MinecraftServer server) {
+        COUPEES.clear();
+        java.nio.file.Path f = fichierCoupees(server);
+        if (!java.nio.file.Files.exists(f)) {
+            return;
+        }
+        try {
+            for (String ligne : java.nio.file.Files.readAllLines(f)) {
+                String[] m = ligne.trim().split(" ");
+                if (m.length != 4) {
+                    continue;
+                }
+                for (ServerLevel level : server.getAllLevels()) {
+                    if (level.dimension().identifier().toString().equals(m[0])) {
+                        COUPEES.computeIfAbsent(level.dimension(), key -> new LongOpenHashSet()).add(BlockPos.asLong(
+                                Integer.parseInt(m[1]), Integer.parseInt(m[2]), Integer.parseInt(m[3])));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Lanterne.LOG.warn("[ANCRE] ferme : lecture de {} impossible : {}", f, e.toString());
+        }
+    }
+
+    /** Toutes les cinq secondes : les objets s'entassent-ils autour d'une ferme ? */
+    private static void verifierSaturation(MinecraftServer server) {
+        int pire = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            LongOpenHashSet set = CHUNKS.get(level.dimension());
+            if (set == null) {
+                continue;
+            }
+            for (long packed : set) {
+                int[] n = {0};
+                level.getEntities().get(EntityTypeTest.forClass(net.minecraft.world.entity.item.ItemEntity.class),
+                        box(level, ChunkPos.unpack(packed)), item -> {
+                            n[0] += item.getItem().getCount();
+                            return net.minecraft.util.Continuation.CONTINUE;
+                        });
+                pire = Math.max(pire, n[0]);
+            }
+        }
+        if (!saturee && pire > SATURATION_HAUTE) {
+            saturee = true;
+            Lanterne.LOG.info("[ANCRE] ferme : {} objets au sol autour d'une ferme (coffres pleins ?)."
+                    + " Toutes les fermes s'arrêtent jusqu'à ce qu'il en reste moins de {}.", pire, SATURATION_BASSE);
+        } else if (saturee && pire < SATURATION_BASSE) {
+            saturee = false;
+            Lanterne.LOG.info("[ANCRE] ferme : plus que {} objets au sol, les fermes repartent.", pire);
+        }
+    }
+
+    public static boolean saturee() {
+        return saturee;
     }
 
     // ------------------------------------------------------------------ commande
@@ -718,7 +852,9 @@ public final class Ferme {
                 total, Settings.ferme() ? "actives" : "COUPÉES (ancre_de_ferme=false)",
                 Settings.fermePlafond(), admises, plafonnees, epargnees, balayes,
                 Settings.fermeTouteDimension() ? "accepté" : "refusé (ferme_toute_dimension=false)",
-                ailleursNes);
+                ailleursNes) + String.format(" ; %s, %d ancre(s) alimentée(s) en redstone, %d tentative(s)"
+                + " refusée(s) en pause", saturee ? "SATURÉE (coffres pleins ?)" : "non saturée",
+                COUPEES.values().stream().mapToInt(LongOpenHashSet::size).sum(), enPauseRefusees);
     }
 
     // ------------------------------------------------------------------ banc d'essai

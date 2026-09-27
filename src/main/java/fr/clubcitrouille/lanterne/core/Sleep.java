@@ -136,6 +136,18 @@ public final class Sleep {
     }
 
     /** Réveille immédiatement : le contenu a changé, l'échéance calculée ne vaut plus rien. */
+    /**
+     * Ticks écoulés depuis le coucher de ce bloc (0 s'il est éveillé), bornés comme le rattrapage.
+     * Lu par {@code FourAffichageMixin} pour montrer au joueur une flèche qui avance.
+     */
+    public static int ecoule(BlockPos pos, long now) {
+        if (ASLEEP_SINCE.isEmpty()) {
+            return 0;
+        }
+        long since = ASLEEP_SINCE.get(pos.asLong());
+        return since == Long.MIN_VALUE ? 0 : (int) Math.max(0L, Math.min(LONGEST, now - since));
+    }
+
     public static void wake(BlockPos pos) {
         long key = pos.asLong();
         if (!WAKE.isEmpty()) {

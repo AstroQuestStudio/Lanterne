@@ -1,9 +1,22 @@
 {
   "variants": {
-    "facing=down": { "model": "minecraft:block/hopper" },
-    "facing=east": { "model": "minecraft:block/hopper_side", "y": 90 },
-    "facing=north": { "model": "minecraft:block/hopper_side" },
-    "facing=south": { "model": "minecraft:block/hopper_side", "y": 180 },
-    "facing=west": { "model": "minecraft:block/hopper_side", "y": 270 }
+    "facing=down": {
+      "model": "lanterne:block/trieur"
+    },
+    "facing=east": {
+      "model": "lanterne:block/trieur_side",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "lanterne:block/trieur_side"
+    },
+    "facing=south": {
+      "model": "lanterne:block/trieur_side",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "lanterne:block/trieur_side",
+      "y": 270
+    }
   }
 }

@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "lanterne:block/recycleur_top",
+    "bottom": "lanterne:block/recycleur_bottom",
+    "side": "lanterne:block/recycleur_side"
+  }
+}
