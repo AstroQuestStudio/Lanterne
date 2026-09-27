@@ -40,4 +40,20 @@ public abstract class FermePromenadeMixin {
         return time >= 100 && body.getType().getCategory() == MobCategory.MONSTER && Ferme.covers(body)
                 ? 0 : time;
     }
+
+    /**
+     * Et sans attendre : vanilla ne tente une promenade qu'une fois sur {@code interval} ticks
+     * (1 sur 120 : six secondes d'immobilité en moyenne), durant lesquelles le monstre occupe une
+     * place du plafond de la ferme à un pas d'un trou. Dans une ferme, le tirage réussit toujours :
+     * le monstre repart dès qu'il s'arrête. Banc du 27/09 : c'était le frein du débit, pas le nombre
+     * de trous (des chats pour les faire fuir n'y changeaient rien).
+     */
+    @WrapOperation(method = "canUse", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/util/RandomSource;nextInt(I)I"))
+    private int lanterne$sansAttendre(net.minecraft.util.RandomSource random, int bound, Operation<Integer> original) {
+        if (this.mob.getType().getCategory() == MobCategory.MONSTER && Ferme.covers(this.mob)) {
+            return 0;
+        }
+        return original.call(random, bound);
+    }
 }

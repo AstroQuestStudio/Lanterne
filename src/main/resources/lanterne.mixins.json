@@ -16,6 +16,8 @@
     "FermeDespawnMixin",
     "FermePromenadeMixin",
     "FermePortailMixin",
+    "FermeSlimeMixin",
+    "PortailSansCreationMixin",
     "FourAffichageMixin",
     "ProfilerMixin",
     "ManneMixin",
