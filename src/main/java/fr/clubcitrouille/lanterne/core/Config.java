@@ -1696,7 +1696,7 @@ public final class Config {
 
         TREVE_BLUEMAP = BUILDER.comment(
                 "Allumer la treve. Sans effet si BlueMap n'est pas installe.")
-                .define("actif", true);
+                .define("actif", false); // 26.3.156 : remplacée par le régulateur de marge de Cadence (sinon elle arrête BlueMap à chaque connexion et le régulateur ne le relance jamais)
 
         BUILDER.pop();
 
