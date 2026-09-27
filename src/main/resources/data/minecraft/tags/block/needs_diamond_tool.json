@@ -1,6 +1,8 @@
 {
+  "replace": false,
   "values": [
     "lanterne:anchor",
-    "lanterne:ancre_de_ferme"
+    "lanterne:ancre_de_ferme",
+    "lanterne:coeur_de_repere"
   ]
 }

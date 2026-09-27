@@ -78,8 +78,7 @@ public final class Reseaux {
             CoffreDepot::new, () -> BlockBehaviour.Properties.of()
                     .mapColor(MapColor.WOOD)
                     .strength(2.5F, 3.0F)
-                    .sound(SoundType.WOOD)
-                    .requiresCorrectToolForDrops());
+                    .sound(SoundType.WOOD));
     public static final DeferredItem<net.minecraft.world.item.BlockItem> COFFRE_DEPOT_ITEM =
             ITEMS.registerSimpleBlockItem("coffre_depot", COFFRE_DEPOT);
 
@@ -87,8 +86,7 @@ public final class Reseaux {
             "coffre_reception", CoffreReception::new, () -> BlockBehaviour.Properties.of()
                     .mapColor(MapColor.COLOR_BROWN)
                     .strength(2.5F, 3.0F)
-                    .sound(SoundType.WOOD)
-                    .requiresCorrectToolForDrops());
+                    .sound(SoundType.WOOD));
     public static final DeferredItem<net.minecraft.world.item.BlockItem> COFFRE_RECEPTION_ITEM =
             ITEMS.registerSimpleBlockItem("coffre_reception", COFFRE_RECEPTION);
 

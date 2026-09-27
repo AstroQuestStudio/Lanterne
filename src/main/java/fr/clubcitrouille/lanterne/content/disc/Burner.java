@@ -170,27 +170,6 @@ public class Burner extends BaseEntityBlock {
         return createTickerHelper(type, Groove.BURNER_ENTITY.get(), BurnerEntity::tick);
     }
 
-    /**
-     * Casser le graveur rend ce qu'il contenait.
-     *
-     * <h2>Pourquoi ici et pas à la suppression du bloc</h2>
-     *
-     * <p>{@code affectNeighborsAfterRemoval} serait l'endroit « propre », et le bloc-entité y a déjà
-     * disparu selon l'ordre des opérations — on y lirait un contenu vide et le disque serait perdu.
-     * {@code playerWillDestroy} est appelé <b>avant</b> le retrait, quand tout est encore là.
-     *
-     * <p>C'est la même règle que partout dans ce paquet : un objet qu'un joueur a confié au mod lui
-     * revient, y compris quand il casse la machine avec un disque dedans, y compris en pleine
-     * gravure.
-     */
-    @Override
-    public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
-        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof BurnerEntity burner) {
-            burner.spill(level, pos);
-        }
-        return super.playerWillDestroy(level, pos, state, player);
-    }
-
     /** Un graveur qui travaille éclaire faiblement : la gravure se voit de loin. */
     @Override
     protected boolean isSignalSource(BlockState state) {

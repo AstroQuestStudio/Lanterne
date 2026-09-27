@@ -211,7 +211,16 @@ public class BurnerEntity extends BlockEntity {
         }
     }
 
-    /** Ce qui tombe quand on casse le bloc. Appelé par {@code Groove}. */
+    /** Restitue le disque avant retrait du bloc-entité, même lors d'une explosion. */
+    @Override
+    public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+        if (this.level instanceof ServerLevel) {
+            super.preRemoveSideEffects(pos, state);
+            spill(this.level, pos);
+        }
+    }
+
+    /** Restitution unique : la pile est ensuite vide, sans modification du bloc en cours de retrait. */
     public void spill(Level level, BlockPos pos) {
         if (!this.held.isEmpty()) {
             Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), this.held);

@@ -11,6 +11,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.ContainerHelper;
+import net.minecraft.world.Containers;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -126,6 +127,20 @@ public class TrieurBlockEntity extends HopperBlockEntity {
 
     public TrieurBlockEntity(BlockPos pos, BlockState state) {
         super(pos, state);
+    }
+
+    /** Rend le stock vanilla et les vrais gabarits, jamais les motifs créés par le champ texte. */
+    @Override
+    public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+        if (this.level instanceof ServerLevel) {
+            super.preRemoveSideEffects(pos, state);
+            for (int slot = 0; slot < FILTER_SLOTS; slot++) {
+                ItemStack gabarit = this.filtre.removeItemNoUpdate(slot);
+                if (!gabarit.isEmpty() && !Motif.estVirtuel(gabarit)) {
+                    Containers.dropItemStack(this.level, pos.getX(), pos.getY(), pos.getZ(), gabarit);
+                }
+            }
+        }
     }
 
     public SimpleContainer filtre() {

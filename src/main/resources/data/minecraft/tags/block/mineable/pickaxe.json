@@ -1,6 +1,16 @@
 {
+  "replace": false,
   "values": [
     "lanterne:anchor",
-    "lanterne:ancre_de_ferme"
+    "lanterne:ancre_de_ferme",
+    "lanterne:graveur",
+    "lanterne:projecteur",
+    "lanterne:ecran",
+    "lanterne:veilleuse",
+    "lanterne:coeur_de_repere",
+    "lanterne:guichet",
+    "lanterne:recycleur",
+    "lanterne:trieur",
+    "lanterne:aiguillage"
   ]
 }
