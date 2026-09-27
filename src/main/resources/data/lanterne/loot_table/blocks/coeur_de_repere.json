@@ -10,9 +10,9 @@
           "name": "lanterne:coeur_de_repere"
         }
       ],
-      "conditions": [
-        { "condition": "minecraft:survives_explosion" }
-      ]
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      }
     }
   ]
 }
